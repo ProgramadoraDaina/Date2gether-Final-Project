@@ -16,3 +16,9 @@ pnpm-debug.log*
 .DS_Store
 .vscode/*
 !.vscode/extensions.json
+
+# Playwright: resultados y reportes de cada corrida (se regeneran siempre)
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
