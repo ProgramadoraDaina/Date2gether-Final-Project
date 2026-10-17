@@ -1,0 +1,26 @@
+# Postgres descartable para e2e. No es el mismo servicio que docker-compose.yml
+# (ese es para desarrollo): este nace vacío antes de la suite y se destruye después,
+# igual que el service container que va a usar GitHub Actions en CI.
+#
+# `name` propio: sin esto, Docker Compose agrupa este archivo y el de
+# desarrollo bajo el mismo "proyecto" (el nombre de la carpeta), y un
+# `down` en uno podría afectar contenedores del otro.
+name: date2gether-test
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: date2gether-postgres-test
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: date2gether_test
+    ports:
+      - '5433:5432'
+    tmpfs:
+      # Sin volumen nombrado: los datos no sobreviven a un `down`, a propósito.
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U test -d date2gether_test']
+      interval: 2s
+      timeout: 3s
+      retries: 10
