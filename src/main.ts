@@ -26,4 +26,7 @@ async function bootstrap() {
   await app.listen(port);
   console.log(`Date2gether API corriendo en http://localhost:${port}`);
 }
-bootstrap();
+bootstrap().catch((error: unknown) => {
+  console.error('No se pudo iniciar la aplicación', error);
+  process.exit(1);
+});
