@@ -22,6 +22,10 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-floating-promises': 'warn',
       '@typescript-eslint/no-unsafe-argument': 'warn',
+      // Permite descartar una propiedad vía destructuring + rest
+      // (ej: `const { secreto: _secreto, ...resto } = obj`) sin que
+      // cuente como variable sin usar: ese es justamente el propósito.
+      '@typescript-eslint/no-unused-vars': ['error', { ignoreRestSiblings: true }],
     },
   },
 );

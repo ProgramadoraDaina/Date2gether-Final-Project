@@ -45,12 +45,19 @@
     "uuid": "^14.0.2"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@nestjs/cli": "^12.0.8",
     "@types/bcrypt": "^6.0.0",
     "@types/express": "^5.0.6",
     "@types/ms": "^2.1.0",
     "@types/node": "^26.6.4",
     "drizzle-kit": "^0.31.11",
-    "typescript": "^6.0.3"
+    "eslint": "^10.12.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.7",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.10",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.2"
   }
 }

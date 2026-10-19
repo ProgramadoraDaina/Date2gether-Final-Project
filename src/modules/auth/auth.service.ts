@@ -75,7 +75,9 @@ export class AuthService {
       // El token ya se usó o fue revocado: posible robo/reuso. Se revocan todos los
       // tokens activos del usuario para forzar un nuevo inicio de sesión.
       await this.revokeAllUserTokens(storedToken.userId);
-      throw new UnauthorizedException('Token de refresco reutilizado, sesión cerrada por seguridad');
+      throw new UnauthorizedException(
+        'Token de refresco reutilizado, sesión cerrada por seguridad',
+      );
     }
 
     if (storedToken.expiresAt.getTime() < Date.now()) {
@@ -154,7 +156,10 @@ export class AuthService {
   }
 
   private async revokeToken(id: string): Promise<void> {
-    await this.db.update(refreshTokens).set({ revokedAt: new Date() }).where(eq(refreshTokens.id, id));
+    await this.db
+      .update(refreshTokens)
+      .set({ revokedAt: new Date() })
+      .where(eq(refreshTokens.id, id));
   }
 
   private async revokeAllUserTokens(userId: string): Promise<void> {

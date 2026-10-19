@@ -1,5 +1,4 @@
 import { UsePipes, ValidationPipe } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import {
   ConnectedSocket,
   MessageBody,
@@ -83,7 +82,7 @@ export class ChatGateway implements OnGatewayDisconnect {
     const user = this.connectedUsers.get(client.id);
     if (!user) return;
 
-    client.leave(user.roomCode);
+    void client.leave(user.roomCode);
     this.connectedUsers.delete(client.id);
     client.to(user.roomCode).emit('userLeft', { userName: user.userName });
   }
