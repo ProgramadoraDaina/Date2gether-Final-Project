@@ -37,7 +37,9 @@ export default defineConfig({
       // sigue considerando "todavía no", y queda reintentando hasta el timeout).
       url: `${API_URL}/health`,
       timeout: 120_000,
-      reuseExistingServer: !process.env.CI,
+      // Siempre false: si se reutilizara un backend ya corriendo (ej. el de
+      // desarrollo), los tests escribirían en esa base en vez de en la de test.
+      reuseExistingServer: false,
       stdout: 'pipe',
       stderr: 'pipe',
       env: {
@@ -54,7 +56,7 @@ export default defineConfig({
       command: 'pnpm --filter client dev',
       url: CLIENT_URL,
       timeout: 120_000,
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
       stdout: 'pipe',
       stderr: 'pipe',
       env: {
