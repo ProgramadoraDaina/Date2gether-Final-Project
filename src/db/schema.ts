@@ -1,5 +1,14 @@
 import { relations } from 'drizzle-orm';
-import { boolean, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  pgEnum,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uuid,
+  varchar,
+} from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -52,15 +61,43 @@ export const messages = pgTable('messages', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
+// El rol es de la relación usuario-sala, no del usuario: la misma persona puede
+// ser administrador en una sala y participante en otra.
+export const roomRoleEnum = pgEnum('room_role', ['administrador', 'colaborador', 'participante']);
+
+export const roomMembers = pgTable(
+  'room_members',
+  {
+    roomId: uuid('room_id')
+      .notNull()
+      .references(() => rooms.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    role: roomRoleEnum('role').notNull().default('participante'),
+    joinedAt: timestamp('joined_at').notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.roomId, table.userId] })],
+);
+
 export const roomsRelations = relations(rooms, ({ many }) => ({
   messages: many(messages),
+  members: many(roomMembers),
 }));
 
 export const messagesRelations = relations(messages, ({ one }) => ({
   room: one(rooms, { fields: [messages.roomId], references: [rooms.id] }),
 }));
 
+export const roomMembersRelations = relations(roomMembers, ({ one }) => ({
+  room: one(rooms, { fields: [roomMembers.roomId], references: [rooms.id] }),
+  user: one(users, { fields: [roomMembers.userId], references: [users.id] }),
+}));
+
 export type Room = typeof rooms.$inferSelect;
 export type NewRoom = typeof rooms.$inferInsert;
 export type Message = typeof messages.$inferSelect;
 export type NewMessage = typeof messages.$inferInsert;
+export type RoomMember = typeof roomMembers.$inferSelect;
+export type NewRoomMember = typeof roomMembers.$inferInsert;
+export type RoomRole = (typeof roomRoleEnum.enumValues)[number];

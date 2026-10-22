@@ -1,18 +1,48 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import type { AccessTokenPayload } from '../auth/auth.types';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreateRoomDto } from './dto/create-room.dto';
+import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
+import { RoomAdminGuard } from './guards/room-admin.guard';
 import { RoomsService } from './rooms.service';
 
 @Controller('rooms')
 export class RoomsController {
   constructor(private readonly roomsService: RoomsService) {}
 
+  @UseGuards(JwtAuthGuard)
   @Post()
-  create(@Body() dto: CreateRoomDto) {
-    return this.roomsService.createRoom(dto.name);
+  create(@Body() dto: CreateRoomDto, @CurrentUser() user: AccessTokenPayload) {
+    return this.roomsService.createRoom(dto.name, user.sub);
   }
 
   @Get(':code')
   findOne(@Param('code') code: string) {
     return this.roomsService.getByCodeOrThrow(code);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':code/join')
+  async join(@Param('code') code: string, @CurrentUser() user: AccessTokenPayload) {
+    await this.roomsService.joinRoom(code, user.sub);
+    return { message: 'Te uniste a la sala' };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get(':code/members')
+  listMembers(@Param('code') code: string) {
+    return this.roomsService.listMembers(code);
+  }
+
+  @UseGuards(JwtAuthGuard, RoomAdminGuard)
+  @Patch(':code/members/:userId')
+  async updateMemberRole(
+    @Param('code') code: string,
+    @Param('userId') userId: string,
+    @Body() dto: UpdateMemberRoleDto,
+  ) {
+    await this.roomsService.setMemberRole(code, userId, dto.role);
+    return { message: 'Rol actualizado' };
   }
 }

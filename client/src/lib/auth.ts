@@ -29,6 +29,17 @@ export function isLoggedIn(): boolean {
   return getAccessToken() !== null;
 }
 
+// localStorage no avisa a la MISMA pestaña que escribe, pero sí a las otras
+// pestañas abiertas (evento "storage" nativo del navegador). Así una pestaña
+// se entera al instante si cerraste sesión desde otra.
+export function onAuthChange(callback: () => void): () => void {
+  function handleStorage(e: StorageEvent) {
+    if (e.key === ACCESS_TOKEN_KEY || e.key === REFRESH_TOKEN_KEY) callback();
+  }
+  window.addEventListener('storage', handleStorage);
+  return () => window.removeEventListener('storage', handleStorage);
+}
+
 function setTokens(tokens: AuthTokens): void {
   localStorage.setItem(ACCESS_TOKEN_KEY, tokens.accessToken);
   localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refreshToken);

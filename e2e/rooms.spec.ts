@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
-import { createRoomViaApi } from './support/api';
+import { createRoomViaApi, registerUserViaApi } from './support/api';
+import { buildTestUser } from './support/test-data';
 
 // Estos son tests "esqueleto": la sala todavía es solo chat de texto por
 // websocket (sin video), así que acá solo verificamos el cableado básico
@@ -13,14 +14,22 @@ import { createRoomViaApi } from './support/api';
 const ROOM_URL_PATTERN = /\/room\/[a-z]{3}-[a-z]{4}-[a-z]{3}$/;
 
 test.describe('Crear y unirse a una sala', () => {
-  // Desde el home, completa el nombre y crea una reunión nueva (sin
-  // necesidad de estar logueado: "Crear reunión" solo pide un nombre).
+  // Crear sala exige estar logueado (el creador queda como administrador de
+  // esa sala), así que primero se registra una cuenta real desde la API y
+  // se inicia sesión en la UI antes de crear la reunión.
   // Se espera: 1) la app navega a /room/<código> con el formato correcto,
   // y 2) el websocket se conecta solo y la persona que creó la sala
   // aparece en el panel "En la sala (1)".
-  test('crear una reunión navega a la sala y queda conectado', async ({ page }) => {
-    await page.goto('/');
-    await page.getByLabel('Tu nombre').fill('Ana');
+  test('crear una reunión navega a la sala y queda conectado', async ({ page, request }) => {
+    const user = buildTestUser({ name: 'Ana' });
+    await registerUserViaApi(request, user);
+
+    await page.goto('/login');
+    await page.getByLabel('Email').fill(user.email);
+    await page.getByLabel('Contraseña').fill(user.password);
+    await page.getByRole('button', { name: 'Entrar' }).click();
+    await expect(page).toHaveURL('/');
+
     await page.getByRole('button', { name: 'Crear reunión' }).click();
 
     await expect(page).toHaveURL(ROOM_URL_PATTERN);
