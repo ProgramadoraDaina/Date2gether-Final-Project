@@ -1,3 +1,35 @@
+:root {
+  --color-bg: #f1f3f4;
+  --color-surface: #fff;
+  --color-text: #202124;
+  --color-text-muted: #5f6368;
+  --color-border: #dadce0;
+  --color-chip-bg: #f1f3f4;
+  --color-accent: #1a73e8;
+  --color-accent-hover: #1765cc;
+  --color-accent-contrast: #fff;
+  --color-disabled: #9aa0a6;
+  --color-error: #d93025;
+  --color-notice-bg: #e8f0fe;
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+:root[data-theme='dark'] {
+  --color-bg: #202124;
+  --color-surface: #2d2e31;
+  --color-text: #e8eaed;
+  --color-text-muted: #9aa0a6;
+  --color-border: #3c4043;
+  --color-chip-bg: #3c4043;
+  --color-accent: #8ab4f8;
+  --color-accent-hover: #aecbfa;
+  --color-accent-contrast: #202124;
+  --color-disabled: #5f6368;
+  --color-error: #f28b82;
+  --color-notice-bg: #28344a;
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -8,9 +40,10 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f1f3f4;
+  background: var(--color-bg);
   font-family: 'Segoe UI', Roboto, Arial, sans-serif;
-  color: #202124;
+  color: var(--color-text);
+  transition: background-color 0.2s, color 0.2s;
 }
 
 .app-shell {
@@ -21,10 +54,42 @@ body {
   padding: 16px;
 }
 
+.top-bar {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  gap: 8px;
+  z-index: 10;
+}
+
+.language-toggle,
+.theme-toggle {
+  width: auto;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-accent);
+  border: 1px solid var(--color-border);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.theme-toggle {
+  padding: 6px 10px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.language-toggle:hover,
+.theme-toggle:hover {
+  background: var(--color-chip-bg);
+}
+
 .card {
-  background: #fff;
+  background: var(--color-surface);
   border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-card);
   padding: 40px;
   width: 100%;
   max-width: 400px;
@@ -37,28 +102,43 @@ h1 {
 
 .subtitle {
   margin: 0 0 28px;
-  color: #5f6368;
+  color: var(--color-text-muted);
   font-size: 14px;
 }
 
 label {
   display: block;
   font-size: 13px;
-  color: #5f6368;
+  color: var(--color-text-muted);
   margin-bottom: 6px;
 }
 
 input {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid #dadce0;
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   font-size: 14px;
   margin-bottom: 16px;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+/* Chrome/Edge fuerzan su propio fondo en campos autocompletados, ignorando
+   el nuestro; este truco del box-shadow inset lo reemplaza por el de la
+   paleta activa, y el borde de acento avisa que lo completó el navegador. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  border-color: var(--color-accent);
+  -webkit-text-fill-color: var(--color-text);
+  -webkit-box-shadow: 0 0 0 1000px var(--color-surface) inset;
+  box-shadow: 0 0 0 1000px var(--color-surface) inset;
+  transition: background-color 9999s ease-in-out 0s;
 }
 
 input:focus {
-  outline: 2px solid #1a73e8;
+  outline: 2px solid var(--color-accent);
   border-color: transparent;
 }
 
@@ -67,30 +147,30 @@ button {
   padding: 10px 12px;
   border: none;
   border-radius: 6px;
-  background: #1a73e8;
-  color: #fff;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
 }
 
 button:hover {
-  background: #1765cc;
+  background: var(--color-accent-hover);
 }
 
 button:disabled {
-  background: #9aa0a6;
+  background: var(--color-disabled);
   cursor: not-allowed;
 }
 
 button.secondary {
-  background: #fff;
-  color: #1a73e8;
-  border: 1px solid #dadce0;
+  background: var(--color-surface);
+  color: var(--color-accent);
+  border: 1px solid var(--color-border);
 }
 
 button.secondary:hover {
-  background: #f1f3f4;
+  background: var(--color-chip-bg);
 }
 
 .divider {
@@ -98,7 +178,7 @@ button.secondary:hover {
   align-items: center;
   gap: 12px;
   margin: 8px 0 20px;
-  color: #5f6368;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -107,7 +187,7 @@ button.secondary:hover {
   content: '';
   flex: 1;
   height: 1px;
-  background: #dadce0;
+  background: var(--color-border);
 }
 
 .join-row {
@@ -126,7 +206,7 @@ button.secondary:hover {
 
 .error {
   margin: 12px 0 0;
-  color: #d93025;
+  color: var(--color-error);
   font-size: 13px;
 }
 
@@ -137,13 +217,13 @@ button.secondary:hover {
   gap: 8px;
   margin: -4px 0 20px;
   padding-bottom: 16px;
-  border-bottom: 1px solid #dadce0;
+  border-bottom: 1px solid var(--color-border);
   font-size: 13px;
-  color: #5f6368;
+  color: var(--color-text-muted);
 }
 
 .auth-bar a {
-  color: #1a73e8;
+  color: var(--color-accent);
   text-decoration: none;
 }
 
@@ -155,7 +235,7 @@ button.secondary:hover {
   width: auto;
   padding: 0;
   background: none;
-  color: #1a73e8;
+  color: var(--color-accent);
   font-size: 13px;
   font-weight: 400;
 }
@@ -168,12 +248,12 @@ button.secondary:hover {
 .switch-link {
   margin: 16px 0 0;
   font-size: 13px;
-  color: #5f6368;
+  color: var(--color-text-muted);
   text-align: center;
 }
 
 .switch-link a {
-  color: #1a73e8;
+  color: var(--color-accent);
   text-decoration: none;
 }
 
@@ -184,7 +264,7 @@ button.secondary:hover {
 .hint {
   margin: -10px 0 16px;
   font-size: 12px;
-  color: #5f6368;
+  color: var(--color-text-muted);
 }
 
 /* --- sala --- */
@@ -195,15 +275,15 @@ button.secondary:hover {
   height: 80vh;
   display: flex;
   flex-direction: column;
-  background: #fff;
+  background: var(--color-surface);
   border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-card);
   overflow: hidden;
 }
 
 .room-header {
   padding: 16px 20px;
-  border-bottom: 1px solid #dadce0;
+  border-bottom: 1px solid var(--color-border);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -212,15 +292,15 @@ button.secondary:hover {
 .room-header .code {
   font-family: monospace;
   font-weight: 600;
-  background: #f1f3f4;
+  background: var(--color-chip-bg);
   padding: 4px 10px;
   border-radius: 6px;
 }
 
 .notice {
   padding: 8px 20px;
-  background: #e8f0fe;
-  color: #1a73e8;
+  background: var(--color-notice-bg);
+  color: var(--color-accent);
   font-size: 13px;
 }
 
@@ -232,7 +312,7 @@ button.secondary:hover {
 
 .users-panel {
   width: 180px;
-  border-right: 1px solid #dadce0;
+  border-right: 1px solid var(--color-border);
   padding: 16px;
   overflow-y: auto;
 }
@@ -240,7 +320,7 @@ button.secondary:hover {
 .users-panel h3 {
   font-size: 12px;
   text-transform: uppercase;
-  color: #5f6368;
+  color: var(--color-text-muted);
   margin: 0 0 10px;
 }
 
@@ -285,7 +365,7 @@ button.secondary:hover {
   display: flex;
   gap: 8px;
   padding: 16px 20px;
-  border-top: 1px solid #dadce0;
+  border-top: 1px solid var(--color-border);
 }
 
 #message-form input {
