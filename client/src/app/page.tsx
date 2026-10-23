@@ -15,15 +15,13 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
-  // Arranca en false en server y cliente (sin leer localStorage todavía) para
-  // que el primer render coincida y no rompa la hidratación de Next.js.
+  // Arranca en false en server y cliente para no romper la hidratación.
   const [loggedIn, setLoggedIn] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
     setName(localStorage.getItem(NAME_KEY) ?? '');
-    // El token ya está en localStorage apenas termina el login (síncrono), así
-    // que habilitar "Crear reunión" no espera al round-trip de /auth/me.
+    // Leer el token es síncrono: no hace falta esperar a /auth/me para habilitar el botón.
     setLoggedIn(isLoggedIn());
 
     getCurrentUser()

@@ -6,20 +6,24 @@ import { buildTestUser, type TestUser } from './test-data';
 // Se usa en tests que necesitan "una cuenta que ya existe" como precondición
 // (por ejemplo, probar el login) sin repetir el flujo de registro de nuevo:
 // cada test debería enfocarse en una sola cosa.
-export async function registerUserViaApi(request: APIRequestContext, user: TestUser): Promise<void> {
+export async function registerUserViaApi(
+  request: APIRequestContext,
+  user: TestUser,
+): Promise<void> {
   const res = await request.post(`${API_URL}/auth/register`, { data: user });
   if (!res.ok()) {
     throw new Error(`No se pudo crear el usuario de prueba: ${res.status()} ${await res.text()}`);
   }
 }
 
-// Crear sala exige estar logueado (el creador queda como administrador de esa
-// sala), así que esto registra una cuenta descartable antes de crearla.
+// Crear sala exige login, así que primero registra una cuenta descartable.
 export async function createRoomViaApi(request: APIRequestContext, name: string): Promise<string> {
   const user = buildTestUser();
   const registerRes = await request.post(`${API_URL}/auth/register`, { data: user });
   if (!registerRes.ok()) {
-    throw new Error(`No se pudo crear el usuario de prueba: ${registerRes.status()} ${await registerRes.text()}`);
+    throw new Error(
+      `No se pudo crear el usuario de prueba: ${registerRes.status()} ${await registerRes.text()}`,
+    );
   }
   const { accessToken } = (await registerRes.json()) as { accessToken: string };
 

@@ -4,6 +4,8 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import type { Socket } from 'socket.io-client';
+import { RoleTag } from '@/features/rooms/RoleTag';
+import { useRoomMembers } from '@/features/rooms/useRoomMembers';
 import { createRoomSocket } from '@/lib/socket';
 
 const NAME_KEY = 'date2gether:userName';
@@ -24,6 +26,7 @@ export default function RoomPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const { members, isCurrentUserAdmin, error: membersError, changeRole } = useRoomMembers(code);
 
   useEffect(() => {
     if (!code) return;
@@ -91,14 +94,41 @@ export default function RoomPage() {
       </div>
 
       {notice && <div className="notice">{notice}</div>}
+      {membersError && (
+        <p className="error" role="alert">
+          {membersError}
+        </p>
+      )}
 
       <div className="room-body">
         <div className="users-panel">
           <h3>En la sala ({users.length})</h3>
           <ul>
-            {users.map((u) => (
-              <li key={u}>{u}</li>
-            ))}
+            {users.map((userName) => {
+              // El nombre del socket se copia del de la cuenta (NAME_KEY), por eso se cruza por nombre.
+              const member = members.find((m) => m.name === userName);
+              const canChangeRole = isCurrentUserAdmin && member && member.role !== 'administrador';
+              return (
+                <li key={userName}>
+                  {userName}
+                  {member && <RoleTag role={member.role} />}
+                  {canChangeRole && (
+                    <button
+                      type="button"
+                      className="role-button"
+                      onClick={() =>
+                        changeRole(
+                          member.userId,
+                          member.role === 'participante' ? 'colaborador' : 'participante',
+                        )
+                      }
+                    >
+                      {member.role === 'participante' ? 'Hacer colaborador' : 'Quitar colaborador'}
+                    </button>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
 

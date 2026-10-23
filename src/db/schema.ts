@@ -61,8 +61,7 @@ export const messages = pgTable('messages', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
-// El rol es de la relación usuario-sala, no del usuario: la misma persona puede
-// ser administrador en una sala y participante en otra.
+// El rol es por sala: la misma persona puede ser admin en una y participante en otra.
 export const roomRoleEnum = pgEnum('room_role', ['administrador', 'colaborador', 'participante']);
 
 export const roomMembers = pgTable(

@@ -7,7 +7,6 @@ import { roomMembers, rooms, users, type Room, type RoomRole } from '../../db/sc
 export interface RoomMemberView {
   userId: string;
   name: string;
-  email: string;
   role: RoomRole;
 }
 
@@ -54,17 +53,15 @@ export class RoomsService {
 
   async listMembers(code: string): Promise<RoomMemberView[]> {
     const room = await this.getByCodeOrThrow(code);
-    const rows = await this.db
-      .select({ userId: users.id, name: users.name, email: users.email, role: roomMembers.role })
+    return this.db
+      .select({ userId: users.id, name: users.name, role: roomMembers.role })
       .from(roomMembers)
       .innerJoin(users, eq(roomMembers.userId, users.id))
       .where(eq(roomMembers.roomId, room.id));
-    return rows;
   }
 
   async getMemberRole(code: string, userId: string): Promise<RoomRole | undefined> {
-    const room = await this.findByCode(code);
-    if (!room) return undefined;
+    const room = await this.getByCodeOrThrow(code);
     const [member] = await this.db
       .select({ role: roomMembers.role })
       .from(roomMembers)

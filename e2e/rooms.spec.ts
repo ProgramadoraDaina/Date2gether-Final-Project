@@ -14,9 +14,7 @@ import { buildTestUser } from './support/test-data';
 const ROOM_URL_PATTERN = /\/room\/[a-z]{3}-[a-z]{4}-[a-z]{3}$/;
 
 test.describe('Crear y unirse a una sala', () => {
-  // Crear sala exige estar logueado (el creador queda como administrador de
-  // esa sala), así que primero se registra una cuenta real desde la API y
-  // se inicia sesión en la UI antes de crear la reunión.
+  // Crear sala exige login: se registra una cuenta por API y se inicia sesión en la UI.
   // Se espera: 1) la app navega a /room/<código> con el formato correcto,
   // y 2) el websocket se conecta solo y la persona que creó la sala
   // aparece en el panel "En la sala (1)".
