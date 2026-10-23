@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import { LanguageToggle } from '@/features/translation/LanguageToggle';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -10,8 +11,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="es">
+    <html lang="en">
       <body>
+        <LanguageToggle />
         <main className="app-shell">{children}</main>
       </body>
     </html>
