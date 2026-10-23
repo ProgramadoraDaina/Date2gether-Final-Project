@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import type { Socket } from 'socket.io-client';
 import { createRoomSocket } from '@/lib/socket';
+import { useTranslation } from '@/features/translation/useTranslation';
 
 const NAME_KEY = 'date2gether:userName';
 
@@ -15,13 +16,16 @@ interface ChatMessage {
   createdAt: string;
 }
 
+type Notice = { text: string } | { event: 'joined' | 'left'; userName: string };
+
 export default function RoomPage() {
+  const { t } = useTranslation();
   const { code } = useParams<{ code: string }>();
   const router = useRouter();
   const [users, setUsers] = useState<string[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
 
@@ -38,7 +42,7 @@ export default function RoomPage() {
     });
 
     socket.on('error', ({ message }: { message: string }) => {
-      setNotice(message);
+      setNotice({ text: message });
       clearTimeout(redirectTimer);
       redirectTimer = setTimeout(() => router.push('/'), 2000);
     });
@@ -48,12 +52,12 @@ export default function RoomPage() {
 
     socket.on('userJoined', ({ userName: joined }: { userName: string }) => {
       setUsers((prev) => (prev.includes(joined) ? prev : [...prev, joined]));
-      setNotice(`${joined} se unió a la sala`);
+      setNotice({ event: 'joined', userName: joined });
     });
 
     socket.on('userLeft', ({ userName: left }: { userName: string }) => {
       setUsers((prev) => prev.filter((u) => u !== left));
-      setNotice(`${left} salió de la sala`);
+      setNotice({ event: 'left', userName: left });
     });
 
     socket.on('newMessage', (message: ChatMessage) => {
@@ -87,14 +91,22 @@ export default function RoomPage() {
         <div>
           <strong>Date2gether</strong> <span className="code">{code}</span>
         </div>
-        <Link href="/">Salir</Link>
+        <Link href="/">{t('Salir')}</Link>
       </div>
 
-      {notice && <div className="notice">{notice}</div>}
+      {notice && (
+        <div className="notice">
+          {'text' in notice
+            ? notice.text
+            : `${notice.userName} ${t(notice.event === 'joined' ? 'se unió a la sala' : 'salió de la sala')}`}
+        </div>
+      )}
 
       <div className="room-body">
         <div className="users-panel">
-          <h3>En la sala ({users.length})</h3>
+          <h3>
+            {t('En la sala')} ({users.length})
+          </h3>
           <ul>
             {users.map((u) => (
               <li key={u}>{u}</li>
@@ -115,10 +127,10 @@ export default function RoomPage() {
             <input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              placeholder="Escribí un mensaje..."
+              placeholder={t('Escribí un mensaje...')}
               autoComplete="off"
             />
-            <button type="submit">Enviar</button>
+            <button type="submit">{t('Enviar')}</button>
           </form>
         </div>
       </div>
