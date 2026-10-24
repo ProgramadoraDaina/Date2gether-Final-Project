@@ -48,7 +48,7 @@ export function clearTokens(): void {
   localStorage.removeItem(REFRESH_TOKEN_KEY);
 }
 
-async function extractErrorMessage(res: Response, fallback: string): Promise<string> {
+export async function extractErrorMessage(res: Response, fallback: string): Promise<string> {
   try {
     const body = await res.json();
     if (Array.isArray(body.message)) return body.message[0];
@@ -101,7 +101,7 @@ export async function logout(): Promise<void> {
   }
 }
 
-async function refreshAccessToken(): Promise<string | null> {
+export async function refreshAccessToken(): Promise<string | null> {
   const refreshToken = getRefreshToken();
   if (!refreshToken) return null;
 

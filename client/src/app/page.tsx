@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { createRoom } from '@/lib/api';
+import { ApiError, createRoom } from '@/lib/api';
 import { getCurrentUser, isLoggedIn, logout, onAuthChange, type AuthUser } from '@/lib/auth';
 
 const NAME_KEY = 'date2gether:userName';
@@ -62,7 +62,7 @@ export default function HomePage() {
       const room = await createRoom(`Reunión de ${name.trim()}`);
       router.push(`/room/${encodeURIComponent(room.code)}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo crear la reunión.');
+      setError(err instanceof ApiError ? err.message : 'No se pudo crear la reunión. ¿Está corriendo el backend?');
       if (!isLoggedIn()) {
         setLoggedIn(false);
         setUser(null);

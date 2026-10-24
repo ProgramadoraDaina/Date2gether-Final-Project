@@ -11,7 +11,9 @@ interface RoleTagProps {
 }
 
 export function RoleTag({ role }: RoleTagProps) {
-  const { short, full } = ROLE_LABELS[role];
+  // Fallback defensivo: si el backend agrega un rol que el cliente todavía
+  // no conoce, se muestra tal cual en vez de romper el render de la sala.
+  const { short, full } = ROLE_LABELS[role] ?? { short: role, full: role };
   return (
     <abbr title={full} className={`role-tag role-tag-${role}`}>
       {short}
