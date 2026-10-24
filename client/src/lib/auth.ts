@@ -29,6 +29,15 @@ export function isLoggedIn(): boolean {
   return getAccessToken() !== null;
 }
 
+// El evento "storage" solo llega a las OTRAS pestañas: así se detecta un logout hecho en otra.
+export function onAuthChange(callback: () => void): () => void {
+  function handleStorage(e: StorageEvent) {
+    if (e.key === ACCESS_TOKEN_KEY || e.key === REFRESH_TOKEN_KEY) callback();
+  }
+  window.addEventListener('storage', handleStorage);
+  return () => window.removeEventListener('storage', handleStorage);
+}
+
 function setTokens(tokens: AuthTokens): void {
   localStorage.setItem(ACCESS_TOKEN_KEY, tokens.accessToken);
   localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refreshToken);
@@ -39,7 +48,7 @@ export function clearTokens(): void {
   localStorage.removeItem(REFRESH_TOKEN_KEY);
 }
 
-async function extractErrorMessage(res: Response, fallback: string): Promise<string> {
+export async function extractErrorMessage(res: Response, fallback: string): Promise<string> {
   try {
     const body = await res.json();
     if (Array.isArray(body.message)) return body.message[0];
@@ -92,7 +101,7 @@ export async function logout(): Promise<void> {
   }
 }
 
-async function refreshAccessToken(): Promise<string | null> {
+export async function refreshAccessToken(): Promise<string | null> {
   const refreshToken = getRefreshToken();
   if (!refreshToken) return null;
 
