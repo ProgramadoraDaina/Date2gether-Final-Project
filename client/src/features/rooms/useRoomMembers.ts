@@ -1,11 +1,27 @@
-import { useEffect, useState } from 'react';
-import { getRoomMembers, joinRoom, updateMemberRole, type RoomMember } from '@/lib/api';
+import { useCallback, useEffect, useState } from 'react';
+import { ApiError, getRoomMembers, joinRoom, updateMemberRole, type RoomMember } from '@/lib/api';
 import { getCurrentUser, isLoggedIn } from '@/lib/auth';
+
+// Un ApiError ya trae un mensaje pensado para mostrarse; cualquier otro
+// error (red caída, etc.) usa el texto genérico de cada caso.
+function describeError(err: unknown, fallback: string): string {
+  return err instanceof ApiError ? err.message : fallback;
+}
 
 export function useRoomMembers(code: string | undefined) {
   const [members, setMembers] = useState<RoomMember[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const refetchMembers = useCallback(async () => {
+    if (!code) return;
+    try {
+      setMembers(await getRoomMembers(code));
+      setError(null);
+    } catch (err) {
+      setError(describeError(err, 'No se pudieron cargar los roles de la sala'));
+    }
+  }, [code]);
 
   useEffect(() => {
     if (!code || !isLoggedIn()) return;
@@ -19,33 +35,33 @@ export function useRoomMembers(code: string | undefined) {
       try {
         // El chat de invitados no registra al usuario en la sala; esto sí.
         await joinRoom(roomCode);
-        const roomMembers = await getRoomMembers(roomCode);
-        if (!cancelled) setMembers(roomMembers);
-      } catch {
-        if (!cancelled) setError('No se pudieron cargar los roles de la sala');
+      } catch (err) {
+        if (!cancelled) setError(describeError(err, 'No se pudieron cargar los roles de la sala'));
+        return;
       }
+      if (!cancelled) await refetchMembers();
     }
 
     loadRoomMembers(code);
     return () => {
       cancelled = true;
     };
-  }, [code]);
+  }, [code, refetchMembers]);
 
   async function changeRole(userId: string, role: 'colaborador' | 'participante') {
     if (!code) return;
     try {
       await updateMemberRole(code, userId, role);
-      setMembers(await getRoomMembers(code));
-      setError(null);
-    } catch {
-      setError('No se pudo cambiar el rol');
+    } catch (err) {
+      setError(describeError(err, 'No se pudo cambiar el rol'));
+      return;
     }
+    await refetchMembers();
   }
 
   const isCurrentUserAdmin = members.some(
     (member) => member.userId === currentUserId && member.role === 'administrador',
   );
 
-  return { members, isCurrentUserAdmin, error, changeRole };
+  return { members, isCurrentUserAdmin, error, changeRole, refetchMembers };
 }

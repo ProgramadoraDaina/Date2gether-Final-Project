@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import { generateRoomCode } from '../../common/generate-room-code';
 import { DRIZZLE, DrizzleDb } from '../../db/drizzle.module';
 import { roomMembers, rooms, users, type Room, type RoomRole } from '../../db/schema';
+import { RoomEventsService } from './room-events.service';
 
 export interface RoomMemberView {
   userId: string;
@@ -12,7 +13,10 @@ export interface RoomMemberView {
 
 @Injectable()
 export class RoomsService {
-  constructor(@Inject(DRIZZLE) private readonly db: DrizzleDb) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: DrizzleDb,
+    private readonly roomEvents: RoomEventsService,
+  ) {}
 
   async createRoom(name: string, creatorId: string): Promise<Room> {
     // Reintenta si el código generado choca con uno existente (muy poco probable).
@@ -93,5 +97,7 @@ export class RoomsService {
       .update(roomMembers)
       .set({ role })
       .where(and(eq(roomMembers.roomId, room.id), eq(roomMembers.userId, targetUserId)));
+
+    this.roomEvents.emitMemberRoleChanged({ roomCode: code });
   }
 }
