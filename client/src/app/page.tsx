@@ -39,6 +39,10 @@ export default function HomePage() {
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
+    if (!user) {
+      router.push('/login');
+      return;
+    }
     localStorage.setItem(NAME_KEY, name.trim());
     setLoading(true);
     setError(null);
@@ -55,6 +59,10 @@ export default function HomePage() {
   function handleJoin(e: FormEvent) {
     e.preventDefault();
     if (!joinCode.trim() || !name.trim()) return;
+    if (!user) {
+      router.push('/login');
+      return;
+    }
     localStorage.setItem(NAME_KEY, name.trim());
     router.push(`/room/${encodeURIComponent(joinCode.trim())}`);
   }
