@@ -4,10 +4,12 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { login } from '@/lib/auth';
+import { useTranslation } from '@/features/translation/useTranslation';
 
 const NAME_KEY = 'date2gether:userName';
 
 export default function LoginPage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -23,7 +25,7 @@ export default function LoginPage() {
       localStorage.setItem(NAME_KEY, user.name);
       router.push('/');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo iniciar sesión');
+      setError(err instanceof Error ? err.message : t('No se pudo iniciar sesión'));
     } finally {
       setLoading(false);
     }
@@ -31,11 +33,11 @@ export default function LoginPage() {
 
   return (
     <div className="card">
-      <h1>Iniciar sesión</h1>
-      <p className="subtitle">Entrá con tu cuenta de Date2gether.</p>
+      <h1>{t('Iniciar sesión')}</h1>
+      <p className="subtitle">{t('Entrá con tu cuenta de Date2gether.')}</p>
 
       <form onSubmit={handleSubmit}>
-        <label htmlFor="email">Email</label>
+        <label htmlFor="email">{t('Email')}</label>
         <input
           id="email"
           type="email"
@@ -45,7 +47,7 @@ export default function LoginPage() {
           required
         />
 
-        <label htmlFor="password">Contraseña</label>
+        <label htmlFor="password">{t('Contraseña')}</label>
         <input
           id="password"
           type="password"
@@ -56,14 +58,15 @@ export default function LoginPage() {
         />
 
         <button type="submit" disabled={loading}>
-          {loading ? 'Entrando…' : 'Entrar'}
+          {loading ? t('Entrando…') : t('Entrar')}
         </button>
       </form>
 
       {error && <p className="error">{error}</p>}
 
       <p className="switch-link">
-        ¿No tenés cuenta? <Link href="/register">Creá una</Link>
+        {t('¿No tenés cuenta? ')}
+        <Link href="/register">{t('Creá una')}</Link>
       </p>
     </div>
   );
