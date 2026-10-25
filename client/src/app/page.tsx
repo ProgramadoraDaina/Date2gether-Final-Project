@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import { createRoom } from '@/lib/api';
 import { getCurrentUser, logout, type AuthUser } from '@/lib/auth';
 import { useTranslation } from '@/features/translation/useTranslation';
+import { ApiError, createRoom } from '@/lib/api';
+import { getCurrentUser, isLoggedIn, logout, onAuthChange, type AuthUser } from '@/lib/auth';
 
 const NAME_KEY = 'date2gether:userName';
 
@@ -17,30 +19,46 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
+  // Arranca en false en server y cliente para no romper la hidratación.
+  const [loggedIn, setLoggedIn] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
     setName(localStorage.getItem(NAME_KEY) ?? '');
+    // Leer el token es síncrono: no hace falta esperar a /auth/me para habilitar el botón.
+    setLoggedIn(isLoggedIn());
 
     getCurrentUser()
       .then((currentUser) => {
         setUser(currentUser);
+        setLoggedIn(currentUser !== null);
         if (currentUser) {
           setName(currentUser.name);
           localStorage.setItem(NAME_KEY, currentUser.name);
         }
       })
       .finally(() => setCheckingSession(false));
+
+    return onAuthChange(() => {
+      const stillLoggedIn = isLoggedIn();
+      setLoggedIn(stillLoggedIn);
+      if (!stillLoggedIn) setUser(null);
+    });
   }, []);
 
   async function handleLogout() {
     await logout();
     setUser(null);
+    setLoggedIn(false);
   }
 
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
+    if (!loggedIn) {
+      setError('Necesitás iniciar sesión para crear una reunión.');
+      return;
+    }
     localStorage.setItem(NAME_KEY, name.trim());
     setLoading(true);
     setError(null);
@@ -49,6 +67,12 @@ export default function HomePage() {
       router.push(`/room/${encodeURIComponent(room.code)}`);
     } catch {
       setError(t('No se pudo crear la reunión. ¿Está corriendo el backend?'));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo crear la reunión. ¿Está corriendo el backend?');
+      if (!isLoggedIn()) {
+        setLoggedIn(false);
+        setUser(null);
+      }
     } finally {
       setLoading(false);
     }
@@ -97,7 +121,12 @@ export default function HomePage() {
         />
         <button type="submit" disabled={loading}>
           {loading ? t('Creando…') : t('Crear reunión')}
+        <button type="submit" disabled={loading || !loggedIn}>
+          {loading ? 'Creando…' : 'Crear reunión'}
         </button>
+        {!checkingSession && !loggedIn && (
+          <p className="hint-below-button">Necesitás iniciar sesión (arriba) para crear una reunión.</p>
+        )}
       </form>
 
       <div className="divider">{t('o unite a una existente')}</div>
