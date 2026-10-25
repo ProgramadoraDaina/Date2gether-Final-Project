@@ -40,6 +40,11 @@ export const rooms = pgTable('rooms', {
   name: varchar('name', { length: 100 }).notNull(),
   isActive: boolean('is_active').notNull().default(true),
   createdAt: timestamp('created_at').notNull().defaultNow(),
+  // MeetingId de Chime de la reunión activa de esta sala, si hay una. Se
+  // reusa mientras siga existiendo en Chime, para que todos los
+  // participantes de la sala entren a la misma reunión en vez de crear
+  // una por cada click en "Llamar" (ver CallsService.createMeetingForRoom).
+  chimeMeetingId: varchar('chime_meeting_id', { length: 64 }),
 });
 
 export const messages = pgTable('messages', {

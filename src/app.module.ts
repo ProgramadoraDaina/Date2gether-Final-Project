@@ -5,6 +5,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { DrizzleModule } from './db/drizzle.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { CallsModule } from './modules/calls/calls.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { RoomsModule } from './modules/rooms/rooms.module';
 
@@ -17,6 +18,7 @@ import { RoomsModule } from './modules/rooms/rooms.module';
     AuthModule,
     RoomsModule,
     ChatModule,
+    CallsModule,
   ],
   controllers: [AppController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

@@ -15,6 +15,13 @@
       "when": 1791482783993,
       "tag": "0001_cold_doctor_octopus",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792959918794,
+      "tag": "0002_fast_nebula",
+      "breakpoints": true
     }
   ]
 }

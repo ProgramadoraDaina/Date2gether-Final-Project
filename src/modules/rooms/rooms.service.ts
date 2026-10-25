@@ -31,4 +31,8 @@ export class RoomsService {
     if (!room) throw new NotFoundException(`No existe una sala con el código "${code}"`);
     return room;
   }
+
+  async setChimeMeetingId(roomId: string, chimeMeetingId: string): Promise<void> {
+    await this.db.update(rooms).set({ chimeMeetingId }).where(eq(rooms.id, roomId));
+  }
 }
