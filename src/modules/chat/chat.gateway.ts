@@ -1,4 +1,4 @@
-import { UsePipes, ValidationPipe } from '@nestjs/common';
+import { UseGuards, UsePipes, ValidationPipe } from '@nestjs/common';
 import {
   ConnectedSocket,
   MessageBody,
@@ -8,6 +8,7 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import { WsJwtAuthGuard } from '../auth/guards/ws-jwt-auth.guard';
 import { RoomsService } from '../rooms/rooms.service';
 import { ChatService } from './chat.service';
 import { JoinRoomDto } from './dto/join-room.dto';
@@ -35,6 +36,7 @@ export class ChatGateway implements OnGatewayDisconnect {
     private readonly chatService: ChatService,
   ) {}
 
+  @UseGuards(WsJwtAuthGuard)
   @SubscribeMessage('joinRoom')
   async handleJoinRoom(@ConnectedSocket() client: Socket, @MessageBody() dto: JoinRoomDto) {
     const room = await this.roomsService.findByCode(dto.code);
