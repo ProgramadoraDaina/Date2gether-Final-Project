@@ -3,11 +3,9 @@
 import Link from 'next/link';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { createRoom } from '@/lib/api';
-import { getCurrentUser, logout, type AuthUser } from '@/lib/auth';
-import { useTranslation } from '@/features/translation/useTranslation';
 import { ApiError, createRoom } from '@/lib/api';
 import { getCurrentUser, isLoggedIn, logout, onAuthChange, type AuthUser } from '@/lib/auth';
+import { useTranslation } from '@/features/translation/useTranslation';
 
 const NAME_KEY = 'date2gether:userName';
 
@@ -56,7 +54,7 @@ export default function HomePage() {
     e.preventDefault();
     if (!name.trim()) return;
     if (!loggedIn) {
-      setError('Necesitás iniciar sesión para crear una reunión.');
+      setError(t('Necesitás iniciar sesión para crear una reunión.'));
       return;
     }
     localStorage.setItem(NAME_KEY, name.trim());
@@ -65,10 +63,10 @@ export default function HomePage() {
     try {
       const room = await createRoom(`Reunión de ${name.trim()}`);
       router.push(`/room/${encodeURIComponent(room.code)}`);
-    } catch {
-      setError(t('No se pudo crear la reunión. ¿Está corriendo el backend?'));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'No se pudo crear la reunión. ¿Está corriendo el backend?');
+      setError(
+        err instanceof ApiError ? err.message : t('No se pudo crear la reunión. ¿Está corriendo el backend?'),
+      );
       if (!isLoggedIn()) {
         setLoggedIn(false);
         setUser(null);
@@ -119,13 +117,11 @@ export default function HomePage() {
           placeholder={t('¿Cómo te llamás?')}
           required
         />
-        <button type="submit" disabled={loading}>
-          {loading ? t('Creando…') : t('Crear reunión')}
         <button type="submit" disabled={loading || !loggedIn}>
-          {loading ? 'Creando…' : 'Crear reunión'}
+          {loading ? t('Creando…') : t('Crear reunión')}
         </button>
         {!checkingSession && !loggedIn && (
-          <p className="hint-below-button">Necesitás iniciar sesión (arriba) para crear una reunión.</p>
+          <p className="hint-below-button">{t('Necesitás iniciar sesión (arriba) para crear una reunión.')}</p>
         )}
       </form>
 

@@ -20,6 +20,7 @@ interface ChatMessage {
 }
 
 type Notice = { text: string } | { event: 'joined' | 'left'; userName: string };
+
 // Presencia en vivo del socket (no confundir con RoomMember de '@/lib/api',
 // que es el registro de roles persistido en el backend).
 interface RoomPresence {
@@ -64,16 +65,6 @@ export default function RoomPage() {
     });
 
     socket.on('roomHistory', (history: ChatMessage[]) => setMessages(history));
-    socket.on('roomUsers', (list: string[]) => setUsers(list));
-
-    socket.on('userJoined', ({ userName: joined }: { userName: string }) => {
-      setUsers((prev) => (prev.includes(joined) ? prev : [...prev, joined]));
-      setNotice({ event: 'joined', userName: joined });
-    });
-
-    socket.on('userLeft', ({ userName: left }: { userName: string }) => {
-      setUsers((prev) => prev.filter((u) => u !== left));
-      setNotice({ event: 'left', userName: left });
     socket.on('roomUsers', (list: RoomPresence[]) => setUsers(list));
 
     socket.on('userJoined', (joined: RoomPresence) => {
@@ -82,14 +73,14 @@ export default function RoomPage() {
           ? prev
           : [...prev, joined],
       );
-      setNotice(`${joined.userName} se unió a la sala`);
+      setNotice({ event: 'joined', userName: joined.userName });
     });
 
     socket.on('userLeft', (left: RoomPresence) => {
       setUsers((prev) =>
         prev.filter((u) => !(u.userName === left.userName && u.userId === left.userId)),
       );
-      setNotice(`${left.userName} salió de la sala`);
+      setNotice({ event: 'left', userName: left.userName });
     });
 
     socket.on('newMessage', (message: ChatMessage) => {
@@ -139,7 +130,7 @@ export default function RoomPage() {
             ? notice.text
             : `${notice.userName} ${t(notice.event === 'joined' ? 'se unió a la sala' : 'salió de la sala')}`}
         </div>
-      {notice && <div className="notice">{notice}</div>}
+      )}
       {membersError && (
         <p className="error" role="alert">
           {membersError}
@@ -173,7 +164,7 @@ export default function RoomPage() {
                         )
                       }
                     >
-                      {member.role === 'participante' ? 'Hacer colaborador' : 'Quitar colaborador'}
+                      {member.role === 'participante' ? t('Hacer colaborador') : t('Quitar colaborador')}
                     </button>
                   )}
                 </li>
