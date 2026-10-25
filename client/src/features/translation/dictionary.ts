@@ -44,6 +44,10 @@ const en: Record<string, string> = {
   'En la sala': 'In the room',
   'Escribí un mensaje...': 'Write a message...',
   'Enviar': 'Send',
+
+  // Tema
+  'Cambiar a modo claro': 'Switch to light mode',
+  'Cambiar a modo oscuro': 'Switch to dark mode',
 };
 
 export default en;
