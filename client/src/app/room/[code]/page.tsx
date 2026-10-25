@@ -4,6 +4,9 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import type { Socket } from 'socket.io-client';
+import { CallControls } from '@/features/calls/CallControls';
+import { useCallSession } from '@/features/calls/useCallSession';
+import { isLoggedIn } from '@/lib/auth';
 import { createRoomSocket } from '@/lib/socket';
 
 const NAME_KEY = 'date2gether:userName';
@@ -24,9 +27,15 @@ export default function RoomPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const callSession = useCallSession();
 
   useEffect(() => {
     if (!code) return;
+    if (!isLoggedIn()) {
+      router.push('/login');
+      return;
+    }
 
     const userName = localStorage.getItem(NAME_KEY) || 'Invitado';
     const socket = createRoomSocket();
@@ -74,6 +83,16 @@ export default function RoomPage() {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [messages]);
 
+  useEffect(() => {
+    const meetingSession = callSession.meetingSession;
+    if (!meetingSession || !audioRef.current) return;
+
+    meetingSession.audioVideo.bindAudioElement(audioRef.current);
+    return () => {
+      meetingSession.audioVideo.unbindAudioElement();
+    };
+  }, [callSession.meetingSession]);
+
   function handleSend(e: FormEvent) {
     e.preventDefault();
     if (!draft.trim()) return;
@@ -87,8 +106,11 @@ export default function RoomPage() {
         <div>
           <strong>Date2gether</strong> <span className="code">{code}</span>
         </div>
+        <CallControls roomCode={code} session={callSession} />
         <Link href="/">Salir</Link>
       </div>
+
+      <audio ref={audioRef} autoPlay hidden />
 
       {notice && <div className="notice">{notice}</div>}
 
