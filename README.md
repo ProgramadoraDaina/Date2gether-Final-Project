@@ -11,7 +11,7 @@ Las reglas de producto están en [docs/requirements.md](docs/requirements.md). E
 - El nombre visible no concede permisos. El servidor emite un pase de participante para esa sala, válido durante 24 horas. Sirve para chat y llamadas; no sirve para crear salas, consultar cuentas ni administrar roles. Cada participante recibe un identificador distinto aunque repita el nombre de otra persona.
 - Los usuarios registrados conservan los roles por sala: administrador, colaborador y participante. Los invitados no reciben permisos de administración.
 - Hay chat de texto persistente, presencia en tiempo real, interfaz ES/EN y tema claro/oscuro.
-- El botón **Llamar** conecta el audio con Amazon Chime SDK. Se obtiene la reunión de la sala y un asistente asociado al pase de participante. La cámara, la grilla de video y compartir pantalla siguen pendientes.
+- El botón **Llamar** conecta el audio con Amazon Chime SDK cuando el servicio está habilitado para el proyecto AWS. Se obtiene la reunión de la sala y un asistente asociado al pase de participante. La cámara, la grilla de video y compartir pantalla siguen pendientes.
 - El ingreso actual es directo con enlace y nombre. La sala de espera, el bloqueo de ingresos y el cupo de 100 personas son funcionalidades pendientes; no se presentan como controles implementados.
 
 ## Requisitos
@@ -41,7 +41,11 @@ JWT_ACCESS_SECRET=<secreto-de-access>
 JWT_REFRESH_SECRET=<otro-secreto-distinto>
 JWT_ACCESS_EXPIRES_IN=15m
 JWT_REFRESH_EXPIRES_IN=7d
-AWS_REGION=us-east-1
+AWS_REGION=us-east-2
+AWS_PROFILE=date2gether
+AWS_CHIME_ENABLED=false
+AWS_CHIME_REGION=us-east-1
+AWS_CHIME_MEDIA_REGION=us-east-2
 ```
 
 Generá cada secreto por separado con `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`. Los `.env` y las credenciales no se versionan.
@@ -73,13 +77,43 @@ pnpm dev:client
 
 ## AWS y llamadas
 
-La etapa actual usa **AWS y Amazon Chime SDK** aprovechando el plan gratuito previsto por el equipo durante hasta seis meses. AWS indica que el Free account plan termina al cumplirse seis meses o al agotarse los créditos, lo que ocurra primero. La disponibilidad de Chime y la cobertura de su uso deben confirmarse en la cuenta del proyecto: el plazo no garantiza llamadas ilimitadas ni que todos los servicios estén incluidos. Referencia: [planes de AWS](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/free-tier-plans.html).
+La integración de audio utiliza **Amazon Chime SDK Meetings**. El Agent Toolkit permite al asistente consultar AWS; la aplicación usa el SDK de JavaScript directamente desde NestJS. Instalar el Toolkit o iniciar sesión no habilita servicios ni concede permisos adicionales.
 
-Las credenciales se resuelven mediante la cadena estándar del SDK de AWS, por ejemplo un perfil local (`AWS_PROFILE`) o un rol IAM en el despliegue. Nunca se envían al navegador. El backend necesita permisos `chime:CreateMeeting`, `chime:GetMeeting` y `chime:CreateAttendee`. `AWS_REGION=us-east-1` configura el plano de control; el código usa `sa-east-1` para los medios.
+### Disponibilidad del plan
 
-Para una prueba real, dos navegadores abren el mismo enlace, confirman sus nombres y pulsan **Llamar**. Ambos deben recibir audio en la misma reunión. Hace falta permiso de micrófono y un contexto seguro (HTTPS o localhost). La suite automatizada simula AWS y no demuestra por sí sola que una llamada real funcione.
+En el **nuevo AWS experience**, Amazon Chime SDK figura entre los [servicios no admitidos](https://docs.aws.amazon.com/accounts/latest/reference/supported-services-sign-up-new.html#unsupported-services), incluso en su plan pago simplificado. Para usarlo se requiere pasar al plan pago y [activar funciones avanzadas](https://docs.aws.amazon.com/accounts/latest/reference/activate-advanced-features.html). No basta con tener créditos ni con esperar el período de seis meses. La consulta de solo lectura realizada durante esta configuración confirmó un plan `FREE` activo; no se habilitó Chime.
 
-El proyecto no crea recursos AWS al instalar dependencias o ejecutar migraciones. Las llamadas a Chime se realizan al pulsar Llamar. Al vencer el período o los créditos se debe decidir cómo continuar antes de mantener el despliegue activo.
+Las funciones avanzadas son una decisión aparte: la activación es irreversible y elimina los límites de gasto de AWS Settings. Los créditos obtenidos se conservan según sus condiciones, pero no garantizan llamadas gratis durante seis meses. Antes de activar, revisar en **AWS Settings > Billing** el saldo, el vencimiento y los servicios cubiertos; luego controlar los costos mediante AWS Billing y presupuestos. Los presupuestos notifican y no reemplazan un corte automático. La configuración del repositorio mantiene `AWS_CHIME_ENABLED=false` hasta aprobar esa decisión. En ese estado, Llamar responde con HTTP 503 y un mensaje legible, sin realizar solicitudes a Chime. Cuenta, invitados y chat siguen funcionando.
+
+### Credenciales y regiones
+
+Para desarrollo local se utiliza el perfil `date2gether`, creado mediante:
+
+```bash
+aws login --profile date2gether --region us-east-2
+```
+
+El SDK instalado soporta perfiles `login_session` y renueva las credenciales temporales de esa sesión. Si vence la sesión, volver a iniciar sesión con ese comando. No copiar tokens ni claves a `.env`, al frontend o al repositorio. En un despliegue AWS se omite `AWS_PROFILE` y se utiliza un rol del servicio. El backend necesita permisos `chime:CreateMeeting`, `chime:GetMeeting` y `chime:CreateAttendee`.
+
+| Variable | Valor de ejemplo | Uso |
+| --- | --- | --- |
+| `AWS_REGION` | `us-east-2` | Región seleccionada del proyecto; confirmar en AWS Settings > View all projects > Overview > Additional Info > Region. |
+| `AWS_PROFILE` | `date2gether` | Perfil local de la sesión de AWS CLI. Omitir al usar un rol en AWS. |
+| `AWS_CHIME_ENABLED` | `false` | Activación explícita del audio, después de confirmar acceso y costos. |
+| `AWS_CHIME_REGION` | `us-east-1` | Endpoint del plano de control de Meetings; no existe en Ohio. No se realizan solicitudes allí mientras las llamadas estén deshabilitadas. |
+| `AWS_CHIME_MEDIA_REGION` | `us-east-2` | Región donde se procesa el audio. Si se omite, usa `AWS_REGION`. |
+
+La [tabla de endpoints](https://docs.aws.amazon.com/general/latest/gr/chime-sdk.html#chime-sdk-region) y la [API CreateMeeting](https://docs.aws.amazon.com/chime-sdk/latest/APIReference/API_meeting-chime_CreateMeeting.html) distinguen la región de control de la región de medios. Para habilitar esta combinación se necesita acceso autorizado al endpoint de Virginia; no se intenta sortear la restricción regional del nuevo AWS experience.
+
+### Prueba real de audio
+
+Solo después de confirmar que Chime está habilitado, sus permisos y la cobertura del consumo, configurar `AWS_CHIME_ENABLED=true` y reiniciar el backend. No hay cambio de plan automático. Aplicar primero `pnpm db:migrate` para disponer de `rooms.chime_meeting_id`.
+
+Dos personas desde navegadores o dispositivos distintos abren el mismo enlace, confirman sus nombres y pulsan **Llamar**. Pueden ser invitados sin cuenta. Hace falta permiso de micrófono y un contexto seguro (HTTPS o localhost). Si usan el mismo equipo, utilizar auriculares para evitar acople.
+
+La interfaz permanece en Conectando hasta que Chime confirma la conexión. Durante ese paso se puede cancelar; ya conectados, se puede silenciar, activar el micrófono o colgar. Al salir, cancelar o fallar la conexión se liberan los dispositivos. Los participantes de una misma sala reciben la misma reunión, también si llaman simultáneamente. Las credenciales temporales de participante (`JoinToken`) solo se entregan a quien presenta el pase de esa sala; las credenciales AWS permanecen en el servidor.
+
+La suite automatizada simula AWS y verifica configuración deshabilitada, errores seguros, concurrencia y el ciclo de audio del cliente. No acredita una llamada real ni capacidad para 100 personas. No se ejecutan servidores ni se crean recursos AWS al correr esas pruebas. Las reuniones siguen dependiendo del cierre por inactividad de Chime; el cierre explícito en AWS queda pendiente.
 
 ## API y Socket.io
 

@@ -68,5 +68,7 @@ cuentas registradas como para invitados.
 
 La suite de navegador comprueba ingreso y chat sin iniciar llamadas reales a AWS.
 Los tests unitarios de backend y cliente simulan Amazon Chime SDK. Para validar
-el audio real se necesita la cuenta AWS del proyecto y una prueba manual entre dos
-navegadores con el mismo enlace, según el README principal.
+el audio real se necesita acceso autorizado a Chime SDK, habilitar explícitamente
+`AWS_CHIME_ENABLED=true` y una prueba manual entre dos navegadores con el mismo
+enlace, según el README principal. El plan FREE del nuevo AWS experience no
+habilita este servicio; instalar Agent Toolkit no modifica esa condición.

@@ -138,6 +138,8 @@ Se eligió la tercera opción: `src/modules/auth/jwt-auth.module.ts` (`JwtAuthMo
 
 ## 5. MediaRegion de Chime en `sa-east-1` (São Paulo), control plane en `us-east-1`
 
+**Decisión histórica, sustituida por la sección 11:** la región de medios ahora es configurable y se usa `us-east-2` para este proyecto.
+
 **Fecha:** 2026-10-25
 **Rama:** `feature/voice-video-call`
 
@@ -292,3 +294,20 @@ Consecuencia real: si dos personas en la misma sala apretaban "Llamar" por separ
 Se conservan juntos los roles de sala, ES/EN, tema claro/oscuro, la corrección de hidratación y las llamadas. La colisión entre dos migraciones `0002` se resuelve conservando roles en `0002_panoramic_nebula` y regenerando Chime como `0003_chime_meeting`, con su snapshot enlazado al de roles. Las bases anteriores de la rama que ya hayan aplicado el antiguo `0002_fast_nebula` requieren reconciliación o una base local nueva; no se borran ni se reinician datos automáticamente.
 
 El equipo autoriza AWS y Amazon Chime SDK para la etapa gratuita prevista de hasta seis meses. Se actualiza primero `docs/requirements.md` para reemplazar la restricción anterior de autohospedaje sin APIs comerciales. El plazo depende de los créditos y de los servicios disponibles en la cuenta; no garantiza consumo ilimitado. Las credenciales siguen solo en el backend y las pruebas automatizadas simulan Chime sin consumir AWS.
+
+
+## 11. Configuración de audio para el proyecto date2gether
+
+**Fecha:** 2026-10-26
+
+La consulta `GetAccountPlanState` confirmó `FREE` y `ACTIVE`. El nuevo AWS experience excluye Chime SDK incluso en su plan pago simplificado. Instalar Agent Toolkit y autenticar AWS CLI no cambia esa restricción. No se cambia el plan, se activan funciones avanzadas ni se crean reuniones para probar el código.
+
+`AWS_CHIME_ENABLED` exige activación explícita; su valor por defecto es `false`. Así se puede continuar con cuentas, invitados y chat mientras se decide sobre el acceso a Chime. En modo deshabilitado se devuelve HTTP 503 antes de consultar AWS. Las credenciales se resuelven con el perfil local `date2gether`, compatible con `aws login`, o con un rol en AWS. Los errores externos se convierten en mensajes de servicio sin divulgar identificadores ni políticas.
+
+`AWS_REGION=us-east-2` representa la región seleccionada. `AWS_CHIME_MEDIA_REGION` usa esa región como valor por defecto. `AWS_CHIME_REGION=us-east-1` identifica el endpoint de control compatible; requiere acceso autorizado a esa región y no se contacta mientras Chime esté deshabilitado. Esto reemplaza la selección fija de São Paulo de la sección 5.
+
+Los ingresos simultáneos comparten una promesa por sala en el proceso. El token idempotente de creación deriva del ID de sala y de su reunión anterior, para que un mismo intento no genere reuniones distintas entre procesos. Los tests simulan AWS y verifican también reintentos tras fallos.
+
+El cliente escucha `audioVideoDidStart` antes de mostrar la llamada conectada. Permite cancelar, silenciar y volver a activar el micrófono. Al colgar, salir o fallar elimina el observer y destruye el controlador de dispositivos. Los intentos cancelados no encienden el micrófono cuando termina una solicitud pendiente.
+
+La conexión real entre dispositivos permanece pendiente hasta disponer de acceso al servicio. Los pasos y fuentes oficiales están en el [README principal](../README.md#aws-y-llamadas).

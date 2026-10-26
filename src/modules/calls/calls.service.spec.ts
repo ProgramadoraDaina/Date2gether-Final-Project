@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { ServiceUnavailableException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   ChimeSDKMeetingsClient,
   CreateAttendeeCommand,
@@ -39,7 +41,11 @@ describe('CallsService', () => {
       getByCodeOrThrow: jest.fn<(...args: unknown[]) => Promise<Room>>(),
       setChimeMeetingId: jest.fn<(...args: unknown[]) => Promise<void>>().mockResolvedValue(),
     };
-    service = new CallsService(client, roomsService as unknown as RoomsService);
+    service = new CallsService(
+      client,
+      roomsService as unknown as RoomsService,
+      new ConfigService({ AWS_CHIME_ENABLED: 'true', AWS_REGION: 'us-east-2' }),
+    );
   });
 
   it('crea una reunión de Chime nueva si la sala todavía no tiene una, y la persiste', async () => {
@@ -56,7 +62,7 @@ describe('CallsService', () => {
     expect(command).toBeInstanceOf(CreateMeetingCommand);
     expect(command.input).toMatchObject({
       ExternalMeetingId: 'ABC123',
-      MediaRegion: 'sa-east-1',
+      MediaRegion: 'us-east-2',
     });
     expect(roomsService.setChimeMeetingId).toHaveBeenCalledWith('room-1', 'meeting-123');
   });
@@ -111,5 +117,78 @@ describe('CallsService', () => {
       MeetingId: 'meeting-123',
       ExternalUserId: 'user-456',
     });
+  });
+
+  it('comparte una reunión cuando dos participantes llaman simultáneamente', async () => {
+    roomsService.getByCodeOrThrow.mockResolvedValue(buildRoom());
+    const meeting = { MeetingId: 'meeting-shared' };
+    send.mockResolvedValue({ Meeting: meeting });
+
+    const results = await Promise.all([
+      service.createMeetingForRoom('ABC123'),
+      service.createMeetingForRoom('ABC123'),
+    ]);
+
+    expect(results).toEqual([meeting, meeting]);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(roomsService.setChimeMeetingId).toHaveBeenCalledTimes(1);
+  });
+
+  it('no consulta AWS ni la base si las llamadas no están habilitadas', async () => {
+    const disabledService = new CallsService(
+      { send } as unknown as ChimeSDKMeetingsClient,
+      roomsService as unknown as RoomsService,
+      new ConfigService({}),
+    );
+
+    await expect(disabledService.createMeetingForRoom('ABC123')).rejects.toThrow(
+      'Las llamadas de audio todavía no están habilitadas',
+    );
+    await expect(disabledService.createAttendee('meeting', 'guest')).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+    expect(send).not.toHaveBeenCalled();
+    expect(roomsService.getByCodeOrThrow).not.toHaveBeenCalled();
+  });
+
+  it('permite reintentar sin exponer la respuesta de AWS cuando faltan permisos', async () => {
+    roomsService.getByCodeOrThrow.mockResolvedValue(buildRoom());
+    send.mockRejectedValueOnce(
+      Object.assign(new Error('Private AWS identifier and policy details'), {
+        name: 'AccessDeniedException',
+      }),
+    );
+    await expect(service.createMeetingForRoom('ABC123')).rejects.toThrow(
+      'El servicio de audio no está disponible en este momento',
+    );
+    send.mockResolvedValueOnce({ Meeting: { MeetingId: 'meeting-retry' } });
+    await expect(service.createMeetingForRoom('ABC123')).resolves.toEqual({
+      MeetingId: 'meeting-retry',
+    });
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it('informa la renovación de credenciales sin publicar su contenido', async () => {
+    send.mockRejectedValueOnce(
+      Object.assign(new Error('Private profile details'), { name: 'CredentialsProviderError' }),
+    );
+    await expect(service.createAttendee('meeting', 'guest')).rejects.toThrow(
+      'El servicio de audio necesita renovar su conexión',
+    );
+  });
+
+  it('no guarda una reunión si AWS devuelve una respuesta incompleta', async () => {
+    roomsService.getByCodeOrThrow.mockResolvedValue(buildRoom());
+    send.mockResolvedValue({});
+    await expect(service.createMeetingForRoom('ABC123')).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+    expect(roomsService.setChimeMeetingId).not.toHaveBeenCalled();
+  });
+
+  it('rechaza una sala cerrada antes de consultar Chime', async () => {
+    roomsService.getByCodeOrThrow.mockResolvedValue(buildRoom({ isActive: false }));
+    await expect(service.createMeetingForRoom('ABC123')).rejects.toThrow('La sala está cerrada');
+    expect(send).not.toHaveBeenCalled();
   });
 });

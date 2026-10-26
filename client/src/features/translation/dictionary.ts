@@ -15,6 +15,22 @@ const en: Record<string, string> = {
   'Conectando...': 'Connecting...',
   Llamar: 'Call',
   Colgar: 'Hang up',
+  Cancelar: 'Cancel',
+  'Activar micrófono': 'Unmute microphone',
+  'Silenciar micrófono': 'Mute microphone',
+  'Las llamadas de audio todavía no están habilitadas': 'Audio calls are not enabled yet',
+  'El servicio de audio necesita renovar su conexión':
+    'The audio service needs to renew its connection',
+  'El servicio de audio no está disponible en este momento':
+    'The audio service is currently unavailable',
+  'El servicio de audio no devolvió una reunión válida':
+    'The audio service did not return a valid meeting',
+  'El servicio de audio no devolvió un participante válido':
+    'The audio service did not return a valid participant',
+  'Se perdió la conexión de audio. Volvé a llamar.': 'Audio connection lost. Please call again.',
+  'Permití el acceso al micrófono para iniciar la llamada':
+    'Allow microphone access to start the call',
+  'No se pudo iniciar la llamada': 'Could not start the call',
   'Videollamadas simples, en el navegador.': 'Simple video calls, in the browser.',
 
   // Inicio

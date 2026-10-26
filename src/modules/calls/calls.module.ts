@@ -16,7 +16,9 @@ import { CallsService } from './calls.service';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) =>
         new ChimeSDKMeetingsClient({
-          region: configService.get<string>('AWS_REGION', 'us-east-1'),
+          // Ohio admite medios, pero no el endpoint de Meetings.
+          region: configService.get<string>('AWS_CHIME_REGION', 'us-east-1'),
+          profile: configService.get<string>('AWS_PROFILE'),
         }),
     },
   ],

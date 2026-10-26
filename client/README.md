@@ -21,9 +21,11 @@ La interfaz conserva ES/EN y tema claro/oscuro. Los usuarios registrados mantien
 
 ## Audio con Amazon Chime SDK
 
-El audio usa la misma reunión Chime para toda la sala. Al pulsar Llamar, el frontend obtiene una reunión y un asistente mediante `POST /calls/:roomCode`, con el pase de sala. Las credenciales AWS permanecen en el backend.
+El audio usa la misma reunión Chime para toda la sala. Al pulsar Llamar, el frontend obtiene una reunión y un asistente mediante `POST /calls/:roomCode`, con el pase de sala. Las credenciales AWS permanecen en el backend. El perfil local se configura solo en el `.env` raíz; no hay variables AWS ni claves en `client/.env`.
 
-El equipo eligió AWS para la etapa gratuita prevista de hasta seis meses, sujeta a créditos y servicios habilitados. La configuración y sus límites están en el [README principal](../README.md#aws-y-llamadas). Los tests simulan AWS; la conexión real requiere credenciales y una prueba entre dos navegadores.
+El nuevo AWS experience con plan FREE no admite Chime SDK. El audio queda deshabilitado por defecto (`AWS_CHIME_ENABLED=false` en el backend), con un mensaje claro al pulsar Llamar. Usar Chime requiere una decisión explícita sobre plan pago y funciones avanzadas; los créditos no garantizan seis meses de llamadas gratuitas. La configuración y sus límites están en el [README principal](../README.md#aws-y-llamadas). Los tests simulan AWS; la conexión real requiere credenciales y una prueba entre dos navegadores.
+
+La interfaz espera la confirmación real de Chime, permite cancelar la conexión y silenciar o activar el micrófono. Colgar o abandonar la página libera el dispositivo. Los errores de conexión permiten volver a llamar.
 
 En esta entrega todavía faltan cámara, grilla de video, selección y previsualización de dispositivos, pantalla compartida y moderación de ingresos. El botón Llamar inicia audio; no representa una videollamada completa.
 
