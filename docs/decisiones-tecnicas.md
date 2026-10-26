@@ -206,43 +206,19 @@ Se eligió **Jest con el preset `next/jest`**, más `jest-environment-jsdom`, `@
 
 ---
 
-## 7. Las salas dejan de ser anónimas: se requiere cuenta para crear/unirse, pero el nombre de display sigue siendo editable
+## 7. Acceso con enlace y nombre para invitados, cuenta para crear y administrar
 
-**Fecha:** 2026-10-25
-**Rama:** `feature/voice-video-call`
+**Actualización:** 2026-10-26. Reemplaza la decisión inicial de exigir cuenta para entrar a cualquier sala.
 
-### Contexto
+Crear salas sigue requiriendo un JWT de cuenta. Al crear, el servidor registra al creador como administrador usando su identidad autenticada, conservando los roles de `develop`.
 
-Al diagnosticar por qué "Llamar" devolvía 401 se encontró que `CallsController` ya exigía un JWT de cuenta (`JwtAuthGuard`), pero `RoomsController` y `ChatGateway` no exigían nada: cualquiera entraba a una sala con solo un `userName` de texto libre, sin pasar por `/auth/login`. Dos features del mismo producto asumían modelos de usuario distintos. Había que decidir si las salas pasaban a requerir cuenta (como Meet/Zoom) o si `CallsController` bajaba su exigencia a algo compatible con el modelo anónimo.
+`POST /rooms/:code/access` acepta un nombre obligatorio de 1 a 60 caracteres, recortado en el servidor. Comprueba que la sala exista y esté activa. La cuenta es opcional: si llega un JWT de cuenta, se valida y registra su membresía; si no llega, se crea una participación invitada. El nombre nunca se usa como prueba de identidad.
 
-### Alternativas consideradas
+El servidor emite un pase firmado con `kind: room-participant`, audiencia `date2gether:rooms`, identificador aleatorio, código de sala, nombre y, solo cuando fue autenticado, `userId`. Vence a las 24 horas. El JWT de cuenta no se sustituye: `JwtAuthGuard` rechaza los pases de sala para impedir que un invitado cree reuniones o administre roles.
 
-- **Mantener salas anónimas** y relajar `CallsController` para que confíe solo en el código de sala + un `userName` de texto libre, sin cuenta.
-- **Requerir cuenta para crear/unirse a una sala**, manteniendo `JwtAuthGuard` en `CallsController` tal como estaba.
+El socket verifica ese pase, toma de él la identidad y el nombre y rechaza otra sala. La presencia usa `participantId`, de modo que dos nombres iguales no se fusionan. `POST /calls/:roomCode` verifica el mismo pase y devuelve la reunión y un asistente Chime para ese participante. Se elimina el endpoint público basado únicamente en un MeetingId arbitrario.
 
-Dentro de la segunda opción, surgió una sub-decisión: si la identidad pasa a ser la cuenta (email + contraseña + id), ¿el nombre que ven los demás en la sala y en el chat debería ser siempre el nombre registrado de la cuenta, o seguir siendo editable por sesión?
-
-### Decisión
-
-Se eligió **requerir cuenta** para crear o unirse a una sala. Las salas anónimas quedan descartadas por el momento.
-
-El nombre de display, sin embargo, **sigue siendo independiente de la cuenta y editable en cualquier momento**, replicando el comportamiento de Google Meet y Zoom: ahí el email/contraseña (y el id interno) solo sirven para diferenciar cuentas; nadie inicia sesión "con su id", y el nombre que ven los demás participantes se puede cambiar antes de entrar a cualquier llamada. El JWT prueba que el socket pertenece a una cuenta logueada; no determina qué nombre se muestra.
-
-### Justificación
-
-- Consistente con el patrón de producto que ya usan Meet/Zoom, que es la referencia explícita del proyecto.
-- Evita duplicar la noción de "identidad para autorizar" (cuenta) con la de "identidad para mostrar" (nombre); cada una resuelve un problema distinto y no hay razón para acoplarlas.
-- No requiere tocar el payload del JWT (`AccessTokenPayload: { sub, email }`) ni agregar una consulta a la base de datos en `ChatGateway` solo para resolver un nombre — el gateway solo necesita confirmar que el socket es de una cuenta válida.
-
-### Implementación
-
-- **Backend:** nuevo `WsJwtAuthGuard` (`src/modules/auth/guards/ws-jwt-auth.guard.ts`), exportado desde `JwtAuthModule` junto al `JwtAuthGuard` HTTP existente. Verifica el JWT del handshake del socket (`client.handshake.auth.token`) contra `JWT_ACCESS_SECRET`, igual que el guard HTTP pero extrayendo el token de otro lugar. `RoomsController` (`create` y `findOne`) y `ChatGateway.handleJoinRoom` quedan detrás de sus respectivos guards; `RoomsModule` y `ChatModule` importan `JwtAuthModule`.
-- **Frontend:** `client/src/lib/socket.ts` manda el access token en `io(url, { auth: { token } })`. `client/src/lib/api.ts` (`createRoom`) también manda el header `Authorization` — se detectó en rojo (401 real en el navegador) que faltaba actualizarlo al guardar `RoomsController.create`, quedó corregido con test (`api.spec.ts`). `client/src/app/page.tsx` redirige a `/login` si se intenta crear o unirse a una sala sin `user` autenticado. `client/src/app/room/[code]/page.tsx` redirige a `/login` antes de conectar el socket si `isLoggedIn()` es `false`. El campo "Tu nombre" del home no se tocó: sigue editable, precargado con el nombre de cuenta pero no forzado a coincidir con él.
-
-### Consecuencias
-
-- Un JWT expirado (vida corta, 15 min) a mitad de una sesión en una sala hará que el próximo intento de `joinRoom` sea rechazado por `WsJwtAuthGuard`; hoy esto no refresca el token automáticamente en el socket ni se distingue de otros errores en el cliente (cae en el mismo listener `socket.on('error', ...)` que ya existía para sala inexistente). Queda pendiente como mejora futura, no se implementó en este cambio.
-- `GET /rooms/:code` también quedó detrás de `JwtAuthGuard`: ya no se puede consultar si un código de sala existe sin estar logueado.
+El enlace directo muestra el formulario de nombre antes de conectar el chat. El pase vive en memoria; la reconexión automática lo conserva y una recarga vuelve a pedir confirmación. Elegir el nombre no activa el micrófono: el audio se inicia con Llamar. La sala de espera y la moderación de ingresos quedan pendientes y serán opcionales, desactivadas por defecto.
 
 ---
 
@@ -308,3 +284,11 @@ Consecuencia real: si dos personas en la misma sala apretaban "Llamar" por separ
 
 - `calls.module.spec.ts` ahora necesita `DrizzleModule` (con `DRIZZLE` mockeado vía `overrideProvider`) para compilar, porque `CallsModule` → `RoomsModule` → `RoomsService` depende de la base. A diferencia del guard JWT (sección 4), esta es una dependencia real e intencional: `CallsService` necesita leer y escribir datos de la sala.
 - Sigue sin existir un endpoint para cerrar la reunión explícitamente al terminar la llamada (`DeleteMeetingCommand`) — la reunión se cierra sola del lado de Chime por inactividad; `chimeMeetingId` en la fila de la sala queda apuntando a una reunión vencida hasta el próximo `createMeetingForRoom`, que la detecta y la reemplaza.
+
+## 10. Integración con develop y período gratuito de AWS
+
+**Fecha:** 2026-10-26.
+
+Se conservan juntos los roles de sala, ES/EN, tema claro/oscuro, la corrección de hidratación y las llamadas. La colisión entre dos migraciones `0002` se resuelve conservando roles en `0002_panoramic_nebula` y regenerando Chime como `0003_chime_meeting`, con su snapshot enlazado al de roles. Las bases anteriores de la rama que ya hayan aplicado el antiguo `0002_fast_nebula` requieren reconciliación o una base local nueva; no se borran ni se reinician datos automáticamente.
+
+El equipo autoriza AWS y Amazon Chime SDK para la etapa gratuita prevista de hasta seis meses. Se actualiza primero `docs/requirements.md` para reemplazar la restricción anterior de autohospedaje sin APIs comerciales. El plazo depende de los créditos y de los servicios disponibles en la cuenta; no garantiza consumo ilimitado. Las credenciales siguen solo en el backend y las pruebas automatizadas simulan Chime sin consumir AWS.

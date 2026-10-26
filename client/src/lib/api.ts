@@ -10,6 +10,25 @@ export interface Room {
   createdAt: string;
 }
 
+export interface RoomAccess {
+  token: string;
+  participant: { sub: string; roomCode: string; name: string; userId?: string };
+}
+
+// El nombre se confirma antes de obtener acceso, tanto con cuenta como sin ella.
+export async function requestRoomAccess(code: string, name: string): Promise<RoomAccess> {
+  const path = `/rooms/${encodeURIComponent(code)}/access`;
+  const init = { method: 'POST', body: JSON.stringify({ name }) };
+  const res = getAccessToken()
+    ? await authFetch(path, init)
+    : await fetch(`${API_URL}${path}`, {
+        ...init,
+        headers: { 'Content-Type': 'application/json' },
+      });
+  if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudo entrar a la sala'));
+  return res.json();
+}
+
 export type RoomRole = 'administrador' | 'colaborador' | 'participante';
 
 export interface RoomMember {

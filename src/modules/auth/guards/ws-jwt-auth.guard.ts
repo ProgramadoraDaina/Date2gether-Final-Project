@@ -1,33 +1,25 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
 import { WsException } from '@nestjs/websockets';
 import type { Socket } from 'socket.io';
-import type { AccessTokenPayload } from '../auth.types';
-
-type AuthenticatedSocket = Socket & { user?: AccessTokenPayload };
+import { RoomAccessService, type RoomParticipant } from '../room-access.service';
 
 @Injectable()
 export class WsJwtAuthGuard implements CanActivate {
-  constructor(
-    private readonly jwtService: JwtService,
-    private readonly configService: ConfigService,
-  ) {}
+  constructor(private readonly access: RoomAccessService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const client = context.switchToWs().getClient<AuthenticatedSocket>();
+    const client = context.switchToWs().getClient<Socket>();
+    const data = context.switchToWs().getData<{ code?: string }>();
     const token = client.handshake.auth?.token as string | undefined;
-    if (!token) {
-      throw new WsException('Token de acceso requerido');
-    }
-
+    if (!token) throw new WsException('Elegí tu nombre antes de entrar');
     try {
-      client.user = await this.jwtService.verifyAsync<AccessTokenPayload>(token, {
-        secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
-      });
+      const participant = await this.access.verify(token);
+      if (data?.code && participant.roomCode !== data.code) throw new Error('Otra sala');
+      const socketData = client.data as { participant?: RoomParticipant };
+      socketData.participant = participant;
       return true;
     } catch {
-      throw new WsException('Token de acceso inválido o expirado');
+      throw new WsException('Acceso a la sala inválido o expirado');
     }
   }
 }

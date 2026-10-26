@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { Test } from '@nestjs/testing';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RoomsController } from './rooms.controller';
+import { RoomAccessService } from '../auth/room-access.service';
 import { RoomsService } from './rooms.service';
 
 describe('RoomsController', () => {
@@ -19,7 +20,10 @@ describe('RoomsController', () => {
 
     const module = await Test.createTestingModule({
       controllers: [RoomsController],
-      providers: [{ provide: RoomsService, useValue: roomsService }],
+      providers: [
+        { provide: RoomsService, useValue: roomsService },
+        { provide: RoomAccessService, useValue: {} },
+      ],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
@@ -28,7 +32,7 @@ describe('RoomsController', () => {
     controller = module.get(RoomsController);
   });
 
-  it('requiere autenticación para crear y consultar salas', () => {
+  it('requiere autenticación para crear salas pero permite consultar el enlace', () => {
     const handler = Object.getOwnPropertyDescriptor(RoomsController.prototype, 'create')!
       .value as object;
     const guards = (Reflect.getMetadata('__guards__', handler) ?? []) as unknown[];

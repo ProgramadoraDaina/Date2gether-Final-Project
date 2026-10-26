@@ -1,21 +1,19 @@
-import { Controller, Param, Post, UseGuards } from '@nestjs/common';
-import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import type { AccessTokenPayload } from '../auth/auth.types';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { Controller, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { RoomAccessGuard, type ParticipantRequest } from '../auth/guards/room-access.guard';
 import { CallsService } from './calls.service';
 
 @Controller('calls')
-@UseGuards(JwtAuthGuard)
+@UseGuards(RoomAccessGuard)
 export class CallsController {
   constructor(private readonly callsService: CallsService) {}
 
   @Post(':roomCode')
-  createMeeting(@Param('roomCode') roomCode: string) {
-    return this.callsService.createMeetingForRoom(roomCode);
-  }
-
-  @Post('meetings/:meetingId/attendees')
-  createAttendee(@Param('meetingId') meetingId: string, @CurrentUser() user: AccessTokenPayload) {
-    return this.callsService.createAttendee(meetingId, user.sub);
+  async join(@Param('roomCode') roomCode: string, @Req() request: ParticipantRequest) {
+    const meeting = await this.callsService.createMeetingForRoom(roomCode);
+    const attendee = await this.callsService.createAttendee(
+      meeting.MeetingId!,
+      request.participant.sub,
+    );
+    return { meeting, attendee };
   }
 }

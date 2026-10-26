@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useLanguageStore } from './store';
 import { applyLanguageToDocument } from './dom-helpers';
 import en from './dictionary';
@@ -18,7 +18,10 @@ export function useTranslation() {
     applyLanguageToDocument(language);
   }, [language]);
 
-  const t = (key: string): string => (language === 'en' ? en[key] ?? key : key);
+  const t = useCallback(
+    (key: string): string => (language === 'en' ? (en[key] ?? key) : key),
+    [language],
+  );
 
   return { t, language, setLanguage, toggle };
 }

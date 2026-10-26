@@ -1,59 +1,36 @@
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { WsException } from '@nestjs/websockets';
+import { describe, expect, it } from '@jest/globals';
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import type { ExecutionContext } from '@nestjs/common';
+import { RoomAccessService } from '../room-access.service';
 import { WsJwtAuthGuard } from './ws-jwt-auth.guard';
 
-function contextWithToken(token: string | undefined): ExecutionContext {
-  const client = { handshake: { auth: { token } } };
+const access = new RoomAccessService(
+  new JwtService(),
+  new ConfigService({ JWT_ACCESS_SECRET: 'ws-test-secret' }),
+);
+const guard = new WsJwtAuthGuard(access);
+function context(token?: string, code = 'abc-defg-hij') {
+  const client = { handshake: { auth: { token } }, data: {} };
   return {
-    switchToWs: () => ({ getClient: () => client }),
-  } as unknown as ExecutionContext;
+    client,
+    ctx: {
+      switchToWs: () => ({ getClient: () => client, getData: () => ({ code }) }),
+    } as unknown as ExecutionContext,
+  };
 }
 
 describe('WsJwtAuthGuard', () => {
-  let jwtService: { verifyAsync: jest.Mock<(...args: unknown[]) => Promise<unknown>> };
-  let configService: { getOrThrow: jest.Mock<(...args: unknown[]) => string> };
-  let guard: WsJwtAuthGuard;
-
-  beforeEach(() => {
-    jwtService = { verifyAsync: jest.fn() };
-    configService = {
-      getOrThrow: jest.fn<(...args: unknown[]) => string>().mockReturnValue('access-secret'),
-    };
-    guard = new WsJwtAuthGuard(jwtService as never, configService as never);
+  it('permite un invitado con nombre y conserva la identidad verificada', async () => {
+    const issued = await access.create('abc-defg-hij', 'Invitado');
+    const { client, ctx } = context(issued.token);
+    await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    expect(client.data).toMatchObject({ participant: issued.participant });
   });
-
-  it('rechaza la conexión si el handshake no trae token', async () => {
-    const context = contextWithToken(undefined);
-
-    await expect(guard.canActivate(context)).rejects.toThrow(WsException);
-    expect(jwtService.verifyAsync).not.toHaveBeenCalled();
-  });
-
-  it('rechaza la conexión si el token es inválido o expiró', async () => {
-    jwtService.verifyAsync.mockRejectedValue(new Error('invalid'));
-    const context = contextWithToken('token-invalido');
-
-    await expect(guard.canActivate(context)).rejects.toThrow(WsException);
-    expect(jwtService.verifyAsync).toHaveBeenCalledWith('token-invalido', {
-      secret: 'access-secret',
-    });
-  });
-
-  it('permite la conexión y adjunta el payload al socket si el token es válido', async () => {
-    const payload = { sub: 'user-1', email: 'user@example.com' };
-    jwtService.verifyAsync.mockResolvedValue(payload);
-    const client: { handshake: { auth: { token: string } }; user?: unknown } = {
-      handshake: { auth: { token: 'token-valido' } },
-      user: undefined,
-    };
-    const context = {
-      switchToWs: () => ({ getClient: () => client }),
-    } as unknown as ExecutionContext;
-
-    const result = await guard.canActivate(context);
-
-    expect(result).toBe(true);
-    expect(client.user).toEqual(payload);
+  it('rechaza sockets sin pase, con pase inválido o de otra sala', async () => {
+    await expect(guard.canActivate(context().ctx)).rejects.toThrow();
+    await expect(guard.canActivate(context('invalid').ctx)).rejects.toThrow();
+    const issued = await access.create('abc-defg-hij', 'Invitado');
+    await expect(guard.canActivate(context(issued.token, 'xyz-abcd-efg').ctx)).rejects.toThrow();
   });
 });

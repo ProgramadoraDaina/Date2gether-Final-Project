@@ -14,16 +14,16 @@ describe('createRoomSocket', () => {
     localStorage.clear();
   });
 
-  it('conecta al namespace /rooms mandando el access token en el handshake', async () => {
+  it('conecta al namespace /rooms mandando el pase de sala en el handshake', async () => {
     const { io } = await import('socket.io-client');
     const { createRoomSocket } = await import('./socket');
     localStorage.setItem(ACCESS_TOKEN_KEY, 'fake-access-token');
 
-    createRoomSocket();
+    createRoomSocket('guest-room-token');
 
     expect(io).toHaveBeenCalledWith(
       'http://localhost:3001/rooms',
-      expect.objectContaining({ auth: { token: 'fake-access-token' } }),
+      expect.objectContaining({ auth: { token: 'guest-room-token' } }),
     );
   });
 });

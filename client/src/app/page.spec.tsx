@@ -27,7 +27,7 @@ describe('HomePage', () => {
     expect(screen.getByRole('button', { name: 'Crear reunión' })).toBeDisabled();
     expect(createRoom).not.toHaveBeenCalled();
   });
-  it('redirige al login al intentar entrar sin sesión', async () => {
+  it('permite navegar a una sala con nombre y código sin iniciar sesión', async () => {
     const HomePage = (await import('./page')).default;
     render(<HomePage />);
     await screen.findByText('Iniciar sesión');
@@ -36,7 +36,7 @@ describe('HomePage', () => {
       target: { value: 'abc-defg-hij' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Unirse' }));
-    expect(push).toHaveBeenCalledWith('/login');
-    expect(push).not.toHaveBeenCalledWith('/room/abc-defg-hij');
+    expect(push).toHaveBeenCalledWith('/room/abc-defg-hij');
+    expect(push).not.toHaveBeenCalledWith('/login');
   });
 });

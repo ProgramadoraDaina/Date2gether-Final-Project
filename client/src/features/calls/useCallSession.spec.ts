@@ -40,10 +40,10 @@ describe('useCallSession', () => {
     expect(result.current.status).toBe('idle');
 
     await act(async () => {
-      await result.current.joinCall('ABC123');
+      await result.current.joinCall('ABC123', 'room-token');
     });
 
-    expect(startCall).toHaveBeenCalledWith('ABC123');
+    expect(startCall).toHaveBeenCalledWith('ABC123', 'room-token');
     expect(createMeetingSession).toHaveBeenCalledWith(fakeSession);
     expect(listAudioInputDevices).toHaveBeenCalledTimes(1);
     expect(startAudioInput).toHaveBeenCalledWith('mic-1');
@@ -62,7 +62,7 @@ describe('useCallSession', () => {
     const { result } = renderHook(() => useCallSession());
 
     await act(async () => {
-      await result.current.joinCall('ABC123');
+      await result.current.joinCall('ABC123', 'room-token');
     });
 
     expect(result.current.status).toBe('error');
@@ -96,7 +96,7 @@ describe('useCallSession', () => {
     const { result } = renderHook(() => useCallSession());
 
     await act(async () => {
-      await result.current.joinCall('ABC123');
+      await result.current.joinCall('ABC123', 'room-token');
     });
 
     act(() => {

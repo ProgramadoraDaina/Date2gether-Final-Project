@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import {
   type Attendee,
   ChimeSDKMeetingsClient,
@@ -20,6 +20,7 @@ export class CallsService {
 
   async createMeetingForRoom(roomCode: string): Promise<Meeting> {
     const room = await this.roomsService.getByCodeOrThrow(roomCode);
+    if (!room.isActive) throw new ForbiddenException('La sala está cerrada');
 
     if (room.chimeMeetingId) {
       const existingMeeting = await this.findActiveMeeting(room.chimeMeetingId);

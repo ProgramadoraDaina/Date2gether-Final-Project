@@ -1,52 +1,43 @@
 # Date2gether — client
 
-Frontend de Date2gether construido con [Next.js](https://nextjs.org/) **15.5.27** (App Router) + React 19 + TypeScript.
-
-Next.js se actualizó desde **15.1.6** para incorporar parches de seguridad. La dependencia está declarada en `package.json` y la versión instalada queda registrada en el `pnpm-lock.yaml` del workspace. Next.js utiliza React para la interfaz y App Router para las rutas `/` y `/room/[code]`.
-
-El workspace fija PostCSS **8.5.23** para Next.js mediante `overrides` en `pnpm-workspace.yaml`, corrigiendo las alertas de seguridad de esa dependencia. Tras cambiar versiones, ejecutá `pnpm install` en la raíz y conservá el lockfile actualizado.
+Frontend Next.js 15.5.27, React 19 y TypeScript. Forma parte del workspace pnpm; las dependencias se instalan desde la raíz con `pnpm install --frozen-lockfile`.
 
 ## Desarrollo
 
-```bash
-pnpm install
-cp .env.example .env   # NEXT_PUBLIC_API_URL, por defecto http://localhost:3001
-pnpm dev
-```
+Copiá `client/.env.example` a `client/.env`. Por defecto usa `NEXT_PUBLIC_API_URL=http://localhost:3001`.
 
-Abrí [http://localhost:3002](http://localhost:3002) (puerto fijo, para no chocar con el backend en `3001`). Necesita el backend corriendo para poder crear/unirse a salas.
+Desde la raíz ejecutá `pnpm dev:client`, o desde `client/` ejecutá `pnpm dev`. El frontend escucha en http://localhost:3002. El backend se inicia en otra terminal con `pnpm start:dev`; ambos necesitan PostgreSQL y las migraciones aplicadas. La [guía principal](../README.md) detalla la configuración.
 
-Para comprobar la versión instalada, ejecutá `pnpm exec next --version` dentro de `client/`.
+## Crear y entrar a reuniones
+
+- Crear una reunión requiere una cuenta y una sesión válida. Su creador queda como administrador.
+- Cualquier persona con el enlace `/room/<código>` puede entrar sin cuenta, eligiendo y confirmando un nombre de 1 a 60 caracteres. También se acepta el código desde el inicio.
+- Abrir el enlace muestra primero el formulario de nombre; no conecta el chat ni solicita el micrófono automáticamente.
+- La API entrega un pase de participante limitado a esa sala. Ese pase se usa para el socket y para Llamar; no reemplaza el JWT de una cuenta ni habilita permisos de administrador.
+- Dos personas pueden usar el mismo nombre: sus identificadores de participante son distintos.
+- Copiar enlace permite invitar a otra persona. Salir cierra el socket y la sesión de audio del navegador.
+
+La interfaz conserva ES/EN y tema claro/oscuro. Los usuarios registrados mantienen sus roles por sala. Los invitados participan sin tener que registrarse.
+
+## Audio con Amazon Chime SDK
+
+El audio usa la misma reunión Chime para toda la sala. Al pulsar Llamar, el frontend obtiene una reunión y un asistente mediante `POST /calls/:roomCode`, con el pase de sala. Las credenciales AWS permanecen en el backend.
+
+El equipo eligió AWS para la etapa gratuita prevista de hasta seis meses, sujeta a créditos y servicios habilitados. La configuración y sus límites están en el [README principal](../README.md#aws-y-llamadas). Los tests simulan AWS; la conexión real requiere credenciales y una prueba entre dos navegadores.
+
+En esta entrega todavía faltan cámara, grilla de video, selección y previsualización de dispositivos, pantalla compartida y moderación de ingresos. El botón Llamar inicia audio; no representa una videollamada completa.
 
 ## Scripts
 
+Desde `client/`:
+
 ```bash
-pnpm dev     # servidor de desarrollo de Next.js
-pnpm build   # build de producción
-pnpm start   # sirve el build de producción
-pnpm lint    # oxlint
-pnpm typecheck # genera los tipos de rutas de Next.js y comprueba TypeScript
+pnpm dev
+pnpm build
+pnpm start
+pnpm lint
+pnpm typecheck
+pnpm test --runInBand
 ```
 
-## Estructura
-
-```
-src/
-├── app/
-│   ├── layout.tsx        # layout raíz
-│   ├── globals.css       # estilos globales
-│   ├── page.tsx          # "/" — crear/unirse a una sala
-│   └── room/[code]/
-│       └── page.tsx      # "/room/:code" — sala: usuarios + chat en vivo
-└── lib/
-    ├── api.ts            # llamadas REST al backend
-    └── socket.ts         # conexión Socket.io al namespace /rooms
-```
-
-## Hoja de ruta
-
-La [hoja de ruta hacia una experiencia tipo Meet](../README.md#hoja-de-ruta-hacia-una-experiencia-tipo-meet) del README principal detalla las entregas pendientes, las alternativas de WebRTC y LiveKit y los criterios de aceptación.
-
-El próximo avance visible del frontend es la pantalla previa: previsualizar la cámara, elegir dispositivos y entrar con audio o video apagados. Luego se incorporan la videollamada, la grilla de participantes, los controles de reunión y la pantalla compartida.
-
-La planificación también contempla mano levantada, reacciones, participante fijado, indicador de quién habla, recuperación del chat, accesibilidad, uso desde el móvil y liberación de cámara y micrófono al salir.
+Los requisitos del producto están en [requirements.md](../docs/requirements.md). Los planes y estados anteriores de los README no sustituyen esa referencia.
