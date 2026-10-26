@@ -11,6 +11,20 @@ jest.mock('next/navigation', () => ({
   useParams: () => ({ code: 'abc-defg-hij' }),
   useRouter: () => ({ push }),
 }));
+jest.mock('@/features/translation/useTranslation', () => {
+  const t = (key: string) => key;
+  return { useTranslation: () => ({ t }) };
+});
+jest.mock('@/features/rooms/useRoomMembers', () => {
+  const state = {
+    members: [],
+    isCurrentUserAdmin: false,
+    error: null,
+    changeRole: jest.fn(),
+    refetchMembers: jest.fn(),
+  };
+  return { useRoomMembers: () => state };
+});
 jest.mock('@/lib/auth', () => ({ isLoggedIn: jest.fn() }));
 jest.mock('@/lib/socket', () => ({ createRoomSocket: jest.fn() }));
 jest.mock('@/features/calls/useCallSession', () => ({
@@ -51,9 +65,7 @@ describe('RoomPage', () => {
       disconnect: jest.fn(),
       removeAllListeners: jest.fn(),
     };
-    (createRoomSocket as jest.Mock<typeof createRoomSocket>).mockReturnValue(
-      fakeSocket as never,
-    );
+    (createRoomSocket as jest.Mock<typeof createRoomSocket>).mockReturnValue(fakeSocket as never);
 
     const RoomPage = (await import('./page')).default;
     render(<RoomPage />);

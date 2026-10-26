@@ -4,10 +4,13 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import type { Socket } from 'socket.io-client';
+import { RoleTag } from '@/features/rooms/RoleTag';
+import { useRoomMembers } from '@/features/rooms/useRoomMembers';
+import { getCurrentUser, isLoggedIn } from '@/lib/auth';
 import { CallControls } from '@/features/calls/CallControls';
 import { useCallSession } from '@/features/calls/useCallSession';
-import { isLoggedIn } from '@/lib/auth';
 import { createRoomSocket } from '@/lib/socket';
+import { useTranslation } from '@/features/translation/useTranslation';
 
 const NAME_KEY = 'date2gether:userName';
 
@@ -18,17 +21,34 @@ interface ChatMessage {
   createdAt: string;
 }
 
+type Notice = { text: string } | { event: 'joined' | 'left'; userName: string };
+
+// Presencia en vivo del socket (no confundir con RoomMember de '@/lib/api',
+// que es el registro de roles persistido en el backend).
+interface RoomPresence {
+  userName: string;
+  userId?: string;
+}
+
 export default function RoomPage() {
+  const { t } = useTranslation();
   const { code } = useParams<{ code: string }>();
   const router = useRouter();
-  const [users, setUsers] = useState<string[]>([]);
+  const [users, setUsers] = useState<RoomPresence[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const callSession = useCallSession();
+  const {
+    members,
+    isCurrentUserAdmin,
+    error: membersError,
+    changeRole,
+    refetchMembers,
+  } = useRoomMembers(code);
 
   useEffect(() => {
     if (!code) return;
@@ -43,30 +63,48 @@ export default function RoomPage() {
     socketRef.current = socket;
 
     socket.on('connect', () => {
-      socket.emit('joinRoom', { code, userName });
+      // Si hay sesión, viaja el userId real: así la UI puede cruzar esta
+      // lista de presencia con los roles de la sala sin ambigüedad cuando
+      // dos personas comparten el mismo userName.
+      getCurrentUser().then((user) => {
+        socket.emit('joinRoom', { code, userName, userId: user?.id });
+      });
     });
 
     socket.on('error', ({ message }: { message: string }) => {
-      setNotice(message);
+      setNotice({ text: message });
       clearTimeout(redirectTimer);
       redirectTimer = setTimeout(() => router.push('/'), 2000);
     });
 
     socket.on('roomHistory', (history: ChatMessage[]) => setMessages(history));
-    socket.on('roomUsers', (list: string[]) => setUsers(list));
+    socket.on('roomUsers', (list: RoomPresence[]) => setUsers(list));
 
-    socket.on('userJoined', ({ userName: joined }: { userName: string }) => {
-      setUsers((prev) => (prev.includes(joined) ? prev : [...prev, joined]));
-      setNotice(`${joined} se unió a la sala`);
+    socket.on('userJoined', (joined: RoomPresence) => {
+      setUsers((prev) =>
+        prev.some((u) => u.userName === joined.userName && u.userId === joined.userId)
+          ? prev
+          : [...prev, joined],
+      );
+      setNotice({ event: 'joined', userName: joined.userName });
     });
 
-    socket.on('userLeft', ({ userName: left }: { userName: string }) => {
-      setUsers((prev) => prev.filter((u) => u !== left));
-      setNotice(`${left} salió de la sala`);
+    socket.on('userLeft', (left: RoomPresence) => {
+      setUsers((prev) =>
+        prev.filter((u) => !(u.userName === left.userName && u.userId === left.userId)),
+      );
+      setNotice({ event: 'left', userName: left.userName });
     });
 
     socket.on('newMessage', (message: ChatMessage) => {
       setMessages((prev) => [...prev, message]);
+    });
+
+    // El REST de roles (useRoomMembers) no tiene su propio socket: cuando
+    // un admin cambia un rol, el backend avisa por este evento y acá se
+    // dispara el refetch para que se vea sin recargar la página.
+    socket.on('memberRoleChanged', () => {
+      refetchMembers();
     });
 
     socket.connect();
@@ -77,19 +115,18 @@ export default function RoomPage() {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [code, router]);
+  }, [code, router, refetchMembers]);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [messages]);
 
   useEffect(() => {
-    const meetingSession = callSession.meetingSession;
-    if (!meetingSession || !audioRef.current) return;
-
-    meetingSession.audioVideo.bindAudioElement(audioRef.current);
+    const session = callSession.meetingSession;
+    if (!session || !audioRef.current) return;
+    session.audioVideo.bindAudioElement(audioRef.current);
     return () => {
-      meetingSession.audioVideo.unbindAudioElement();
+      session.audioVideo.unbindAudioElement();
     };
   }, [callSession.meetingSession]);
 
@@ -107,20 +144,59 @@ export default function RoomPage() {
           <strong>Date2gether</strong> <span className="code">{code}</span>
         </div>
         <CallControls roomCode={code} session={callSession} />
-        <Link href="/">Salir</Link>
+        <Link href="/">{t('Salir')}</Link>
       </div>
 
       <audio ref={audioRef} autoPlay hidden />
 
-      {notice && <div className="notice">{notice}</div>}
+      {notice && (
+        <div className="notice">
+          {'text' in notice
+            ? notice.text
+            : `${notice.userName} ${t(notice.event === 'joined' ? 'se unió a la sala' : 'salió de la sala')}`}
+        </div>
+      )}
+      {membersError && (
+        <p className="error" role="alert">
+          {membersError}
+        </p>
+      )}
 
       <div className="room-body">
         <div className="users-panel">
-          <h3>En la sala ({users.length})</h3>
+          <h3>
+            {t('En la sala')} ({users.length})
+          </h3>
           <ul>
-            {users.map((u) => (
-              <li key={u}>{u}</li>
-            ))}
+            {users.map(({ userName, userId }, index) => {
+              // Se cruza por userId (único), no por nombre: dos personas
+              // pueden escribir el mismo userName y antes eso mezclaba sus
+              // roles y botones de permisos.
+              const member = userId ? members.find((m) => m.userId === userId) : undefined;
+              const canChangeRole = isCurrentUserAdmin && member && member.role !== 'administrador';
+              return (
+                <li key={userId ?? `${userName}-${index}`}>
+                  {userName}
+                  {member && <RoleTag role={member.role} />}
+                  {canChangeRole && (
+                    <button
+                      type="button"
+                      className="role-button"
+                      onClick={() =>
+                        changeRole(
+                          member.userId,
+                          member.role === 'participante' ? 'colaborador' : 'participante',
+                        )
+                      }
+                    >
+                      {member.role === 'participante'
+                        ? t('Hacer colaborador')
+                        : t('Quitar colaborador')}
+                    </button>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
 
@@ -137,10 +213,10 @@ export default function RoomPage() {
             <input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              placeholder="Escribí un mensaje..."
+              placeholder={t('Escribí un mensaje...')}
               autoComplete="off"
             />
-            <button type="submit">Enviar</button>
+            <button type="submit">{t('Enviar')}</button>
           </form>
         </div>
       </div>

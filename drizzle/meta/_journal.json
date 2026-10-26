@@ -19,8 +19,15 @@
     {
       "idx": 2,
       "version": "7",
-      "when": 1792959918794,
-      "tag": "0002_fast_nebula",
+      "when": 1792531060815,
+      "tag": "0002_panoramic_nebula",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793018164781,
+      "tag": "0003_chime_meeting",
       "breakpoints": true
     }
   ]

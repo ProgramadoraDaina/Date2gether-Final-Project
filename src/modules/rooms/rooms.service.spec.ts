@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import type { DrizzleDb } from '../../db/drizzle.module';
+import { RoomEventsService } from './room-events.service';
 import { RoomsService } from './rooms.service';
 
 describe('RoomsService', () => {
@@ -13,7 +14,7 @@ describe('RoomsService', () => {
     set = jest.fn<(...args: unknown[]) => { where: typeof where }>().mockReturnValue({ where });
     update = jest.fn<(...args: unknown[]) => { set: typeof set }>().mockReturnValue({ set });
     const db = { update } as unknown as DrizzleDb;
-    service = new RoomsService(db);
+    service = new RoomsService(db, new RoomEventsService());
   });
 
   it('guarda el MeetingId de Chime de la sala', async () => {

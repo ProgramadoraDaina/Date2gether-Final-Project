@@ -15,6 +15,9 @@ const en: Record<string, string> = {
   'Unirse': 'Join',
   'No se pudo crear la reunión. ¿Está corriendo el backend?':
     'Could not create the meeting. Is the backend running?',
+  'Necesitás iniciar sesión para crear una reunión.': 'You need to log in to create a meeting.',
+  'Necesitás iniciar sesión (arriba) para crear una reunión.':
+    'You need to log in (above) to create a meeting.',
 
   // Login
   'Entrá con tu cuenta de Date2gether.': 'Sign in with your Date2gether account.',
@@ -44,6 +47,8 @@ const en: Record<string, string> = {
   'En la sala': 'In the room',
   'Escribí un mensaje...': 'Write a message...',
   'Enviar': 'Send',
+  'Hacer colaborador': 'Make collaborator',
+  'Quitar colaborador': 'Remove collaborator',
 
   // Tema
   'Cambiar a modo claro': 'Switch to light mode',

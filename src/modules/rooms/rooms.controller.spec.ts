@@ -29,7 +29,9 @@ describe('RoomsController', () => {
   });
 
   it('requiere autenticación para crear y consultar salas', () => {
-    const guards = (Reflect.getMetadata('__guards__', RoomsController) ?? []) as unknown[];
+    const handler = Object.getOwnPropertyDescriptor(RoomsController.prototype, 'create')!
+      .value as object;
+    const guards = (Reflect.getMetadata('__guards__', handler) ?? []) as unknown[];
     expect(guards).toContain(JwtAuthGuard);
   });
 
@@ -37,10 +39,13 @@ describe('RoomsController', () => {
     const fakeRoom = { id: 'room-1', code: 'abc-defg-hij', name: 'Reunión de Daina' };
     roomsService.createRoom.mockResolvedValue(fakeRoom);
 
-    const result = await controller.create({ name: 'Reunión de Daina' });
+    const result = await controller.create(
+      { name: 'Reunión de Daina' },
+      { sub: 'owner-123', email: 'a@example.test' },
+    );
 
     expect(result).toEqual(fakeRoom);
-    expect(roomsService.createRoom).toHaveBeenCalledWith('Reunión de Daina');
+    expect(roomsService.createRoom).toHaveBeenCalledWith('Reunión de Daina', 'owner-123');
   });
 
   it('delega la búsqueda de la sala al RoomsService con el código', async () => {

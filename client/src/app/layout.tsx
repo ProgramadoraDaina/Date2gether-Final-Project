@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import { LanguageToggle } from '@/features/translation/LanguageToggle';
 import { ThemeToggle } from '@/features/theme/ThemeToggle';
 import './globals.css';
 
@@ -14,6 +15,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="es">
       <body>
         <div className="top-bar">
+          <LanguageToggle />
           <ThemeToggle />
         </div>
         <main className="app-shell">{children}</main>

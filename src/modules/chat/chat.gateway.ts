@@ -9,6 +9,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { WsJwtAuthGuard } from '../auth/guards/ws-jwt-auth.guard';
+import { RoomEventsService } from '../rooms/room-events.service';
 import { RoomsService } from '../rooms/rooms.service';
 import { ChatService } from './chat.service';
 import { JoinRoomDto } from './dto/join-room.dto';
@@ -18,7 +19,12 @@ interface ConnectedUser {
   roomCode: string;
   roomId: string;
   userName: string;
+  userId?: string;
 }
+
+// Shape pública de la presencia: mismos campos que ConnectedUser salvo los
+// internos (roomId), para no declarar un segundo tipo con los mismos campos.
+type RoomUser = Pick<ConnectedUser, 'userName' | 'userId'>;
 
 @WebSocketGateway({
   namespace: '/rooms',
@@ -34,7 +40,12 @@ export class ChatGateway implements OnGatewayDisconnect {
   constructor(
     private readonly roomsService: RoomsService,
     private readonly chatService: ChatService,
-  ) {}
+    private readonly roomEvents: RoomEventsService,
+  ) {
+    this.roomEvents.onMemberRoleChanged(({ roomCode }) => {
+      this.server.to(roomCode).emit('memberRoleChanged');
+    });
+  }
 
   @UseGuards(WsJwtAuthGuard)
   @SubscribeMessage('joinRoom')
@@ -50,13 +61,14 @@ export class ChatGateway implements OnGatewayDisconnect {
       roomCode: dto.code,
       roomId: room.id,
       userName: dto.userName,
+      userId: dto.userId,
     });
 
     const history = await this.chatService.getHistory(room.id);
     client.emit('roomHistory', history);
     client.emit('roomUsers', this.getUsersInRoom(dto.code));
 
-    client.to(dto.code).emit('userJoined', { userName: dto.userName });
+    client.to(dto.code).emit('userJoined', { userName: dto.userName, userId: dto.userId });
   }
 
   @SubscribeMessage('leaveRoom')
@@ -86,12 +98,12 @@ export class ChatGateway implements OnGatewayDisconnect {
 
     void client.leave(user.roomCode);
     this.connectedUsers.delete(client.id);
-    client.to(user.roomCode).emit('userLeft', { userName: user.userName });
+    client.to(user.roomCode).emit('userLeft', { userName: user.userName, userId: user.userId });
   }
 
-  private getUsersInRoom(roomCode: string): string[] {
+  private getUsersInRoom(roomCode: string): RoomUser[] {
     return Array.from(this.connectedUsers.values())
       .filter((user) => user.roomCode === roomCode)
-      .map((user) => user.userName);
+      .map((user) => ({ userName: user.userName, userId: user.userId }));
   }
 }

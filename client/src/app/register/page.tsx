@@ -4,10 +4,12 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { register } from '@/lib/auth';
+import { useTranslation } from '@/features/translation/useTranslation';
 
 const NAME_KEY = 'date2gether:userName';
 
 export default function RegisterPage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -24,7 +26,7 @@ export default function RegisterPage() {
       localStorage.setItem(NAME_KEY, user.name);
       router.push('/');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo crear la cuenta');
+      setError(err instanceof Error ? err.message : t('No se pudo crear la cuenta'));
     } finally {
       setLoading(false);
     }
@@ -32,11 +34,11 @@ export default function RegisterPage() {
 
   return (
     <div className="card">
-      <h1>Crear cuenta</h1>
-      <p className="subtitle">Registrate para usar Date2gether.</p>
+      <h1>{t('Crear cuenta')}</h1>
+      <p className="subtitle">{t('Registrate para usar Date2gether.')}</p>
 
       <form onSubmit={handleSubmit}>
-        <label htmlFor="name">Nombre</label>
+        <label htmlFor="name">{t('Nombre')}</label>
         <input
           id="name"
           value={name}
@@ -45,7 +47,7 @@ export default function RegisterPage() {
           required
         />
 
-        <label htmlFor="email">Email</label>
+        <label htmlFor="email">{t('Email')}</label>
         <input
           id="email"
           type="email"
@@ -55,7 +57,7 @@ export default function RegisterPage() {
           required
         />
 
-        <label htmlFor="password">Contraseña</label>
+        <label htmlFor="password">{t('Contraseña')}</label>
         <input
           id="password"
           type="password"
@@ -65,17 +67,18 @@ export default function RegisterPage() {
           minLength={8}
           required
         />
-        <p className="hint">Mínimo 8 caracteres, con al menos una letra y un número.</p>
+        <p className="hint">{t('Mínimo 8 caracteres, con al menos una letra y un número.')}</p>
 
         <button type="submit" disabled={loading}>
-          {loading ? 'Creando cuenta…' : 'Crear cuenta'}
+          {loading ? t('Creando cuenta…') : t('Crear cuenta')}
         </button>
       </form>
 
       {error && <p className="error">{error}</p>}
 
       <p className="switch-link">
-        ¿Ya tenés cuenta? <Link href="/login">Iniciá sesión</Link>
+        {t('¿Ya tenés cuenta? ')}
+        <Link href="/login">{t('Iniciá sesión')}</Link>
       </p>
     </div>
   );

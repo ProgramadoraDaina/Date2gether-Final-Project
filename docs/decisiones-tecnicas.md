@@ -2,7 +2,37 @@
 
 Registro de decisiones de arquitectura y herramientas, con el contexto y las alternativas consideradas en cada caso. El objetivo es que cualquiera que retome el proyecto entienda por qué se eligió cada tecnología, no solo cuál se eligió.
 
-## 1. Amazon Chime SDK para llamadas de voz y video
+## 1. Resolución del conflicto entre el toggle de idioma y el toggle de tema
+
+**Fecha:** 2026-10-25
+**Rama:** `feature/multi-language_EN-ES`
+
+### Contexto
+
+`feature/multi-language_EN-ES` se creó antes de que el dark mode (`feature/dark-mode`) se mergeara a `develop`. Al traer `develop` a la rama, `client/src/app/layout.tsx` y `client/src/app/globals.css` quedaron en conflicto: ambas features agregan un botón fijo en la esquina superior derecha (`LanguageToggle` y `ThemeToggle`), y el dark mode además migró los colores hardcodeados a variables CSS (`--color-*`).
+
+### Alternativas consideradas
+
+- **Rebase de la rama sobre `develop`.** Historia más lineal, pero reescribe el único commit de la rama y requiere force-push.
+- **Merge de `develop` hacia la rama, resolviendo el conflicto a mano.** Deja registro explícito del conflicto y de cómo se resolvió, sin reescribir commits existentes.
+
+### Decisión
+
+Se optó por el **merge** (no rebase), resolviendo el conflicto manualmente.
+
+### Resolución aplicada
+
+- `layout.tsx`: ambos toggles (`LanguageToggle` y `ThemeToggle`) ahora conviven dentro del mismo contenedor `.top-bar` que trajo el dark mode. Se mantiene `<html lang="es">` como en `develop` (el store de idioma corrige `document.documentElement.lang` en runtime al rehidratar).
+- `globals.css`: se conservó la regla combinada de `develop` (`.language-toggle, .theme-toggle` sobre variables CSS), descartando la regla standalone con colores hardcodeados que tenía la rama vieja.
+- `dictionary.ts`: se conservaron las claves de traducción de "Tema" (`Cambiar a modo claro` / `oscuro`) agregadas en `develop`.
+
+### Verificación
+
+`pnpm tsc --noEmit` y `pnpm build` corridos en `client/` sin errores después de la resolución.
+
+---
+
+## 2. Amazon Chime SDK para llamadas de voz y video
 
 **Fecha:** 2026-10-24
 **Rama:** `feature/voice-video-call`
@@ -36,7 +66,7 @@ Se eligió **Amazon Chime SDK**.
 
 ---
 
-## 2. Jest como test runner unitario del backend
+## 3. Jest como test runner unitario del backend
 
 **Fecha:** 2026-10-24
 **Rama:** `feature/voice-video-call`
@@ -75,7 +105,7 @@ Esta configuración es infraestructura de una sola vez: los próximos archivos `
 
 ---
 
-## 3. JwtAuthModule: módulo compartido para separar el guard JWT de AuthService
+## 4. JwtAuthModule: módulo compartido para separar el guard JWT de AuthService
 
 **Fecha:** 2026-10-25
 **Rama:** `feature/voice-video-call`
@@ -106,7 +136,7 @@ Se eligió la tercera opción: `src/modules/auth/jwt-auth.module.ts` (`JwtAuthMo
 
 ---
 
-## 4. MediaRegion de Chime en `sa-east-1` (São Paulo), control plane en `us-east-1`
+## 5. MediaRegion de Chime en `sa-east-1` (São Paulo), control plane en `us-east-1`
 
 **Fecha:** 2026-10-25
 **Rama:** `feature/voice-video-call`
@@ -138,7 +168,7 @@ Chime SDK Meetings separa dos regiones con propósitos distintos (confirmado con
 
 ---
 
-## 5. Jest + next/jest + React Testing Library para TDD en el frontend
+## 6. Jest + next/jest + React Testing Library para TDD en el frontend
 
 **Fecha:** 2026-10-25
 **Rama:** `feature/voice-video-call`
@@ -176,7 +206,7 @@ Se eligió **Jest con el preset `next/jest`**, más `jest-environment-jsdom`, `@
 
 ---
 
-## 6. Las salas dejan de ser anónimas: se requiere cuenta para crear/unirse, pero el nombre de display sigue siendo editable
+## 7. Las salas dejan de ser anónimas: se requiere cuenta para crear/unirse, pero el nombre de display sigue siendo editable
 
 **Fecha:** 2026-10-25
 **Rama:** `feature/voice-video-call`
@@ -216,7 +246,7 @@ El nombre de display, sin embargo, **sigue siendo independiente de la cuenta y e
 
 ---
 
-## 7. Fix de hydration mismatch en `<html lang>` (bug preexistente del merge de dark-mode)
+## 8. Fix de hydration mismatch en `<html lang>` (bug preexistente del merge de dark-mode)
 
 **Fecha:** 2026-10-25
 **Rama:** `feature/voice-video-call`
@@ -247,7 +277,7 @@ Se aplicó el mismo patrón que `features/theme/store.ts` ya usa para el mismo p
 
 ---
 
-## 8. Cada click en "Llamar" creaba una reunión de Chime distinta — las salas no eran realmente grupales
+## 9. Cada click en "Llamar" creaba una reunión de Chime distinta — las salas no eran realmente grupales
 
 **Fecha:** 2026-10-25
 **Rama:** `feature/voice-video-call`
@@ -260,7 +290,7 @@ Consecuencia real: si dos personas en la misma sala apretaban "Llamar" por separ
 
 ### Decisión
 
-`rooms` gana una columna nueva, `chime_meeting_id` (`varchar(64)`, nullable) — migración `drizzle/0002_fast_nebula.sql`. `CallsService.createMeetingForRoom(roomCode)` pasa a:
+`rooms` gana una columna nueva, `chime_meeting_id` (`varchar(64)`, nullable) — migración `drizzle/0003_chime_meeting.sql`. `CallsService.createMeetingForRoom(roomCode)` pasa a:
 
 1. Buscar la sala por código (`RoomsService.getByCodeOrThrow`).
 2. Si la sala ya tiene un `chimeMeetingId` guardado, pedirle a Chime esa reunión (`GetMeetingCommand`). Si todavía existe, la reusa y devuelve esa misma reunión — así todos los que llaman desde la misma sala entran al mismo `MeetingId`.
@@ -272,9 +302,9 @@ Consecuencia real: si dos personas en la misma sala apretaban "Llamar" por separ
 
 - Es el mínimo necesario para que "sala" y "reunión de Chime" sean la misma cosa vista por todos los participantes, que es el requisito implícito de toda la feature.
 - Manejar el caso "la reunión guardada ya no existe" (en vez de asumir que el `chimeMeetingId` persistido siempre es válido) es necesario, no un extra: las reuniones de Chime no son eternas, así que sin este chequeo la sala quedaría inutilizable para siempre después de la primera reunión vencida.
-- Separar la persistencia (`RoomsService`) de la orquestación de Chime (`CallsService`) sigue el mismo criterio de responsabilidad única que ya se usó para `JwtAuthModule` (ver sección 3).
+- Separar la persistencia (`RoomsService`) de la orquestación de Chime (`CallsService`) sigue el mismo criterio de responsabilidad única que ya se usó para `JwtAuthModule` (ver sección 4).
 
 ### Consecuencias
 
-- `calls.module.spec.ts` ahora necesita `DrizzleModule` (con `DRIZZLE` mockeado vía `overrideProvider`) para compilar, porque `CallsModule` → `RoomsModule` → `RoomsService` depende de la base. A diferencia del guard JWT (sección 3), esta es una dependencia real e intencional: `CallsService` necesita leer y escribir datos de la sala.
+- `calls.module.spec.ts` ahora necesita `DrizzleModule` (con `DRIZZLE` mockeado vía `overrideProvider`) para compilar, porque `CallsModule` → `RoomsModule` → `RoomsService` depende de la base. A diferencia del guard JWT (sección 4), esta es una dependencia real e intencional: `CallsService` necesita leer y escribir datos de la sala.
 - Sigue sin existir un endpoint para cerrar la reunión explícitamente al terminar la llamada (`DeleteMeetingCommand`) — la reunión se cierra sola del lado de Chime por inactividad; `chimeMeetingId` en la fila de la sala queda apuntando a una reunión vencida hasta el próximo `createMeetingForRoom`, que la detecta y la reemplaza.
