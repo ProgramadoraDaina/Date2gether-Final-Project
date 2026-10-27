@@ -1,9 +1,11 @@
+import { randomInt } from 'node:crypto';
+
 const ALPHABET = 'abcdefghijklmnopqrstuvwxyz';
 
 function randomSegment(length: number): string {
   let result = '';
   for (let i = 0; i < length; i++) {
-    result += ALPHABET[Math.floor(Math.random() * ALPHABET.length)];
+    result += ALPHABET[randomInt(ALPHABET.length)];
   }
   return result;
 }
