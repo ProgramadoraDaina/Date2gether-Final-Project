@@ -1,0 +1,339 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Date2gether academic demo in us-east-2: one EC2 with application, PostgreSQL, LiveKit and automatic HTTPS/TURN. No Chime or paid-plan upgrade. Root disk retained when terminated; backup and remove separately after the demo.",
+  "Metadata": {
+    "AWSToolsMetrics": {
+      "AWSAgentToolkit": "aws-cloudformation@3"
+    }
+  },
+  "Parameters": {
+    "VpcId": {
+      "Type": "AWS::EC2::VPC::Id",
+      "Description": "Existing VPC in us-east-2"
+    },
+    "SubnetId": {
+      "Type": "AWS::EC2::Subnet::Id",
+      "Description": "Public subnet in that VPC, with Internet Gateway route"
+    },
+    "InstanceType": {
+      "Type": "String",
+      "Default": "t3.medium",
+      "AllowedValues": [
+        "t3.small",
+        "t3.medium"
+      ],
+      "Description": "t3.medium recommended for the complete demo; small has less memory"
+    },
+    "AmiId": {
+      "Type": "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>",
+      "Default": "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
+    },
+    "RepositoryUrl": {
+      "Type": "String",
+      "Default": "https://github.com/ProgramadoraDaina/Date2gether-Final-Project.git",
+      "AllowedPattern": "https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+",
+      "Description": "Public repository with the reviewed deployment files"
+    },
+    "GitRef": {
+      "Type": "String",
+      "Default": "feature/voice-video-call",
+      "AllowedPattern": "[A-Za-z0-9._/-]{1,128}",
+      "Description": "Prefer an exact reviewed commit SHA, already pushed to the repository"
+    },
+    "BaseDomain": {
+      "Type": "String",
+      "Default": "",
+      "AllowedPattern": "^$|^[a-z0-9][a-z0-9.-]{0,198}[a-z0-9]$",
+      "Description": "Base domain whose app/media/turn subdomains resolve to this IP. Empty uses IP.sslip.io for a temporary demo."
+    },
+    "ParticipantLimit": {
+      "Type": "Number",
+      "Default": 6,
+      "MinValue": 2,
+      "MaxValue": 20
+    }
+  },
+  "Resources": {
+    "DemoSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Only public HTTPS/ACME and WebRTC/TURN transports are reachable. Administration uses SSM, not SSH.",
+          "must": [
+            "Do not open 22, 3001, 3002, 5432, 7880 or 5349",
+            "Public media ingress is necessary for invited browsers on different networks"
+          ]
+        }
+      },
+      "Properties": {
+        "GroupDescription": "Date2gether HTTPS and media only",
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 80,
+            "ToPort": 80,
+            "CidrIp": "0.0.0.0/0",
+            "Description": "ACME certificate challenges"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 443,
+            "ToPort": 443,
+            "CidrIp": "0.0.0.0/0",
+            "Description": "Application HTTPS, LiveKit WSS and TURN TLS using SNI"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 7881,
+            "ToPort": 7881,
+            "CidrIp": "0.0.0.0/0",
+            "Description": "WebRTC TCP fallback"
+          },
+          {
+            "IpProtocol": "udp",
+            "FromPort": 7882,
+            "ToPort": 7882,
+            "CidrIp": "0.0.0.0/0",
+            "Description": "WebRTC UDP mux"
+          },
+          {
+            "IpProtocol": "udp",
+            "FromPort": 3478,
+            "ToPort": 3478,
+            "CidrIp": "0.0.0.0/0",
+            "Description": "Authenticated TURN UDP"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "date2gether"
+          }
+        ]
+      }
+    },
+    "DemoRole": {
+      "Type": "AWS::IAM::Role",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Access through Session Manager without an SSH key. The application itself does not call AWS APIs.",
+          "must": [
+            "Only the standard SSM instance policy; no application AWS keys"
+          ]
+        }
+      },
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ec2.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore"
+          }
+        ]
+      }
+    },
+    "DemoProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Attach the SSM role to the EC2 host.",
+          "must": [
+            "Do not grant administrative access to the host role"
+          ]
+        }
+      },
+      "Properties": {
+        "Roles": [
+          {
+            "Ref": "DemoRole"
+          }
+        ]
+      }
+    },
+    "DemoAddress": {
+      "Type": "AWS::EC2::EIP",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Stable IPv4 keeps invitation, media and TURN hostnames valid across stops.",
+          "must": [
+            "Release it when the demo is retired; it is charged even when EC2 is stopped"
+          ]
+        }
+      },
+      "Properties": {
+        "Domain": "vpc",
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "date2gether"
+          }
+        ]
+      }
+    },
+    "DemoInstance": {
+      "Type": "AWS::EC2::Instance",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Single-host academic demo with a 6-participant default, encrypted root disk and automatic stop.",
+          "must": [
+            "Deploy only in us-east-2",
+            "Root EBS remains after termination to preserve PostgreSQL data; remove deliberately after backup",
+            "No secrets in UserData; generate them on the encrypted host"
+          ]
+        }
+      },
+      "Properties": {
+        "ImageId": {
+          "Ref": "AmiId"
+        },
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "IamInstanceProfile": {
+          "Ref": "DemoProfile"
+        },
+        "CreditSpecification": {
+          "CPUCredits": "standard"
+        },
+        "MetadataOptions": {
+          "HttpTokens": "required",
+          "HttpPutResponseHopLimit": 1,
+          "HttpEndpoint": "enabled"
+        },
+        "InstanceInitiatedShutdownBehavior": "stop",
+        "NetworkInterfaces": [
+          {
+            "DeviceIndex": "0",
+            "AssociatePublicIpAddress": true,
+            "SubnetId": {
+              "Ref": "SubnetId"
+            },
+            "GroupSet": [
+              {
+                "Ref": "DemoSecurityGroup"
+              }
+            ]
+          }
+        ],
+        "BlockDeviceMappings": [
+          {
+            "DeviceName": "/dev/xvda",
+            "Ebs": {
+              "VolumeSize": 30,
+              "VolumeType": "gp3",
+              "Encrypted": true,
+              "DeleteOnTermination": false
+            }
+          }
+        ],
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Sub": "#!/bin/bash\nset -euo pipefail\nexport AWS_DEFAULT_REGION=us-east-2\ndnf install -y docker git python3\nsystemctl enable --now docker amazon-ssm-agent\nmkdir -p /usr/local/lib/docker/cli-plugins\ncurl --retry 5 -fsSL https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose\ncurl --retry 5 -fsSL https://github.com/docker/compose/releases/download/v2.40.3/checksums.txt -o /tmp/compose-checksums.txt\n(cd /usr/local/lib/docker/cli-plugins && sha256sum --check --ignore-missing /tmp/compose-checksums.txt)\nchmod 755 /usr/local/lib/docker/cli-plugins/docker-compose\nimdsToken=$(curl --retry 10 -fsS -X PUT -H 'X-aws-ec2-metadata-token-ttl-seconds: 600' http://169.254.169.254/latest/api/token)\nfor attempt in $(seq 1 60); do\n  observedIp=$(curl -fsS -H \"X-aws-ec2-metadata-token: $imdsToken\" http://169.254.169.254/latest/meta-data/public-ipv4 || true)\n  if [ \"$observedIp\" = '${DemoAddress}' ]; then break; fi\n  sleep 5\ndone\n[ \"$observedIp\" = '${DemoAddress}' ] || { echo 'Elastic IP association not ready' >&2; exit 1; }\nprivateIp=$(curl -fsS -H \"X-aws-ec2-metadata-token: $imdsToken\" http://169.254.169.254/latest/meta-data/local-ipv4)\ninstall -d -m 700 /opt/date2gether\ncd /opt/date2gether\ngit init\ngit remote add origin '${RepositoryUrl}'\ngit fetch --depth 1 origin '${GitRef}'\ngit checkout --detach FETCH_HEAD\npython3 deploy/ec2/configure.py --public-ip '${DemoAddress}' --private-ip \"$privateIp\" --domain '${BaseDomain}' --participants '${ParticipantLimit}'\n# Auto-stop on every boot. EBS and the reserved IPv4 remain billable while stopped.\ncat > /etc/systemd/system/date2gether-autostop.service <<'UNIT'\n[Unit]\nDescription=Stop academic demo to limit compute usage\n[Service]\nType=oneshot\nExecStart=/usr/sbin/shutdown -h now\nUNIT\ncat > /etc/systemd/system/date2gether-autostop.timer <<'UNIT'\n[Unit]\nDescription=Stop Date2gether EC2 two hours after boot\n[Timer]\nOnBootSec=2h\nUnit=date2gether-autostop.service\n[Install]\nWantedBy=timers.target\nUNIT\nsystemctl daemon-reload\nsystemctl enable --now date2gether-autostop.timer\nbash deploy/ec2/start.sh\n"
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${AWS::StackName}-date2gether"
+            }
+          },
+          {
+            "Key": "Project",
+            "Value": "date2gether"
+          }
+        ]
+      }
+    },
+    "DemoAddressAssociation": {
+      "Type": "AWS::EC2::EIPAssociation",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Attach the stable address after the instance is running.",
+          "must": [
+            "Bootstrap waits for this association before generating hostnames"
+          ]
+        }
+      },
+      "Properties": {
+        "AllocationId": {
+          "Fn::GetAtt": [
+            "DemoAddress",
+            "AllocationId"
+          ]
+        },
+        "InstanceId": {
+          "Ref": "DemoInstance"
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "ApplicationUrl": {
+      "Description": "Application URL; usable only after cloud-init and TLS issuance succeed",
+      "Value": {
+        "Fn::If": [
+          "TemporaryDomain",
+          {
+            "Fn::Sub": "https://app.${DemoAddress}.sslip.io"
+          },
+          {
+            "Fn::Sub": "https://app.${BaseDomain}"
+          }
+        ]
+      }
+    },
+    "MediaUrl": {
+      "Description": "Media URL; usable only after cloud-init and TLS issuance succeed",
+      "Value": {
+        "Fn::If": [
+          "TemporaryDomain",
+          {
+            "Fn::Sub": "wss://media.${DemoAddress}.sslip.io"
+          },
+          {
+            "Fn::Sub": "wss://media.${BaseDomain}"
+          }
+        ]
+      }
+    },
+    "InstanceId": {
+      "Value": {
+        "Ref": "DemoInstance"
+      }
+    },
+    "PublicIp": {
+      "Value": {
+        "Ref": "DemoAddress"
+      }
+    },
+    "SessionManagerCommand": {
+      "Value": {
+        "Fn::Sub": "aws ssm start-session --region us-east-2 --target ${DemoInstance}"
+      }
+    }
+  },
+  "Conditions": {
+    "TemporaryDomain": {
+      "Fn::Equals": [
+        {
+          "Ref": "BaseDomain"
+        },
+        ""
+      ]
+    }
+  }
+}
