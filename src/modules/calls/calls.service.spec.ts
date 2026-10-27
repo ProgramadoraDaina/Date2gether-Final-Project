@@ -1,194 +1,121 @@
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { ServiceUnavailableException } from '@nestjs/common';
+import { beforeEach, afterEach, describe, expect, it, jest } from '@jest/globals';
 import { ConfigService } from '@nestjs/config';
-import {
-  ChimeSDKMeetingsClient,
-  CreateAttendeeCommand,
-  CreateMeetingCommand,
-  GetMeetingCommand,
-  NotFoundException,
-} from '@aws-sdk/client-chime-sdk-meetings';
+import { ForbiddenException, ServiceUnavailableException } from '@nestjs/common';
+import { RoomServiceClient, TokenVerifier } from 'livekit-server-sdk';
 import type { Room } from '../../db/schema';
+import type { RoomParticipant } from '../auth/room-access.service';
 import { RoomsService } from '../rooms/rooms.service';
 import { CallsService } from './calls.service';
 
-jest.mock('@aws-sdk/client-chime-sdk-meetings');
+const participant: RoomParticipant = {
+  kind: 'room-participant',
+  sub: 'guest-1',
+  roomCode: 'abc-defg-hij',
+  name: 'Ana',
+};
+const room = { id: 'room-1', code: participant.roomCode, isActive: true } as Room;
+const secret = 'test-secret-at-least-32-characters-long';
+const config = {
+  LIVEKIT_URL: 'wss://media.example.com',
+  LIVEKIT_API_URL: 'http://localhost:7880',
+  LIVEKIT_API_KEY: 'test-key',
+  LIVEKIT_API_SECRET: secret,
+  MAX_ROOM_PARTICIPANTS: '6',
+};
 
-function buildRoom(overrides: Partial<Room> = {}): Room {
-  return {
-    id: 'room-1',
-    code: 'ABC123',
-    name: 'Reunión de Daina',
-    isActive: true,
-    createdAt: new Date(),
-    chimeMeetingId: null,
-    ...overrides,
-  };
-}
-
-describe('CallsService', () => {
+describe('CallsService: LiveKit', () => {
+  let rooms: { getByCodeOrThrow: jest.Mock<RoomsService['getByCodeOrThrow']> };
+  let createRoom: jest.SpiedFunction<RoomServiceClient['createRoom']>;
   let service: CallsService;
-  let send: jest.Mock<(...args: unknown[]) => Promise<unknown>>;
-  let roomsService: {
-    getByCodeOrThrow: jest.Mock<(...args: unknown[]) => Promise<Room>>;
-    setChimeMeetingId: jest.Mock<(...args: unknown[]) => Promise<void>>;
-  };
-
   beforeEach(() => {
-    send = jest.fn();
-    const client = { send } as unknown as ChimeSDKMeetingsClient;
-    roomsService = {
-      getByCodeOrThrow: jest.fn<(...args: unknown[]) => Promise<Room>>(),
-      setChimeMeetingId: jest.fn<(...args: unknown[]) => Promise<void>>().mockResolvedValue(),
+    rooms = {
+      getByCodeOrThrow: jest.fn<RoomsService['getByCodeOrThrow']>().mockResolvedValue(room),
     };
-    service = new CallsService(
-      client,
-      roomsService as unknown as RoomsService,
-      new ConfigService({ AWS_CHIME_ENABLED: 'true', AWS_REGION: 'us-east-2' }),
-    );
+    createRoom = jest
+      .spyOn(RoomServiceClient.prototype, 'createRoom')
+      .mockResolvedValue({} as Awaited<ReturnType<RoomServiceClient['createRoom']>>);
+    service = new CallsService(rooms as unknown as RoomsService, new ConfigService(config));
+  });
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
-  it('crea una reunión de Chime nueva si la sala todavía no tiene una, y la persiste', async () => {
-    roomsService.getByCodeOrThrow.mockResolvedValue(buildRoom({ chimeMeetingId: null }));
-    const fakeMeeting = { MeetingId: 'meeting-123', ExternalMeetingId: 'ABC123' };
-    send.mockResolvedValue({ Meeting: fakeMeeting });
-
-    const meeting = await service.createMeetingForRoom('ABC123');
-
-    expect(meeting).toEqual(fakeMeeting);
-    expect(send).toHaveBeenCalledTimes(1);
-
-    const command = send.mock.calls[0][0] as CreateMeetingCommand;
-    expect(command).toBeInstanceOf(CreateMeetingCommand);
-    expect(command.input).toMatchObject({
-      ExternalMeetingId: 'ABC123',
-      MediaRegion: 'us-east-2',
+  it('firma un token de invitado limitado a su sala con el nombre confirmado', async () => {
+    const session = await service.join(room.code, participant);
+    const claims = await new TokenVerifier(config.LIVEKIT_API_KEY, secret).verify(session.token);
+    expect(claims.sub).toBe(participant.sub);
+    expect(claims.name).toBe('Ana');
+    expect(claims.video).toMatchObject({
+      room: room.code,
+      roomJoin: true,
+      roomAdmin: false,
+      roomRecord: false,
+      canPublishData: false,
     });
-    expect(roomsService.setChimeMeetingId).toHaveBeenCalledWith('room-1', 'meeting-123');
+    expect(session.url).toBe('wss://media.example.com');
+    expect(session.participantLimit).toBe(6);
+    expect(JSON.stringify(session)).not.toContain(secret);
+    expect(JSON.stringify(session)).not.toContain('http://localhost:7880');
   });
 
-  it('reusa la reunión de Chime existente si la sala ya tiene una activa', async () => {
-    roomsService.getByCodeOrThrow.mockResolvedValue(
-      buildRoom({ chimeMeetingId: 'meeting-existente' }),
-    );
-    const existingMeeting = { MeetingId: 'meeting-existente', ExternalMeetingId: 'ABC123' };
-    send.mockResolvedValue({ Meeting: existingMeeting });
-
-    const meeting = await service.createMeetingForRoom('ABC123');
-
-    expect(meeting).toEqual(existingMeeting);
-    expect(send).toHaveBeenCalledTimes(1);
-    const command = send.mock.calls[0][0] as GetMeetingCommand;
-    expect(command).toBeInstanceOf(GetMeetingCommand);
-    expect(command.input).toMatchObject({ MeetingId: 'meeting-existente' });
-    expect(roomsService.setChimeMeetingId).not.toHaveBeenCalled();
-  });
-
-  it('crea una reunión nueva si la que tenía guardada la sala ya no existe en Chime', async () => {
-    roomsService.getByCodeOrThrow.mockResolvedValue(
-      buildRoom({ chimeMeetingId: 'meeting-vencida' }),
-    );
-    const newMeeting = { MeetingId: 'meeting-nueva', ExternalMeetingId: 'ABC123' };
-    send
-      .mockRejectedValueOnce(new NotFoundException({ message: 'not found', $metadata: {} }))
-      .mockResolvedValueOnce({ Meeting: newMeeting });
-
-    const meeting = await service.createMeetingForRoom('ABC123');
-
-    expect(meeting).toEqual(newMeeting);
-    expect(send).toHaveBeenCalledTimes(2);
-    expect(send.mock.calls[0][0]).toBeInstanceOf(GetMeetingCommand);
-    expect(send.mock.calls[1][0]).toBeInstanceOf(CreateMeetingCommand);
-    expect(roomsService.setChimeMeetingId).toHaveBeenCalledWith('room-1', 'meeting-nueva');
-  });
-
-  it('crea un asistente de Chime para un usuario dentro de una reunión', async () => {
-    const fakeAttendee = { AttendeeId: 'attendee-123', ExternalUserId: 'user-456' };
-    send.mockResolvedValue({ Attendee: fakeAttendee });
-
-    const attendee = await service.createAttendee('meeting-123', 'user-456');
-
-    expect(attendee).toEqual(fakeAttendee);
-    expect(send).toHaveBeenCalledTimes(1);
-
-    const command = send.mock.calls[0][0] as CreateAttendeeCommand;
-    expect(command).toBeInstanceOf(CreateAttendeeCommand);
-    expect(command.input).toMatchObject({
-      MeetingId: 'meeting-123',
-      ExternalUserId: 'user-456',
+  it('configura el cupo en LiveKit y el cierre por inactividad', async () => {
+    await service.join(room.code, participant);
+    expect(createRoom).toHaveBeenCalledWith({
+      name: room.code,
+      maxParticipants: 6,
+      emptyTimeout: 300,
+      departureTimeout: 30,
     });
   });
 
-  it('comparte una reunión cuando dos participantes llaman simultáneamente', async () => {
-    roomsService.getByCodeOrThrow.mockResolvedValue(buildRoom());
-    const meeting = { MeetingId: 'meeting-shared' };
-    send.mockResolvedValue({ Meeting: meeting });
-
+  it('usa la misma sala ante solicitudes concurrentes y distingue identidades', async () => {
     const results = await Promise.all([
-      service.createMeetingForRoom('ABC123'),
-      service.createMeetingForRoom('ABC123'),
+      service.join(room.code, participant),
+      service.join(room.code, { ...participant, sub: 'guest-2', name: 'Ana' }),
     ]);
-
-    expect(results).toEqual([meeting, meeting]);
-    expect(send).toHaveBeenCalledTimes(1);
-    expect(roomsService.setChimeMeetingId).toHaveBeenCalledTimes(1);
+    expect(results[0].roomName).toBe(results[1].roomName);
+    const verifier = new TokenVerifier(config.LIVEKIT_API_KEY, secret);
+    expect((await verifier.verify(results[0].token)).sub).not.toBe(
+      (await verifier.verify(results[1].token)).sub,
+    );
   });
 
-  it('no consulta AWS ni la base si las llamadas no están habilitadas', async () => {
-    const disabledService = new CallsService(
-      { send } as unknown as ChimeSDKMeetingsClient,
-      roomsService as unknown as RoomsService,
-      new ConfigService({}),
+  it('rechaza un pase de otra sala', async () => {
+    await expect(service.join('other-room', participant)).rejects.toBeInstanceOf(
+      ForbiddenException,
     );
+    expect(createRoom).not.toHaveBeenCalled();
+  });
 
-    await expect(disabledService.createMeetingForRoom('ABC123')).rejects.toThrow(
-      'Las llamadas de audio todavía no están habilitadas',
+  it('rechaza una sala cerrada antes de contactar LiveKit', async () => {
+    rooms.getByCodeOrThrow.mockResolvedValue({ ...room, isActive: false });
+    await expect(service.join(room.code, participant)).rejects.toThrow('La sala está cerrada');
+    expect(createRoom).not.toHaveBeenCalled();
+  });
+
+  it('informa si falta configuración sin contactar al servicio', async () => {
+    service = new CallsService(rooms as unknown as RoomsService, new ConfigService({}));
+    await expect(service.join(room.code, participant)).rejects.toThrow(
+      'Las llamadas todavía no están configuradas',
     );
-    await expect(disabledService.createAttendee('meeting', 'guest')).rejects.toBeInstanceOf(
+    expect(createRoom).not.toHaveBeenCalled();
+  });
+
+  it('no convierte valores inválidos en un cupo ilimitado', async () => {
+    service = new CallsService(
+      rooms as unknown as RoomsService,
+      new ConfigService({ ...config, MAX_ROOM_PARTICIPANTS: '0' }),
+    );
+    await expect(service.join(room.code, participant)).rejects.toBeInstanceOf(
       ServiceUnavailableException,
     );
-    expect(send).not.toHaveBeenCalled();
-    expect(roomsService.getByCodeOrThrow).not.toHaveBeenCalled();
+    expect(createRoom).not.toHaveBeenCalled();
   });
 
-  it('permite reintentar sin exponer la respuesta de AWS cuando faltan permisos', async () => {
-    roomsService.getByCodeOrThrow.mockResolvedValue(buildRoom());
-    send.mockRejectedValueOnce(
-      Object.assign(new Error('Private AWS identifier and policy details'), {
-        name: 'AccessDeniedException',
-      }),
+  it('no expone respuestas internas del servidor de medios', async () => {
+    createRoom.mockRejectedValueOnce(new Error('private server credentials'));
+    await expect(service.join(room.code, participant)).rejects.toThrow(
+      'El servidor de llamadas no está disponible. Intentá nuevamente.',
     );
-    await expect(service.createMeetingForRoom('ABC123')).rejects.toThrow(
-      'El servicio de audio no está disponible en este momento',
-    );
-    send.mockResolvedValueOnce({ Meeting: { MeetingId: 'meeting-retry' } });
-    await expect(service.createMeetingForRoom('ABC123')).resolves.toEqual({
-      MeetingId: 'meeting-retry',
-    });
-    expect(send).toHaveBeenCalledTimes(2);
-  });
-
-  it('informa la renovación de credenciales sin publicar su contenido', async () => {
-    send.mockRejectedValueOnce(
-      Object.assign(new Error('Private profile details'), { name: 'CredentialsProviderError' }),
-    );
-    await expect(service.createAttendee('meeting', 'guest')).rejects.toThrow(
-      'El servicio de audio necesita renovar su conexión',
-    );
-  });
-
-  it('no guarda una reunión si AWS devuelve una respuesta incompleta', async () => {
-    roomsService.getByCodeOrThrow.mockResolvedValue(buildRoom());
-    send.mockResolvedValue({});
-    await expect(service.createMeetingForRoom('ABC123')).rejects.toBeInstanceOf(
-      ServiceUnavailableException,
-    );
-    expect(roomsService.setChimeMeetingId).not.toHaveBeenCalled();
-  });
-
-  it('rechaza una sala cerrada antes de consultar Chime', async () => {
-    roomsService.getByCodeOrThrow.mockResolvedValue(buildRoom({ isActive: false }));
-    await expect(service.createMeetingForRoom('ABC123')).rejects.toThrow('La sala está cerrada');
-    expect(send).not.toHaveBeenCalled();
   });
 });

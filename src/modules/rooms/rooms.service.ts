@@ -47,10 +47,6 @@ export class RoomsService {
     return room;
   }
 
-  async setChimeMeetingId(roomId: string, chimeMeetingId: string): Promise<void> {
-    await this.db.update(rooms).set({ chimeMeetingId }).where(eq(rooms.id, roomId));
-  }
-
   async joinRoom(code: string, userId: string): Promise<void> {
     const room = await this.getByCodeOrThrow(code);
     await this.db
