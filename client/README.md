@@ -1,6 +1,6 @@
 # Date2gether — client
 
-Frontend Next.js 15.5.27, React 19 y TypeScript. Forma parte del workspace pnpm; las dependencias se instalan desde la raíz con `pnpm install --frozen-lockfile`.
+Frontend Next.js 15.5.28, React 19 y TypeScript. Forma parte del workspace pnpm; las dependencias se instalan desde la raíz con `pnpm install --frozen-lockfile`.
 
 ## Desarrollo
 
@@ -19,15 +19,17 @@ Desde la raíz ejecutá `pnpm dev:client`, o desde `client/` ejecutá `pnpm dev`
 
 La interfaz conserva ES/EN y tema claro/oscuro. Los usuarios registrados mantienen sus roles por sala. Los invitados participan sin tener que registrarse.
 
-## Audio con Amazon Chime SDK
+## Audio y video con LiveKit
 
-El audio usa la misma reunión Chime para toda la sala. Al pulsar Llamar, el frontend obtiene una reunión y un asistente mediante `POST /calls/:roomCode`, con el pase de sala. Las credenciales AWS permanecen en el backend. El perfil local se configura solo en el `.env` raíz; no hay variables AWS ni claves en `client/.env`.
+Al pulsar Llamar, el backend entrega `{ url, token, roomName, participantLimit }` a quien presenta el pase de esa sala. El cliente conecta con `LiveKitRoom`, muestra la grilla y reproduce audio remoto. Cámara y micrófono empiezan apagados; se activan y se eligen desde los controles. También se puede escuchar y usar el chat sin otorgar permisos de dispositivos. Al colgar o salir se liberan los tracks. Los nombres se toman de los tokens firmados; repetir un nombre no mezcla identidades.
 
-El nuevo AWS experience con plan FREE no admite Chime SDK. El audio queda deshabilitado por defecto (`AWS_CHIME_ENABLED=false` en el backend), con un mensaje claro al pulsar Llamar. Usar Chime requiere una decisión explícita sobre plan pago y funciones avanzadas; los créditos no garantizan seis meses de llamadas gratuitas. La configuración y sus límites están en el [README principal](../README.md#aws-y-llamadas). Los tests simulan AWS; la conexión real requiere credenciales y una prueba entre dos navegadores.
+El cupo predeterminado es de seis conexiones de medios. El backend prepara la sala y LiveKit aplica ese máximo; las claves privadas del servidor no llegan al navegador. Ya no se usa Chime SDK ni se necesita habilitar funciones avanzadas de AWS.
 
-La interfaz espera la confirmación real de Chime, permite cancelar la conexión y silenciar o activar el micrófono. Colgar o abandonar la página libera el dispositivo. Los errores de conexión permiten volver a llamar.
+El desarrollo local utiliza `ws://localhost:7880` con el servicio LiveKit del Compose raíz. La [guía EC2](../deploy/ec2/README.md) prepara la aplicación completa por HTTPS en `us-east-2`. En ese despliegue `NEXT_PUBLIC_API_URL=/api` se fija durante el build; REST y Socket.io comparten el dominio de la aplicación. Para cambiarlo hay que reconstruir el frontend.
 
-En esta entrega todavía faltan cámara, grilla de video, selección y previsualización de dispositivos, pantalla compartida y moderación de ingresos. El botón Llamar inicia audio; no representa una videollamada completa.
+La configuración privada está solo en el backend. `client/.env` contiene la URL pública de la API. No poner claves de LiveKit ni credenciales AWS allí. Las pruebas simulan los SDK; la aceptación final requiere dispositivos y redes reales.
+
+Quedan pendientes previsualización antes del ingreso, compartir pantalla, admisión y otras funciones detalladas en los requisitos.
 
 ## Scripts
 

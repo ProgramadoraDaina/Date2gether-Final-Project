@@ -1,3 +1,5 @@
+> Estado actual: las decisiones de Chime de las secciones 2, 5, 9 y 11 son históricas y quedan reemplazadas por LiveKit en la sección 12.
+
 # Decisiones técnicas
 
 Registro de decisiones de arquitectura y herramientas, con el contexto y las alternativas consideradas en cada caso. El objetivo es que cualquiera que retome el proyecto entienda por qué se eligió cada tecnología, no solo cuál se eligió.
@@ -311,3 +313,31 @@ Los ingresos simultáneos comparten una promesa por sala en el proceso. El token
 El cliente escucha `audioVideoDidStart` antes de mostrar la llamada conectada. Permite cancelar, silenciar y volver a activar el micrófono. Al colgar, salir o fallar elimina el observer y destruye el controlador de dispositivos. Los intentos cancelados no encienden el micrófono cuando termina una solicitud pendiente.
 
 La conexión real entre dispositivos permanece pendiente hasta disponer de acceso al servicio. Los pasos y fuentes oficiales están en el [README principal](../README.md#aws-y-llamadas).
+
+
+## 12. LiveKit autohospedado en EC2 para la entrega académica
+
+**Fecha:** 2026-10-27
+
+El usuario eligió conservar el plan gratuito de seis meses, utilizar EC2 y reducir el cupo para una entrega que no tendrá tráfico diario. El objetivo de la entrega pasa a seis personas por llamada; no se requiere Chime ni un plan pago de LiveKit Cloud. Se retiran ambos SDK de Chime y se utilizan `livekit-server-sdk`, `livekit-client` y los componentes oficiales de React.
+
+El backend confirma la sala y el pase de participante, crea idempotentemente su sala de medios con cupo y emite un JWT de corta duración. El token conserva el nombre elegido y una identidad independiente; no concede administración. El cupo se verifica en LiveKit al conectar, incluso si varios tokens se emitieron a la vez. El chat conserva Socket.io y su admisión no aplica todavía un cupo equivalente.
+
+El cliente muestra grilla, audio remoto, controles y selección de cámara/micrófono. Ambos medios se conectan apagados hasta que la persona los active. Se puede continuar sin un dispositivo o con sus permisos rechazados. La salida desconecta y libera los tracks mediante el ciclo de vida de los componentes oficiales.
+
+El despliegue de una EC2 en `us-east-2` incluye aplicación, PostgreSQL, LiveKit, Caddy con HTTPS y TURN/TLS. Las claves se generan en la instancia y quedan en archivos ignorados por Git. La API de producción usa `/api`, incluido el path de Socket.io, para mantener un solo origen HTTPS. La IP se reserva para conservar los enlaces al detener y volver a iniciar EC2. El apagado automático limita el tiempo de cómputo; EBS e IPv4 mantienen costos residuales.
+
+La columna antigua de Chime se conserva para no reescribir migraciones ni borrar datos. No se utiliza para las llamadas nuevas. La configuración está en [deploy/ec2](../deploy/ec2/README.md); la validación final requiere el despliegue y una prueba real desde distintas redes.
+
+
+## 13. Revisión de exposición y dependencias antes del despliegue
+
+**Fecha:** 2026-10-27
+
+Se revisaron archivos versionables y referencias Git locales en busca de patrones habituales de credenciales AWS, tokens GitHub y claves privadas; no se detectaron coincidencias. Los secretos JWT locales se compararon con los archivos versionables sin publicar sus valores. Se amplía `.gitignore` para excluir variantes `.env*`, `.aws`, claves privadas y los archivos generados por el despliegue; los `.env.example` siguen versionables y contienen exclusivamente datos de prueba.
+
+La auditoría reportó avisos en Next.js, body-parser y multer. Se actualizó Next.js a 15.5.28 y se fijaron versiones corregidas de las dependencias transitivas. También se corrigieron avisos en fast-uri y esbuild utilizados por herramientas de desarrollo. Tras los cambios, `pnpm audit` no reporta avisos; el resultado está limitado a los avisos conocidos por el registro en el momento de la consulta. El override de esbuild se comprobó generando una migración en `/tmp`, sin modificar la base del usuario.
+
+El PostgreSQL del Compose de desarrollo se vincula a `127.0.0.1` en vez de a todas las interfaces, conservando el volumen. El contenedor anterior conserva su configuración hasta que el usuario lo recree. Los códigos de las salas recién creadas usan `crypto.randomInt`. Las invitaciones anteriores no cambian y quien posea un enlace válido aún puede entrar como invitado, según la regla del producto.
+
+Los tokens de cuenta siguen en `localStorage`; un ataque de inyección de scripts podría acceder a ellos. La prueba de penetración, la revisión de la instancia EC2 desplegada y los controles de admisión y revocación de invitaciones no forman parte de esta comprobación y quedan pendientes.

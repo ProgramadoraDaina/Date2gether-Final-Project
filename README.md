@@ -11,15 +11,15 @@ Las reglas de producto están en [docs/requirements.md](docs/requirements.md). E
 - El nombre visible no concede permisos. El servidor emite un pase de participante para esa sala, válido durante 24 horas. Sirve para chat y llamadas; no sirve para crear salas, consultar cuentas ni administrar roles. Cada participante recibe un identificador distinto aunque repita el nombre de otra persona.
 - Los usuarios registrados conservan los roles por sala: administrador, colaborador y participante. Los invitados no reciben permisos de administración.
 - Hay chat de texto persistente, presencia en tiempo real, interfaz ES/EN y tema claro/oscuro.
-- El botón **Llamar** conecta el audio con Amazon Chime SDK cuando el servicio está habilitado para el proyecto AWS. Se obtiene la reunión de la sala y un asistente asociado al pase de participante. La cámara, la grilla de video y compartir pantalla siguen pendientes.
-- El ingreso actual es directo con enlace y nombre. La sala de espera, el bloqueo de ingresos y el cupo de 100 personas son funcionalidades pendientes; no se presentan como controles implementados.
+- El botón **Llamar** conecta audio y video con LiveKit. Hay grilla de participantes, controles y selección de cámara y micrófono; ambos dispositivos empiezan apagados. Las llamadas admiten seis personas por defecto. Compartir pantalla sigue pendiente.
+- El ingreso actual es directo con enlace y nombre. La sala de espera, el bloqueo de ingresos y el cupo de admisión al chat son funcionalidades pendientes; no se presentan como controles implementados.
 
 ## Requisitos
 
 - Node.js 20 o superior (ver las restricciones de las dependencias instaladas).
 - pnpm **11.18.0**, fijado en `package.json`.
 - Docker Engine y Docker Compose, o PostgreSQL 16 accesible.
-- Para probar audio: una cuenta AWS con acceso a Amazon Chime SDK Meetings y credenciales disponibles para el backend.
+- Para probar audio y video: LiveKit local con Docker o el despliegue EC2 documentado. No hace falta acceso a Chime SDK.
 
 ## Instalar y preparar la base
 
@@ -41,11 +41,11 @@ JWT_ACCESS_SECRET=<secreto-de-access>
 JWT_REFRESH_SECRET=<otro-secreto-distinto>
 JWT_ACCESS_EXPIRES_IN=15m
 JWT_REFRESH_EXPIRES_IN=7d
-AWS_REGION=us-east-2
-AWS_PROFILE=date2gether
-AWS_CHIME_ENABLED=false
-AWS_CHIME_REGION=us-east-1
-AWS_CHIME_MEDIA_REGION=us-east-2
+LIVEKIT_URL=ws://localhost:7880
+LIVEKIT_API_URL=http://localhost:7880
+LIVEKIT_API_KEY=devkey
+LIVEKIT_API_SECRET=devsecret-for-local-development-only-32chars
+MAX_ROOM_PARTICIPANTS=6
 ```
 
 Generá cada secreto por separado con `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`. Los `.env` y las credenciales no se versionan.
@@ -77,43 +77,33 @@ pnpm dev:client
 
 ## AWS y llamadas
 
-La integración de audio utiliza **Amazon Chime SDK Meetings**. El Agent Toolkit permite al asistente consultar AWS; la aplicación usa el SDK de JavaScript directamente desde NestJS. Instalar el Toolkit o iniciar sesión no habilita servicios ni concede permisos adicionales.
+Audio y video utilizan **LiveKit autohospedado**. Se reemplaza la integración anterior de Chime porque no está admitida en el plan FREE del nuevo AWS experience. El plan gratuito de LiveKit Cloud tampoco es necesario para este despliegue: se utiliza su servidor abierto en EC2, con consumo de los créditos de infraestructura AWS.
 
-### Disponibilidad del plan
+La [guía de EC2](deploy/ec2/README.md) incluye una sola instancia en `us-east-2`, HTTPS, TURN para redes restrictivas, aplicación completa con PostgreSQL, generación privada de secretos y apagado automático a las dos horas. Crear el stack consume créditos; la guía explica costos residuales del disco y la IP y cómo retirar los recursos al terminar.
 
-En el **nuevo AWS experience**, Amazon Chime SDK figura entre los [servicios no admitidos](https://docs.aws.amazon.com/accounts/latest/reference/supported-services-sign-up-new.html#unsupported-services), incluso en su plan pago simplificado. Para usarlo se requiere pasar al plan pago y [activar funciones avanzadas](https://docs.aws.amazon.com/accounts/latest/reference/activate-advanced-features.html). No basta con tener créditos ni con esperar el período de seis meses. La consulta de solo lectura realizada durante esta configuración confirmó un plan `FREE` activo; no se habilitó Chime.
+Para probar localmente, `docker compose up -d` inicia PostgreSQL y LiveKit. Las claves `devkey` del ejemplo son públicas y se usan solo en localhost: no exponer este servicio local en Internet. El despliegue EC2 genera otras claves aleatorias. El backend necesita `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` y, opcionalmente, `LIVEKIT_API_URL` para acceder al servidor por la red interna. No utiliza credenciales AWS en tiempo de ejecución.
 
-Las funciones avanzadas son una decisión aparte: la activación es irreversible y elimina los límites de gasto de AWS Settings. Los créditos obtenidos se conservan según sus condiciones, pero no garantizan llamadas gratis durante seis meses. Antes de activar, revisar en **AWS Settings > Billing** el saldo, el vencimiento y los servicios cubiertos; luego controlar los costos mediante AWS Billing y presupuestos. Los presupuestos notifican y no reemplazan un corte automático. La configuración del repositorio mantiene `AWS_CHIME_ENABLED=false` hasta aprobar esa decisión. En ese estado, Llamar responde con HTTP 503 y un mensaje legible, sin realizar solicitudes a Chime. Cuenta, invitados y chat siguen funcionando.
+`POST /calls/:roomCode` valida el pase de sala, confirma que la sala siga abierta y solicita a LiveKit una sala con `MAX_ROOM_PARTICIPANTS=6` (admite valores entre 2 y 20 para la demo). Emite un token temporal de 15 minutos limitado al nombre de esa sala y a la identidad/nombre confirmados del participante. No otorga administración ni grabación del servidor. LiveKit aplica el cupo al conectar, incluso ante solicitudes simultáneas; emitir un token no reserva un lugar. El chat mantiene su control de acceso pero aún no tiene un cupo equivalente de admisión. Cambiar el límite requiere cerrar las salas de medios que ya estaban creadas o esperar a que caduquen.
 
-### Credenciales y regiones
+Al pulsar Llamar se conecta con cámara y micrófono apagados. Se pueden activar o desactivar y elegir los dispositivos desde la llamada. La grilla muestra nombre y estado de cámara, incluido un recuadro para quien no publica video. El audio remoto se reproduce mediante LiveKit; si el navegador lo bloquea, se ofrece Activar sonido de la reunión. Rechazar un permiso no impide continuar con el resto de la reunión. Colgar o abandonar la página desconecta y libera los dispositivos.
 
-Para desarrollo local se utiliza el perfil `date2gether`, creado mediante:
+Las llamadas requieren HTTPS o localhost. En EC2 el frontend usa `/api` para REST y Socket.io a través del mismo dominio HTTPS, evitando contenido mixto. Las credenciales privadas de LiveKit permanecen en el servidor; el navegador recibe solo su pase temporal. No se registran tokens ni se versionan archivos de configuración generados.
 
-```bash
-aws login --profile date2gether --region us-east-2
-```
+La columna histórica `rooms.chime_meeting_id` se conserva para no reescribir migraciones existentes; LiveKit no la utiliza. No hay una migración destructiva al cambiar de proveedor. Se deben seguir aplicando las migraciones versionadas con `pnpm db:migrate`.
 
-El SDK instalado soporta perfiles `login_session` y renueva las credenciales temporales de esa sesión. Si vence la sesión, volver a iniciar sesión con ese comando. No copiar tokens ni claves a `.env`, al frontend o al repositorio. En un despliegue AWS se omite `AWS_PROFILE` y se utiliza un rol del servicio. El backend necesita permisos `chime:CreateMeeting`, `chime:GetMeeting` y `chime:CreateAttendee`.
+La comprobación real se hace desde dos o más dispositivos y redes diferentes, con invitados y permisos rechazados; después se valida el límite de seis conexiones de medios. Las pruebas automáticas y los builds no demuestran por sí solos una videollamada real en EC2.
 
-| Variable | Valor de ejemplo | Uso |
-| --- | --- | --- |
-| `AWS_REGION` | `us-east-2` | Región seleccionada del proyecto; confirmar en AWS Settings > View all projects > Overview > Additional Info > Region. |
-| `AWS_PROFILE` | `date2gether` | Perfil local de la sesión de AWS CLI. Omitir al usar un rol en AWS. |
-| `AWS_CHIME_ENABLED` | `false` | Activación explícita del audio, después de confirmar acceso y costos. |
-| `AWS_CHIME_REGION` | `us-east-1` | Endpoint del plano de control de Meetings; no existe en Ohio. No se realizan solicitudes allí mientras las llamadas estén deshabilitadas. |
-| `AWS_CHIME_MEDIA_REGION` | `us-east-2` | Región donde se procesa el audio. Si se omite, usa `AWS_REGION`. |
+## Seguridad de la entrega
 
-La [tabla de endpoints](https://docs.aws.amazon.com/general/latest/gr/chime-sdk.html#chime-sdk-region) y la [API CreateMeeting](https://docs.aws.amazon.com/chime-sdk/latest/APIReference/API_meeting-chime_CreateMeeting.html) distinguen la región de control de la región de medios. Para habilitar esta combinación se necesita acceso autorizado al endpoint de Virginia; no se intenta sortear la restricción regional del nuevo AWS experience.
+Las credenciales reales de LiveKit, PostgreSQL y JWT del despliegue EC2 se generan en el host y quedan en `deploy/ec2/runtime/`, ignorado por Git. Las claves `devkey` de `.env.example` y `deploy/local/livekit.yaml` son públicas y solo sirven para desarrollo local; no usarlas en un servidor accesible desde Internet. `.env*` está excluido del repositorio, con excepción de los archivos `.env.example`, que no deben contener secretos.
 
-### Prueba real de audio
+En desarrollo local, PostgreSQL y LiveKit publican sus puertos solo en `127.0.0.1`. Si PostgreSQL ya estaba levantado con una configuración anterior, aplicar el cambio ejecutando `docker compose up -d postgres`; Docker recrea ese contenedor y conserva su volumen de datos. No ejecutar `docker compose down -v` salvo que se desee eliminar esos datos.
 
-Solo después de confirmar que Chime está habilitado, sus permisos y la cobertura del consumo, configurar `AWS_CHIME_ENABLED=true` y reiniciar el backend. No hay cambio de plan automático. Aplicar primero `pnpm db:migrate` para disponer de `rooms.chime_meeting_id`.
+Los códigos nuevos de las salas usan aleatoriedad criptográfica. Cualquier persona que posea el enlace puede solicitar acceso y leer el chat de esa sala; tratar el enlace como privado. El proyecto todavía no implementa sala de espera, expulsión ni revocación completa de invitaciones. Las sesiones de cuenta se guardan en `localStorage`, por lo que una inyección de scripts en el navegador podría exponerlas; se debe revisar esa decisión antes de usar la aplicación con datos reales.
 
-Dos personas desde navegadores o dispositivos distintos abren el mismo enlace, confirman sus nombres y pulsan **Llamar**. Pueden ser invitados sin cuenta. Hace falta permiso de micrófono y un contexto seguro (HTTPS o localhost). Si usan el mismo equipo, utilizar auriculares para evitar acople.
+La auditoría de dependencias realizada el 27 de octubre de 2026 terminó sin vulnerabilidades conocidas en `pnpm audit` después de actualizar Next.js, body-parser, multer y herramientas de desarrollo. El resultado depende de la base de avisos en ese momento y no reemplaza una auditoría o prueba de penetración. También se revisaron los archivos versionables y las referencias Git locales buscando patrones habituales de claves, sin hallar coincidencias; esa búsqueda no garantiza detectar todos los formatos de secretos.
 
-La interfaz permanece en Conectando hasta que Chime confirma la conexión. Durante ese paso se puede cancelar; ya conectados, se puede silenciar, activar el micrófono o colgar. Al salir, cancelar o fallar la conexión se liberan los dispositivos. Los participantes de una misma sala reciben la misma reunión, también si llaman simultáneamente. Las credenciales temporales de participante (`JoinToken`) solo se entregan a quien presenta el pase de esa sala; las credenciales AWS permanecen en el servidor.
-
-La suite automatizada simula AWS y verifica configuración deshabilitada, errores seguros, concurrencia y el ciclo de audio del cliente. No acredita una llamada real ni capacidad para 100 personas. No se ejecutan servidores ni se crean recursos AWS al correr esas pruebas. Las reuniones siguen dependiendo del cierre por inactividad de Chime; el cierre explícito en AWS queda pendiente.
+Los cambios de LiveKit y seguridad deben revisarse en el PR antes de desplegarlos. La plantilla prepara medidas para EC2, pero una validación local no comprueba el despliegue real, sus reglas efectivas de red ni permisos en AWS. Verificar el commit y la configuración al crear la instancia y revisar el consumo en AWS Settings > Billing.
 
 ## API y Socket.io
 
@@ -127,7 +117,7 @@ La suite automatizada simula AWS y verifica configuración deshabilitada, errore
 | POST   | `/rooms/:code/join`                                              | JWT de cuenta; membresía registrada                                |
 | GET    | `/rooms/:code/members`                                           | Cuenta miembro de la sala                                          |
 | PATCH  | `/rooms/:code/members/:userId`                                   | Administrador de la sala                                           |
-| POST   | `/calls/:roomCode`                                               | Pase de participante de esa sala; devuelve `{ meeting, attendee }` |
+| POST   | `/calls/:roomCode`                                               | Pase de participante de esa sala; devuelve `{ url, token, roomName, participantLimit }` |
 
 `POST /rooms/:code/access` devuelve `{ token, participant }`. El frontend conserva el pase en memoria durante la visita; abrir o recargar el enlace vuelve a pedir confirmación del nombre. Una reconexión automática del socket usa el mismo pase. El nombre anterior puede estar precargado, pero no se ingresa automáticamente.
 
@@ -145,4 +135,4 @@ pnpm test:client --runInBand
 
 La [guía E2E](e2e/README.md) explica cómo probar los recorridos con una base separada. El [README del cliente](client/README.md) detalla el flujo del navegador y las [decisiones técnicas](docs/decisiones-tecnicas.md) registran la integración de esta rama.
 
-Los siguientes avances son la previsualización y selección de dispositivos, el video real, la moderación de acceso y el control de cupo. El objetivo del producto sigue siendo reuniones de hasta 100 personas; esa capacidad, el cierre de salas, el vencimiento del chat, los adjuntos, los stickers, la grabación local, los subtítulos y los fondos requieren las implementaciones y validaciones descritas en los requisitos.
+La entrega académica usa seis participantes por llamada. Siguen pendientes la previsualización antes de entrar, compartir pantalla, moderación de acceso, cupo del chat, cierre de salas de la aplicación, vencimiento del chat, adjuntos, stickers, grabación local, subtítulos y fondos, según los requisitos.

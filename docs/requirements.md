@@ -1,6 +1,6 @@
 # Date2gether — definición del proyecto
 
-Última actualización: 26 de octubre de 2026.
+Última actualización: 27 de octubre de 2026.
 
 Este documento es la referencia para desarrollar Date2gether: describe qué tiene que hacer el producto terminado, cómo deben comportarse sus funciones y qué decisiones siguen abiertas. El trabajo puede dividirse en entregas, pero eso no reduce el objetivo final.
 
@@ -12,7 +12,7 @@ Date2gether será una aplicación de reuniones grupales desde el navegador. Las 
 
 La experiencia debe permitir reconocer fácilmente quién participa y quién está hablando. Crear una reunión requiere una cuenta registrada y una sesión válida; quienes reciben una invitación pueden participar con su cuenta o como invitados, según las reglas de acceso de la sala.
 
-Las reuniones grupales forman parte del producto desde su primera versión utilizable. Cada sala admite un máximo de **100 personas en total, incluido el anfitrión**. La cantidad de reuniones simultáneas sigue pendiente y se definirá según la infraestructura y las pruebas de capacidad.
+Las reuniones grupales forman parte del producto desde su primera versión utilizable. Cada sala admite un máximo de **6 personas en total, incluido el anfitrión**. La cantidad de reuniones simultáneas sigue pendiente y se definirá según la infraestructura y las pruebas de capacidad.
 
 ## Cuentas y permisos
 
@@ -51,7 +51,7 @@ El acceso contempla tanto cuentas registradas como invitados. Tener el enlace o 
 - Bloquear nuevos ingresos no expulsa a quienes ya estaban dentro.
 - Una expulsión termina la participación actual y retira su acceso al chat, los archivos y los medios. No bloquea la cuenta ni la sesión: la persona puede volver a solicitar el ingreso, incluso desde el mismo navegador, y se aplican las condiciones vigentes de la sala. La expulsión no debe provocar un reingreso automático del cliente.
 - Una sala inexistente, finalizada, bloqueada o sin cupo debe mostrar el motivo correspondiente.
-- El servidor aplica el máximo de **100 participantes por sala**, contando al anfitrión, las cuentas registradas y los invitados. Las personas en espera no ocupan un lugar dentro de la reunión. Al completarse el cupo, se rechazan nuevos ingresos y admisiones hasta que se libere un lugar, incluso si varias personas intentan entrar al mismo tiempo. Tener la cámara apagada no evita ese límite.
+- El servidor aplica el máximo de **6 participantes por sala**, contando al anfitrión, las cuentas registradas y los invitados. Las personas en espera no ocupan un lugar dentro de la reunión. Al completarse el cupo, se rechazan nuevos ingresos y admisiones hasta que se libere un lugar, incluso si varias personas intentan entrar al mismo tiempo. Tener la cámara apagada no evita ese límite.
 
 Expulsar y bloquear nuevos ingresos son acciones distintas. La expulsión solo quita a la persona de la sala. Si vuelve a entrar con la espera activada, necesita admisión; si está desactivada, puede ingresar directamente mientras se cumplan las demás condiciones. No existe una lista de usuarios bloqueados como consecuencia de una expulsión.
 
@@ -69,7 +69,7 @@ Si el anfitrión sale o pierde conexión y todavía quedan participantes, la sal
 
 Cada persona puede elegir cámara y micrófono, previsualizar su imagen y activar o desactivar sus propios medios durante la reunión. Si falta un dispositivo o se rechaza un permiso, debe poder continuar con las funciones disponibles y recibir instrucciones para resolver el problema.
 
-La reunión transmite audio y video entre sus participantes en salas de hasta 100 personas. Debe funcionar entre dispositivos y redes diferentes, no solamente entre pestañas de una misma computadora.
+La reunión transmite audio y video entre sus participantes en salas de hasta 6 personas. Debe funcionar entre dispositivos y redes diferentes, no solamente entre pestañas de una misma computadora.
 
 Silenciar el micrófono impide que los demás reciban la voz de esa persona. Apagar la cámara interrumpe su imagen en vivo. Ambos estados se reflejan en la interfaz y se conservan al reconectar; una cámara o un micrófono apagados no se reactivan por esa reconexión.
 
@@ -282,7 +282,7 @@ El alcance funcional también incluye estas condiciones:
 - **Datos protegidos.** Las conexiones del despliegue están protegidas. Las contraseñas y credenciales no se exponen en respuestas ni registros. Los archivos se validan antes de distribuirse y las cargas transitorias se liberan al terminar, cancelar o fallar.
 - **Persistencia.** Cuentas, anfitriones, estado de las reuniones, participaciones, historial textual no vencido y colecciones personales sobreviven al reinicio. Las imágenes, GIFs y stickers de mensajes no se persisten. El historial vence a las 24 horas del cierre y los stickers guardados respetan su cuota por cuenta.
 - **Recuperación.** Los errores de permisos, dispositivos, conexión, carga y envío muestran una explicación y una acción posible. El sistema no oculta fallos como si la operación hubiera terminado bien.
-- **Rendimiento verificable.** Las funciones se prueban contra las metas definidas más abajo, en la infraestructura AWS del proyecto y con hasta 100 participantes por sala. Esas metas son requisitos a validar, no resultados medidos del código actual.
+- **Rendimiento verificable.** Las funciones se prueban contra las metas definidas más abajo, en la infraestructura AWS del proyecto y con hasta 6 participantes por sala. Esas metas son requisitos a validar, no resultados medidos del código actual.
 - **Instalación y pruebas reproducibles.** El proyecto se instala y ejecuta siguiendo los README, con pnpm y migraciones documentadas. Las pruebas usan datos y una base separados del desarrollo.
 
 ### Navegadores y dispositivos
@@ -319,19 +319,21 @@ Se adoptan estas metas para el **percentil 95**, es decir, para al menos el 95 %
 
 La validación usa al menos 30 mediciones por operación, RTT hacia el servidor de hasta 100 ms y pérdida de paquetes de hasta 1 %. Para las cargas se requiere un mínimo de 10 Mbit/s efectivos de subida disponibles además del tráfico de la llamada. Se registran equipos, navegadores y recursos del servidor.
 
-También debe sostenerse una reunión de **60 minutos con 100 participantes, incluido el anfitrión**, con cámaras, micrófonos, chat y una presentación en uso, sin caídas de la aplicación ni pérdida de mensajes textuales confirmados. Se repite con subtítulos y con grabación y efectos activos en los dispositivos compatibles para medir su impacto.
+También debe sostenerse una reunión de **60 minutos con 6 participantes, incluido el anfitrión**, con cámaras, micrófonos, chat y una presentación en uso, sin caídas de la aplicación ni pérdida de mensajes textuales confirmados. Se repite con subtítulos y con grabación y efectos activos en los dispositivos compatibles para medir su impacto.
 
-El cupo por sala queda fijado en 100 personas. La cantidad de salas simultáneas y los recursos del servidor siguen pendientes; el cumplimiento de las metas requiere pruebas con ese cupo en la infraestructura elegida. La meta de reconectar en 10 segundos no define cuánto tiempo se reserva un lugar, ni modifica los 15 minutos de tolerancia sin anfitrión.
+El cupo por sala queda fijado en 6 personas. La cantidad de salas simultáneas y los recursos del servidor siguen pendientes; el cumplimiento de las metas requiere pruebas con ese cupo en la infraestructura elegida. La meta de reconectar en 10 segundos no define cuánto tiempo se reserva un lugar, ni modifica los 15 minutos de tolerancia sin anfitrión.
 
 ## Infraestructura y recursos
 
-El equipo utilizará **AWS**, con Amazon Chime SDK como integración de medios prevista, sujeta a que el proyecto tenga acceso autorizado a ese servicio. Esta decisión autoriza servicios administrados y reemplaza la restricción anterior de alojamiento propio sin APIs comerciales. La aplicación y la base de datos se despliegan en la infraestructura del proyecto; Chime gestiona la señalización y distribución de audio y video. El reconocimiento de voz puede resolverse en el dispositivo o mediante la infraestructura aprobada.
+Para la entrega académica, el equipo utilizará **AWS EC2 con LiveKit autohospedado** en `us-east-2`, con un máximo objetivo de seis personas por sala. Esta decisión reemplaza la integración de Chime SDK y el objetivo anterior de 100 participantes. Esta decisión autoriza servicios administrados y reemplaza la restricción anterior de alojamiento propio sin APIs comerciales. La aplicación y la base de datos se despliegan en la infraestructura del proyecto; LiveKit gestiona la señalización y distribución de audio y video; NestJS conserva la identidad y las reglas de acceso. El reconocimiento de voz puede resolverse en el dispositivo o mediante la infraestructura aprobada.
 
 La comunicación entre distintas redes debe funcionar usando los servicios de medios de AWS configurados para el proyecto. La grabación permanece en el equipo de quien graba; los efectos de fondo se procesan en el cliente.
 
-Según los [planes de AWS](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/free-tier-plans.html), el plan gratuito termina a los seis meses o al agotar sus créditos, lo que ocurra primero. En el nuevo AWS experience, Chime SDK no está admitido en el plan FREE ni en el plan pago simplificado. Su uso requiere plan pago y funciones avanzadas, una decisión irreversible que elimina el límite de gasto de AWS Settings. Antes de usar Chime se confirma su habilitación y que los créditos cubran ese consumo; tener créditos durante seis meses no concede acceso al servicio. Referencias: [servicios admitidos](https://docs.aws.amazon.com/accounts/latest/reference/supported-services-sign-up-new.html) y [funciones avanzadas](https://docs.aws.amazon.com/accounts/latest/reference/activate-advanced-features.html). No se supone uso ilimitado ni cobertura automática de todos los servicios. Se deben registrar el saldo, la fecha de vencimiento y la decisión de continuidad al terminar el período. No se configura una ampliación de pago como parte de esta decisión. El motor de transcripción sigue pendiente de selección.
+El plan gratuito de AWS termina a los seis meses o al agotar sus créditos, lo que ocurra primero. EC2 está entre los servicios admitidos del nuevo AWS experience y aloja el servidor abierto de LiveKit. No se utiliza Chime SDK ni se requiere activar funciones avanzadas o contratar LiveKit Cloud. El costo de cómputo, almacenamiento, IPv4 y transferencia se cubre con créditos elegibles según sus condiciones; no se promete infraestructura ilimitada ni seis meses de uso continuo sin costo. Antes de desplegar se confirma el plan, el saldo y el vencimiento en AWS Settings > Billing. No se cambia el plan de AWS automáticamente. El motor de transcripción sigue pendiente.
 
-No se supone capacidad ilimitada: el almacenamiento de cuentas y stickers, la memoria de las transferencias y el procesamiento de medios deben dimensionarse según ese servidor. Para dimensionar el despliegue para salas de hasta 100 personas y definir cuántas podrán funcionar simultáneamente, se documentarán CPU, RAM, almacenamiento, conexión y, si existe, aceleración disponible.
+Para la demostración se prepara una sola EC2 con la aplicación completa, HTTPS y respaldo de conectividad mediante TURN. La configuración predeterminada limita las llamadas a seis conexiones de medios y apaga la instancia a las dos horas de cada arranque; se puede ajustar para la presentación. El apagado interrumpe reuniones activas y no elimina los cargos de disco o IPv4 reservada. El cupo de admisión al chat sigue siendo una función pendiente; el cupo de medios lo aplica LiveKit.
+
+No se supone capacidad ilimitada: el almacenamiento de cuentas y stickers, la memoria de las transferencias y el procesamiento de medios deben dimensionarse según ese servidor. Para dimensionar el despliegue para salas de hasta 6 personas y definir cuántas podrán funcionar simultáneamente, se documentarán CPU, RAM, almacenamiento, conexión y, si existe, aceleración disponible.
 
 ## Lo que todavía hay que decidir
 
@@ -339,9 +341,9 @@ Las reglas anteriores ya forman parte de la especificación. Quedan abiertos est
 
 | Tema                        | Decisión pendiente                                                                                                                     |
 | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Salas simultáneas           | Cantidad de reuniones que podrán funcionar al mismo tiempo, con un máximo ya definido de 100 personas por sala.                        |
+| Salas simultáneas           | Cantidad de reuniones que podrán funcionar al mismo tiempo, con un máximo ya definido de 6 personas por sala.                        |
 | Infraestructura AWS         | Servicios, regiones, recursos, créditos disponibles y fecha de vencimiento; permiten dimensionar y validar las metas de rendimiento.   |
-| Medios y transcripción      | Medios con Amazon Chime SDK; falta seleccionar el motor de transcripción y validar su cobertura y consumo.                             |
+| Medios y transcripción      | Medios con LiveKit autohospedado en EC2; falta seleccionar el motor de transcripción y validar su cobertura y consumo.                             |
 | Salas sin utilizar          | Caducidad de una sala creada cuyo primer ingreso nunca se completó.                                                                    |
 | Reconexión                  | Plazo de reserva de cupo y momento de confirmar que una sala quedó vacía tras un corte de red.                                         |
 | Registros de participación  | Plazo de conservación y eliminación de ingresos y salidas; no confundirlos con el historial del chat, que ya vence a las 24 horas.     |
@@ -358,7 +360,7 @@ No forman parte del producto las aplicaciones nativas, el acceso telefónico, lo
 Las pruebas de cada función deben complementarse con recorridos completos. Como mínimo, deben cubrir:
 
 1. Crear una cuenta e iniciar sesión; comprobar que la creación de una sala sin cuenta, con sesión inválida o atribuyéndola a otra persona se rechaza sin guardar la sala.
-2. Crear una reunión y comprobar el ingreso directo por defecto y que invitados con enlace puedan entrar tras elegir un nombre; activar la espera. Admitir participantes, desactivarla y verificar el ingreso directo; volver a activarla sin expulsar a quienes ya están dentro. Mantener los controles de bloqueo y comprobar el cupo de 100 personas, incluido el anfitrión: rechazar el ingreso número 101 tanto directo como por admisión. Con 99 participantes y dos ingresos simultáneos, aceptar como máximo uno; al liberarse un lugar, permitir un nuevo ingreso.
+2. Crear una reunión y comprobar el ingreso directo por defecto y que invitados con enlace puedan entrar tras elegir un nombre; activar la espera. Admitir participantes, desactivarla y verificar el ingreso directo; volver a activarla sin expulsar a quienes ya están dentro. Mantener los controles de bloqueo y comprobar el cupo de 6 personas, incluido el anfitrión: rechazar el ingreso número 7 tanto directo como por admisión. Con 5 participantes y dos ingresos simultáneos, aceptar como máximo uno; al liberarse un lugar, permitir un nuevo ingreso.
 3. Reunir a varias personas desde dispositivos y redes diferentes, incluyendo invitados y participantes con el mismo nombre.
 4. Usar cámara y micrófono, entrar con permisos rechazados y reconocer a quien habla por nombre, indicador y borde del mismo color, incluso con cámara apagada. Comprobar que el color aleatorio asignado sea el mismo para todos y se mantenga al reconectar.
 5. Compartir pantalla, fijar otro video y abrir el chat sin perder la identificación del hablante. Probar también voces simultáneas.
@@ -371,7 +373,7 @@ Las pruebas de cada función deben complementarse con recorridos completos. Como
 12. Borrar mensajes propios y mensajes ajenos como anfitrión; rechazar el intento de una tercera persona sin permisos. Comprobar que el contenido eliminado no reaparezca al reconectar.
 13. Solicitar, aprobar y rechazar grabaciones; verificar que el anfitrión pueda iniciar directamente. Elegir el archivo antes de comenzar, cancelar el selector, revocar un permiso y cerrar la reunión. Comprobar que se guarde localmente y que no exista copia en el servidor.
 14. Activar subtítulos en español e inglés, cambiar su presentación y comprobar que no se conserven como transcripción. Aplicar desenfoque y una imagen propia sin encender una cámara apagada ni almacenar el fondo en el servidor.
-15. Repetir los recorridos principales en la matriz de navegadores y dispositivos definida, incluyendo teclado y pantallas pequeñas. Medir las metas de respuesta y la sesión de 60 minutos con 100 participantes.
+15. Repetir los recorridos principales en la matriz de navegadores y dispositivos definida, incluyendo teclado y pantallas pequeñas. Medir las metas de respuesta y la sesión de 60 minutos con 6 participantes.
 
 La evidencia de aceptación debe indicar qué se probó, con cuántos participantes y en qué entorno. Una prueba escrita o una función presente en el código no demuestran por sí solas que el recorrido funciona.
 
@@ -379,8 +381,10 @@ La evidencia de aceptación debe indicar qué se probó, con cuántos participan
 
 Esta rama integra la base de `develop`: registro, login, renovación y cierre de sesión; creación de salas con administrador registrado; roles por sala; chat textual persistente; tema claro/oscuro y traducciones ES/EN.
 
-El ingreso mediante enlace requiere confirmar un nombre. La API emite un pase firmado limitado a esa sala, separado de una sesión de cuenta. Los invitados pueden usar chat y solicitar audio Chime sin registrarse; no pueden crear salas ni administrar roles. Los participantes reciben un ID independiente de su nombre y del socket. La misma credencial se conserva durante una reconexión automática; al recargar se confirma el nombre y se crea una participación nueva.
+El ingreso mediante enlace requiere confirmar un nombre. La API emite un pase firmado limitado a esa sala, separado de una sesión de cuenta. Los invitados pueden usar chat y solicitar audio y video LiveKit sin registrarse; no pueden crear salas ni administrar roles. Los participantes reciben un ID independiente de su nombre y del socket. La misma credencial se conserva durante una reconexión automática; al recargar se confirma el nombre y se crea una participación nueva.
 
-El PR incorpora integración de audio con Amazon Chime SDK. Cámara, pantalla compartida, selección de dispositivos, espera, cupo de 100, cierre automático de reuniones, borrado y vencimiento del chat, adjuntos, stickers, grabación, subtítulos y fondos siguen pendientes. El audio se habilita explícitamente con `AWS_CHIME_ENABLED=true` después de verificar el plan, el acceso regional, los permisos y los costos; por defecto queda deshabilitado. Los tests con AWS simulado cubren concurrencia, errores y liberación del micrófono, pero no acreditan una llamada real ni la capacidad de 100 participantes.
+El PR incorpora audio y video con LiveKit, grilla con nombres, cámara y micrófono apagados al conectar, controles y selección de dispositivos durante la llamada, reproducción de audio remoto y liberación de tracks al colgar. El servidor firma pases temporales limitados a la sala e identidad; LiveKit aplica seis conexiones de medios por defecto. Los participantes sin cuenta usan el mismo flujo después de confirmar su nombre.
+
+La configuración EC2 y las imágenes de la aplicación se preparan con HTTPS y TURN. La aceptación en AWS queda pendiente hasta desplegar con una sesión vigente y probar entre dispositivos/redes. Previsualización previa al ingreso, pantalla compartida, espera, cupo de admisión al chat, cierre automático de salas de la aplicación, borrado y vencimiento del chat, adjuntos, stickers, grabación, subtítulos y fondos siguen pendientes. Las pruebas automáticas no acreditan por sí solas la capacidad de seis personas en la infraestructura real.
 
 Las migraciones conservan roles en `0002_panoramic_nebula` y agregan Chime en `0003_chime_meeting`. Las instrucciones operativas están en el [README principal](../README.md), el [README del cliente](../client/README.md) y la [guía E2E](../e2e/README.md).
