@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 import {
   API_URL,
+  SPANISH_STORAGE_STATE,
   CLIENT_URL,
   TEST_DATABASE_URL,
   TEST_JWT_ACCESS_SECRET,
@@ -21,6 +22,7 @@ export default defineConfig({
 
   use: {
     baseURL: CLIENT_URL,
+    storageState: SPANISH_STORAGE_STATE,
     trace: 'on-first-retry',
   },
 

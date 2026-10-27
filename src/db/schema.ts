@@ -49,6 +49,9 @@ export const rooms = pgTable('rooms', {
   name: varchar('name', { length: 100 }).notNull(),
   isActive: boolean('is_active').notNull().default(true),
   createdAt: timestamp('created_at').notNull().defaultNow(),
+  // Columna histórica de Chime conservada para no reescribir migraciones aplicadas.
+  // LiveKit identifica las salas por su código y no utiliza esta columna.
+  chimeMeetingId: varchar('chime_meeting_id', { length: 64 }),
 });
 
 export const messages = pgTable('messages', {

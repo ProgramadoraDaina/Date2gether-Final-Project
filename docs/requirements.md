@@ -1,6 +1,6 @@
 # Date2gether — definición del proyecto
 
-Última actualización: 22 de octubre de 2026.
+Última actualización: 27 de octubre de 2026.
 
 Este documento es la referencia para desarrollar Date2gether: describe qué tiene que hacer el producto terminado, cómo deben comportarse sus funciones y qué decisiones siguen abiertas. El trabajo puede dividirse en entregas, pero eso no reduce el objetivo final.
 
@@ -12,7 +12,7 @@ Date2gether será una aplicación de reuniones grupales desde el navegador. Las 
 
 La experiencia debe permitir reconocer fácilmente quién participa y quién está hablando. Crear una reunión requiere una cuenta registrada y una sesión válida; quienes reciben una invitación pueden participar con su cuenta o como invitados, según las reglas de acceso de la sala.
 
-Las reuniones grupales forman parte del producto desde su primera versión utilizable. Cada sala admite un máximo de **100 personas en total, incluido el anfitrión**. La cantidad de reuniones simultáneas sigue pendiente y se definirá según la infraestructura y las pruebas de capacidad.
+Las reuniones grupales forman parte del producto desde su primera versión utilizable. Cada sala admite un máximo de **6 personas en total, incluido el anfitrión**. La cantidad de reuniones simultáneas sigue pendiente y se definirá según la infraestructura y las pruebas de capacidad.
 
 ## Cuentas y permisos
 
@@ -20,11 +20,11 @@ El sistema debe permitir registrarse con nombre, correo y contraseña, iniciar s
 
 Una cuenta identifica a una persona registrada. Una participación identifica su presencia en una reunión. El nombre visible y la conexión temporal del navegador no reemplazan ninguna de esas identidades.
 
-| Rol | Qué puede hacer |
-| --- | --- |
-| Usuario registrado | Crear reuniones con una sesión válida y participar en reuniones a las que tenga acceso. |
-| Anfitrión | Administrar su reunión, gestionar el acceso, borrar mensajes, aprobar grabaciones de otros participantes, grabar directamente y finalizar para todos. |
-| Invitado | Participar, usar sus medios y el chat, borrar sus mensajes, solicitar permiso para grabar y salir. No puede crear reuniones ni asumir permisos de anfitrión. |
+| Rol                | Qué puede hacer                                                                                                                                              |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Usuario registrado | Crear reuniones con una sesión válida y participar en reuniones a las que tenga acceso.                                                                      |
+| Anfitrión          | Administrar su reunión, gestionar el acceso, borrar mensajes, aprobar grabaciones de otros participantes, grabar directamente y finalizar para todos.        |
+| Invitado           | Participar, usar sus medios y el chat, borrar sus mensajes, solicitar permiso para grabar y salir. No puede crear reuniones ni asumir permisos de anfitrión. |
 
 ### Ninguna sala se crea sin anfitrión registrado
 
@@ -44,14 +44,14 @@ Al crear una reunión se generan un código único y un enlace que se puede copi
 
 Antes de entrar, cada persona puede confirmar su nombre visible, probar sus dispositivos y elegir si ingresa con cámara y micrófono encendidos o apagados. Abrir una invitación no debe encenderlos automáticamente.
 
-El acceso contempla tanto cuentas registradas como invitados. La sala de espera está activada al crear la reunión y el anfitrión puede activarla o desactivarla. Con la espera activada, quienes quieran entrar deben ser admitidos; con ella desactivada, ingresan directamente si la sala está activa, permite nuevos ingresos y tiene cupo. El anfitrión accede mediante su cuenta sin tener que aprobarse a sí mismo.
+El acceso contempla tanto cuentas registradas como invitados. Tener el enlace o código de una sala activa y elegir un nombre visible permite ingresar sin crear una cuenta. El nombre es obligatorio, se confirma antes de conectar el chat o los medios y no concede permisos de anfitrión. La sala de espera es una función de moderación opcional, desactivada por defecto, que el anfitrión podrá activar o desactivar. Con la espera activada, quienes quieran entrar deben ser admitidos; con ella desactivada, ingresan directamente si la sala está activa, permite nuevos ingresos y tiene cupo. El anfitrión accede mediante su cuenta sin tener que aprobarse a sí mismo.
 
 - Quien espera aprobación todavía no recibe el chat, las imágenes ni los medios de la reunión.
 - El anfitrión puede admitir o rechazar una solicitud y ver el resultado de la acción. Los cambios de configuración se aplican en el servidor: al desactivar la espera, las solicitudes pendientes pueden completar el ingreso si siguen cumpliendo las condiciones de acceso; activarla no retira a quienes ya están dentro.
 - Bloquear nuevos ingresos no expulsa a quienes ya estaban dentro.
 - Una expulsión termina la participación actual y retira su acceso al chat, los archivos y los medios. No bloquea la cuenta ni la sesión: la persona puede volver a solicitar el ingreso, incluso desde el mismo navegador, y se aplican las condiciones vigentes de la sala. La expulsión no debe provocar un reingreso automático del cliente.
 - Una sala inexistente, finalizada, bloqueada o sin cupo debe mostrar el motivo correspondiente.
-- El servidor aplica el máximo de **100 participantes por sala**, contando al anfitrión, las cuentas registradas y los invitados. Las personas en espera no ocupan un lugar dentro de la reunión. Al completarse el cupo, se rechazan nuevos ingresos y admisiones hasta que se libere un lugar, incluso si varias personas intentan entrar al mismo tiempo. Tener la cámara apagada no evita ese límite.
+- El servidor aplica el máximo de **6 participantes por sala**, contando al anfitrión, las cuentas registradas y los invitados. Las personas en espera no ocupan un lugar dentro de la reunión. Al completarse el cupo, se rechazan nuevos ingresos y admisiones hasta que se libere un lugar, incluso si varias personas intentan entrar al mismo tiempo. Tener la cámara apagada no evita ese límite.
 
 Expulsar y bloquear nuevos ingresos son acciones distintas. La expulsión solo quita a la persona de la sala. Si vuelve a entrar con la espera activada, necesita admisión; si está desactivada, puede ingresar directamente mientras se cumplan las demás condiciones. No existe una lista de usuarios bloqueados como consecuencia de una expulsión.
 
@@ -69,7 +69,7 @@ Si el anfitrión sale o pierde conexión y todavía quedan participantes, la sal
 
 Cada persona puede elegir cámara y micrófono, previsualizar su imagen y activar o desactivar sus propios medios durante la reunión. Si falta un dispositivo o se rechaza un permiso, debe poder continuar con las funciones disponibles y recibir instrucciones para resolver el problema.
 
-La reunión transmite audio y video entre sus participantes en salas de hasta 100 personas. Debe funcionar entre dispositivos y redes diferentes, no solamente entre pestañas de una misma computadora.
+La reunión transmite audio y video entre sus participantes en salas de hasta 6 personas. Debe funcionar entre dispositivos y redes diferentes, no solamente entre pestañas de una misma computadora.
 
 Silenciar el micrófono impide que los demás reciban la voz de esa persona. Apagar la cámara interrumpe su imagen en vivo. Ambos estados se reflejan en la interfaz y se conservan al reconectar; una cámara o un micrófono apagados no se reactivan por esa reconexión.
 
@@ -116,7 +116,7 @@ La reunión ofrece subtítulos automáticos en **español e inglés**. Cada pers
 
 Se transcribe lo dicho en el idioma original; la traducción entre idiomas no forma parte de esta función. Los subtítulos no se guardan como transcripción, no se agregan al chat ni se incluyen en su historial de 24 horas.
 
-El audio necesario se procesa de forma transitoria con software gratuito en el servidor propio o en el dispositivo, sin una API de pago ni un servicio externo obligatorio. Solo se transcriben los medios de participantes autorizados y los fragmentos de audio se descartan después de procesarlos. Si el reconocimiento falla, se informa sin cortar la llamada. La calidad se comprobará con conversaciones en ambos idiomas, incluyendo distintas voces y acentos.
+El audio necesario se procesa de forma transitoria con software gratuito en el servidor propio o en el dispositivo, dentro de los servicios y créditos autorizados para el proyecto. Solo se transcriben los medios de participantes autorizados y los fragmentos de audio se descartan después de procesarlos. Si el reconocimiento falla, se informa sin cortar la llamada. La calidad se comprobará con conversaciones en ambos idiomas, incluyendo distintas voces y acentos.
 
 ## Grabación local de la reunión
 
@@ -165,22 +165,22 @@ Se adoptan estos límites para equilibrar calidad, transferencia y procesamiento
 
 El archivo que se selecciona puede ser mayor que la versión que se distribuye en vivo o se guarda explícitamente en una colección personal:
 
-| Archivo de origen | Formatos admitidos | Peso máximo | Otros límites |
-| --- | --- | --- | --- |
-| Imagen estática | JPEG/JPG, PNG y WebP estático | 10 MiB | Hasta 8192 px por lado y 25 megapíxeles en total. |
-| Animación | GIF y WebP animado | 10 MiB | Hasta 1280 px por lado, 10 segundos por ciclo y 300 fotogramas. |
-| Origen de un sticker | Cualquiera de las imágenes o animaciones anteriores | El de su categoría | Se aplican los mismos límites del archivo de origen. |
+| Archivo de origen    | Formatos admitidos                                  | Peso máximo        | Otros límites                                                   |
+| -------------------- | --------------------------------------------------- | ------------------ | --------------------------------------------------------------- |
+| Imagen estática      | JPEG/JPG, PNG y WebP estático                       | 10 MiB             | Hasta 8192 px por lado y 25 megapíxeles en total.               |
+| Animación            | GIF y WebP animado                                  | 10 MiB             | Hasta 1280 px por lado, 10 segundos por ciclo y 300 fotogramas. |
+| Origen de un sticker | Cualquiera de las imágenes o animaciones anteriores | El de su categoría | Se aplican los mismos límites del archivo de origen.            |
 
 Todos los límites se cumplen a la vez. Además, una animación no puede superar 60 millones de píxeles acumulados, calculados como `ancho del lienzo × alto del lienzo × cantidad de fotogramas`, antes de redimensionarla. El límite de duración corresponde a un ciclo, aunque se reproduzca en bucle.
 
 Para publicar el contenido se genera una versión optimizada:
 
-| Contenido publicado | Formato | Dimensiones máximas | Peso máximo |
-| --- | --- | --- | --- |
-| Imagen del chat | WebP estático | 2560 px en el lado mayor | 2 MiB |
-| GIF o animación del chat | WebP animado | 800 px en el lado mayor | 3 MiB |
-| Sticker estático | WebP estático | Contenido proporcional dentro de 512 × 512 px | 200 KiB |
-| Sticker animado | WebP animado | Contenido proporcional dentro de 512 × 512 px | 512 KiB |
+| Contenido publicado      | Formato       | Dimensiones máximas                           | Peso máximo |
+| ------------------------ | ------------- | --------------------------------------------- | ----------- |
+| Imagen del chat          | WebP estático | 2560 px en el lado mayor                      | 2 MiB       |
+| GIF o animación del chat | WebP animado  | 800 px en el lado mayor                       | 3 MiB       |
+| Sticker estático         | WebP estático | Contenido proporcional dentro de 512 × 512 px | 200 KiB     |
+| Sticker animado          | WebP animado  | Contenido proporcional dentro de 512 × 512 px | 512 KiB     |
 
 Las animaciones publicadas conservan su duración y se limitan a 20 fotogramas por segundo, sin aumentar la frecuencia del original. Si se reducen fotogramas, se ajustan sus tiempos de presentación sin acelerar la animación. Un sticker animado mantiene el máximo de 10 segundos por ciclo. MiB y KiB significan, respectivamente, 1 048 576 y 1024 bytes.
 
@@ -282,20 +282,20 @@ El alcance funcional también incluye estas condiciones:
 - **Datos protegidos.** Las conexiones del despliegue están protegidas. Las contraseñas y credenciales no se exponen en respuestas ni registros. Los archivos se validan antes de distribuirse y las cargas transitorias se liberan al terminar, cancelar o fallar.
 - **Persistencia.** Cuentas, anfitriones, estado de las reuniones, participaciones, historial textual no vencido y colecciones personales sobreviven al reinicio. Las imágenes, GIFs y stickers de mensajes no se persisten. El historial vence a las 24 horas del cierre y los stickers guardados respetan su cuota por cuenta.
 - **Recuperación.** Los errores de permisos, dispositivos, conexión, carga y envío muestran una explicación y una acción posible. El sistema no oculta fallos como si la operación hubiera terminado bien.
-- **Rendimiento verificable.** Las funciones se prueban contra las metas definidas más abajo, en el servidor propio y con hasta 100 participantes por sala. Esas metas son requisitos a validar, no resultados medidos del código actual.
+- **Rendimiento verificable.** Las funciones se prueban contra las metas definidas más abajo, en la infraestructura AWS del proyecto y con hasta 6 participantes por sala. Esas metas son requisitos a validar, no resultados medidos del código actual.
 - **Instalación y pruebas reproducibles.** El proyecto se instala y ejecuta siguiendo los README, con pnpm y migraciones documentadas. Las pruebas usan datos y una base separados del desarrollo.
 
 ### Navegadores y dispositivos
 
 Se soportan las dos versiones estables principales más recientes de los navegadores incluidos, sobre sistemas operativos que esos navegadores mantengan soportados. En cada entrega se registran las versiones exactas verificadas; no se exige compatibilidad con navegadores antiguos ni con navegadores embebidos en otras aplicaciones.
 
-| Entorno | Participación, chat, stickers y subtítulos | Presentar pantalla | Grabación con ubicación elegida al inicio |
-| --- | --- | --- | --- |
-| Chrome y Edge de escritorio, en Windows, Linux y macOS | Incluido | Incluido con permiso del navegador | Incluido; entorno de referencia |
-| Firefox de escritorio | Incluido | Incluido con permiso del navegador | No se ofrece mientras no permita elegir y escribir el archivo al inicio |
-| Safari en macOS | Incluido | Incluido con permiso del navegador | No se ofrece mientras no permita elegir y escribir el archivo al inicio |
-| Chrome en Android | Incluido | No se exige emitir pantalla desde móvil; sí recibir presentaciones | Solo se habilita en dispositivos con el flujo completo comprobado |
-| Safari en iPhone y iPad | Incluido | No se exige emitir pantalla desde móvil; sí recibir presentaciones | No se ofrece mientras no permita elegir y escribir el archivo al inicio |
+| Entorno                                                | Participación, chat, stickers y subtítulos | Presentar pantalla                                                 | Grabación con ubicación elegida al inicio                               |
+| ------------------------------------------------------ | ------------------------------------------ | ------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| Chrome y Edge de escritorio, en Windows, Linux y macOS | Incluido                                   | Incluido con permiso del navegador                                 | Incluido; entorno de referencia                                         |
+| Firefox de escritorio                                  | Incluido                                   | Incluido con permiso del navegador                                 | No se ofrece mientras no permita elegir y escribir el archivo al inicio |
+| Safari en macOS                                        | Incluido                                   | Incluido con permiso del navegador                                 | No se ofrece mientras no permita elegir y escribir el archivo al inicio |
+| Chrome en Android                                      | Incluido                                   | No se exige emitir pantalla desde móvil; sí recibir presentaciones | Solo se habilita en dispositivos con el flujo completo comprobado       |
+| Safari en iPhone y iPad                                | Incluido                                   | No se exige emitir pantalla desde móvil; sí recibir presentaciones | No se ofrece mientras no permita elegir y escribir el archivo al inicio |
 
 El desenfoque y los fondos propios se verifican en escritorio. En móviles se habilitan al comprobar capacidad y fluidez en el dispositivo; si no están disponibles, el resto de la reunión sigue funcionando con cámara normal.
 
@@ -305,46 +305,48 @@ La tabla define el soporte objetivo de Date2gether, no una certificación del c�
 
 Se adoptan estas metas para el **percentil 95**, es decir, para al menos el 95 % de las operaciones medidas dentro del entorno de prueba. No son garantías sobre cualquier conexión de Internet.
 
-| Operación | Meta | Desde dónde se mide |
-| --- | --- | --- |
-| Entrar a una reunión | 5 segundos | Desde la admisión y los permisos resueltos hasta tener sala, chat y conexión de medios disponibles. |
-| Entregar texto o enlaces | 1 segundo | Desde pulsar enviar hasta recibir el mensaje en los demás clientes conectados. |
-| Propagar un borrado | 1 segundo | Desde la confirmación del servidor hasta retirar el mensaje de los demás clientes conectados. |
-| Identificar a quien habla | 500 milisegundos | Desde el comienzo de la voz hasta mostrar su indicador y borde a los demás. |
-| Publicar una imagen o crear un sticker estático | 20 segundos | Desde iniciar la carga de un archivo válido de hasta 10 MiB, incluyendo validación y procesamiento. |
-| Publicar una animación o crear un sticker animado | 30 segundos | Desde iniciar la carga de un archivo válido de hasta 10 MiB, dentro de los límites de duración y píxeles. |
-| Recuperar una conexión | 10 segundos | Desde que vuelve una conexión estable, si la sala y la participación siguen habilitadas. |
-| Mostrar un segmento de subtítulos | 5 segundos | Desde el final de un segmento hablado de hasta 5 segundos hasta mostrar su transcripción. |
-| Iniciar una grabación autorizada | 3 segundos | Desde confirmar el archivo y el permiso de escritura, sin contar la espera de aprobación ni la elección de ubicación. |
+| Operación                                         | Meta             | Desde dónde se mide                                                                                                   |
+| ------------------------------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Entrar a una reunión                              | 5 segundos       | Desde la admisión y los permisos resueltos hasta tener sala, chat y conexión de medios disponibles.                   |
+| Entregar texto o enlaces                          | 1 segundo        | Desde pulsar enviar hasta recibir el mensaje en los demás clientes conectados.                                        |
+| Propagar un borrado                               | 1 segundo        | Desde la confirmación del servidor hasta retirar el mensaje de los demás clientes conectados.                         |
+| Identificar a quien habla                         | 500 milisegundos | Desde el comienzo de la voz hasta mostrar su indicador y borde a los demás.                                           |
+| Publicar una imagen o crear un sticker estático   | 20 segundos      | Desde iniciar la carga de un archivo válido de hasta 10 MiB, incluyendo validación y procesamiento.                   |
+| Publicar una animación o crear un sticker animado | 30 segundos      | Desde iniciar la carga de un archivo válido de hasta 10 MiB, dentro de los límites de duración y píxeles.             |
+| Recuperar una conexión                            | 10 segundos      | Desde que vuelve una conexión estable, si la sala y la participación siguen habilitadas.                              |
+| Mostrar un segmento de subtítulos                 | 5 segundos       | Desde el final de un segmento hablado de hasta 5 segundos hasta mostrar su transcripción.                             |
+| Iniciar una grabación autorizada                  | 3 segundos       | Desde confirmar el archivo y el permiso de escritura, sin contar la espera de aprobación ni la elección de ubicación. |
 
 La validación usa al menos 30 mediciones por operación, RTT hacia el servidor de hasta 100 ms y pérdida de paquetes de hasta 1 %. Para las cargas se requiere un mínimo de 10 Mbit/s efectivos de subida disponibles además del tráfico de la llamada. Se registran equipos, navegadores y recursos del servidor.
 
-También debe sostenerse una reunión de **60 minutos con 100 participantes, incluido el anfitrión**, con cámaras, micrófonos, chat y una presentación en uso, sin caídas de la aplicación ni pérdida de mensajes textuales confirmados. Se repite con subtítulos y con grabación y efectos activos en los dispositivos compatibles para medir su impacto.
+También debe sostenerse una reunión de **60 minutos con 6 participantes, incluido el anfitrión**, con cámaras, micrófonos, chat y una presentación en uso, sin caídas de la aplicación ni pérdida de mensajes textuales confirmados. Se repite con subtítulos y con grabación y efectos activos en los dispositivos compatibles para medir su impacto.
 
-El cupo por sala queda fijado en 100 personas. La cantidad de salas simultáneas y los recursos del servidor siguen pendientes; el cumplimiento de las metas requiere pruebas con ese cupo en la infraestructura elegida. La meta de reconectar en 10 segundos no define cuánto tiempo se reserva un lugar, ni modifica los 15 minutos de tolerancia sin anfitrión.
+El cupo por sala queda fijado en 6 personas. La cantidad de salas simultáneas y los recursos del servidor siguen pendientes; el cumplimiento de las metas requiere pruebas con ese cupo en la infraestructura elegida. La meta de reconectar en 10 segundos no define cuánto tiempo se reserva un lugar, ni modifica los 15 minutos de tolerancia sin anfitrión.
 
 ## Infraestructura y recursos
 
-El proyecto se despliega en un **servidor propio** y debe poder funcionar con software y recursos gratuitos, sin suscripciones, APIs de pago ni servicios comerciales obligatorios. El servidor aloja la aplicación, la base de datos, los servicios de medios necesarios y, si no se resuelve en el dispositivo, el reconocimiento de voz.
+Para la entrega académica, el equipo utilizará **AWS EC2 con LiveKit autohospedado** en `us-east-2`, con un máximo objetivo de seis personas por sala. Esta decisión reemplaza la integración de Chime SDK y el objetivo anterior de 100 participantes. Esta decisión autoriza servicios administrados y reemplaza la restricción anterior de alojamiento propio sin APIs comerciales. La aplicación y la base de datos se despliegan en la infraestructura del proyecto; LiveKit gestiona la señalización y distribución de audio y video; NestJS conserva la identidad y las reglas de acceso. El reconocimiento de voz puede resolverse en el dispositivo o mediante la infraestructura aprobada.
 
-La comunicación entre distintas redes debe funcionar con infraestructura propia para señalización, distribución de medios y retransmisión cuando corresponda. La grabación permanece en el equipo de quien graba; los efectos de fondo se procesan en el cliente.
+La comunicación entre distintas redes debe funcionar usando los servicios de medios de AWS configurados para el proyecto. La grabación permanece en el equipo de quien graba; los efectos de fondo se procesan en el cliente.
 
-La selección del servidor de medios y del motor de transcripción queda como decisión de implementación, con esta restricción de despliegue. Hay alternativas autohospedables: [LiveKit](https://github.com/livekit/livekit) publica su servidor con licencia Apache 2.0 y [Vosk](https://alphacephei.com/vosk/) ofrece reconocimiento local en español e inglés. Estas referencias no sustituyen las pruebas con el hardware disponible.
+El plan gratuito de AWS termina a los seis meses o al agotar sus créditos, lo que ocurra primero. EC2 está entre los servicios admitidos del nuevo AWS experience y aloja el servidor abierto de LiveKit. No se utiliza Chime SDK ni se requiere activar funciones avanzadas o contratar LiveKit Cloud. El costo de cómputo, almacenamiento, IPv4 y transferencia se cubre con créditos elegibles según sus condiciones; no se promete infraestructura ilimitada ni seis meses de uso continuo sin costo. Antes de desplegar se confirma el plan, el saldo y el vencimiento en AWS Settings > Billing. No se cambia el plan de AWS automáticamente. El motor de transcripción sigue pendiente.
 
-No se supone capacidad ilimitada: el almacenamiento de cuentas y stickers, la memoria de las transferencias y el procesamiento de medios deben dimensionarse según ese servidor. Para dimensionar el despliegue para salas de hasta 100 personas y definir cuántas podrán funcionar simultáneamente, se documentarán CPU, RAM, almacenamiento, conexión y, si existe, aceleración disponible.
+Para la demostración se prepara una sola EC2 con la aplicación completa, HTTPS y respaldo de conectividad mediante TURN. La configuración predeterminada limita las llamadas a seis conexiones de medios y apaga la instancia a las dos horas de cada arranque; se puede ajustar para la presentación. El apagado interrumpe reuniones activas y no elimina los cargos de disco o IPv4 reservada. El cupo de admisión al chat sigue siendo una función pendiente; el cupo de medios lo aplica LiveKit.
+
+No se supone capacidad ilimitada: el almacenamiento de cuentas y stickers, la memoria de las transferencias y el procesamiento de medios deben dimensionarse según ese servidor. Para dimensionar el despliegue para salas de hasta 6 personas y definir cuántas podrán funcionar simultáneamente, se documentarán CPU, RAM, almacenamiento, conexión y, si existe, aceleración disponible.
 
 ## Lo que todavía hay que decidir
 
 Las reglas anteriores ya forman parte de la especificación. Quedan abiertos estos puntos:
 
-| Tema | Decisión pendiente |
-| --- | --- |
-| Salas simultáneas | Cantidad de reuniones que podrán funcionar al mismo tiempo, con un máximo ya definido de 100 personas por sala. |
-| Servidor | Recursos concretos del equipo propio y condiciones de red; permiten dimensionar y validar las metas de rendimiento. |
-| Medios y transcripción | Selección y configuración de componentes gratuitos autohospedados. |
-| Salas sin utilizar | Caducidad de una sala creada cuyo primer ingreso nunca se completó. |
-| Reconexión | Plazo de reserva de cupo y momento de confirmar que una sala quedó vacía tras un corte de red. |
-| Registros de participación | Plazo de conservación y eliminación de ingresos y salidas; no confundirlos con el historial del chat, que ya vence a las 24 horas. |
+| Tema                        | Decisión pendiente                                                                                                                     |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Salas simultáneas           | Cantidad de reuniones que podrán funcionar al mismo tiempo, con un máximo ya definido de 6 personas por sala.                        |
+| Infraestructura AWS         | Servicios, regiones, recursos, créditos disponibles y fecha de vencimiento; permiten dimensionar y validar las metas de rendimiento.   |
+| Medios y transcripción      | Medios con LiveKit autohospedado en EC2; falta seleccionar el motor de transcripción y validar su cobertura y consumo.                             |
+| Salas sin utilizar          | Caducidad de una sala creada cuyo primer ingreso nunca se completó.                                                                    |
+| Reconexión                  | Plazo de reserva de cupo y momento de confirmar que una sala quedó vacía tras un corte de red.                                         |
+| Registros de participación  | Plazo de conservación y eliminación de ingresos y salidas; no confundirlos con el historial del chat, que ya vence a las 24 horas.     |
 | Consulta después del cierre | Si quienes participaron pueden consultar el historial textual durante sus 24 horas de conservación o si se conserva solo internamente. |
 
 La paleta concreta se define en el frontend y se valida por contraste. Los límites internos de memoria y concurrencia se ajustarán a la infraestructura sin cambiar por su cuenta las funciones del producto.
@@ -358,7 +360,7 @@ No forman parte del producto las aplicaciones nativas, el acceso telefónico, lo
 Las pruebas de cada función deben complementarse con recorridos completos. Como mínimo, deben cubrir:
 
 1. Crear una cuenta e iniciar sesión; comprobar que la creación de una sala sin cuenta, con sesión inválida o atribuyéndola a otra persona se rechaza sin guardar la sala.
-2. Crear una reunión y comprobar que la espera esté activada por defecto. Admitir participantes, desactivarla y verificar el ingreso directo; volver a activarla sin expulsar a quienes ya están dentro. Mantener los controles de bloqueo y comprobar el cupo de 100 personas, incluido el anfitrión: rechazar el ingreso número 101 tanto directo como por admisión. Con 99 participantes y dos ingresos simultáneos, aceptar como máximo uno; al liberarse un lugar, permitir un nuevo ingreso.
+2. Crear una reunión y comprobar el ingreso directo por defecto y que invitados con enlace puedan entrar tras elegir un nombre; activar la espera. Admitir participantes, desactivarla y verificar el ingreso directo; volver a activarla sin expulsar a quienes ya están dentro. Mantener los controles de bloqueo y comprobar el cupo de 6 personas, incluido el anfitrión: rechazar el ingreso número 7 tanto directo como por admisión. Con 5 participantes y dos ingresos simultáneos, aceptar como máximo uno; al liberarse un lugar, permitir un nuevo ingreso.
 3. Reunir a varias personas desde dispositivos y redes diferentes, incluyendo invitados y participantes con el mismo nombre.
 4. Usar cámara y micrófono, entrar con permisos rechazados y reconocer a quien habla por nombre, indicador y borde del mismo color, incluso con cámara apagada. Comprobar que el color aleatorio asignado sea el mismo para todos y se mantenga al reconectar.
 5. Compartir pantalla, fijar otro video y abrir el chat sin perder la identificación del hablante. Probar también voces simultáneas.
@@ -371,23 +373,18 @@ Las pruebas de cada función deben complementarse con recorridos completos. Como
 12. Borrar mensajes propios y mensajes ajenos como anfitrión; rechazar el intento de una tercera persona sin permisos. Comprobar que el contenido eliminado no reaparezca al reconectar.
 13. Solicitar, aprobar y rechazar grabaciones; verificar que el anfitrión pueda iniciar directamente. Elegir el archivo antes de comenzar, cancelar el selector, revocar un permiso y cerrar la reunión. Comprobar que se guarde localmente y que no exista copia en el servidor.
 14. Activar subtítulos en español e inglés, cambiar su presentación y comprobar que no se conserven como transcripción. Aplicar desenfoque y una imagen propia sin encender una cámara apagada ni almacenar el fondo en el servidor.
-15. Repetir los recorridos principales en la matriz de navegadores y dispositivos definida, incluyendo teclado y pantallas pequeñas. Medir las metas de respuesta y la sesión de 60 minutos con 100 participantes.
+15. Repetir los recorridos principales en la matriz de navegadores y dispositivos definida, incluyendo teclado y pantallas pequeñas. Medir las metas de respuesta y la sesión de 60 minutos con 6 participantes.
 
 La evidencia de aceptación debe indicar qué se probó, con cuántos participantes y en qué entorno. Una prueba escrita o una función presente en el código no demuestran por sí solas que el recorrido funciona.
 
-## Punto de partida del desarrollo
+## Estado de la entrega de llamadas e invitados
 
-En la revisión del 22 de octubre de 2026, sobre el commit `d19dba3`, el proyecto tiene código de registro, login, renovación y cierre de sesión; creación de salas; chat de texto persistente e historial por sala.
+Esta rama integra la base de `develop`: registro, login, renovación y cierre de sesión; creación de salas con administrador registrado; roles por sala; chat textual persistente; tema claro/oscuro y traducciones ES/EN.
 
-Todavía se crean salas sin autenticar al anfitrión. Falta vincular las reuniones y los mensajes con identidades persistentes, resolver los participantes con nombres repetidos e implementar el cierre efectivo de una sala, el borrado de mensajes y su vencimiento a las 24 horas.
+El ingreso mediante enlace requiere confirmar un nombre. La API emite un pase firmado limitado a esa sala, separado de una sesión de cuenta. Los invitados pueden usar chat y solicitar audio y video LiveKit sin registrarse; no pueden crear salas ni administrar roles. Los participantes reciben un ID independiente de su nombre y del socket. La misma credencial se conserva durante una reconexión automática; al recargar se confirma el nombre y se crea una participación nueva.
 
-No hay implementación de audio/video, pantalla compartida, identificación de voz, moderación de acceso, grabación, subtítulos, efectos de fondo ni chat con imágenes, GIFs y stickers. Hay 11 casos E2E declarados sobre autenticación y acceso/presencia en salas. Esta revisión fue de archivos; no se ejecutaron la aplicación ni las pruebas.
+El PR incorpora audio y video con LiveKit, grilla con nombres, cámara y micrófono apagados al conectar, controles y selección de dispositivos durante la llamada, reproducción de audio remoto y liberación de tracks al colgar. El servidor firma pases temporales limitados a la sala e identidad; LiveKit aplica seis conexiones de medios por defecto. Los participantes sin cuenta usan el mismo flujo después de confirmar su nombre.
 
-El README principal presenta la autenticación como pendiente y conserva un objetivo inicial de dos personas. El README de E2E dice que reutiliza servidores existentes, aunque la configuración actual lo impide. Esas descripciones deben alinearse con el código y con esta definición.
+La configuración EC2 y las imágenes de la aplicación se preparan con HTTPS y TURN. La aceptación en AWS queda pendiente hasta desplegar con una sesión vigente y probar entre dispositivos/redes. Previsualización previa al ingreso, pantalla compartida, espera, cupo de admisión al chat, cierre automático de salas de la aplicación, borrado y vencimiento del chat, adjuntos, stickers, grabación, subtítulos y fondos siguen pendientes. Las pruebas automáticas no acreditan por sí solas la capacidad de seis personas en la infraestructura real.
 
-Referencias para continuar:
-
-- [README del proyecto](../README.md) y [README del cliente](../client/README.md).
-- [Autenticación](../src/modules/auth/auth.controller.ts), [creación de salas](../src/modules/rooms/rooms.controller.ts) y [modelo de datos](../src/db/schema.ts).
-- [Eventos de salas y chat](../src/modules/chat/chat.gateway.ts) e [interfaz de reunión](../client/src/app/room/[code]/page.tsx).
-- [Guía de pruebas](../e2e/README.md) y [configuración de Playwright](../playwright.config.ts).
+Las migraciones conservan roles en `0002_panoramic_nebula` y agregan Chime en `0003_chime_meeting`. Las instrucciones operativas están en el [README principal](../README.md), el [README del cliente](../client/README.md) y la [guía E2E](../e2e/README.md).

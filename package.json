@@ -24,13 +24,17 @@
     "build:client": "pnpm --filter client build",
     "start:client": "pnpm --filter client start",
     "check:client": "pnpm --filter client lint && pnpm --filter client typecheck",
+    "test:client": "pnpm --filter client test",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report",
     "test:e2e:db:up": "docker compose -f docker-compose.test.yml up -d --wait",
     "test:e2e:db:down": "docker compose -f docker-compose.test.yml down -v",
     "test:e2e:db:migrate": "cross-env DATABASE_URL=postgresql://test:test@localhost:5433/date2gether_test drizzle-kit migrate",
-    "test:e2e:setup": "pnpm test:e2e:db:up && pnpm test:e2e:db:migrate"
+    "test:e2e:setup": "pnpm test:e2e:db:up && pnpm test:e2e:db:migrate",
+    "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
+    "test:watch": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --watch",
+    "test:cov": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --coverage"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.4",
@@ -47,16 +51,20 @@
     "dotenv": "^18.0.2",
     "drizzle-orm": "^0.45.3",
     "helmet": "^8.3.0",
+    "livekit-server-sdk": "2.19.2",
     "postgres": "^3.4.9",
     "socket.io": "^4.8.3",
     "uuid": "^14.0.2"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@jest/globals": "^30.5.2",
     "@nestjs/cli": "^12.0.8",
+    "@nestjs/testing": "^12.2.0",
     "@playwright/test": "^1.64.1",
     "@types/bcrypt": "^6.0.0",
     "@types/express": "^5.0.6",
+    "@types/jest": "^30.0.0",
     "@types/ms": "^2.1.0",
     "@types/node": "^26.6.4",
     "cross-env": "^10.1.0",
@@ -65,8 +73,36 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.7",
     "globals": "^17.13.0",
+    "jest": "^30.5.2",
     "prettier": "^3.9.10",
+    "ts-jest": "^29.4.15",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.2"
+  },
+  "jest": {
+    "rootDir": "src",
+    "testRegex": ".*\\.spec\\.ts$",
+    "extensionsToTreatAsEsm": [
+      ".ts"
+    ],
+    "transform": {
+      "^.+\\.ts$": [
+        "ts-jest",
+        {
+          "tsconfig": "<rootDir>/../tsconfig.spec.json",
+          "useESM": true
+        }
+      ]
+    },
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
+    "collectCoverageFrom": [
+      "**/*.(t|j)s"
+    ],
+    "coverageDirectory": "../coverage",
+    "testEnvironment": "node"
   }
 }

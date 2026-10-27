@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
+  ForbiddenException,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -16,10 +18,29 @@ import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
 import { RoomRolesGuard } from './guards/room-roles.guard';
 import { RoomsService } from './rooms.service';
+import { RoomAccessService } from '../auth/room-access.service';
+import { RoomAccessDto } from './dto/room-access.dto';
 
 @Controller('rooms')
 export class RoomsController {
-  constructor(private readonly roomsService: RoomsService) {}
+  constructor(
+    private readonly roomsService: RoomsService,
+    private readonly roomAccess: RoomAccessService,
+  ) {}
+
+  @Post(':code/access')
+  async access(
+    @Param('code') code: string,
+    @Body() dto: RoomAccessDto,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const room = await this.roomsService.getByCodeOrThrow(code);
+    if (!room.isActive) throw new ForbiddenException('La sala está cerrada');
+    const access = await this.roomAccess.create(code, dto.name, authorization);
+    if (access.participant.userId)
+      await this.roomsService.joinRoom(code, access.participant.userId);
+    return access;
+  }
 
   @UseGuards(JwtAuthGuard)
   @Post()

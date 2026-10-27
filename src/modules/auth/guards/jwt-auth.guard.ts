@@ -22,6 +22,10 @@ export class JwtAuthGuard implements CanActivate {
       const payload = await this.jwtService.verifyAsync<AccessTokenPayload>(token, {
         secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
       });
+      // Un pase de sala nunca equivale a una sesión de cuenta.
+      if (!payload.sub || typeof payload.email !== 'string' || 'kind' in payload) {
+        throw new UnauthorizedException();
+      }
       request.user = payload;
       return true;
     } catch {

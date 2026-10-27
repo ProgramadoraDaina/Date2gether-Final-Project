@@ -1,231 +1,138 @@
 # Date2gether
 
-Clon de Google Meet — proyecto final. Monorepo simple con dos partes:
+Aplicación de reuniones desde el navegador. Monorepo con backend NestJS, Socket.io y Drizzle ORM sobre PostgreSQL, y frontend Next.js 15 + React 19 en `client/`. Se usa **pnpm**.
 
-- **Backend** (raíz del repo): NestJS + TypeScript + Socket.io + Drizzle ORM (PostgreSQL)
-- **Frontend** (`client/`): Next.js 15.5.27 (App Router) + React 19 + TypeScript
+Las reglas de producto están en [docs/requirements.md](docs/requirements.md). Este README explica cómo instalar y ejecutar la versión actual.
 
-Todo con **pnpm** como gestor de paquetes (no usar npm ni yarn).
+## Comportamiento actual
 
-Por ahora la base incluye **salas** (crear una sala, unirse por código) y **chat en tiempo real** dentro de cada sala. La videollamada (WebRTC) se agrega en una siguiente etapa.
-
-## Stack
-
-- [NestJS](https://nestjs.com/) — framework backend
-- [Socket.io](https://socket.io/) (vía `@nestjs/websockets` + `@nestjs/platform-socket.io`) — WebSocket para salas y chat
-- [Drizzle ORM](https://orm.drizzle.team/) + PostgreSQL — acceso a base de datos
-- [Next.js](https://nextjs.org/) 15.5.27 (App Router) — frontend
-- pnpm — gestor de paquetes (no usar npm ni yarn)
+- Crear una reunión requiere una cuenta registrada y una sesión válida. Su creador queda como administrador de esa sala.
+- Una persona con el enlace `/room/<código>` puede entrar **sin cuenta**, después de elegir y confirmar su nombre (entre 1 y 60 caracteres, sin contar espacios exteriores). También se puede introducir el código desde el inicio.
+- El nombre visible no concede permisos. El servidor emite un pase de participante para esa sala, válido durante 24 horas. Sirve para chat y llamadas; no sirve para crear salas, consultar cuentas ni administrar roles. Cada participante recibe un identificador distinto aunque repita el nombre de otra persona.
+- Los usuarios registrados conservan los roles por sala: administrador, colaborador y participante. Los invitados no reciben permisos de administración.
+- Hay chat de texto persistente, presencia en tiempo real, interfaz ES/EN y tema claro/oscuro.
+- El botón **Llamar** conecta audio y video con LiveKit. Hay grilla de participantes, controles y selección de cámara y micrófono; ambos dispositivos empiezan apagados. Las llamadas admiten seis personas por defecto. Compartir pantalla sigue pendiente.
+- El ingreso actual es directo con enlace y nombre. La sala de espera, el bloqueo de ingresos y el cupo de admisión al chat son funcionalidades pendientes; no se presentan como controles implementados.
 
 ## Requisitos
 
-- Node.js 20+
-- pnpm (`corepack enable` o `npm i -g pnpm`)
-- Docker (para levantar PostgreSQL local) — o un Postgres propio
+- Node.js 20 o superior (ver las restricciones de las dependencias instaladas).
+- pnpm **11.18.0**, fijado en `package.json`.
+- Docker Engine y Docker Compose, o PostgreSQL 16 accesible.
+- Para probar audio y video: LiveKit local con Docker o el despliegue EC2 documentado. No hace falta acceso a Chime SDK.
 
-## Puesta en marcha
+## Instalar y preparar la base
+
+Desde la raíz:
 
 ```bash
-# 1. Instalar dependencias
-pnpm install
-
-# 2. Copiar variables de entorno
+pnpm install --frozen-lockfile
 cp .env.example .env
+cp client/.env.example client/.env
+```
 
-# 3. Levantar PostgreSQL con Docker
+Completá `.env`:
+
+```dotenv
+DATABASE_URL=postgresql://date2gether:date2gether@localhost:5432/date2gether
+PORT=3001
+CORS_ORIGIN=http://localhost:3002
+JWT_ACCESS_SECRET=<secreto-de-access>
+JWT_REFRESH_SECRET=<otro-secreto-distinto>
+JWT_ACCESS_EXPIRES_IN=15m
+JWT_REFRESH_EXPIRES_IN=7d
+LIVEKIT_URL=ws://localhost:7880
+LIVEKIT_API_URL=http://localhost:7880
+LIVEKIT_API_KEY=devkey
+LIVEKIT_API_SECRET=devsecret-for-local-development-only-32chars
+MAX_ROOM_PARTICIPANTS=6
+```
+
+Generá cada secreto por separado con `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`. Los `.env` y las credenciales no se versionan.
+
+```bash
 docker compose up -d
-
-# 4. Generar y aplicar las migraciones de la base de datos
-pnpm db:generate
 pnpm db:migrate
+```
 
-# 5. Levantar el servidor en modo desarrollo
+Se aplican las migraciones versionadas. `0002_panoramic_nebula` incorpora roles y `0003_chime_meeting` agrega `rooms.chime_meeting_id`. `pnpm db:generate` se usa al cambiar el esquema, no para iniciar un clon existente.
+
+Si una base de la versión anterior del PR ya aplicó `0002_fast_nebula`, registró antes la migración de Chime que la de roles. No se debe reutilizar esa secuencia como si fuera la nueva: usá una base local nueva o planificá su reconciliación conservando los datos. Las bases que siguen las migraciones de `develop` pueden aplicar `0003` normalmente.
+
+## Levantar backend y frontend
+
+En dos terminales, ambas desde la raíz:
+
+```bash
+# Terminal 1: API, http://localhost:3001
 pnpm start:dev
 ```
 
-El servidor queda escuchando en `http://localhost:3001` (configurable en `.env` con `PORT`).
+```bash
+# Terminal 2: frontend, http://localhost:3002
+pnpm dev:client
+```
 
-### Frontend (Next.js)
+`GET http://localhost:3001/health` comprueba el proceso de la API. No existe un script raíz `pnpm dev` que inicie ambos. Si un puerto está ocupado, revisá si el servidor ya está corriendo.
 
-Next.js se actualizó de **15.1.6 a 15.5.27** para incorporar parches de seguridad. La dependencia está declarada en `client/package.json` y la versión instalada queda registrada en `pnpm-lock.yaml`. La interfaz sigue usando React 19, con las rutas de Next.js App Router.
+## AWS y llamadas
 
-El workspace fija PostCSS **8.5.23** para Next.js mediante `overrides` en `pnpm-workspace.yaml`, corrigiendo las alertas de seguridad de esa dependencia. Tras cambiar versiones, ejecutá `pnpm install` en la raíz y conservá el lockfile actualizado.
+Audio y video utilizan **LiveKit autohospedado**. Se reemplaza la integración anterior de Chime porque no está admitida en el plan FREE del nuevo AWS experience. El plan gratuito de LiveKit Cloud tampoco es necesario para este despliegue: se utiliza su servidor abierto en EC2, con consumo de los créditos de infraestructura AWS.
 
-En otra terminal:
+La [guía de EC2](deploy/ec2/README.md) incluye una sola instancia en `us-east-2`, HTTPS, TURN para redes restrictivas, aplicación completa con PostgreSQL, generación privada de secretos y apagado automático a las dos horas. Crear el stack consume créditos; la guía explica costos residuales del disco y la IP y cómo retirar los recursos al terminar.
+
+Para probar localmente, `docker compose up -d` inicia PostgreSQL y LiveKit. Las claves `devkey` del ejemplo son públicas y se usan solo en localhost: no exponer este servicio local en Internet. El despliegue EC2 genera otras claves aleatorias. El backend necesita `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` y, opcionalmente, `LIVEKIT_API_URL` para acceder al servidor por la red interna. No utiliza credenciales AWS en tiempo de ejecución.
+
+`POST /calls/:roomCode` valida el pase de sala, confirma que la sala siga abierta y solicita a LiveKit una sala con `MAX_ROOM_PARTICIPANTS=6` (admite valores entre 2 y 20 para la demo). Emite un token temporal de 15 minutos limitado al nombre de esa sala y a la identidad/nombre confirmados del participante. No otorga administración ni grabación del servidor. LiveKit aplica el cupo al conectar, incluso ante solicitudes simultáneas; emitir un token no reserva un lugar. El chat mantiene su control de acceso pero aún no tiene un cupo equivalente de admisión. Cambiar el límite requiere cerrar las salas de medios que ya estaban creadas o esperar a que caduquen.
+
+Al pulsar Llamar se conecta con cámara y micrófono apagados. Se pueden activar o desactivar y elegir los dispositivos desde la llamada. La grilla muestra nombre y estado de cámara, incluido un recuadro para quien no publica video. El audio remoto se reproduce mediante LiveKit; si el navegador lo bloquea, se ofrece Activar sonido de la reunión. Rechazar un permiso no impide continuar con el resto de la reunión. Colgar o abandonar la página desconecta y libera los dispositivos.
+
+Las llamadas requieren HTTPS o localhost. En EC2 el frontend usa `/api` para REST y Socket.io a través del mismo dominio HTTPS, evitando contenido mixto. Las credenciales privadas de LiveKit permanecen en el servidor; el navegador recibe solo su pase temporal. No se registran tokens ni se versionan archivos de configuración generados.
+
+La columna histórica `rooms.chime_meeting_id` se conserva para no reescribir migraciones existentes; LiveKit no la utiliza. No hay una migración destructiva al cambiar de proveedor. Se deben seguir aplicando las migraciones versionadas con `pnpm db:migrate`.
+
+La comprobación real se hace desde dos o más dispositivos y redes diferentes, con invitados y permisos rechazados; después se valida el límite de seis conexiones de medios. Las pruebas automáticas y los builds no demuestran por sí solos una videollamada real en EC2.
+
+## Seguridad de la entrega
+
+Las credenciales reales de LiveKit, PostgreSQL y JWT del despliegue EC2 se generan en el host y quedan en `deploy/ec2/runtime/`, ignorado por Git. Las claves `devkey` de `.env.example` y `deploy/local/livekit.yaml` son públicas y solo sirven para desarrollo local; no usarlas en un servidor accesible desde Internet. `.env*` está excluido del repositorio, con excepción de los archivos `.env.example`, que no deben contener secretos.
+
+En desarrollo local, PostgreSQL y LiveKit publican sus puertos solo en `127.0.0.1`. Si PostgreSQL ya estaba levantado con una configuración anterior, aplicar el cambio ejecutando `docker compose up -d postgres`; Docker recrea ese contenedor y conserva su volumen de datos. No ejecutar `docker compose down -v` salvo que se desee eliminar esos datos.
+
+Los códigos nuevos de las salas usan aleatoriedad criptográfica. Cualquier persona que posea el enlace puede solicitar acceso y leer el chat de esa sala; tratar el enlace como privado. El proyecto todavía no implementa sala de espera, expulsión ni revocación completa de invitaciones. Las sesiones de cuenta se guardan en `localStorage`, por lo que una inyección de scripts en el navegador podría exponerlas; se debe revisar esa decisión antes de usar la aplicación con datos reales.
+
+La auditoría de dependencias realizada el 27 de octubre de 2026 terminó sin vulnerabilidades conocidas en `pnpm audit` después de actualizar Next.js, body-parser, multer y herramientas de desarrollo. El resultado depende de la base de avisos en ese momento y no reemplaza una auditoría o prueba de penetración. También se revisaron los archivos versionables y las referencias Git locales buscando patrones habituales de claves, sin hallar coincidencias; esa búsqueda no garantiza detectar todos los formatos de secretos.
+
+Los cambios de LiveKit y seguridad deben revisarse en el PR antes de desplegarlos. La plantilla prepara medidas para EC2, pero una validación local no comprueba el despliegue real, sus reglas efectivas de red ni permisos en AWS. Verificar el commit y la configuración al crear la instancia y revisar el consumo en AWS Settings > Billing.
+
+## API y Socket.io
+
+| Método | Ruta                                                             | Acceso                                                             |
+| ------ | ---------------------------------------------------------------- | ------------------------------------------------------------------ |
+| POST   | `/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout` | Gestión de cuentas y sesión                                        |
+| GET    | `/auth/me`                                                       | JWT de cuenta                                                      |
+| POST   | `/rooms`                                                         | JWT de cuenta; registra al administrador                           |
+| GET    | `/rooms/:code`                                                   | Consulta mediante código                                           |
+| POST   | `/rooms/:code/access`                                            | Enlace/código y `{ "name": "Ana" }`; JWT de cuenta opcional        |
+| POST   | `/rooms/:code/join`                                              | JWT de cuenta; membresía registrada                                |
+| GET    | `/rooms/:code/members`                                           | Cuenta miembro de la sala                                          |
+| PATCH  | `/rooms/:code/members/:userId`                                   | Administrador de la sala                                           |
+| POST   | `/calls/:roomCode`                                               | Pase de participante de esa sala; devuelve `{ url, token, roomName, participantLimit }` |
+
+`POST /rooms/:code/access` devuelve `{ token, participant }`. El frontend conserva el pase en memoria durante la visita; abrir o recargar el enlace vuelve a pedir confirmación del nombre. Una reconexión automática del socket usa el mismo pase. El nombre anterior puede estar precargado, pero no se ingresa automáticamente.
+
+El namespace Socket.io es `/rooms`, con `auth: { token }` usando el pase de sala. `joinRoom` recibe `{ code }`; el nombre, el identificador y la cuenta se obtienen del pase verificado. `sendMessage` recibe `{ content }` y `leaveRoom` no requiere payload. El servidor emite `roomHistory`, `roomUsers`, `userJoined`, `userLeft`, `newMessage` y `memberRoleChanged`. La presencia incluye `{ participantId, userName, userId? }`.
+
+## Comprobaciones y próximos pasos
 
 ```bash
-cd client
-pnpm install
-cp .env.example .env   # NEXT_PUBLIC_API_URL, por defecto http://localhost:3001
-pnpm dev
+pnpm build
+pnpm build:client
+pnpm check:client
+pnpm test --runInBand
+pnpm test:client --runInBand
 ```
 
-El frontend queda en `http://localhost:3002` (puerto fijo, para no chocar con el backend en `3001`). Necesita el backend corriendo para poder crear/unirse a salas.
+La [guía E2E](e2e/README.md) explica cómo probar los recorridos con una base separada. El [README del cliente](client/README.md) detalla el flujo del navegador y las [decisiones técnicas](docs/decisiones-tecnicas.md) registran la integración de esta rama.
 
-## Estructura del proyecto
-
-```
-src/                            # backend (NestJS)
-├── main.ts                     # bootstrap de Nest
-├── app.module.ts                # módulo raíz
-├── db/
-│   ├── schema.ts                # tablas de Drizzle (rooms, messages)
-│   └── drizzle.module.ts        # provider global de la conexión a la DB
-├── common/
-│   └── generate-room-code.ts    # genera códigos tipo "abc-defg-hij"
-└── modules/
-    ├── rooms/                   # API REST para crear/consultar salas
-    │   ├── dto/
-    │   ├── rooms.controller.ts
-    │   ├── rooms.service.ts
-    │   └── rooms.module.ts
-    └── chat/                    # WebSocket Gateway: salas + chat en vivo
-        ├── dto/
-        ├── chat.gateway.ts
-        ├── chat.service.ts
-        └── chat.module.ts
-
-client/                         # frontend (Next.js)
-└── src/
-    ├── app/
-    │   ├── layout.tsx            # layout raíz
-    │   ├── page.tsx              # "/" — crear/unirse a una sala
-    │   └── room/[code]/page.tsx  # "/room/:code" — sala: usuarios + chat en vivo
-    └── lib/
-        ├── api.ts                # llamadas REST al backend
-        └── socket.ts             # conexión Socket.io al namespace /rooms
-```
-
-## API REST
-
-| Método | Ruta          | Descripción                          |
-| ------ | ------------- | ------------------------------------- |
-| POST   | `/rooms`      | Crea una sala. Body: `{ "name": string }` |
-| GET    | `/rooms/:code`| Devuelve la sala por su código        |
-
-## WebSocket (namespace `/rooms`)
-
-Conectate al namespace `/rooms` (ej. `io("http://localhost:3001/rooms")`).
-
-### Eventos que el cliente envía
-
-| Evento      | Payload                          | Descripción                              |
-| ----------- | --------------------------------- | ----------------------------------------- |
-| `joinRoom`  | `{ code: string, userName: string }` | Une el socket a la sala con ese código |
-| `sendMessage` | `{ content: string }`           | Envía un mensaje de chat a la sala actual |
-| `leaveRoom` | —                                  | Sale de la sala actual                    |
-
-### Eventos que el servidor emite
-
-| Evento        | Payload                                | Cuándo                                          |
-| ------------- | ---------------------------------------- | ------------------------------------------------ |
-| `roomHistory` | `Message[]`                              | Al unirte, historial de chat de la sala          |
-| `roomUsers`   | `string[]` (nombres)                     | Al unirte, lista de usuarios ya conectados       |
-| `userJoined`  | `{ userName: string }`                   | A los demás, cuando alguien se une               |
-| `userLeft`    | `{ userName: string }`                   | A los demás, cuando alguien se va o se desconecta |
-| `newMessage`  | `Message`                                | A toda la sala, cuando llega un mensaje nuevo    |
-| `error`       | `{ message: string }`                    | Sala inexistente, o mensaje sin haberte unido    |
-
-## Scripts útiles
-
-```bash
-pnpm start:dev     # servidor en modo watch
-pnpm build         # compila a dist/
-pnpm start:prod    # corre la build compilada
-
-pnpm db:generate   # genera migraciones SQL a partir de src/db/schema.ts
-pnpm db:migrate    # aplica las migraciones pendientes a la DB
-pnpm db:studio     # abre Drizzle Studio para inspeccionar la DB
-```
-
-Dentro de `client/`:
-
-```bash
-pnpm dev           # servidor de desarrollo de Next.js
-pnpm build         # build de producción
-pnpm start         # sirve el build de producción
-```
-
-## Hoja de ruta hacia una experiencia tipo Meet
-
-Date2gether ya permite crear salas, entrar por código y chatear en tiempo real. Las salas y los mensajes se guardan en PostgreSQL; los participantes conectados se mantienen en memoria y se identifican en la interfaz por su nombre de invitado.
-
-Las funcionalidades de esta hoja de ruta están **pendientes de implementación**. El objetivo de la primera entrega es que dos personas puedan crear una sala, compartir el enlace, entrar desde dispositivos distintos, verse, escucharse, silenciarse y salir correctamente.
-
-### Validar la base actual
-
-Antes de ampliar el sistema, comprobar el flujo existente con el backend y PostgreSQL:
-
-- [ ] Crear una sala y entrar desde dos pestañas con nombres distintos.
-- [ ] Verificar que los mensajes lleguen a ambos participantes en tiempo real.
-- [ ] Volver a entrar y comprobar que se recupera el historial del chat.
-- [ ] Salir de la sala y comprobar que se actualiza la lista de participantes.
-
-### Entregas propuestas
-
-| Orden | Funcionalidad | Alcance |
-| ----- | ------------- | ------- |
-| 1 | Pantalla previa | Previsualizar la cámara, elegir cámara y micrófono y entrar con audio o video apagados. Explicar cómo habilitar permisos cuando se rechazan. |
-| 2 | Audio y video | Conectar dos participantes, transmitir sus medios y permitir silenciar el micrófono y apagar la cámara. |
-| 3 | Interfaz de reunión | Mostrar una grilla de participantes, una barra inferior de controles y paneles laterales para chat y personas. Incluir un botón para copiar el enlace de invitación. |
-| 4 | Compartir pantalla | Presentar una pantalla o ventana, detener la presentación y volver a la vista habitual de la reunión. |
-| 5 | Autenticación e identidad | Implementar registro, inicio y cierre de sesión. Identificar al organizador, asociar mensajes con usuarios autenticados y permitir invitados mediante un enlace. |
-| 6 | Anfitrión y acceso | Incorporar sala de espera, admitir o rechazar solicitudes, expulsar participantes, bloquear nuevos ingresos y finalizar la reunión para todos. Depende de la identidad y los permisos de la entrega anterior. |
-| 7 | Reconexión y persistencia | Mostrar el estado de conexión, recuperar una sesión sin duplicar participantes y guardar quién creó la reunión y cuándo ingresó o salió cada persona. |
-
-La pantalla previa es el siguiente avance visible recomendado. Permite probar dispositivos y permisos antes de conectar la primera videollamada. La autenticación puede desarrollarse en paralelo y debe estar lista antes de habilitar controles de anfitrión.
-
-### Elegir cómo transportar audio y video
-
-La arquitectura de medios debe definirse antes de implementar las conexiones entre participantes:
-
-- **WebRTC directo, para aprender y construir una primera llamada:** usar el Gateway de Socket.io para intercambiar ofertas, respuestas y candidatos ICE entre los navegadores. Configurar servidores STUN/TURN y probar conexiones entre distintas redes. Referencias: [dispositivos multimedia](https://webrtc.org/getting-started/media-devices), [conexiones y señalización WebRTC](https://webrtc.org/getting-started/peer-connections).
-- **Servidor de medios, para avanzar hacia reuniones grupales:** evaluar [LiveKit](https://github.com/livekit/livekit), que proporciona una SFU para recibir y distribuir audio y video entre participantes. Su SDK y servidor gestionan las conexiones de medios. NestJS puede seguir gestionando usuarios, permisos y datos del sistema.
-
-Next.js se ocupa de la interfaz y las rutas. Socket.io mantiene el chat y los eventos de la sala, y puede actuar como canal de señalización si se elige WebRTC directo. El audio y el video se transportan con WebRTC, de forma directa o a través de la SFU seleccionada.
-
-Para la pantalla previa, `getUserMedia()` permite obtener cámara y micrófono, y `enumerateDevices()` permite consultar los dispositivos disponibles. Las API del navegador se utilizan desde los componentes de cliente de Next.js.
-
-### Identidad y datos de la reunión
-
-- [ ] Asignar un ID único a cada participante. Dos personas llamadas “Alex” deben poder coexistir sin mezclar su presencia o sus mensajes.
-- [ ] Separar la identidad del participante del nombre visible y de la conexión temporal del socket.
-- [ ] Asociar cada mensaje con el usuario o participante que lo envió.
-- [ ] Guardar el organizador, los participantes y sus horarios de ingreso y salida.
-- [ ] Gestionar los estados activa y cerrada de la reunión y validar el acceso desde el backend.
-- [ ] Diferenciar una sala inexistente de una sala cerrada y mostrar un mensaje claro en cada caso.
-
-### Mejoras de participación y experiencia
-
-- [ ] Levantar la mano y enviar reacciones para participar sin interrumpir.
-- [ ] Fijar un participante para mantener su video destacado.
-- [ ] Resaltar a la persona que está hablando.
-- [ ] Conservar el borrador del chat y avisar cuando un mensaje no pudo enviarse.
-- [ ] Ofrecer controles cómodos en pantallas pequeñas y permitir navegar con teclado.
-- [ ] Explicar los errores de permisos o dispositivos y cómo continuar o resolverlos.
-- [ ] Al abandonar la sala, cerrar las conexiones, liberar cámara y micrófono y actualizar la presencia.
-
-### Criterios de aceptación
-
-Cada funcionalidad debe tener un comportamiento concreto que pueda verificarse. Estos ejemplos sirven como base para pruebas manuales y, cuando corresponda, automatizadas:
-
-| Situación | Resultado esperado |
-| --------- | ------------------ |
-| Rechazo el permiso de cámara | Puedo entrar con la cámara apagada y veo cómo habilitarla después. |
-| Dos personas usan el mismo nombre | Ambas aparecen como participantes distintos y sus mensajes se atribuyen correctamente. |
-| Dos dispositivos entran a la misma sala | Pueden verse y escucharse; verificar también desde redes distintas. |
-| Silencio mi micrófono | Los demás dejan de escucharme y ven mi estado de micrófono apagado. |
-| Comparto una pantalla y detengo la presentación | Los demás ven la presentación y luego recuperan la vista habitual de la reunión. |
-| Se interrumpe temporalmente la conexión | Veo “Reconectando…” y vuelvo sin duplicar mi participante. |
-| Un mensaje no pudo enviarse | Veo el estado de fallo y conservo el texto para volver a intentarlo. |
-| Salgo de la sala | Se liberan cámara y micrófono y dejo de aparecer entre los participantes conectados. |
-| El anfitrión finaliza la reunión | Todos salen y el mismo enlace informa que la reunión está cerrada. |
-| Uso un teléfono o navego con teclado | Los controles principales siguen siendo accesibles y utilizables. |
-
-### Etapa posterior
-
-Planificar estas funciones después de completar y validar las reuniones básicas:
-
-- [ ] Grabación de reuniones.
-- [ ] Subtítulos.
-- [ ] Fondos virtuales.
+La entrega académica usa seis participantes por llamada. Siguen pendientes la previsualización antes de entrar, compartir pantalla, moderación de acceso, cupo del chat, cierre de salas de la aplicación, vencimiento del chat, adjuntos, stickers, grabación local, subtítulos y fondos, según los requisitos.

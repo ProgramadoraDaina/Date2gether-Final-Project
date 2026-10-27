@@ -8,9 +8,20 @@ services:
       POSTGRES_PASSWORD: date2gether
       POSTGRES_DB: date2gether
     ports:
-      - '5432:5432'
+      - '127.0.0.1:5432:5432'
     volumes:
       - date2gether_postgres_data:/var/lib/postgresql/data
+
+  livekit:
+    image: livekit/livekit-server:v1.13.11
+    restart: unless-stopped
+    command: ['--config', '/etc/livekit.yaml', '--bind', '0.0.0.0']
+    ports:
+      - '127.0.0.1:7880:7880'
+      - '127.0.0.1:7881:7881'
+      - '127.0.0.1:7882:7882/udp'
+    volumes:
+      - ./deploy/local/livekit.yaml:/etc/livekit.yaml:ro
 
 volumes:
   date2gether_postgres_data:

@@ -1,5 +1,48 @@
 // Clave: string original en español. Valor: traducción al inglés.
 const en: Record<string, string> = {
+  'Podés entrar con un enlace o código sin crear una cuenta.':
+    'You can join with a link or code without creating an account.',
+  'Entrar a la reunión': 'Join the meeting',
+  'Elegí cómo querés aparecer. No necesitás una cuenta.':
+    'Choose your display name. You do not need an account.',
+  'Tu nombre en la reunión': 'Your name in the meeting',
+  'No se pudo entrar a la sala': 'Could not join the room',
+  'No se pudo conectar a la sala': 'Could not connect to the room',
+  'Volver al inicio': 'Back to home',
+  'Copiar enlace': 'Copy link',
+  'Enlace copiado': 'Link copied',
+  'No se pudo copiar el enlace': 'Could not copy the link',
+  'Conectando...': 'Connecting...',
+  Llamar: 'Call',
+  Colgar: 'Hang up',
+  Micrófono: 'Microphone',
+  Cámara: 'Camera',
+  'Elegir micrófono': 'Choose microphone',
+  'Elegir cámara': 'Choose camera',
+  'Activar sonido de la reunión': 'Enable meeting audio',
+  'Las llamadas todavía no están configuradas': 'Calls are not configured yet',
+  'El servidor de llamadas no está disponible. Intentá nuevamente.':
+    'The call server is unavailable. Please try again.',
+  'No se pudo conectar a la llamada. La sala puede estar llena o sin conexión.':
+    'Could not join the call. The room may be full or offline.',
+  'No se pudo activar el dispositivo. Revisá los permisos del navegador; podés continuar en la llamada.':
+    'Could not enable the device. Check your browser permissions; you can stay in the call.',
+  Cancelar: 'Cancel',
+  'Activar micrófono': 'Unmute microphone',
+  'Silenciar micrófono': 'Mute microphone',
+  'Las llamadas de audio todavía no están habilitadas': 'Audio calls are not enabled yet',
+  'El servicio de audio necesita renovar su conexión':
+    'The audio service needs to renew its connection',
+  'El servicio de audio no está disponible en este momento':
+    'The audio service is currently unavailable',
+  'El servicio de audio no devolvió una reunión válida':
+    'The audio service did not return a valid meeting',
+  'El servicio de audio no devolvió un participante válido':
+    'The audio service did not return a valid participant',
+  'Se perdió la conexión de audio. Volvé a llamar.': 'Audio connection lost. Please call again.',
+  'Permití el acceso al micrófono para iniciar la llamada':
+    'Allow microphone access to start the call',
+  'No se pudo iniciar la llamada': 'Could not start the call',
   'Videollamadas simples, en el navegador.': 'Simple video calls, in the browser.',
 
   // Inicio
@@ -12,7 +55,7 @@ const en: Record<string, string> = {
   'Creando…': 'Creating…',
   'Crear reunión': 'Create meeting',
   'o unite a una existente': 'or join an existing one',
-  'Unirse': 'Join',
+  Unirse: 'Join',
   'No se pudo crear la reunión. ¿Está corriendo el backend?':
     'Could not create the meeting. Is the backend running?',
   'Necesitás iniciar sesión para crear una reunión.': 'You need to log in to create a meeting.',
@@ -21,17 +64,17 @@ const en: Record<string, string> = {
 
   // Login
   'Entrá con tu cuenta de Date2gether.': 'Sign in with your Date2gether account.',
-  'Email': 'Email',
-  'Contraseña': 'Password',
+  Email: 'Email',
+  Contraseña: 'Password',
   'Entrando…': 'Signing in…',
-  'Entrar': 'Log in',
+  Entrar: 'Log in',
   'No se pudo iniciar sesión': 'Could not log in',
   '¿No tenés cuenta? ': "Don't have an account? ",
   'Creá una': 'Create one',
 
   // Registro
   'Registrate para usar Date2gether.': 'Sign up to use Date2gether.',
-  'Nombre': 'Name',
+  Nombre: 'Name',
   'Mínimo 8 caracteres, con al menos una letra y un número.':
     'At least 8 characters, with at least one letter and one number.',
   'Creando cuenta…': 'Creating account…',
@@ -40,13 +83,13 @@ const en: Record<string, string> = {
   'Iniciá sesión': 'Log in',
 
   // Sala
-  'Invitado': 'Guest',
+  Invitado: 'Guest',
   'se unió a la sala': 'joined the room',
   'salió de la sala': 'left the room',
-  'Salir': 'Leave',
+  Salir: 'Leave',
   'En la sala': 'In the room',
   'Escribí un mensaje...': 'Write a message...',
-  'Enviar': 'Send',
+  Enviar: 'Send',
   'Hacer colaborador': 'Make collaborator',
   'Quitar colaborador': 'Remove collaborator',
 

@@ -14,7 +14,7 @@ export function useRoomMembers(code: string | undefined) {
   const [error, setError] = useState<string | null>(null);
 
   const refetchMembers = useCallback(async () => {
-    if (!code) return;
+    if (!code || !isLoggedIn()) return;
     try {
       setMembers(await getRoomMembers(code));
       setError(null);

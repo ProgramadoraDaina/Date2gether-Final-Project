@@ -1,0 +1,15 @@
+.git
+**/node_modules
+**/.next
+**/.env
+**/.env.*
+**/runtime
+**/__pycache__
+dist
+coverage
+playwright-report
+test-results
+*.log
+.aws
+.codex
+.agents

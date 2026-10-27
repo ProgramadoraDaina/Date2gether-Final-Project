@@ -65,7 +65,9 @@ export default function HomePage() {
       router.push(`/room/${encodeURIComponent(room.code)}`);
     } catch (err) {
       setError(
-        err instanceof ApiError ? err.message : t('No se pudo crear la reunión. ¿Está corriendo el backend?'),
+        err instanceof ApiError
+          ? err.message
+          : t('No se pudo crear la reunión. ¿Está corriendo el backend?'),
       );
       if (!isLoggedIn()) {
         setLoggedIn(false);
@@ -115,17 +117,21 @@ export default function HomePage() {
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder={t('¿Cómo te llamás?')}
+          maxLength={60}
           required
         />
         <button type="submit" disabled={loading || !loggedIn}>
           {loading ? t('Creando…') : t('Crear reunión')}
         </button>
         {!checkingSession && !loggedIn && (
-          <p className="hint-below-button">{t('Necesitás iniciar sesión (arriba) para crear una reunión.')}</p>
+          <p className="hint-below-button">
+            {t('Necesitás iniciar sesión (arriba) para crear una reunión.')}
+          </p>
         )}
       </form>
 
       <div className="divider">{t('o unite a una existente')}</div>
+      <p>{t('Podés entrar con un enlace o código sin crear una cuenta.')}</p>
 
       <form className="join-row" onSubmit={handleJoin}>
         <input

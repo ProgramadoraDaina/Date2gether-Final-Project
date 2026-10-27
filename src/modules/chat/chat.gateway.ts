@@ -1,4 +1,6 @@
-import { UsePipes, ValidationPipe } from '@nestjs/common';
+import { UseGuards, UsePipes, ValidationPipe } from '@nestjs/common';
+import { WsJwtAuthGuard } from '../auth/guards/ws-jwt-auth.guard';
+import type { RoomParticipant } from '../auth/room-access.service';
 import {
   ConnectedSocket,
   MessageBody,
@@ -15,6 +17,7 @@ import { JoinRoomDto } from './dto/join-room.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 
 interface ConnectedUser {
+  participantId: string;
   roomCode: string;
   roomId: string;
   userName: string;
@@ -23,7 +26,7 @@ interface ConnectedUser {
 
 // Shape pública de la presencia: mismos campos que ConnectedUser salvo los
 // internos (roomId), para no declarar un segundo tipo con los mismos campos.
-type RoomUser = Pick<ConnectedUser, 'userName' | 'userId'>;
+type RoomUser = Pick<ConnectedUser, 'participantId' | 'userName' | 'userId'>;
 
 @WebSocketGateway({
   namespace: '/rooms',
@@ -46,6 +49,7 @@ export class ChatGateway implements OnGatewayDisconnect {
     });
   }
 
+  @UseGuards(WsJwtAuthGuard)
   @SubscribeMessage('joinRoom')
   async handleJoinRoom(@ConnectedSocket() client: Socket, @MessageBody() dto: JoinRoomDto) {
     const room = await this.roomsService.findByCode(dto.code);
@@ -54,19 +58,29 @@ export class ChatGateway implements OnGatewayDisconnect {
       return;
     }
 
+    const { participant } = client.data as { participant: RoomParticipant };
+    if (!room.isActive) {
+      client.emit('error', { message: 'La sala está cerrada' });
+      return;
+    }
+    if (this.connectedUsers.has(client.id)) this.removeClient(client);
     await client.join(dto.code);
+    const presence: RoomUser = {
+      participantId: participant.sub,
+      userName: participant.name,
+      userId: participant.userId,
+    };
     this.connectedUsers.set(client.id, {
       roomCode: dto.code,
       roomId: room.id,
-      userName: dto.userName,
-      userId: dto.userId,
+      ...presence,
     });
 
     const history = await this.chatService.getHistory(room.id);
     client.emit('roomHistory', history);
     client.emit('roomUsers', this.getUsersInRoom(dto.code));
 
-    client.to(dto.code).emit('userJoined', { userName: dto.userName, userId: dto.userId });
+    client.to(dto.code).emit('userJoined', presence);
   }
 
   @SubscribeMessage('leaveRoom')
@@ -74,6 +88,7 @@ export class ChatGateway implements OnGatewayDisconnect {
     this.removeClient(client);
   }
 
+  @UseGuards(WsJwtAuthGuard)
   @SubscribeMessage('sendMessage')
   async handleSendMessage(@ConnectedSocket() client: Socket, @MessageBody() dto: SendMessageDto) {
     const user = this.connectedUsers.get(client.id);
@@ -96,12 +111,16 @@ export class ChatGateway implements OnGatewayDisconnect {
 
     void client.leave(user.roomCode);
     this.connectedUsers.delete(client.id);
-    client.to(user.roomCode).emit('userLeft', { userName: user.userName, userId: user.userId });
+    client.to(user.roomCode).emit('userLeft', {
+      participantId: user.participantId,
+      userName: user.userName,
+      userId: user.userId,
+    });
   }
 
   private getUsersInRoom(roomCode: string): RoomUser[] {
     return Array.from(this.connectedUsers.values())
       .filter((user) => user.roomCode === roomCode)
-      .map((user) => ({ userName: user.userName, userId: user.userId }));
+      .map(({ participantId, userName, userId }) => ({ participantId, userName, userId }));
   }
 }

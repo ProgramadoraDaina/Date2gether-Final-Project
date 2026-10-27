@@ -44,11 +44,9 @@ pnpm test:e2e:db:down
   (el de desarrollo usa 5432, no se pisan).
 - `playwright.config.ts` prende el backend en el puerto 3001 apuntando a esa
   base de prueba, y el frontend en el puerto 3002 apuntando a ese backend.
-  Si ya tenés esos puertos corriendo localmente (tu `pnpm start:dev` /
-  `pnpm dev:client` de siempre), Playwright los reutiliza en vez de levantar
-  los suyos — asegurate de que esos procesos también apunten a la base de
-  prueba si vas a correr los tests así, o vas a terminar probando contra tu
-  base de desarrollo sin querer.
+  La configuración tiene `reuseExistingServer: false`: los servidores de desarrollo
+  deben estar detenidos y los puertos 3001 y 3002 libres. Playwright no reutiliza
+  procesos existentes, para evitar escribir en la base de desarrollo.
 - Cada test que necesita un usuario genera un email único (ver
   `support/test-data.ts`), así corridas repetidas no chocan entre sí con
   "ya existe esa cuenta".
@@ -60,3 +58,12 @@ pnpm test:e2e:db:down
   sala, código inexistente.
 - `support/` — helpers compartidos (puertos/URLs, datos de prueba, llamadas
   directas a la API para preparar datos sin pasar por el formulario).
+
+## Cuentas, invitados y llamadas
+
+Crear una sala exige una cuenta autenticada. Los invitados pueden abrir su enlace
+sin cuenta y deben confirmar un nombre antes de conectarse; el nombre no otorga
+permisos de administrador. Los escenarios de salas confirman ese paso tanto para
+cuentas registradas como para invitados.
+
+La suite de navegador comprueba ingreso y chat sin iniciar llamadas reales. Los tests de llamadas simulan LiveKit y validan emisión de pases, permisos, conexión y controles. Para validar audio/video reales, iniciar LiveKit local o usar el [despliegue EC2](../deploy/ec2/README.md), reunir dispositivos con el mismo enlace y comprobar también el rechazo de la séptima conexión de medios. No hace falta Chime SDK.

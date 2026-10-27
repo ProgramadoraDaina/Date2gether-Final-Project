@@ -15,3 +15,19 @@ export const TEST_DATABASE_URL = 'postgresql://test:test@localhost:5433/date2get
 // sobre "valores para los tests").
 export const TEST_JWT_ACCESS_SECRET = 'e2e-test-access-secret-no-es-real';
 export const TEST_JWT_REFRESH_SECRET = 'e2e-test-refresh-secret-no-es-real';
+
+// Los selectores de esta suite están en español, independientemente del idioma inicial de la app.
+export const SPANISH_STORAGE_STATE = {
+  cookies: [],
+  origins: [
+    {
+      origin: CLIENT_URL,
+      localStorage: [
+        {
+          name: 'date2gether:language',
+          value: JSON.stringify({ state: { language: 'es' }, version: 1 }),
+        },
+      ],
+    },
+  ],
+};
