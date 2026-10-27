@@ -37,7 +37,6 @@
     "test:cov": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --coverage"
   },
   "dependencies": {
-    "@aws-sdk/client-chime-sdk-meetings": "^3.1156.0",
     "@nestjs/common": "^12.0.4",
     "@nestjs/config": "^12.0.0",
     "@nestjs/core": "^12.0.4",
@@ -52,6 +51,7 @@
     "dotenv": "^18.0.2",
     "drizzle-orm": "^0.45.3",
     "helmet": "^8.3.0",
+    "livekit-server-sdk": "2.19.2",
     "postgres": "^3.4.9",
     "socket.io": "^4.8.3",
     "uuid": "^14.0.2"

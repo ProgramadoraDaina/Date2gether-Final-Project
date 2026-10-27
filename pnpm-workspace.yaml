@@ -12,3 +12,8 @@ allowBuilds:
 overrides:
   # Patch Next.js's PostCSS dependency while keeping the Next.js 15 API.
   'next@15>postcss': 8.5.23
+  # Security patches for transitive Express and NestJS dependencies.
+  'body-parser@>=2.0.0 <2.4.0': 2.4.0
+  'multer@>=2.0.0 <2.5.0': 2.5.0
+  'fast-uri@>=3.0.0 <3.1.9': 3.1.9
+  '@esbuild-kit/core-utils>esbuild': 0.25.12
