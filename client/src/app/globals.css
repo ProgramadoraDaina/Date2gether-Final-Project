@@ -43,7 +43,9 @@ body {
   background: var(--color-bg);
   font-family: 'Segoe UI', Roboto, Arial, sans-serif;
   color: var(--color-text);
-  transition: background-color 0.2s, color 0.2s;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
 }
 
 .app-shell {
@@ -302,8 +304,8 @@ button.secondary:hover {
 
 .room-layout {
   width: 100%;
-  max-width: 720px;
-  height: 80vh;
+  max-width: 1200px;
+  height: 85vh;
   display: flex;
   flex-direction: column;
   background: var(--color-surface);
@@ -405,4 +407,80 @@ button.secondary:hover {
 
 #message-form button {
   width: auto;
+}
+
+.meeting-and-chat {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.meeting-room {
+  min-height: 240px;
+  flex: 2;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+.meeting-grid {
+  flex: 1;
+  min-height: 180px;
+}
+.meeting-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+}
+.meeting-controls button,
+.call-controls button {
+  width: auto;
+}
+.call-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.call-error {
+  color: var(--color-error);
+  margin: 0;
+  max-width: 28rem;
+}
+.room-header {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.chat-panel {
+  min-height: 140px;
+}
+.meeting-room + .chat-panel {
+  flex: 1;
+  max-height: 35%;
+  border-top: 1px solid var(--color-border);
+}
+@media (max-width: 640px) {
+  .app-shell {
+    padding: 8px;
+  }
+  .room-layout {
+    height: calc(100dvh - 70px);
+    margin-top: 46px;
+  }
+  .users-panel {
+    width: 110px;
+    padding: 8px;
+  }
+  .room-header {
+    padding: 10px;
+  }
+  .meeting-controls {
+    gap: 4px;
+  }
+  .meeting-controls button {
+    font-size: 12px;
+    padding: 8px;
+  }
 }

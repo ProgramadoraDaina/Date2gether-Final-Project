@@ -15,6 +15,18 @@ const en: Record<string, string> = {
   'Conectando...': 'Connecting...',
   Llamar: 'Call',
   Colgar: 'Hang up',
+  Micrófono: 'Microphone',
+  Cámara: 'Camera',
+  'Elegir micrófono': 'Choose microphone',
+  'Elegir cámara': 'Choose camera',
+  'Activar sonido de la reunión': 'Enable meeting audio',
+  'Las llamadas todavía no están configuradas': 'Calls are not configured yet',
+  'El servidor de llamadas no está disponible. Intentá nuevamente.':
+    'The call server is unavailable. Please try again.',
+  'No se pudo conectar a la llamada. La sala puede estar llena o sin conexión.':
+    'Could not join the call. The room may be full or offline.',
+  'No se pudo activar el dispositivo. Revisá los permisos del navegador; podés continuar en la llamada.':
+    'Could not enable the device. Check your browser permissions; you can stay in the call.',
   Cancelar: 'Cancel',
   'Activar micrófono': 'Unmute microphone',
   'Silenciar micrófono': 'Mute microphone',

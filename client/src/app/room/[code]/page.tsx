@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useParams } from 'next/navigation';
 import type { Socket } from 'socket.io-client';
 import { RoleTag } from '@/features/rooms/RoleTag';
@@ -11,6 +12,8 @@ import { CallControls } from '@/features/calls/CallControls';
 import { useCallSession } from '@/features/calls/useCallSession';
 import { createRoomSocket } from '@/lib/socket';
 import { useTranslation } from '@/features/translation/useTranslation';
+
+const MeetingRoom = dynamic(() => import('@/features/calls/MeetingRoom'), { ssr: false });
 
 const NAME_KEY = 'date2gether:userName';
 
@@ -45,7 +48,6 @@ export default function RoomPage() {
   const [notice, setNotice] = useState<Notice | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
   const callSession = useCallSession();
   const {
     members,
@@ -126,15 +128,6 @@ export default function RoomPage() {
   }, [code, access, refetchMembers, t]);
 
   useEffect(() => {
-    const session = callSession.meetingSession;
-    if (!session || !audioRef.current) return;
-    session.audioVideo.bindAudioElement(audioRef.current);
-    return () => {
-      session.audioVideo.unbindAudioElement();
-    };
-  }, [callSession.meetingSession]);
-
-  useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [messages]);
 
@@ -199,8 +192,6 @@ export default function RoomPage() {
         <Link href="/">{t('Salir')}</Link>
       </div>
 
-      <audio ref={audioRef} autoPlay hidden />
-
       {notice && (
         <div className="notice">
           {'text' in notice
@@ -253,24 +244,27 @@ export default function RoomPage() {
           </ul>
         </div>
 
-        <div className="chat-panel">
-          <ul id="messages" ref={listRef}>
-            {messages.map((m) => (
-              <li key={m.id} className="message">
-                <span className="author">{m.authorName}</span>
-                {m.content}
-              </li>
-            ))}
-          </ul>
-          <form id="message-form" onSubmit={handleSend}>
-            <input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder={t('Escribí un mensaje...')}
-              autoComplete="off"
-            />
-            <button type="submit">{t('Enviar')}</button>
-          </form>
+        <div className="meeting-and-chat">
+          {callSession.session && <MeetingRoom call={callSession} />}
+          <div className="chat-panel">
+            <ul id="messages" ref={listRef}>
+              {messages.map((m) => (
+                <li key={m.id} className="message">
+                  <span className="author">{m.authorName}</span>
+                  {m.content}
+                </li>
+              ))}
+            </ul>
+            <form id="message-form" onSubmit={handleSend}>
+              <input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder={t('Escribí un mensaje...')}
+                autoComplete="off"
+              />
+              <button type="submit">{t('Enviar')}</button>
+            </form>
+          </div>
         </div>
       </div>
     </div>

@@ -6,8 +6,10 @@ describe('startCall', () => {
   });
   it('usa el pase de sala de un invitado sin depender de una cuenta', async () => {
     const session = {
-      meeting: { MeetingId: 'meeting-123' },
-      attendee: { AttendeeId: 'attendee-456' },
+      url: 'wss://media.example.com',
+      token: 'signed-token',
+      roomName: 'abc-defg-hij',
+      participantLimit: 6,
     };
     const fetchMock = global.fetch as jest.Mock<typeof fetch>;
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(session), { status: 201 }));

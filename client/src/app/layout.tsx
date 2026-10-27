@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import { LanguageToggle } from '@/features/translation/LanguageToggle';
 import { ThemeToggle } from '@/features/theme/ThemeToggle';
+import '@livekit/components-styles';
 import './globals.css';
 
 export const metadata: Metadata = {

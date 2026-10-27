@@ -8,9 +8,9 @@ function buildState(overrides: Partial<CallSessionState> = {}): CallSessionState
   return {
     status: 'idle',
     error: null,
-    meetingSession: null,
-    isMuted: false,
-    toggleMute: jest.fn<CallSessionState['toggleMute']>(),
+    session: null,
+    connected: jest.fn(),
+    failed: jest.fn(),
     joinCall: jest.fn<CallSessionState['joinCall']>(),
     leaveCall: jest.fn<CallSessionState['leaveCall']>(),
     ...overrides,
@@ -45,21 +45,6 @@ describe('CallControls', () => {
     expect(screen.getByText('Conectando...')).toBeInTheDocument();
   });
 
-  it('muestra el botón "Colgar" en estado in-call y dispara leaveCall al hacer click', () => {
-    const leaveCall = jest.fn<CallSessionState['leaveCall']>();
-    render(
-      <CallControls
-        roomCode="ABC123"
-        roomToken="room-token"
-        session={buildState({ status: 'in-call', leaveCall })}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: 'Colgar' }));
-
-    expect(leaveCall).toHaveBeenCalledTimes(1);
-  });
-
   it('muestra el mensaje de error en estado error', () => {
     render(
       <CallControls
@@ -72,7 +57,7 @@ describe('CallControls', () => {
     expect(screen.getByText('No se pudo iniciar la llamada')).toBeInTheDocument();
   });
 
-  it('permite cancelar mientras Chime conecta', () => {
+  it('permite cancelar mientras LiveKit conecta', () => {
     const leaveCall = jest.fn<CallSessionState['leaveCall']>();
     render(
       <CallControls
@@ -83,18 +68,5 @@ describe('CallControls', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
     expect(leaveCall).toHaveBeenCalledTimes(1);
-  });
-
-  it('permite activar un micrófono silenciado', () => {
-    const toggleMute = jest.fn<CallSessionState['toggleMute']>();
-    render(
-      <CallControls
-        roomCode="ABC123"
-        roomToken="token"
-        session={buildState({ status: 'in-call', isMuted: true, toggleMute })}
-      />,
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'Activar micrófono', pressed: true }));
-    expect(toggleMute).toHaveBeenCalledTimes(1);
   });
 });

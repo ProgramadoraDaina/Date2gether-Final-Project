@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
 const ACCESS_TOKEN_KEY = 'date2gether:accessToken';
 
-// Mismo motivo que en chime.spec.ts: next/jest no hoistea jest.mock() por
+// next/jest no hoistea jest.mock() por
 // encima de imports estáticos, así que el mock y el import de './socket' se
 // cargan dinámicamente dentro del test.
 jest.mock('socket.io-client', () => ({

@@ -11,40 +11,25 @@ interface CallControlsProps {
 
 export function CallControls({ roomCode, roomToken, session }: CallControlsProps) {
   const { t } = useTranslation();
-  const { status, error, isMuted, toggleMute, joinCall, leaveCall } = session;
-
-  if (status === 'connecting') {
+  if (session.status === 'in-call') return null;
+  if (session.status === 'connecting') {
     return (
       <div className="call-controls">
-        {t('Conectando...')}
-        <button type="button" onClick={leaveCall}>
+        {t('Conectando...')}{' '}
+        <button type="button" onClick={session.leaveCall}>
           {t('Cancelar')}
         </button>
       </div>
     );
   }
-
-  if (status === 'in-call') {
-    return (
-      <div className="call-controls">
-        <button type="button" aria-pressed={isMuted} onClick={toggleMute}>
-          {t(isMuted ? 'Activar micrófono' : 'Silenciar micrófono')}
-        </button>
-        <button type="button" onClick={leaveCall}>
-          {t('Colgar')}
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div className="call-controls">
-      {error && (
+      {session.error && (
         <p className="call-error" role="alert">
-          {t(error)}
+          {t(session.error)}
         </p>
       )}
-      <button type="button" onClick={() => joinCall(roomCode, roomToken)}>
+      <button type="button" onClick={() => session.joinCall(roomCode, roomToken)}>
         {t('Llamar')}
       </button>
     </div>

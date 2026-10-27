@@ -21,7 +21,7 @@ jest.mock('@/features/calls/useCallSession', () => ({
   useCallSession: () => ({
     status: 'idle',
     error: null,
-    meetingSession: null,
+    session: null,
     joinCall: jest.fn(),
     leaveCall: jest.fn(),
   }),
