@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { register } from '@/lib/auth';
 import { useTranslation } from '@/features/translation/useTranslation';
+import styles from './page.module.css';
 
 const NAME_KEY = 'date2gether:userName';
 
@@ -33,9 +34,9 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="card">
+    <div className={styles.card}>
       <h1>{t('Crear cuenta')}</h1>
-      <p className="subtitle">{t('Registrate para usar Date2gether.')}</p>
+      <p className={styles.subtitle}>{t('Registrate para usar Date2gether.')}</p>
 
       <form onSubmit={handleSubmit}>
         <label htmlFor="name">{t('Nombre')}</label>
@@ -67,16 +68,16 @@ export default function RegisterPage() {
           minLength={8}
           required
         />
-        <p className="hint">{t('Mínimo 8 caracteres, con al menos una letra y un número.')}</p>
+        <p className={styles.hint}>{t('Mínimo 8 caracteres, con al menos una letra y un número.')}</p>
 
         <button type="submit" disabled={loading}>
           {loading ? t('Creando cuenta…') : t('Crear cuenta')}
         </button>
       </form>
 
-      {error && <p className="error">{error}</p>}
+      {error && <p className={styles.error}>{error}</p>}
 
-      <p className="switch-link">
+      <p className={styles.switchLink}>
         {t('¿Ya tenés cuenta? ')}
         <Link href="/login">{t('Iniciá sesión')}</Link>
       </p>

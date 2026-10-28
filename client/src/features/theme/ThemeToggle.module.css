@@ -1,0 +1,15 @@
+.themeToggle {
+  width: auto;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-accent);
+  border: 1px solid var(--color-border);
+  font-size: 16px;
+  line-height: 1;
+  font-weight: 600;
+}
+
+.themeToggle:hover {
+  background: var(--color-chip-bg);
+}

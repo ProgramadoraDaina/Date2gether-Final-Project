@@ -2,6 +2,7 @@
 
 import { useTheme } from './useTheme';
 import { useTranslation } from '@/features/translation/useTranslation';
+import styles from './ThemeToggle.module.css';
 
 export function ThemeToggle() {
   const { t } = useTranslation();
@@ -15,7 +16,7 @@ export function ThemeToggle() {
       aria-pressed={isDark}
       aria-label={isDark ? t('Cambiar a modo claro') : t('Cambiar a modo oscuro')}
       title={isDark ? t('Cambiar a modo claro') : t('Cambiar a modo oscuro')}
-      className="theme-toggle"
+      className={styles.themeToggle}
     >
       {isDark ? '☀️' : '🌙'}
     </button>
