@@ -2,6 +2,7 @@ import { beforeEach, afterEach, describe, expect, it, jest } from '@jest/globals
 import { ConfigService } from '@nestjs/config';
 import { ForbiddenException, ServiceUnavailableException } from '@nestjs/common';
 import { RoomServiceClient, TokenVerifier } from 'livekit-server-sdk';
+import type { DrizzleDb } from '../../db/drizzle.module';
 import type { Room } from '../../db/schema';
 import type { RoomParticipant } from '../auth/room-access.service';
 import { RoomsService } from '../rooms/rooms.service';
@@ -23,9 +24,22 @@ const config = {
   MAX_ROOM_PARTICIPANTS: '6',
 };
 
+function createDbMock() {
+  const insertValues = jest.fn().mockResolvedValue(undefined);
+  const insert = jest.fn().mockReturnValue({ values: insertValues });
+  const limit = jest.fn().mockResolvedValue([]);
+  const orderBy = jest.fn().mockReturnValue({ limit });
+  const where = jest.fn().mockReturnValue({ orderBy });
+  const innerJoin = jest.fn().mockReturnValue({ where });
+  const from = jest.fn().mockReturnValue({ innerJoin });
+  const select = jest.fn().mockReturnValue({ from });
+  return { insert, insertValues, select, from, innerJoin, where, orderBy, limit };
+}
+
 describe('CallsService: LiveKit', () => {
   let rooms: { getByCodeOrThrow: jest.Mock<RoomsService['getByCodeOrThrow']> };
   let createRoom: jest.SpiedFunction<RoomServiceClient['createRoom']>;
+  let db: ReturnType<typeof createDbMock>;
   let service: CallsService;
   beforeEach(() => {
     rooms = {
@@ -34,7 +48,12 @@ describe('CallsService: LiveKit', () => {
     createRoom = jest
       .spyOn(RoomServiceClient.prototype, 'createRoom')
       .mockResolvedValue({} as Awaited<ReturnType<RoomServiceClient['createRoom']>>);
-    service = new CallsService(rooms as unknown as RoomsService, new ConfigService(config));
+    db = createDbMock();
+    service = new CallsService(
+      rooms as unknown as RoomsService,
+      new ConfigService(config),
+      db as unknown as DrizzleDb,
+    );
   });
   afterEach(() => {
     jest.restoreAllMocks();
@@ -94,7 +113,11 @@ describe('CallsService: LiveKit', () => {
   });
 
   it('informa si falta configuración sin contactar al servicio', async () => {
-    service = new CallsService(rooms as unknown as RoomsService, new ConfigService({}));
+    service = new CallsService(
+      rooms as unknown as RoomsService,
+      new ConfigService({}),
+      db as unknown as DrizzleDb,
+    );
     await expect(service.join(room.code, participant)).rejects.toThrow(
       'Las llamadas todavía no están configuradas',
     );
@@ -105,6 +128,7 @@ describe('CallsService: LiveKit', () => {
     service = new CallsService(
       rooms as unknown as RoomsService,
       new ConfigService({ ...config, MAX_ROOM_PARTICIPANTS: '0' }),
+      db as unknown as DrizzleDb,
     );
     await expect(service.join(room.code, participant)).rejects.toBeInstanceOf(
       ServiceUnavailableException,
@@ -117,5 +141,58 @@ describe('CallsService: LiveKit', () => {
     await expect(service.join(room.code, participant)).rejects.toThrow(
       'El servidor de llamadas no está disponible. Intentá nuevamente.',
     );
+  });
+
+  it('registra el historial de la llamada cuando el participante es una cuenta registrada', async () => {
+    const accountParticipant = { ...participant, userId: 'user-1' };
+    await service.join(room.code, accountParticipant);
+    expect(db.insert).toHaveBeenCalled();
+    expect(db.insertValues).toHaveBeenCalledWith({ roomId: room.id, userId: 'user-1' });
+  });
+
+  it('no registra historial para invitados sin cuenta', async () => {
+    await service.join(room.code, participant);
+    expect(db.insert).not.toHaveBeenCalled();
+  });
+
+  it('no deja que un fallo al registrar el historial rompa la unión a la llamada', async () => {
+    const accountParticipant = { ...participant, userId: 'user-1' };
+    db.insertValues.mockRejectedValueOnce(new Error('db down'));
+    await expect(service.join(room.code, accountParticipant)).resolves.toMatchObject({
+      roomName: room.code,
+    });
+  });
+});
+
+describe('CallsService: historial', () => {
+  let rooms: { getByCodeOrThrow: jest.Mock<RoomsService['getByCodeOrThrow']> };
+  let db: ReturnType<typeof createDbMock>;
+  let service: CallsService;
+
+  beforeEach(() => {
+    rooms = {
+      getByCodeOrThrow: jest.fn<RoomsService['getByCodeOrThrow']>().mockResolvedValue(room),
+    };
+    db = createDbMock();
+    service = new CallsService(
+      rooms as unknown as RoomsService,
+      new ConfigService(config),
+      db as unknown as DrizzleDb,
+    );
+  });
+
+  it('lista el historial del usuario más reciente primero, limitado y con roomCode/roomName', async () => {
+    const rows = [
+      { roomCode: 'abc-defg-hij', roomName: 'Reunión 1', startedAt: new Date('2026-01-02') },
+      { roomCode: 'xyz-uvwt-rst', roomName: 'Reunión 2', startedAt: new Date('2026-01-01') },
+    ];
+    db.limit.mockResolvedValue(rows);
+
+    const result = await service.listHistory('user-1');
+
+    expect(result).toEqual(rows);
+    expect(db.where).toHaveBeenCalled();
+    expect(db.orderBy).toHaveBeenCalled();
+    expect(db.limit).toHaveBeenCalledWith(50);
   });
 });
