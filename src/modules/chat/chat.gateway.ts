@@ -1,4 +1,7 @@
-import { UseGuards, UsePipes, ValidationPipe } from '@nestjs/common';
+import { Inject, UseGuards, UsePipes, ValidationPipe } from '@nestjs/common';
+import { eq } from 'drizzle-orm';
+import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
+import { users } from '../../db/schema';
 import { WsJwtAuthGuard } from '../auth/guards/ws-jwt-auth.guard';
 import type { RoomParticipant } from '../auth/room-access.service';
 import {
@@ -22,11 +25,12 @@ interface ConnectedUser {
   roomId: string;
   userName: string;
   userId?: string;
+  nameColor?: string | null;
 }
 
 // Shape pública de la presencia: mismos campos que ConnectedUser salvo los
 // internos (roomId), para no declarar un segundo tipo con los mismos campos.
-type RoomUser = Pick<ConnectedUser, 'participantId' | 'userName' | 'userId'>;
+type RoomUser = Pick<ConnectedUser, 'participantId' | 'userName' | 'userId' | 'nameColor'>;
 
 @WebSocketGateway({
   namespace: '/rooms',
@@ -40,6 +44,7 @@ export class ChatGateway implements OnGatewayDisconnect {
   private readonly connectedUsers = new Map<string, ConnectedUser>();
 
   constructor(
+    @Inject(DRIZZLE) private readonly db: DrizzleDb,
     private readonly roomsService: RoomsService,
     private readonly chatService: ChatService,
     private readonly roomEvents: RoomEventsService,
@@ -65,10 +70,12 @@ export class ChatGateway implements OnGatewayDisconnect {
     }
     if (this.connectedUsers.has(client.id)) this.removeClient(client);
     await client.join(dto.code);
+    const nameColor = await this.getNameColor(participant.userId);
     const presence: RoomUser = {
       participantId: participant.sub,
       userName: participant.name,
       userId: participant.userId,
+      nameColor,
     };
     this.connectedUsers.set(client.id, {
       roomCode: dto.code,
@@ -121,6 +128,23 @@ export class ChatGateway implements OnGatewayDisconnect {
   private getUsersInRoom(roomCode: string): RoomUser[] {
     return Array.from(this.connectedUsers.values())
       .filter((user) => user.roomCode === roomCode)
-      .map(({ participantId, userName, userId }) => ({ participantId, userName, userId }));
+      .map(({ participantId, userName, userId, nameColor }) => ({
+        participantId,
+        userName,
+        userId,
+        nameColor,
+      }));
+  }
+
+  // Los invitados no tienen cuenta ni color guardado: devuelve undefined para
+  // que el payload de presencia no incluya el campo en ese caso.
+  private async getNameColor(userId?: string): Promise<string | null | undefined> {
+    if (!userId) return undefined;
+    const [account] = await this.db
+      .select({ nameColor: users.nameColor })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    return account?.nameColor;
   }
 }
