@@ -22,15 +22,13 @@ describe('CallControls', () => {
     localStorage.clear();
     useLanguageStore.setState({ language: 'es' });
   });
-  it('muestra el botón "Llamar" en estado idle y dispara joinCall con el código de sala', () => {
-    const joinCall = jest.fn<CallSessionState['joinCall']>();
-    render(
-      <CallControls roomCode="ABC123" roomToken="room-token" session={buildState({ joinCall })} />,
+
+  it('no renderiza nada en estado idle: la conexión arranca sola al entrar a la sala', () => {
+    const { container } = render(
+      <CallControls roomCode="ABC123" roomToken="room-token" session={buildState()} />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Llamar' }));
-
-    expect(joinCall).toHaveBeenCalledWith('ABC123', 'room-token');
+    expect(container).toBeEmptyDOMElement();
   });
 
   it('muestra "Conectando..." mientras el status es connecting', () => {
@@ -45,6 +43,19 @@ describe('CallControls', () => {
     expect(screen.getByText('Conectando...')).toBeInTheDocument();
   });
 
+  it('permite cancelar mientras LiveKit conecta', () => {
+    const leaveCall = jest.fn<CallSessionState['leaveCall']>();
+    render(
+      <CallControls
+        roomCode="ABC123"
+        roomToken="token"
+        session={buildState({ status: 'connecting', leaveCall })}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    expect(leaveCall).toHaveBeenCalledTimes(1);
+  });
+
   it('muestra el mensaje de error en estado error', () => {
     render(
       <CallControls
@@ -57,16 +68,30 @@ describe('CallControls', () => {
     expect(screen.getByText('No se pudo iniciar la llamada')).toBeInTheDocument();
   });
 
-  it('permite cancelar mientras LiveKit conecta', () => {
-    const leaveCall = jest.fn<CallSessionState['leaveCall']>();
+  it('en estado error permite reintentar la conexión con el mismo código y token', () => {
+    const joinCall = jest.fn<CallSessionState['joinCall']>();
     render(
       <CallControls
         roomCode="ABC123"
-        roomToken="token"
-        session={buildState({ status: 'connecting', leaveCall })}
+        roomToken="room-token"
+        session={buildState({ status: 'error', error: 'No se pudo iniciar la llamada', joinCall })}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
-    expect(leaveCall).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
+
+    expect(joinCall).toHaveBeenCalledWith('ABC123', 'room-token');
+  });
+
+  it('no renderiza nada en estado in-call', () => {
+    const { container } = render(
+      <CallControls
+        roomCode="ABC123"
+        roomToken="room-token"
+        session={buildState({ status: 'in-call' })}
+      />,
+    );
+
+    expect(container).toBeEmptyDOMElement();
   });
 });
