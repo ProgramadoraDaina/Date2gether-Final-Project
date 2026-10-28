@@ -1,17 +1,21 @@
 'use client';
 
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useParams } from 'next/navigation';
 import type { Socket } from 'socket.io-client';
 import { RoleTag } from '@/features/rooms/RoleTag';
+import roleTagStyles from '@/features/rooms/RoleTag.module.css';
+import { RoomSidebar } from '@/features/rooms/RoomSidebar';
+import { useResizablePanel } from '@/features/rooms/useResizablePanel';
 import { useRoomMembers } from '@/features/rooms/useRoomMembers';
 import { ApiError, requestRoomAccess, type RoomAccess } from '@/lib/api';
-import { CallControls } from '@/features/calls/CallControls';
 import { useCallSession } from '@/features/calls/useCallSession';
 import { createRoomSocket } from '@/lib/socket';
 import { useTranslation } from '@/features/translation/useTranslation';
+import { NAME_COLOR_HEX, isNameColorId } from '@/lib/nameColors';
+import styles from './page.module.css';
 
 const MeetingRoom = dynamic(() => import('@/features/calls/MeetingRoom'), { ssr: false });
 
@@ -32,6 +36,15 @@ interface RoomPresence {
   participantId: string;
   userName: string;
   userId?: string;
+  // Solo cuentas que eligieron un color en /settings; ausente/null en invitados.
+  nameColor?: string | null;
+}
+
+// El id ya viene validado por el backend (uno de los 8 de NAME_COLOR_HEX),
+// pero se revalida acá antes de indexar para no romper si llega otro valor.
+function nameColorHex(nameColor?: string | null): string | undefined {
+  if (!nameColor || !isNameColorId(nameColor)) return undefined;
+  return NAME_COLOR_HEX[nameColor];
 }
 
 export default function RoomPage() {
@@ -46,6 +59,23 @@ export default function RoomPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [chatTab, setChatTab] = useState<'chat' | 'presentes'>('chat');
+  const [chatOpen, setChatOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const sidebarResize = useResizablePanel({
+    storageKey: 'date2gether:sidebarWidth',
+    defaultWidth: 220,
+    min: 180,
+    max: 400,
+    edge: 'left',
+  });
+  const chatResize = useResizablePanel({
+    storageKey: 'date2gether:chatWidth',
+    defaultWidth: 340,
+    min: 260,
+    max: 520,
+    edge: 'right',
+  });
   const socketRef = useRef<Socket | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const callSession = useCallSession();
@@ -76,6 +106,19 @@ export default function RoomPage() {
       setJoining(false);
     }
   }
+
+  // Al estilo Google Meet: entrar a la sala ya significa estar en la llamada,
+  // sin un paso manual de "Llamar". Si el usuario corta manualmente, este
+  // efecto no debe reconectar: `access`/`code` no cambian después de un
+  // hangup, así que no se vuelve a disparar. `callSession` se omite a
+  // propósito de las dependencias: es estable (useCallback sin deps) y
+  // agregarla no cambia el comportamiento, solo confunde la intención.
+  // (oxlint no soporta suprimir esta regla con un comentario inline; el
+  // warning "missing dependency: callSession" que queda es esperado.)
+  useEffect(() => {
+    if (!access) return;
+    callSession.joinCall(code, access.token);
+  }, [access, code]);
 
   useEffect(() => {
     if (!code || !access) return;
@@ -138,9 +181,18 @@ export default function RoomPage() {
     setDraft('');
   }
 
+  async function handleCopyLink() {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+    } catch {
+      setNotice({ text: t('No se pudo copiar el enlace') });
+    }
+  }
+
   if (!access) {
     return (
-      <div className="card">
+      <div className={styles.card}>
         <h1>{t('Entrar a la reunión')}</h1>
         <p className="code">{code}</p>
         <p>{t('Elegí cómo querés aparecer. No necesitás una cuenta.')}</p>
@@ -159,7 +211,7 @@ export default function RoomPage() {
           </button>
         </form>
         {joinError && (
-          <p className="error" role="alert">
+          <p className={styles.error} role="alert">
             {joinError}
           </p>
         )}
@@ -168,64 +220,82 @@ export default function RoomPage() {
     );
   }
 
-  return (
-    <div className="room-layout">
-      <div className="room-header">
-        <div>
-          <strong>Date2gether</strong> <span className="code">{code}</span>
-        </div>
+  // Contenido del panel de chat (tabs + lista de mensajes o de presentes):
+  // se calcula una sola vez y se monta dentro de dos envoltorios distintos
+  // más abajo, según haya o no una llamada activa (ver comentario junto a
+  // chatPanelInCallWrap). Evita duplicar este bloque dos veces en el JSX.
+  const chatContent = (
+    <>
+      <div className={styles.chatTabs}>
         <button
           type="button"
-          className="secondary"
-          onClick={async () => {
-            try {
-              await navigator.clipboard.writeText(window.location.href);
-              setCopied(true);
-            } catch {
-              setNotice({ text: t('No se pudo copiar el enlace') });
-            }
-          }}
+          className={`${styles.chatTab} ${chatTab === 'chat' ? styles.chatTabActive : ''}`}
+          onClick={() => setChatTab('chat')}
         >
-          {t(copied ? 'Enlace copiado' : 'Copiar enlace')}
+          {t('Conversación')}
         </button>
-        <CallControls roomCode={code} roomToken={access.token} session={callSession} />
-        <Link href="/">{t('Salir')}</Link>
+        <button
+          type="button"
+          className={`${styles.chatTab} ${chatTab === 'presentes' ? styles.chatTabActive : ''}`}
+          onClick={() => setChatTab('presentes')}
+        >
+          {t('Presentes')}
+        </button>
       </div>
-
-      {notice && (
-        <div className="notice">
-          {'text' in notice
-            ? notice.text
-            : `${notice.userName} ${t(notice.event === 'joined' ? 'se unió a la sala' : 'salió de la sala')}`}
-        </div>
-      )}
-      {membersError && (
-        <p className="error" role="alert">
-          {membersError}
-        </p>
-      )}
-
-      <div className="room-body">
-        <div className="users-panel">
+      {chatTab === 'chat' ? (
+        <>
+          <ul className={styles.messages} ref={listRef}>
+            {messages.map((m) => {
+              // No hay un id de autor persistido por mensaje: el color se
+              // resuelve cruzando por nombre contra la presencia actual.
+              // Es una simplificación aceptada para v1 (ver comentario en
+              // el PR): un mensaje viejo de alguien que ya se fue, o una
+              // colisión de nombres entre dos personas distintas, puede
+              // quedar sin color o con el color equivocado.
+              const presence = users.find((u) => u.userName === m.authorName);
+              const color = nameColorHex(presence?.nameColor);
+              return (
+                <li key={m.id} className={styles.message}>
+                  <span className={styles.author} style={color ? { color } : undefined}>
+                    {m.authorName}
+                  </span>
+                  {m.content}
+                </li>
+              );
+            })}
+          </ul>
+          <form className={styles.messageForm} onSubmit={handleSend}>
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder={t('Escribí un mensaje...')}
+              autoComplete="off"
+            />
+            <button type="submit">{t('Enviar')}</button>
+          </form>
+        </>
+      ) : (
+        <div className={styles.usersPanel}>
           <h3>
             {t('En la sala')} ({users.length})
           </h3>
           <ul>
-            {users.map(({ participantId, userName, userId }) => {
+            {users.map(({ participantId, userName, userId, nameColor }) => {
               // Se cruza por userId (único), no por nombre: dos personas
               // pueden escribir el mismo userName y antes eso mezclaba sus
               // roles y botones de permisos.
               const member = userId ? members.find((m) => m.userId === userId) : undefined;
               const canChangeRole = isCurrentUserAdmin && member && member.role !== 'administrador';
+              const color = nameColorHex(nameColor);
               return (
                 <li key={participantId}>
-                  {userName}
+                  <span style={color ? { color } : undefined}>{userName}</span>
                   {!userId && <span> ({t('Invitado')})</span>}
                   {member && <RoleTag role={member.role} />}
                   {canChangeRole && (
                     <button
                       type="button"
-                      className="role-button"
+                      className={roleTagStyles.roleButton}
                       onClick={() =>
                         changeRole(
                           member.userId,
@@ -243,28 +313,112 @@ export default function RoomPage() {
             })}
           </ul>
         </div>
+      )}
+    </>
+  );
 
-        <div className="meeting-and-chat">
-          {callSession.session && <MeetingRoom call={callSession} />}
-          <div className="chat-panel">
-            <ul id="messages" ref={listRef}>
-              {messages.map((m) => (
-                <li key={m.id} className="message">
-                  <span className="author">{m.authorName}</span>
-                  {m.content}
-                </li>
-              ))}
-            </ul>
-            <form id="message-form" onSubmit={handleSend}>
-              <input
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder={t('Escribí un mensaje...')}
-                autoComplete="off"
-              />
-              <button type="submit">{t('Enviar')}</button>
-            </form>
+  return (
+    <div className={styles.roomLayout}>
+      <RoomSidebar
+        code={code}
+        roomToken={access.token}
+        callSession={callSession}
+        copied={copied}
+        onCopyLink={handleCopyLink}
+        open={sidebarOpen}
+        width={sidebarResize.width}
+        onResizeHandleMouseDown={sidebarResize.handleMouseDown}
+      />
+      <button
+        type="button"
+        className={styles.sidebarToggleButton}
+        onClick={() => setSidebarOpen((open) => !open)}
+        aria-label={sidebarOpen ? t('Ocultar panel lateral') : t('Mostrar panel lateral')}
+        title={sidebarOpen ? t('Ocultar panel lateral') : t('Mostrar panel lateral')}
+      >
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <rect x="3" y="4" width="18" height="16" rx="2" />
+          <line x1="10" y1="4" x2="10" y2="20" />
+        </svg>
+      </button>
+
+      <div className={styles.roomMain}>
+        {notice && (
+          <div className={styles.notice}>
+            {'text' in notice
+              ? notice.text
+              : `${notice.userName} ${t(notice.event === 'joined' ? 'se unió a la sala' : 'salió de la sala')}`}
           </div>
+        )}
+        {membersError && (
+          <p className={styles.error} role="alert">
+            {membersError}
+          </p>
+        )}
+
+        <div className={styles.meetingAndChat}>
+          {callSession.session && <MeetingRoom call={callSession} />}
+          <button
+            type="button"
+            className={styles.chatToggleButton}
+            onClick={() => setChatOpen((open) => !open)}
+            aria-label={chatOpen ? t('Ocultar chat') : t('Mostrar chat')}
+            title={chatOpen ? t('Ocultar chat') : t('Mostrar chat')}
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+            </svg>
+          </button>
+          {callSession.session ? (
+            // En llamada: el chat queda "acoplado" con ancho fijo y puede
+            // colapsarse. Siempre se monta (no se condiciona con chatOpen),
+            // porque es el wrapper el que anima `width` entre 0 y el ancho
+            // elegido — si se condicionara el montaje, desaparecería de
+            // golpe en vez de animarse (ver RoomSidebar para el mismo
+            // patrón, ya usado en la sidebar izquierda).
+            <div
+              className={styles.chatPanelInCallWrap}
+              data-open={chatOpen}
+              style={{ '--chat-width': `${chatResize.width}px` } as CSSProperties}
+            >
+              <div
+                className={styles.chatResizeHandle}
+                onMouseDown={chatResize.handleMouseDown}
+                role="separator"
+                aria-orientation="vertical"
+                aria-label={t('Ajustar ancho del chat')}
+              />
+              <div
+                className={`${styles.chatPanel} ${styles.chatPanelInCall}`}
+                style={{ width: chatResize.width }}
+              >
+                {chatContent}
+              </div>
+            </div>
+          ) : (
+            // Sin llamada activa el chat es el único contenido de
+            // .meetingAndChat (no hay nada más al lado para "acoplarse"),
+            // así que se mantiene el mismo mostrar/ocultar simple de antes.
+            chatOpen && <div className={styles.chatPanel}>{chatContent}</div>
+          )}
         </div>
       </div>
     </div>
