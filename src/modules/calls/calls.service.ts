@@ -1,13 +1,25 @@
 import {
   ForbiddenException,
+  Inject,
   Injectable,
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { desc, eq } from 'drizzle-orm';
 import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
 import type { RoomParticipant } from '../auth/room-access.service';
+import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
+import { callHistory, rooms } from '../../db/schema';
 import { RoomsService } from '../rooms/rooms.service';
+
+const HISTORY_LIMIT = 50;
+
+export interface CallHistoryEntry {
+  roomCode: string;
+  roomName: string;
+  startedAt: Date;
+}
 
 @Injectable()
 export class CallsService {
@@ -16,6 +28,7 @@ export class CallsService {
   constructor(
     private readonly roomsService: RoomsService,
     private readonly config: ConfigService,
+    @Inject(DRIZZLE) private readonly db: DrizzleDb,
   ) {}
 
   async join(roomCode: string, participant: RoomParticipant) {
@@ -68,11 +81,37 @@ export class CallsService {
       roomAdmin: false,
       roomRecord: false,
     });
+
+    if (participant.userId) {
+      // Solo las cuentas registradas generan historial; los invitados se omiten
+      // en silencio. Un fallo al registrar no debe impedir que la llamada continúe.
+      await this.db
+        .insert(callHistory)
+        .values({ roomId: room.id, userId: participant.userId })
+        .catch(() => {
+          this.logger.warn('No se pudo registrar el historial de la llamada');
+        });
+    }
+
     return {
       url,
       token: await access.toJwt(),
       roomName: roomCode,
       participantLimit: maxParticipants,
     };
+  }
+
+  async listHistory(userId: string): Promise<CallHistoryEntry[]> {
+    return this.db
+      .select({
+        roomCode: rooms.code,
+        roomName: rooms.name,
+        startedAt: callHistory.startedAt,
+      })
+      .from(callHistory)
+      .innerJoin(rooms, eq(callHistory.roomId, rooms.id))
+      .where(eq(callHistory.userId, userId))
+      .orderBy(desc(callHistory.startedAt))
+      .limit(HISTORY_LIMIT);
   }
 }

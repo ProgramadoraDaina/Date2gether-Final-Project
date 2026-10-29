@@ -10,11 +10,26 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 
+// Paleta fija de colores de nombre: el frontend usa exactamente la misma lista de ids.
+export const NAME_COLOR_IDS = [
+  'purple',
+  'red',
+  'teal',
+  'amber',
+  'navy',
+  'orange',
+  'green',
+  'pink',
+] as const;
+
+export const nameColorEnum = pgEnum('name_color', NAME_COLOR_IDS);
+
 export const users = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
   email: varchar('email', { length: 255 }).notNull().unique(),
   passwordHash: varchar('password_hash', { length: 255 }).notNull(),
   name: varchar('name', { length: 100 }).notNull(),
+  nameColor: nameColorEnum('name_color'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -29,10 +44,6 @@ export const refreshTokens = pgTable('refresh_tokens', {
   revokedAt: timestamp('revoked_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
-
-export const usersRelations = relations(users, ({ many }) => ({
-  refreshTokens: many(refreshTokens),
-}));
 
 export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
   user: one(users, { fields: [refreshTokens.userId], references: [users.id] }),
@@ -82,9 +93,28 @@ export const roomMembers = pgTable(
   (table) => [primaryKey({ columns: [table.roomId, table.userId] })],
 );
 
+// Historial de llamadas: una fila por cada vez que una cuenta registrada
+// se une exitosamente a una sala. Los invitados sin cuenta no generan fila.
+export const callHistory = pgTable('call_history', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  roomId: uuid('room_id')
+    .notNull()
+    .references(() => rooms.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  startedAt: timestamp('started_at').notNull().defaultNow(),
+});
+
+export const usersRelations = relations(users, ({ many }) => ({
+  refreshTokens: many(refreshTokens),
+  callHistory: many(callHistory),
+}));
+
 export const roomsRelations = relations(rooms, ({ many }) => ({
   messages: many(messages),
   members: many(roomMembers),
+  callHistory: many(callHistory),
 }));
 
 export const messagesRelations = relations(messages, ({ one }) => ({
@@ -96,6 +126,11 @@ export const roomMembersRelations = relations(roomMembers, ({ one }) => ({
   user: one(users, { fields: [roomMembers.userId], references: [users.id] }),
 }));
 
+export const callHistoryRelations = relations(callHistory, ({ one }) => ({
+  room: one(rooms, { fields: [callHistory.roomId], references: [rooms.id] }),
+  user: one(users, { fields: [callHistory.userId], references: [users.id] }),
+}));
+
 export type Room = typeof rooms.$inferSelect;
 export type NewRoom = typeof rooms.$inferInsert;
 export type Message = typeof messages.$inferSelect;
@@ -103,3 +138,6 @@ export type NewMessage = typeof messages.$inferInsert;
 export type RoomMember = typeof roomMembers.$inferSelect;
 export type NewRoomMember = typeof roomMembers.$inferInsert;
 export type RoomRole = (typeof roomRoleEnum.enumValues)[number];
+export type CallHistory = typeof callHistory.$inferSelect;
+export type NewCallHistory = typeof callHistory.$inferInsert;
+export type NameColor = (typeof nameColorEnum.enumValues)[number];

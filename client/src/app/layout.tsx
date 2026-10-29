@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import { LanguageToggle } from '@/features/translation/LanguageToggle';
-import { ThemeToggle } from '@/features/theme/ThemeToggle';
+import { TopBar } from '@/features/layout/TopBar';
 import '@livekit/components-styles';
 import './globals.css';
+import styles from './layout.module.css';
 
 export const metadata: Metadata = {
   title: 'Date2gether',
@@ -15,11 +15,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="es">
       <body>
-        <div className="top-bar">
-          <LanguageToggle />
-          <ThemeToggle />
-        </div>
-        <main className="app-shell">{children}</main>
+        <TopBar />
+        <main className={styles.appShell}>{children}</main>
       </body>
     </html>
   );

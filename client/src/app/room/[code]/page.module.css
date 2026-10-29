@@ -1,0 +1,417 @@
+/* --- primitivos compartidos de formulario/tarjeta, reusados por la
+   tarjeta de "entrar con tu nombre" (pre-join) --- */
+.card {
+  composes: card from '../../../styles/form.module.css';
+}
+.error {
+  composes: error from '../../../styles/form.module.css';
+}
+
+/* --- transición de carga antes de entrar a la llamada ---
+   Mientras el acceso a la sala ya está concedido pero LiveKit todavía no
+   terminó de conectar (status !== 'in-call'), .roomLayout (con
+   <MeetingRoom>) ya está montado para que la conexión avance en segundo
+   plano, pero queda tapado por este overlay de pantalla completa con la
+   misma tarjeta de "elegí tu nombre" + un filtro oscuro. Al llegar a
+   'in-call' el overlay deja de renderizarse y se revela la sala, ya lista. */
+.joinOverlayScreen {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--color-bg);
+}
+
+.joinScreen {
+  position: relative;
+}
+
+.callLoadingOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  text-align: center;
+  animation: overlayFadeIn 200ms ease;
+}
+
+.callLoadingOverlay p {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.callLoadingSpinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: callLoadingSpin 800ms linear infinite;
+}
+
+.callLoadingButton {
+  width: auto;
+  padding: 8px 20px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: transparent;
+  color: #fff;
+  font-weight: 600;
+}
+
+.callLoadingButton:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.callLoadingLink {
+  color: #fff;
+  font-size: 13px;
+  text-decoration: underline;
+}
+
+@keyframes overlayFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes callLoadingSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* --- sala --- */
+
+.roomLayout {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: row;
+  background: var(--color-bg);
+  overflow: hidden;
+  /* Al pasar de la tarjeta de carga a la sala ya conectada, un fade suave
+     en vez de un corte seco entre los dos árboles de JSX completamente
+     distintos. */
+  animation: roomFadeIn 250ms ease;
+}
+
+@keyframes roomFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.roomMain {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Botón que abre/cierra la sidebar izquierda (RoomSidebar). Mismo criterio
+   que .chatToggleButton: vive fuera del panel que colapsa (es hijo directo
+   de .roomLayout, que es position:fixed) para quedar siempre visible y
+   clickeable sin importar si la sidebar está abierta o cerrada.
+   `left` llega por inline style desde RoomPage (sidebarResize.width - 46,
+   38px de ancho del botón + 8px de margen): así queda pegado al borde
+   derecho de la sidebar pero sin salirse de ella, en vez de clavado en la
+   esquina izquierda, donde tapaba el nombre de la marca. La transición
+   acompaña la misma duración que el colapso de la sidebar (ver
+   sidebarWrap). */
+.sidebarToggleButton {
+  position: absolute;
+  top: 12px;
+  z-index: 10;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: none;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  color: var(--color-text);
+  cursor: pointer;
+  padding: 0;
+  transition: left 200ms ease;
+}
+
+.sidebarToggleButton:hover {
+  color: var(--color-accent);
+}
+
+.notice {
+  padding: 8px 20px;
+  background: var(--color-notice-bg);
+  color: var(--color-accent);
+  font-size: 13px;
+}
+
+/* .usersPanel ahora vive dentro de la tab "Presentes" del chat-panel
+   (ver RoomPage), no como columna fija: ocupa el espacio que antes usaban
+   #messages/#message-form, con el mismo scroll interno. */
+.usersPanel {
+  flex: 1;
+  padding: 16px 20px;
+  overflow-y: auto;
+}
+
+.usersPanel h3 {
+  font-size: 12px;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin: 0 0 10px;
+}
+
+.usersPanel ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 14px;
+}
+
+.usersPanel li {
+  padding: 4px 0;
+}
+
+.chatPanel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 140px;
+}
+
+/* Antes era la regla de adyacencia cross-selector ".meeting-room +
+   .chat-panel" (dependía de que MeetingRoom existiera como hermano
+   anterior en el DOM). Con CSS Modules cada componente tiene su propio
+   namespace hasheado, así que esa adyacencia ya no puede resolverse por
+   selector CSS: en su lugar, page.tsx agrega esta clase explícitamente
+   solo cuando la llamada está activa (mismo criterio que antes, mismas
+   declaraciones).
+
+   El wrapper (chatPanelInCallWrap) es el que anima `width` al abrir/cerrar
+   y lleva el margen que antes tenía la tarjeta — igual patrón que
+   .sidebarWrap/.sidebar en RoomSidebar: el wrapper colapsa con
+   overflow:hidden, la tarjeta interna mantiene su ancho fijo (vía inline
+   style) para no reflowear mientras se cierra. */
+.chatPanelInCallWrap {
+  position: relative;
+  flex-shrink: 0;
+  width: var(--chat-width);
+  height: calc(100% - 64px);
+  margin: 32px 16px 32px 0;
+  overflow: hidden;
+  transition:
+    width 200ms ease,
+    margin 200ms ease;
+}
+
+.chatPanelInCallWrap[data-open='false'] {
+  width: 0;
+  margin: 32px 0;
+}
+
+.chatResizeHandle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 6px;
+  height: 100%;
+  margin-left: -3px;
+  cursor: col-resize;
+  z-index: 5;
+  background: transparent;
+}
+
+.chatResizeHandle:hover {
+  background: var(--color-accent);
+  opacity: 0.4;
+}
+
+.chatPanelInCall {
+  flex: none;
+  width: 100%;
+  height: 100%;
+  background: var(--color-surface);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+/* Botón que abre/cierra el panel de chat. Fijo en la esquina superior
+   derecha de .meetingAndChat (no dentro del flujo del chat) para que
+   quede siempre visible y clickeable, sin importar si el chat está
+   abierto o cerrado, y sin pisar el dock de controles de la llamada
+   (ese vive abajo, centrado, dentro de MeetingRoom). */
+.chatToggleButton {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: none;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  color: var(--color-text);
+  cursor: pointer;
+  padding: 0;
+}
+
+.chatToggleButton:hover {
+  color: var(--color-accent);
+}
+
+.chatTabs {
+  display: flex;
+  gap: 20px;
+  padding: 14px 20px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.chatTab {
+  width: auto;
+  padding: 0 0 12px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chatTab:hover {
+  background: none;
+  color: var(--color-text);
+}
+
+.chatTabActive,
+.chatTabActive:hover {
+  color: var(--color-accent);
+  border-bottom-color: var(--color-accent);
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+  padding: 16px 20px;
+}
+
+.message {
+  margin-bottom: 10px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.message .author {
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+.messageForm {
+  display: flex;
+  gap: 8px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--color-border);
+}
+
+.messageForm input {
+  margin-bottom: 0;
+}
+
+.messageForm button {
+  width: auto;
+}
+
+.meetingAndChat {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+}
+
+@media (max-width: 640px) {
+  .roomLayout {
+    flex-direction: column;
+  }
+  .meetingAndChat {
+    flex-direction: column;
+  }
+
+  /* En mobile la sidebar pasa a ser una fila horizontal de ancho completo
+     (ver RoomSidebar.module.css), no una columna angosta: el `left`
+     calculado a partir de sidebarResize.width (pensado para desktop) ya no
+     tiene sentido acá. Se ancla a la derecha en su lugar; !important porque
+     el inline style de left gana por especificidad sobre una regla de
+     clase normal. */
+  .sidebarToggleButton {
+    left: auto !important;
+    right: 12px;
+  }
+
+  /* En mobile .meetingAndChat pasa a columna: el chat deja de acoplarse al
+     costado con ancho elegible por cursor (no hay "ancho" que arrastrar en
+     una fila vertical) y vuelve a un alto fijo, igual que antes. Sigue
+     pudiendo abrirse/cerrarse animado, ahora por `height` en vez de
+     `width`. */
+  .chatPanelInCallWrap {
+    /* Pisa el width:var(--chat-width) de la regla de desktop: en columna
+       no hay ancho elegible, el panel ocupa todo el ancho disponible. */
+    width: 100%;
+    height: 220px;
+    max-height: 50vh;
+    margin: 8px;
+    transition:
+      height 200ms ease,
+      margin 200ms ease;
+  }
+
+  .chatPanelInCallWrap[data-open='false'] {
+    width: 100%;
+    height: 0;
+    margin: 0 8px;
+  }
+
+  .chatResizeHandle {
+    display: none;
+  }
+
+  /* La tarjeta interna trae un inline style={{width}} (pensado para
+     desktop); en mobile se ignora y se fuerza a ocupar todo el wrapper. */
+  .chatPanelInCall {
+    width: 100% !important;
+    height: 100%;
+  }
+}

@@ -8,6 +8,7 @@ export interface AuthUser {
   email: string;
   name: string;
   createdAt: string;
+  nameColor: string | null;
 }
 
 interface AuthTokens {

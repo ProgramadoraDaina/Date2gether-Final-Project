@@ -1,0 +1,58 @@
+.rail {
+  width: 76px;
+  flex-shrink: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px 8px;
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+}
+
+.top {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: auto;
+}
+
+.navItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 4px;
+  border-radius: 10px;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.navItem:hover {
+  background: var(--color-chip-bg);
+}
+
+.navItemActive {
+  color: var(--color-accent);
+}
+
+.icon {
+  display: flex;
+}
+
+.label {
+  line-height: 1.1;
+}
