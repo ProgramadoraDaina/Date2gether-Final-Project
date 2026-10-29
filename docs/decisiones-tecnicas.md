@@ -341,3 +341,18 @@ La auditoría reportó avisos en Next.js, body-parser y multer. Se actualizó Ne
 El PostgreSQL del Compose de desarrollo se vincula a `127.0.0.1` en vez de a todas las interfaces, conservando el volumen. El contenedor anterior conserva su configuración hasta que el usuario lo recree. Los códigos de las salas recién creadas usan `crypto.randomInt`. Las invitaciones anteriores no cambian y quien posea un enlace válido aún puede entrar como invitado, según la regla del producto.
 
 Los tokens de cuenta siguen en `localStorage`; un ataque de inyección de scripts podría acceder a ellos. La prueba de penetración, la revisión de la instancia EC2 desplegada y los controles de admisión y revocación de invitaciones no forman parte de esta comprobación y quedan pendientes.
+
+
+## 14. Correcciones de arranque y construcción detectadas en el primer despliegue real a EC2
+
+**Fecha:** 2026-10-28
+
+La sección 12 preparó la plantilla de EC2 sin una validación de extremo a extremo contra una instancia real. El primer despliegue efectivo expuso tres fallas que la validación local de CloudFormation no podía detectar, porque esa validación comprueba sintaxis y no ejecuta el `UserData` ni el contenedor de producción.
+
+El backend no arrancaba dentro del contenedor: `start:prod` ejecutaba `node dist/main`, pero `nest-cli.json` fija `sourceRoot: "src"` y `tsconfig.build.json` no redefine `rootDir`, así que `nest build` conserva la estructura de carpetas de `src/` dentro de `dist/` y el archivo compilado queda en `dist/src/main.js`, no en `dist/main.js`. Node fallaba con `Cannot find module '/app/dist/main'` al iniciar `deploy/Dockerfile` (`CMD ["pnpm", "start:prod"]`). Se corrige el script a `node dist/src/main`.
+
+La verificación de integridad de `docker-compose` no verificaba nada: el `UserData` descargaba el binario directamente con el nombre final `docker-compose` dentro de `cli-plugins/` y corría `sha256sum --check --ignore-missing` ahí mismo contra `checksums.txt`, que lista el nombre original del asset (`docker-compose-linux-x86_64`). Como ningún nombre coincidía, `--ignore-missing` descartaba la única línea relevante y el comando terminaba en éxito sin haber comparado ningún hash. Se corrige descargando el binario a `/tmp` con su nombre original, verificando el checksum ahí, e instalándolo recién después con `install -m 755` en `cli-plugins/docker-compose`. La verificación deja de ser cosmética: un hash que no coincide ahora sí interrumpe el arranque (`set -euo pipefail`).
+
+`docker compose build backend frontend` (en `deploy/ec2/start.sh`) fallaba con `docker: 'buildx' is not a docker command`, porque el paquete `docker` de Amazon Linux instalado vía `dnf` no incluye el plugin CLI `buildx`, requerido por Compose v2 para construir imágenes. Se agrega al `UserData` la descarga e instalación de `docker-buildx` como plugin CLI, con la misma verificación de checksum contra su archivo original que se corrigió para `docker-compose`.
+
+Ninguna de las tres fallas es visible en desarrollo local (ahí no se usa `start:prod` fuera de Docker, y `docker compose up -d` no pasa por `build` ni por el `UserData` de EC2), lo que explica por qué llegaron sin detectarse hasta el despliegue real. No cambia el comportamiento documentado en el README ni en la [guía de EC2](../deploy/ec2/README.md): los mismos pasos ahora sí completan el arranque.
