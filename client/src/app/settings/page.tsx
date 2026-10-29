@@ -7,6 +7,7 @@ import { getCurrentUser, isLoggedIn } from '@/lib/auth';
 import { NAME_COLOR_HEX, NAME_COLOR_IDS, type NameColorId } from '@/lib/nameColors';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { AppShell } from '@/features/navigation/AppShell';
+import { ThemeToggle } from '@/features/theme/ThemeToggle';
 import styles from './page.module.css';
 
 // Nombres legibles de cada id de color, solo para el aria-label/title de cada
@@ -70,6 +71,15 @@ export default function SettingsPage() {
       <AppShell>
         <div className={styles.card}>
           <h1>{t('Configuración')}</h1>
+
+          <div className={styles.section}>
+            <p className={styles.subtitle}>{t('Apariencia')}</p>
+            <div className={styles.sectionRow}>
+              <span>{t('Modo oscuro')}</span>
+              <ThemeToggle />
+            </div>
+          </div>
+
           <p>{t('Necesitás iniciar sesión para elegir el color de tu nombre.')}</p>
           <p>
             <Link href="/login">{t('Iniciar sesión')}</Link> ·{' '}
@@ -84,6 +94,15 @@ export default function SettingsPage() {
     <AppShell>
       <div className={styles.card}>
         <h1>{t('Configuración')}</h1>
+
+        <div className={styles.section}>
+          <p className={styles.subtitle}>{t('Apariencia')}</p>
+          <div className={styles.sectionRow}>
+            <span>{t('Modo oscuro')}</span>
+            <ThemeToggle />
+          </div>
+        </div>
+
         <p className={styles.subtitle}>{t('Elegí el color de tu nombre')}</p>
 
         <div className={styles.palette} role="group" aria-label={t('Elegí el color de tu nombre')}>

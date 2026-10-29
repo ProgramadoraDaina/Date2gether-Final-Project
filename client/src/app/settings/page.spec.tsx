@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 
 jest.mock('next/navigation', () => ({ usePathname: () => '/settings' }));
 jest.mock('@/features/translation/useTranslation', () => {
@@ -39,7 +39,9 @@ describe('SettingsPage', () => {
     render(<SettingsPage />);
     await screen.findByText('Elegí el color de tu nombre');
     expect(screen.getByRole('button', { name: 'Púrpura' })).toBeInTheDocument();
-    expect(screen.getAllByRole('button')).toHaveLength(8);
+    // Se escopea al grupo de la paleta, no a toda la página: el toggle de
+    // tema (ThemeToggle) también es un <button> en esta pantalla.
+    expect(within(screen.getByRole('group')).getAllByRole('button')).toHaveLength(8);
   });
 
   it('elegir un color llama a updateNameColor y lo marca como seleccionado', async () => {

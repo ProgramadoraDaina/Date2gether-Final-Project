@@ -116,6 +116,8 @@ const en: Record<string, string> = {
   'No se pudo obtener el historial': 'Could not fetch the history',
 
   // Configuración
+  Apariencia: 'Appearance',
+  'Modo oscuro': 'Dark mode',
   'Necesitás iniciar sesión para elegir el color de tu nombre.':
     'You need to log in to choose your name color.',
   'Elegí el color de tu nombre': 'Choose your name color',
