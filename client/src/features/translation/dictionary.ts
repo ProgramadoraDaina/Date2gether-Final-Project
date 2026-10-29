@@ -13,6 +13,7 @@ const en: Record<string, string> = {
   'Enlace copiado': 'Link copied',
   'No se pudo copiar el enlace': 'Could not copy the link',
   'Conectando...': 'Connecting...',
+  'Cargando llamada…': 'Loading call…',
   Colgar: 'Hang up',
   'Elegir micrófono': 'Choose microphone',
   'Elegir cámara': 'Choose camera',

@@ -7,6 +7,94 @@
   composes: error from '../../../styles/form.module.css';
 }
 
+/* --- transición de carga antes de entrar a la llamada ---
+   Mientras el acceso a la sala ya está concedido pero LiveKit todavía no
+   terminó de conectar (status !== 'in-call'), .roomLayout (con
+   <MeetingRoom>) ya está montado para que la conexión avance en segundo
+   plano, pero queda tapado por este overlay de pantalla completa con la
+   misma tarjeta de "elegí tu nombre" + un filtro oscuro. Al llegar a
+   'in-call' el overlay deja de renderizarse y se revela la sala, ya lista. */
+.joinOverlayScreen {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--color-bg);
+}
+
+.joinScreen {
+  position: relative;
+}
+
+.callLoadingOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  text-align: center;
+  animation: overlayFadeIn 200ms ease;
+}
+
+.callLoadingOverlay p {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.callLoadingSpinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: callLoadingSpin 800ms linear infinite;
+}
+
+.callLoadingButton {
+  width: auto;
+  padding: 8px 20px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: transparent;
+  color: #fff;
+  font-weight: 600;
+}
+
+.callLoadingButton:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.callLoadingLink {
+  color: #fff;
+  font-size: 13px;
+  text-decoration: underline;
+}
+
+@keyframes overlayFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes callLoadingSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* --- sala --- */
 
 .roomLayout {
@@ -18,6 +106,19 @@
   flex-direction: row;
   background: var(--color-bg);
   overflow: hidden;
+  /* Al pasar de la tarjeta de carga a la sala ya conectada, un fade suave
+     en vez de un corte seco entre los dos árboles de JSX completamente
+     distintos. */
+  animation: roomFadeIn 250ms ease;
+}
+
+@keyframes roomFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .roomMain {
@@ -31,11 +132,16 @@
 /* Botón que abre/cierra la sidebar izquierda (RoomSidebar). Mismo criterio
    que .chatToggleButton: vive fuera del panel que colapsa (es hijo directo
    de .roomLayout, que es position:fixed) para quedar siempre visible y
-   clickeable sin importar si la sidebar está abierta o cerrada. */
+   clickeable sin importar si la sidebar está abierta o cerrada.
+   `left` llega por inline style desde RoomPage (sidebarResize.width - 46,
+   38px de ancho del botón + 8px de margen): así queda pegado al borde
+   derecho de la sidebar pero sin salirse de ella, en vez de clavado en la
+   esquina izquierda, donde tapaba el nombre de la marca. La transición
+   acompaña la misma duración que el colapso de la sidebar (ver
+   sidebarWrap). */
 .sidebarToggleButton {
   position: absolute;
   top: 12px;
-  left: 12px;
   z-index: 10;
   width: 38px;
   height: 38px;
@@ -49,6 +155,7 @@
   color: var(--color-text);
   cursor: pointer;
   padding: 0;
+  transition: left 200ms ease;
 }
 
 .sidebarToggleButton:hover {
@@ -261,6 +368,17 @@
   }
   .meetingAndChat {
     flex-direction: column;
+  }
+
+  /* En mobile la sidebar pasa a ser una fila horizontal de ancho completo
+     (ver RoomSidebar.module.css), no una columna angosta: el `left`
+     calculado a partir de sidebarResize.width (pensado para desktop) ya no
+     tiene sentido acá. Se ancla a la derecha en su lugar; !important porque
+     el inline style de left gana por especificidad sobre una regla de
+     clase normal. */
+  .sidebarToggleButton {
+    left: auto !important;
+    right: 12px;
   }
 
   /* En mobile .meetingAndChat pasa a columna: el chat deja de acoplarse al

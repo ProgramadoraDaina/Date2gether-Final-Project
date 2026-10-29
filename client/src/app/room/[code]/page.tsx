@@ -5,6 +5,7 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useParams } from 'next/navigation';
 import type { Socket } from 'socket.io-client';
+import { AppShell } from '@/features/navigation/AppShell';
 import { RoleTag } from '@/features/rooms/RoleTag';
 import roleTagStyles from '@/features/rooms/RoleTag.module.css';
 import { RoomSidebar } from '@/features/rooms/RoomSidebar';
@@ -190,35 +191,75 @@ export default function RoomPage() {
     }
   }
 
+  // Misma tarjeta para el estado "todavía sin acceso" y para el de "acceso
+  // concedido pero la llamada no está in-call": en este segundo caso se
+  // muestra como overlay de pantalla completa ARRIBA de la sala (ver el
+  // return final), no en vez de ella. La sala y <MeetingRoom> tienen que
+  // montarse ya (aunque quede tapada) porque es justamente ese montaje el
+  // que dispara la conexión a LiveKit y, con ella, el status 'in-call' que
+  // hace desaparecer este overlay. Si se la reemplaza en vez de tapar, el
+  // status nunca avanza de 'connecting' (no hay nada que la saque de ahí).
+  const joinCard = (
+    <div className={styles.card}>
+      <h1>{t('Entrar a la reunión')}</h1>
+      <p className="code">{code}</p>
+      <p>{t('Elegí cómo querés aparecer. No necesitás una cuenta.')}</p>
+      <form onSubmit={handleJoin}>
+        <label htmlFor="guest-name">{t('Tu nombre en la reunión')}</label>
+        <input
+          id="guest-name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={60}
+          required
+          autoComplete="nickname"
+        />
+        <button type="submit" disabled={joining || !name.trim()}>
+          {joining ? t('Entrando…') : t('Entrar a la reunión')}
+        </button>
+      </form>
+      {joinError && (
+        <p className={styles.error} role="alert">
+          {joinError}
+        </p>
+      )}
+      <Link href="/">{t('Volver al inicio')}</Link>
+    </div>
+  );
+
   if (!access) {
-    return (
-      <div className={styles.card}>
-        <h1>{t('Entrar a la reunión')}</h1>
-        <p className="code">{code}</p>
-        <p>{t('Elegí cómo querés aparecer. No necesitás una cuenta.')}</p>
-        <form onSubmit={handleJoin}>
-          <label htmlFor="guest-name">{t('Tu nombre en la reunión')}</label>
-          <input
-            id="guest-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            maxLength={60}
-            required
-            autoComplete="nickname"
-          />
-          <button type="submit" disabled={joining || !name.trim()}>
-            {joining ? t('Entrando…') : t('Entrar a la reunión')}
-          </button>
-        </form>
-        {joinError && (
-          <p className={styles.error} role="alert">
-            {joinError}
-          </p>
-        )}
-        <Link href="/">{t('Volver al inicio')}</Link>
-      </div>
-    );
+    return <AppShell>{joinCard}</AppShell>;
   }
+
+  const callOverlay = callSession.status !== 'in-call' && (
+    <div className={styles.joinOverlayScreen}>
+      <div className={styles.joinScreen}>
+        {joinCard}
+        <div className={styles.callLoadingOverlay} role="status" aria-live="polite">
+          {callSession.status === 'error' ? (
+            <>
+              <p>{callSession.error ? t(callSession.error) : t('No se pudo conectar a la llamada')}</p>
+              <button
+                type="button"
+                className={styles.callLoadingButton}
+                onClick={() => callSession.joinCall(code, access.token)}
+              >
+                {t('Reintentar')}
+              </button>
+              <Link href="/" className={styles.callLoadingLink}>
+                {t('Volver al inicio')}
+              </Link>
+            </>
+          ) : (
+            <>
+              <div className={styles.callLoadingSpinner} />
+              <p>{t('Cargando llamada…')}</p>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 
   // Contenido del panel de chat (tabs + lista de mensajes o de presentes):
   // se calcula una sola vez y se monta dentro de dos envoltorios distintos
@@ -318,109 +359,111 @@ export default function RoomPage() {
   );
 
   return (
-    <div className={styles.roomLayout}>
-      <RoomSidebar
-        code={code}
-        roomToken={access.token}
-        callSession={callSession}
-        copied={copied}
-        onCopyLink={handleCopyLink}
-        open={sidebarOpen}
-        width={sidebarResize.width}
-        onResizeHandleMouseDown={sidebarResize.handleMouseDown}
-      />
-      <button
-        type="button"
-        className={styles.sidebarToggleButton}
-        onClick={() => setSidebarOpen((open) => !open)}
-        aria-label={sidebarOpen ? t('Ocultar panel lateral') : t('Mostrar panel lateral')}
-        title={sidebarOpen ? t('Ocultar panel lateral') : t('Mostrar panel lateral')}
-      >
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+    <>
+      {callOverlay}
+      <div className={styles.roomLayout}>
+        <RoomSidebar
+          code={code}
+          copied={copied}
+          onCopyLink={handleCopyLink}
+          open={sidebarOpen}
+          width={sidebarResize.width}
+          onResizeHandleMouseDown={sidebarResize.handleMouseDown}
+        />
+        <button
+          type="button"
+          className={styles.sidebarToggleButton}
+          style={{ left: sidebarOpen ? sidebarResize.width - 46 : 12 }}
+          onClick={() => setSidebarOpen((open) => !open)}
+          aria-label={sidebarOpen ? t('Ocultar panel lateral') : t('Mostrar panel lateral')}
+          title={sidebarOpen ? t('Ocultar panel lateral') : t('Mostrar panel lateral')}
         >
-          <rect x="3" y="4" width="18" height="16" rx="2" />
-          <line x1="10" y1="4" x2="10" y2="20" />
-        </svg>
-      </button>
-
-      <div className={styles.roomMain}>
-        {notice && (
-          <div className={styles.notice}>
-            {'text' in notice
-              ? notice.text
-              : `${notice.userName} ${t(notice.event === 'joined' ? 'se unió a la sala' : 'salió de la sala')}`}
-          </div>
-        )}
-        {membersError && (
-          <p className={styles.error} role="alert">
-            {membersError}
-          </p>
-        )}
-
-        <div className={styles.meetingAndChat}>
-          {callSession.session && <MeetingRoom call={callSession} />}
-          <button
-            type="button"
-            className={styles.chatToggleButton}
-            onClick={() => setChatOpen((open) => !open)}
-            aria-label={chatOpen ? t('Ocultar chat') : t('Mostrar chat')}
-            title={chatOpen ? t('Ocultar chat') : t('Mostrar chat')}
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
           >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-            </svg>
-          </button>
-          {callSession.session ? (
-            // En llamada: el chat queda "acoplado" con ancho fijo y puede
-            // colapsarse. Siempre se monta (no se condiciona con chatOpen),
-            // porque es el wrapper el que anima `width` entre 0 y el ancho
-            // elegido — si se condicionara el montaje, desaparecería de
-            // golpe en vez de animarse (ver RoomSidebar para el mismo
-            // patrón, ya usado en la sidebar izquierda).
-            <div
-              className={styles.chatPanelInCallWrap}
-              data-open={chatOpen}
-              style={{ '--chat-width': `${chatResize.width}px` } as CSSProperties}
-            >
-              <div
-                className={styles.chatResizeHandle}
-                onMouseDown={chatResize.handleMouseDown}
-                role="separator"
-                aria-orientation="vertical"
-                aria-label={t('Ajustar ancho del chat')}
-              />
-              <div
-                className={`${styles.chatPanel} ${styles.chatPanelInCall}`}
-                style={{ width: chatResize.width }}
-              >
-                {chatContent}
-              </div>
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <line x1="10" y1="4" x2="10" y2="20" />
+          </svg>
+        </button>
+
+        <div className={styles.roomMain}>
+          {notice && (
+            <div className={styles.notice}>
+              {'text' in notice
+                ? notice.text
+                : `${notice.userName} ${t(notice.event === 'joined' ? 'se unió a la sala' : 'salió de la sala')}`}
             </div>
-          ) : (
-            // Sin llamada activa el chat es el único contenido de
-            // .meetingAndChat (no hay nada más al lado para "acoplarse"),
-            // así que se mantiene el mismo mostrar/ocultar simple de antes.
-            chatOpen && <div className={styles.chatPanel}>{chatContent}</div>
           )}
+          {membersError && (
+            <p className={styles.error} role="alert">
+              {membersError}
+            </p>
+          )}
+
+          <div className={styles.meetingAndChat}>
+            {callSession.session && <MeetingRoom call={callSession} />}
+            <button
+              type="button"
+              className={styles.chatToggleButton}
+              onClick={() => setChatOpen((open) => !open)}
+              aria-label={chatOpen ? t('Ocultar chat') : t('Mostrar chat')}
+              title={chatOpen ? t('Ocultar chat') : t('Mostrar chat')}
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+              </svg>
+            </button>
+            {callSession.session ? (
+              // En llamada: el chat queda "acoplado" con ancho fijo y puede
+              // colapsarse. Siempre se monta (no se condiciona con chatOpen),
+              // porque es el wrapper el que anima `width` entre 0 y el ancho
+              // elegido — si se condicionara el montaje, desaparecería de
+              // golpe en vez de animarse (ver RoomSidebar para el mismo
+              // patrón, ya usado en la sidebar izquierda).
+              <div
+                className={styles.chatPanelInCallWrap}
+                data-open={chatOpen}
+                style={{ '--chat-width': `${chatResize.width}px` } as CSSProperties}
+              >
+                <div
+                  className={styles.chatResizeHandle}
+                  onMouseDown={chatResize.handleMouseDown}
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label={t('Ajustar ancho del chat')}
+                />
+                <div
+                  className={`${styles.chatPanel} ${styles.chatPanelInCall}`}
+                  style={{ width: chatResize.width }}
+                >
+                  {chatContent}
+                </div>
+              </div>
+            ) : (
+              // Sin llamada activa el chat es el único contenido de
+              // .meetingAndChat (no hay nada más al lado para "acoplarse"),
+              // así que se mantiene el mismo mostrar/ocultar simple de antes.
+              chatOpen && <div className={styles.chatPanel}>{chatContent}</div>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
