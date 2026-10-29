@@ -1,8 +1,6 @@
 'use client';
 
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react';
-import { CallControls } from '@/features/calls/CallControls';
-import type { CallSessionState } from '@/features/calls/useCallSession';
 import { ThemeToggle } from '@/features/theme/ThemeToggle';
 import { LanguageToggle } from '@/features/translation/LanguageToggle';
 import { useTranslation } from '@/features/translation/useTranslation';
@@ -10,8 +8,6 @@ import styles from './RoomSidebar.module.css';
 
 interface RoomSidebarProps {
   code: string;
-  roomToken: string;
-  callSession: CallSessionState;
   copied: boolean;
   onCopyLink: () => void;
   // Controlan el colapso animado y el ancho elegido con el handle de resize
@@ -25,8 +21,6 @@ interface RoomSidebarProps {
 
 export function RoomSidebar({
   code,
-  roomToken,
-  callSession,
   copied,
   onCopyLink,
   open,
@@ -45,8 +39,6 @@ export function RoomSidebar({
         <div className={styles.brand}>
           <strong>Date2gether</strong> <span className={styles.code}>{code}</span>
         </div>
-
-        <CallControls roomCode={code} roomToken={roomToken} session={callSession} />
 
         <div className={styles.toggles}>
           <ThemeToggle />
