@@ -1,14 +1,21 @@
 import { relations } from 'drizzle-orm';
 import {
   boolean,
+  customType,
   pgEnum,
   pgTable,
   primaryKey,
   text,
   timestamp,
+  unique,
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
+
+// Drizzle no trae una columna bytea propia: se declara con customType.
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType: () => 'bytea',
+});
 
 // Paleta fija de colores de nombre: el frontend usa exactamente la misma lista de ids.
 export const NAME_COLOR_IDS = [
@@ -111,6 +118,28 @@ export const callHistory = pgTable('call_history', {
     .references(() => users.id, { onDelete: 'cascade' }),
   startedAt: timestamp('started_at').notNull().defaultNow(),
 });
+
+// Emojis propios de cada sala, al estilo Discord. Los archivos van en la base porque el
+// deploy de EC2 solo respalda PostgreSQL (pg_dump) y el backend no tiene volumen.
+export const roomEmojis = pgTable(
+  'room_emojis',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    roomId: uuid('room_id')
+      .notNull()
+      .references(() => rooms.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 32 }).notNull(),
+    image: bytea('image').notNull(),
+    imageMime: varchar('image_mime', { length: 32 }).notNull(),
+    sound: bytea('sound'),
+    soundMime: varchar('sound_mime', { length: 32 }),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [unique('room_emojis_room_id_name_unique').on(table.roomId, table.name)],
+);
+
+export type RoomEmoji = typeof roomEmojis.$inferSelect;
 
 export const usersRelations = relations(users, ({ many }) => ({
   refreshTokens: many(refreshTokens),

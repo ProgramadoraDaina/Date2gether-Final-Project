@@ -26,14 +26,18 @@ describe('ChatGateway', () => {
     const roomsService = {
       findByCode: jest.fn<RoomsService['findByCode']>().mockResolvedValue(room as never),
     } as unknown as RoomsService;
+    const createMessage = jest.fn<ChatService['createMessage']>();
     const chatService = {
       getHistory: jest.fn<ChatService['getHistory']>().mockResolvedValue([]),
-      createMessage: jest.fn<ChatService['createMessage']>(),
+      createMessage,
     } as unknown as ChatService;
-    const roomEvents = { onMemberRoleChanged: jest.fn() } as unknown as RoomEventsService;
+    const roomEvents = {
+      onMemberRoleChanged: jest.fn(),
+      onRoomEmojisChanged: jest.fn(),
+    } as unknown as RoomEventsService;
 
     const gateway = new ChatGateway(db, roomsService, chatService, roomEvents);
-    return { gateway, db, select, chatService };
+    return { gateway, db, select, createMessage };
   }
 
   function createSocket(participant: RoomParticipant) {
@@ -91,7 +95,7 @@ describe('ChatGateway', () => {
   });
 
   it('rechaza un mensaje GIF que no viene de GIPHY y no lo guarda', async () => {
-    const { gateway, chatService } = createGateway();
+    const { gateway, createMessage } = createGateway();
     const participant: RoomParticipant = {
       kind: 'room-participant',
       sub: 'participant-3',
@@ -107,6 +111,6 @@ describe('ChatGateway', () => {
     });
 
     expect(client.emit).toHaveBeenCalledWith('error', { message: 'El GIF no es válido' });
-    expect(chatService.createMessage).not.toHaveBeenCalled();
+    expect(createMessage).not.toHaveBeenCalled();
   });
 });

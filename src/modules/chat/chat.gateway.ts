@@ -62,6 +62,9 @@ export class ChatGateway implements OnGatewayDisconnect {
     this.roomEvents.onMemberRoleChanged(({ roomCode }) => {
       this.server.to(roomCode).emit('memberRoleChanged');
     });
+    this.roomEvents.onRoomEmojisChanged(({ roomCode }) => {
+      this.server.to(roomCode).emit('roomEmojisChanged');
+    });
   }
 
   @UseGuards(WsJwtAuthGuard)

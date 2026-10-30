@@ -43,6 +43,13 @@
       "when": 1793376444635,
       "tag": "0005_message_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793383800329,
+      "tag": "0006_room_emojis",
+      "breakpoints": true
     }
   ]
 }
