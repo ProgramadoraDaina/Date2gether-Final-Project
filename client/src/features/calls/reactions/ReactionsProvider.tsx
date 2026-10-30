@@ -14,6 +14,7 @@ import {
   type ReactionBurst,
   type ReactionEmoji,
 } from './reactions';
+import { createBurstPlan } from './burstEffects';
 import { ReactionsContext } from './useReactions';
 
 const SEND_COOLDOWN_MS = 250;
@@ -56,7 +57,10 @@ export function ReactionsProvider({ children }: { children: ReactNode }) {
       ];
 
       if (pendingBurst.current.length >= BURST_THRESHOLD) {
-        const burst = { id: reaction.id, emojis: pendingBurst.current.map((r) => r.emoji) };
+        const burst = {
+          id: reaction.id,
+          plan: createBurstPlan(pendingBurst.current.map((r) => r.emoji)),
+        };
         const explodedIds = new Set(pendingBurst.current.map((r) => r.id));
         pendingBurst.current = [];
         setReactions((prev) => [

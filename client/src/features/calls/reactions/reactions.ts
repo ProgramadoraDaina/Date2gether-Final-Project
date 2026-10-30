@@ -1,3 +1,5 @@
+import type { BurstPlan } from './burstEffects';
+
 export const REACTIONS_TOPIC = 'reactions';
 
 export const REACTION_EMOJIS = ['💖', '👍', '🎉', '👏', '😂', '😮', '😢', '🤔'] as const;
@@ -16,13 +18,14 @@ export interface Reaction {
 
 export interface ReactionBurst {
   id: string;
-  emojis: ReactionEmoji[];
+  plan: BurstPlan;
 }
 
 export const REACTION_LIFETIME_MS = 4000;
 export const BURST_THRESHOLD = 6;
 export const BURST_WINDOW_MS = 2000;
-export const BURST_DURATION_MS = 1000;
+// Cubre el peor caso del plan aleatorio: última oleada (~700ms de retraso) + partícula más lenta.
+export const BURST_DURATION_MS = 2600;
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
