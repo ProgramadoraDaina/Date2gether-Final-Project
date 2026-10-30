@@ -1,41 +1,9 @@
-.wrap {
-  position: relative;
-  display: flex;
-}
-
-.trigger {
-  width: auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 10px;
-  border: 1px solid var(--color-border);
-  border-radius: 2px;
-  background: var(--color-surface);
-  color: var(--color-text-muted);
-}
-
-.trigger:hover,
-.trigger[aria-expanded='true'] {
-  background: var(--color-chip-bg);
-  color: var(--color-accent);
-}
-
-.popover {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 0;
-  z-index: 20;
-  border: 1px solid var(--color-border);
-  border-radius: 2px;
-  background: var(--color-surface);
-}
-
 .picker {
   display: flex;
   flex-direction: column;
-  width: 300px;
-  height: 340px;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
 }
 
 .search {

@@ -5,8 +5,7 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useParams } from 'next/navigation';
 import type { Socket } from 'socket.io-client';
-import { EmojiPickerButton } from '@/features/chat/EmojiPickerButton';
-import { GifPickerButton } from '@/features/chat/GifPickerButton';
+import { ExpressionPicker } from '@/features/chat/ExpressionPicker';
 import { AppShell } from '@/features/navigation/AppShell';
 import { RoleTag } from '@/features/rooms/RoleTag';
 import roleTagStyles from '@/features/rooms/RoleTag.module.css';
@@ -330,8 +329,12 @@ export default function RoomPage() {
             })}
           </ul>
           <form className={styles.messageForm} onSubmit={handleSend}>
-            <EmojiPickerButton onSelect={handleEmojiSelect} />
-            <GifPickerButton roomCode={code} roomToken={access.token} onSelect={handleGifSelect} />
+            <ExpressionPicker
+              roomCode={code}
+              roomToken={access.token}
+              onEmojiSelect={handleEmojiSelect}
+              onGifSelect={handleGifSelect}
+            />
             <input
               ref={draftInputRef}
               value={draft}

@@ -91,7 +91,7 @@ const en: Record<string, string> = {
   'En la sala': 'In the room',
   'Escribí un mensaje...': 'Write a message...',
   Enviar: 'Send',
-  'Insertar emoji': 'Insert emoji',
+  'Emojis y GIFs': 'Emojis and GIFs',
   'Buscar emoji...': 'Search emoji...',
   'Cargando…': 'Loading…',
   'No se encontraron emojis': 'No emoji found',

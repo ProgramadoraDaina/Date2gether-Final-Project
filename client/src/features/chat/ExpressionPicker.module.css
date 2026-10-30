@@ -1,0 +1,71 @@
+/* Sin position: el popover se ancla al formulario del chat, no al botón. */
+.wrap {
+  display: flex;
+}
+
+.trigger {
+  width: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+}
+
+.trigger:hover,
+.trigger[aria-expanded='true'] {
+  background: var(--color-chip-bg);
+  color: var(--color-accent);
+}
+
+.popover {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 20px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  width: min(300px, calc(100% - 40px));
+  height: 380px;
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+  background: var(--color-surface);
+}
+
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.tab {
+  flex: 1;
+  padding: 8px 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  box-shadow: inset 0 -2px 0 transparent;
+}
+
+.tab:hover {
+  background: var(--color-chip-bg);
+}
+
+.tab[aria-selected='true'] {
+  color: var(--color-accent);
+  box-shadow: inset 0 -2px 0 var(--color-accent);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
