@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -70,7 +69,7 @@ export class RoomEmojisController {
         { name: 'image', maxCount: 1 },
         { name: 'sound', maxCount: 1 },
       ],
-      { limits: { fileSize: MAX_UPLOAD_BYTES, files: 2, fields: 1 } },
+      { limits: { fileSize: MAX_UPLOAD_BYTES, files: 2, fields: 2 } },
     ),
   )
   @Post()
@@ -80,10 +79,9 @@ export class RoomEmojisController {
     @UploadedFiles() files: EmojiUploads,
     @CurrentUser() user: AccessTokenPayload,
   ) {
-    const image = files.image?.[0];
-    if (!image) throw new BadRequestException('Falta la imagen del emoji');
     return this.roomEmojis.create(code, user.sub, dto.name, {
-      image: image.buffer,
+      image: files.image?.[0]?.buffer,
+      emoji: dto.emoji,
       sound: files.sound?.[0]?.buffer,
     });
   }

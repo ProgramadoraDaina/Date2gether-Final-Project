@@ -1,5 +1,9 @@
 import { Transform } from 'class-transformer';
-import { IsString, Matches } from 'class-validator';
+import { IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+
+// Un solo emoji, incluidos tonos de piel, secuencias con ZWJ (👨‍👩‍👧) y banderas (🇦🇷).
+const SINGLE_EMOJI =
+  /^(?:\p{Regional_Indicator}{2}|\p{Extended_Pictographic}️?\p{Emoji_Modifier}?(?:‍\p{Extended_Pictographic}️?\p{Emoji_Modifier}?)*)$/u;
 
 export class CreateRoomEmojiDto {
   @Transform(({ value }: { value: unknown }) =>
@@ -10,4 +14,10 @@ export class CreateRoomEmojiDto {
     message: 'El nombre debe tener de 2 a 32 caracteres: letras, números o guion bajo',
   })
   name: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  @Matches(SINGLE_EMOJI, { message: 'Elegí un solo emoji' })
+  emoji?: string;
 }

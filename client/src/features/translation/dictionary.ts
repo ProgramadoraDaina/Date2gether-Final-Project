@@ -98,6 +98,13 @@ const en: Record<string, string> = {
   'Buscar GIF': 'Search GIF',
   Reaccionar: 'React',
   'Emojis de la sala': 'Room emojis',
+  'Subir imagen': 'Upload image',
+  'Emoji común': 'Standard emoji',
+  'Elegido:': 'Selected:',
+  'Elegí un emoji': 'Pick an emoji',
+  'Elegí un solo emoji': 'Pick a single emoji',
+  'Subí una imagen o elegí un emoji (solo uno de los dos)':
+    'Upload an image or pick an emoji (only one of them)',
   Cerrar: 'Close',
   Borrar: 'Delete',
   '¿Borrar?': 'Delete?',

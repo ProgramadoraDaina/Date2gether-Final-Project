@@ -127,6 +127,8 @@ export async function updateNameColor(nameColor: string): Promise<AuthUser> {
 export interface RoomEmoji {
   id: string;
   name: string;
+  // Emoji Unicode elegido del picker; null si el emoji de la sala es una imagen subida.
+  emoji: string | null;
   hasSound: boolean;
 }
 

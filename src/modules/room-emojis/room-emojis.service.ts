@@ -25,11 +25,14 @@ export function isUniqueViolation(error: unknown): boolean {
 export interface RoomEmojiSummary {
   id: string;
   name: string;
+  emoji: string | null;
   hasSound: boolean;
 }
 
-interface NewEmojiFiles {
-  image: Buffer;
+// Exactamente uno entre `image` (archivo subido) y `emoji` (Unicode elegido del picker).
+interface NewEmojiContent {
+  image?: Buffer;
+  emoji?: string;
   sound?: Buffer;
 }
 
@@ -48,6 +51,7 @@ export class RoomEmojisService {
       .select({
         id: roomEmojis.id,
         name: roomEmojis.name,
+        emoji: roomEmojis.emoji,
         hasSound: sql<boolean>`${roomEmojis.sound} is not null`,
       })
       .from(roomEmojis)
@@ -59,8 +63,11 @@ export class RoomEmojisService {
     code: string,
     userId: string,
     name: string,
-    files: NewEmojiFiles,
+    content: NewEmojiContent,
   ): Promise<RoomEmojiSummary> {
+    if (Boolean(content.image) === Boolean(content.emoji)) {
+      throw new BadRequestException('Subí una imagen o elegí un emoji (solo uno de los dos)');
+    }
     const room = await this.roomsService.getByCodeOrThrow(code);
     const [{ total }] = await this.db
       .select({ total: count() })
@@ -70,9 +77,9 @@ export class RoomEmojisService {
       throw new BadRequestException(`La sala ya tiene ${MAX_EMOJIS_PER_ROOM} emojis`);
     }
 
-    const image = await processEmojiImage(files.image);
-    const sound: ProcessedMedia | undefined = files.sound
-      ? await validateEmojiSound(files.sound)
+    const image = content.image ? await processEmojiImage(content.image) : undefined;
+    const sound: ProcessedMedia | undefined = content.sound
+      ? await validateEmojiSound(content.sound)
       : undefined;
 
     try {
@@ -81,13 +88,14 @@ export class RoomEmojisService {
         .values({
           roomId: room.id,
           name,
-          image: image.data,
-          imageMime: image.mime,
+          image: image?.data ?? null,
+          imageMime: image?.mime ?? null,
+          emoji: content.emoji ?? null,
           sound: sound?.data ?? null,
           soundMime: sound?.mime ?? null,
           createdBy: userId,
         })
-        .returning({ id: roomEmojis.id, name: roomEmojis.name });
+        .returning({ id: roomEmojis.id, name: roomEmojis.name, emoji: roomEmojis.emoji });
       this.roomEvents.emitRoomEmojisChanged({ roomCode: code });
       return { ...created, hasSound: Boolean(sound) };
     } catch (error) {

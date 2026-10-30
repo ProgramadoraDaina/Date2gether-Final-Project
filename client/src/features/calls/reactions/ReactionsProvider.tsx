@@ -136,9 +136,9 @@ export function ReactionsProvider({ children, roomCode, roomEmojis }: ReactionsP
       const id = customIdOf(key);
       if (!id) return { kind: 'text', text: key };
       const emoji = emojisById.get(id);
-      return emoji
-        ? { kind: 'image', src: roomEmojiImageUrl(roomCode, id), name: emoji.name }
-        : null;
+      if (!emoji) return null;
+      if (emoji.emoji) return { kind: 'text', text: emoji.emoji };
+      return { kind: 'image', src: roomEmojiImageUrl(roomCode, id), name: emoji.name };
     },
     [emojisById, roomCode],
   );

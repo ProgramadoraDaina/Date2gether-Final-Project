@@ -10,6 +10,7 @@ import {
   roomEmojiSoundUrl,
   type RoomEmoji,
 } from '@/lib/api';
+import { EmojiPanel } from '@/features/chat/EmojiPanel';
 import styles from './RoomEmojisDialog.module.css';
 
 const MAX_EMOJIS = 50;
@@ -48,6 +49,10 @@ export function RoomEmojisDialog({ code, open, onClose, emojis, canManage }: Roo
   const dialogRef = useRef<HTMLDialogElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const [name, setName] = useState('');
+  const [source, setSource] = useState<'image' | 'emoji'>('image');
+  const [unicode, setUnicode] = useState<string | null>(null);
+  // form.reset() no limpia el estado interno del picker: se lo vuelve a montar con otra key.
+  const [pickerKey, setPickerKey] = useState(0);
   const [image, setImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [sound, setSound] = useState<File | null>(null);
@@ -74,7 +79,9 @@ export function RoomEmojisDialog({ code, open, onClose, emojis, canManage }: Roo
     formRef.current?.reset();
     setName('');
     pickImage(null);
+    setUnicode(null);
     setSound(null);
+    setPickerKey((value) => value + 1);
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -85,11 +92,15 @@ export function RoomEmojisDialog({ code, open, onClose, emojis, canManage }: Roo
       setError(t('El nombre debe tener de 2 a 32 caracteres: letras, números o guion bajo'));
       return;
     }
-    if (!image) {
+    if (source === 'emoji' && !unicode) {
+      setError(t('Elegí un emoji'));
+      return;
+    }
+    if (source === 'image' && !image) {
       setError(t('Falta la imagen del emoji'));
       return;
     }
-    if (image.size > MAX_IMAGE_BYTES) {
+    if (image && source === 'image' && image.size > MAX_IMAGE_BYTES) {
       setError(t('La imagen no puede superar los 2 MB'));
       return;
     }
@@ -107,7 +118,8 @@ export function RoomEmojisDialog({ code, open, onClose, emojis, canManage }: Roo
 
     const form = new FormData();
     form.append('name', normalized);
-    form.append('image', image);
+    if (source === 'image' && image) form.append('image', image);
+    if (source === 'emoji' && unicode) form.append('emoji', unicode);
     if (sound) form.append('sound', sound);
     setSaving(true);
     try {
@@ -160,7 +172,13 @@ export function RoomEmojisDialog({ code, open, onClose, emojis, canManage }: Roo
         <ul className={styles.grid}>
           {emojis.map((emoji) => (
             <li key={emoji.id} className={styles.item}>
-              <img src={roomEmojiImageUrl(code, emoji.id)} alt="" width={40} height={40} />
+              {emoji.emoji ? (
+                <span className={styles.unicode} aria-hidden="true">
+                  {emoji.emoji}
+                </span>
+              ) : (
+                <img src={roomEmojiImageUrl(code, emoji.id)} alt="" width={40} height={40} />
+              )}
               <span className={styles.name} title={`:${emoji.name}:`}>
                 :{emoji.name}:
               </span>
@@ -209,17 +227,44 @@ export function RoomEmojisDialog({ code, open, onClose, emojis, canManage }: Roo
             <span aria-hidden="true">:</span>
           </div>
 
-          <label htmlFor="emoji-image">{t('Imagen (PNG, JPG, WebP o GIF)')}</label>
-          <div className={styles.fileRow}>
-            <input
-              id="emoji-image"
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
-              onChange={(e) => pickImage(e.target.files?.[0] ?? null)}
-              required
-            />
-            {imagePreview && <img src={imagePreview} alt="" width={40} height={40} />}
+          <div className={styles.sourceTabs} role="radiogroup" aria-label={t('Apariencia')}>
+            {(['image', 'emoji'] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={source === value}
+                className={styles.sourceTab}
+                onClick={() => setSource(value)}
+              >
+                {value === 'image' ? t('Subir imagen') : t('Emoji común')}
+              </button>
+            ))}
           </div>
+
+          {source === 'image' ? (
+            <>
+              <label htmlFor="emoji-image">{t('Imagen (PNG, JPG, WebP o GIF)')}</label>
+              <div className={styles.fileRow}>
+                <input
+                  id="emoji-image"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  onChange={(e) => pickImage(e.target.files?.[0] ?? null)}
+                />
+                {imagePreview && <img src={imagePreview} alt="" width={40} height={40} />}
+              </div>
+            </>
+          ) : (
+            <>
+              <p className={styles.selectedEmoji}>
+                {t('Elegido:')} <span>{unicode ?? '—'}</span>
+              </p>
+              <div className={styles.emojiPicker}>
+                <EmojiPanel key={pickerKey} onSelect={setUnicode} />
+              </div>
+            </>
+          )}
 
           <label htmlFor="emoji-sound">{t('Sonido opcional (MP3, OGG o WAV, hasta 5 s)')}</label>
           <input

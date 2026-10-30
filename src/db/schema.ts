@@ -1,6 +1,7 @@
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 import {
   boolean,
+  check,
   customType,
   pgEnum,
   pgTable,
@@ -129,14 +130,22 @@ export const roomEmojis = pgTable(
       .notNull()
       .references(() => rooms.id, { onDelete: 'cascade' }),
     name: varchar('name', { length: 32 }).notNull(),
-    image: bytea('image').notNull(),
-    imageMime: varchar('image_mime', { length: 32 }).notNull(),
+    // Imagen subida o emoji Unicode elegido del picker: exactamente uno de los dos.
+    image: bytea('image'),
+    imageMime: varchar('image_mime', { length: 32 }),
+    emoji: varchar('emoji', { length: 32 }),
     sound: bytea('sound'),
     soundMime: varchar('sound_mime', { length: 32 }),
     createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
-  (table) => [unique('room_emojis_room_id_name_unique').on(table.roomId, table.name)],
+  (table) => [
+    unique('room_emojis_room_id_name_unique').on(table.roomId, table.name),
+    check(
+      'room_emojis_image_xor_emoji',
+      sql`(${table.image} is not null) <> (${table.emoji} is not null)`,
+    ),
+  ],
 );
 
 export type RoomEmoji = typeof roomEmojis.$inferSelect;
