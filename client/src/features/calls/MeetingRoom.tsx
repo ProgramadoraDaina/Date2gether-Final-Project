@@ -15,6 +15,7 @@ import { DisconnectReason, Track, VideoPresets, type RoomOptions } from 'livekit
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useTranslation } from '../translation/useTranslation';
+import type { RoomEmoji } from '@/lib/api';
 import type { CallSessionState } from './useCallSession';
 import styles from './MeetingRoom.module.css';
 import { ReactionOverlay } from './reactions/ReactionOverlay';
@@ -155,14 +156,20 @@ function CameraToggleButton({ setDeviceError }: { setDeviceError: (value: boolea
   );
 }
 
-function MeetingContent() {
+interface MeetingRoomProps {
+  call: CallSessionState;
+  roomCode: string;
+  roomEmojis: RoomEmoji[];
+}
+
+function MeetingContent({ roomCode, roomEmojis }: Omit<MeetingRoomProps, 'call'>) {
   const { t } = useTranslation();
   const [deviceError, setDeviceError] = useState(false);
   const tracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], {
     onlySubscribed: false,
   });
   return (
-    <ReactionsProvider>
+    <ReactionsProvider roomCode={roomCode} roomEmojis={roomEmojis}>
       <RoomAudioRenderer />
       <StartAudio label={t('Activar sonido de la reunión')} />
       <ConnectionStateToast />
@@ -199,7 +206,7 @@ function MeetingContent() {
   );
 }
 
-export default function MeetingRoom({ call }: { call: CallSessionState }) {
+export default function MeetingRoom({ call, roomCode, roomEmojis }: MeetingRoomProps) {
   const router = useRouter();
   if (!call.session) return null;
   return (
@@ -221,7 +228,7 @@ export default function MeetingRoom({ call }: { call: CallSessionState }) {
       data-lk-theme="default"
       className={styles.meetingRoom}
     >
-      <MeetingContent />
+      <MeetingContent roomCode={roomCode} roomEmojis={roomEmojis} />
     </LiveKitRoom>
   );
 }

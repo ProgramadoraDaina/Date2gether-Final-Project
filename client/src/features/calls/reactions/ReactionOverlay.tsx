@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type CSSProperties } from 'react';
 import type { BurstParticle } from './burstEffects';
+import { ReactionGlyph } from './ReactionGlyph';
 import { useReactions } from './useReactions';
 import styles from './Reactions.module.css';
 
@@ -32,7 +33,7 @@ function Particle({ particle }: { particle: BurstParticle }) {
 
   return (
     <span ref={ref} className={className} style={{ fontSize: particle.size } as CSSProperties}>
-      {particle.emoji}
+      {particle.reactionKey && <ReactionGlyph reactionKey={particle.reactionKey} />}
     </span>
   );
 }
@@ -51,7 +52,9 @@ export function ReactionOverlay() {
               className={styles.floating}
               style={{ '--drift': `${driftFor(r.id)}px` } as CSSProperties}
             >
-              <span className={styles.floatingEmoji}>{r.emoji}</span>
+              <span className={styles.floatingEmoji}>
+                <ReactionGlyph reactionKey={r.key} />
+              </span>
               {r.name && <span className={styles.floatingName}>{r.name}</span>}
             </div>
           ))}

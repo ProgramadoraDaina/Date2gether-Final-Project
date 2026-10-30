@@ -454,7 +454,9 @@ export default function RoomPage() {
           )}
 
           <div className={styles.meetingAndChat}>
-            {callSession.session && <MeetingRoom call={callSession} />}
+            {callSession.session && (
+              <MeetingRoom call={callSession} roomCode={code} roomEmojis={emojis} />
+            )}
             <button
               type="button"
               className={styles.chatToggleButton}

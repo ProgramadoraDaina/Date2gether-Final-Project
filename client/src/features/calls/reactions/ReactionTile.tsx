@@ -1,6 +1,7 @@
 'use client';
 
 import { ParticipantTile, useMaybeTrackRefContext } from '@livekit/components-react';
+import { ReactionGlyph } from './ReactionGlyph';
 import { useReactions } from './useReactions';
 import styles from './Reactions.module.css';
 
@@ -16,7 +17,7 @@ export function ReactionTile() {
       <ParticipantTile />
       {latest && (
         <span key={latest.id} className={styles.tileBadge} aria-hidden="true">
-          {latest.emoji}
+          <ReactionGlyph reactionKey={latest.key} />
         </span>
       )}
     </div>

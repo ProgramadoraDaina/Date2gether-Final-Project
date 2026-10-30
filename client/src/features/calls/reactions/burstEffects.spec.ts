@@ -18,7 +18,7 @@ describe('createBurstPlan', () => {
 
   it('usa solo los emojis que formaron la explosión', () => {
     const plan = createBurstPlan(['🎉', '😂']);
-    const emojis = plan.particles.filter((p) => p.kind === 'emoji').map((p) => p.emoji);
+    const emojis = plan.particles.filter((p) => p.kind === 'emoji').map((p) => p.reactionKey);
     expect(new Set(emojis)).toEqual(new Set(['🎉', '😂']));
   });
 

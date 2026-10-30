@@ -3,13 +3,14 @@
 import { useCallback, useRef, useState } from 'react';
 import { useDismiss } from '@/lib/useDismiss';
 import { useTranslation } from '@/features/translation/useTranslation';
-import { REACTION_EMOJIS } from './reactions';
+import { customReactionKey, REACTION_EMOJIS } from './reactions';
+import { ReactionGlyph } from './ReactionGlyph';
 import { useReactions } from './useReactions';
 import styles from './Reactions.module.css';
 
 export function ReactionPicker({ buttonClassName }: { buttonClassName: string }) {
   const { t } = useTranslation();
-  const { sendReaction } = useReactions();
+  const { sendReaction, roomEmojis } = useReactions();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   useDismiss(
@@ -58,6 +59,19 @@ export function ReactionPicker({ buttonClassName }: { buttonClassName: string })
               aria-label={`${label} ${emoji}`}
             >
               {emoji}
+            </button>
+          ))}
+          {roomEmojis.length > 0 && <span className={styles.pickerDivider} aria-hidden="true" />}
+          {roomEmojis.map((emoji) => (
+            <button
+              key={emoji.id}
+              type="button"
+              className={styles.pickerEmoji}
+              onClick={() => sendReaction(customReactionKey(emoji.id))}
+              aria-label={`${label} :${emoji.name}:`}
+              title={`:${emoji.name}:${emoji.hasSound ? ' 🔊' : ''}`}
+            >
+              <ReactionGlyph reactionKey={customReactionKey(emoji.id)} />
             </button>
           ))}
         </div>
