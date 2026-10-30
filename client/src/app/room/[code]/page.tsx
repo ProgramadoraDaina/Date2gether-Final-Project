@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic';
 import { useParams } from 'next/navigation';
 import type { Socket } from 'socket.io-client';
 import { EmojiPickerButton } from '@/features/chat/EmojiPickerButton';
+import { GifPickerButton } from '@/features/chat/GifPickerButton';
 import { AppShell } from '@/features/navigation/AppShell';
 import { RoleTag } from '@/features/rooms/RoleTag';
 import roleTagStyles from '@/features/rooms/RoleTag.module.css';
@@ -26,6 +27,7 @@ const NAME_KEY = 'date2gether:userName';
 interface ChatMessage {
   id: string;
   authorName: string;
+  kind: 'text' | 'gif';
   content: string;
   createdAt: string;
 }
@@ -184,6 +186,10 @@ export default function RoomPage() {
     setDraft('');
   }
 
+  function handleGifSelect(url: string) {
+    socketRef.current?.emit('sendMessage', { kind: 'gif', content: url });
+  }
+
   function handleEmojiSelect(emoji: string) {
     const input = draftInputRef.current;
     const start = input?.selectionStart ?? draft.length;
@@ -314,13 +320,18 @@ export default function RoomPage() {
                   <span className={styles.author} style={color ? { color } : undefined}>
                     {m.authorName}
                   </span>
-                  {m.content}
+                  {m.kind === 'gif' ? (
+                    <img className={styles.gifMessage} src={m.content} alt="GIF" loading="lazy" />
+                  ) : (
+                    m.content
+                  )}
                 </li>
               );
             })}
           </ul>
           <form className={styles.messageForm} onSubmit={handleSend}>
             <EmojiPickerButton onSelect={handleEmojiSelect} />
+            <GifPickerButton roomCode={code} roomToken={access.token} onSelect={handleGifSelect} />
             <input
               ref={draftInputRef}
               value={draft}

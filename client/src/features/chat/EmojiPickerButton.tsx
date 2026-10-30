@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { EmojiPicker } from 'frimousse';
 import { useTranslation } from '@/features/translation/useTranslation';
 import styles from './EmojiPickerButton.module.css';
+import { useDismiss } from './useDismiss';
 
 interface EmojiPickerButtonProps {
   onSelect: (emoji: string) => void;
@@ -14,21 +15,11 @@ export function EmojiPickerButton({ onSelect }: EmojiPickerButtonProps) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    function handlePointerDown(e: PointerEvent) {
-      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
-    }
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('pointerdown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [open]);
+  useDismiss(
+    open,
+    wrapRef,
+    useCallback(() => setOpen(false), []),
+  );
 
   const label = t('Insertar emoji');
 

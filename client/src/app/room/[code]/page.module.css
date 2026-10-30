@@ -333,12 +333,21 @@
   line-height: 1.4;
 }
 
+.gifMessage {
+  display: block;
+  margin-top: 4px;
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 2px;
+}
+
 .message .author {
   font-weight: 600;
   margin-right: 6px;
 }
 
 .messageForm {
+  position: relative;
   display: flex;
   gap: 8px;
   padding: 16px 20px;

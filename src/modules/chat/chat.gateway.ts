@@ -1,4 +1,5 @@
 import { Inject, UseGuards, UsePipes, ValidationPipe } from '@nestjs/common';
+import { isURL } from 'class-validator';
 import { eq } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
 import { users } from '../../db/schema';
@@ -18,6 +19,15 @@ import { RoomsService } from '../rooms/rooms.service';
 import { ChatService } from './chat.service';
 import { JoinRoomDto } from './dto/join-room.dto';
 import { SendMessageDto } from './dto/send-message.dto';
+
+// Solo GIFs servidos por GIPHY: evita que se inyecten imágenes de cualquier dominio.
+function isGiphyUrl(url: string): boolean {
+  return isURL(url, {
+    protocols: ['https'],
+    require_protocol: true,
+    host_whitelist: [/^media\d?\.giphy\.com$/],
+  });
+}
 
 interface ConnectedUser {
   participantId: string;
@@ -104,7 +114,18 @@ export class ChatGateway implements OnGatewayDisconnect {
       return;
     }
 
-    const message = await this.chatService.createMessage(user.roomId, user.userName, dto.content);
+    const kind = dto.kind ?? 'text';
+    if (kind === 'gif' && !isGiphyUrl(dto.content)) {
+      client.emit('error', { message: 'El GIF no es válido' });
+      return;
+    }
+
+    const message = await this.chatService.createMessage(
+      user.roomId,
+      user.userName,
+      dto.content,
+      kind,
+    );
     this.server.to(user.roomCode).emit('newMessage', message);
   }
 
