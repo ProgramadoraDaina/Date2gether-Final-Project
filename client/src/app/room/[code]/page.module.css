@@ -349,7 +349,7 @@
   margin-bottom: 0;
 }
 
-.messageForm button {
+.messageForm > button {
   width: auto;
 }
 
