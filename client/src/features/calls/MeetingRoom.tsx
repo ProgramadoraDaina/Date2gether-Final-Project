@@ -17,6 +17,7 @@ import { useState } from 'react';
 import { useTranslation } from '../translation/useTranslation';
 import type { CallSessionState } from './useCallSession';
 import styles from './MeetingRoom.module.css';
+import { ReactionOverlay } from './reactions/ReactionOverlay';
 import { ReactionPicker } from './reactions/ReactionPicker';
 import { ReactionsProvider } from './reactions/ReactionsProvider';
 import { ReactionTile } from './reactions/ReactionTile';
@@ -168,6 +169,7 @@ function MeetingContent() {
       <GridLayout tracks={tracks} className={styles.meetingGrid}>
         <ReactionTile />
       </GridLayout>
+      <ReactionOverlay />
       {deviceError && (
         <p className={styles.error} role="alert">
           {t(

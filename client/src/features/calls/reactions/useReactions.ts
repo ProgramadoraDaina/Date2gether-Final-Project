@@ -1,8 +1,9 @@
 import { createContext, useContext } from 'react';
-import type { Reaction, ReactionEmoji } from './reactions';
+import type { Reaction, ReactionBurst, ReactionEmoji } from './reactions';
 
 export interface ReactionsContextValue {
   reactions: Reaction[];
+  bursts: ReactionBurst[];
   sendReaction: (emoji: ReactionEmoji) => void;
 }
 

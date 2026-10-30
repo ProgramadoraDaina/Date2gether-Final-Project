@@ -10,9 +10,19 @@ export interface Reaction {
   identity: string;
   name: string;
   at: number;
+  // Ya formó parte de una explosión: deja de flotar, pero sigue en el tile de quien la mandó.
+  exploded: boolean;
+}
+
+export interface ReactionBurst {
+  id: string;
+  emojis: ReactionEmoji[];
 }
 
 export const REACTION_LIFETIME_MS = 4000;
+export const BURST_THRESHOLD = 6;
+export const BURST_WINDOW_MS = 2000;
+export const BURST_DURATION_MS = 1000;
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
