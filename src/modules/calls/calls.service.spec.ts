@@ -69,7 +69,7 @@ describe('CallsService: LiveKit', () => {
       roomJoin: true,
       roomAdmin: false,
       roomRecord: false,
-      canPublishData: false,
+      canPublishData: true,
     });
     expect(session.url).toBe('wss://media.example.com');
     expect(session.participantLimit).toBe(6);

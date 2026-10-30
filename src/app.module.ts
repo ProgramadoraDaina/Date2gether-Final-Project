@@ -7,6 +7,7 @@ import { DrizzleModule } from './db/drizzle.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CallsModule } from './modules/calls/calls.module';
 import { ChatModule } from './modules/chat/chat.module';
+import { GifsModule } from './modules/gifs/gifs.module';
 import { RoomsModule } from './modules/rooms/rooms.module';
 
 @Module({
@@ -19,6 +20,7 @@ import { RoomsModule } from './modules/rooms/rooms.module';
     RoomsModule,
     ChatModule,
     CallsModule,
+    GifsModule,
   ],
   controllers: [AppController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

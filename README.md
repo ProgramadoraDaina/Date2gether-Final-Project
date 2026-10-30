@@ -46,6 +46,7 @@ LIVEKIT_API_URL=http://localhost:7880
 LIVEKIT_API_KEY=devkey
 LIVEKIT_API_SECRET=devsecret-for-local-development-only-32chars
 MAX_ROOM_PARTICIPANTS=6
+GIPHY_API_KEY=<key-beta-de-developers.giphy.com>
 ```
 
 Generá cada secreto por separado con `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`. Los `.env` y las credenciales no se versionan.

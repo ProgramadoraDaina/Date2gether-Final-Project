@@ -17,6 +17,9 @@ jest.mock('@livekit/components-react', () => ({
   useDisconnectButton: jest.fn(() => ({ buttonProps: { onClick: jest.fn() } })),
   useTrackToggle: jest.fn(),
   useTracks: jest.fn(() => []),
+  useDataChannel: jest.fn(() => ({ send: jest.fn(), isSending: false, message: undefined })),
+  useLocalParticipant: jest.fn(() => ({ localParticipant: { identity: 'local', name: 'Ana' } })),
+  useMaybeTrackRefContext: jest.fn(() => undefined),
 }));
 jest.mock('livekit-client', () => ({
   DisconnectReason: { CLIENT_INITIATED: 1 },

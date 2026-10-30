@@ -28,11 +28,12 @@ describe('ChatGateway', () => {
     } as unknown as RoomsService;
     const chatService = {
       getHistory: jest.fn<ChatService['getHistory']>().mockResolvedValue([]),
+      createMessage: jest.fn<ChatService['createMessage']>(),
     } as unknown as ChatService;
     const roomEvents = { onMemberRoleChanged: jest.fn() } as unknown as RoomEventsService;
 
     const gateway = new ChatGateway(db, roomsService, chatService, roomEvents);
-    return { gateway, db, select };
+    return { gateway, db, select, chatService };
   }
 
   function createSocket(participant: RoomParticipant) {
@@ -87,5 +88,25 @@ describe('ChatGateway', () => {
       userId: undefined,
       nameColor: undefined,
     });
+  });
+
+  it('rechaza un mensaje GIF que no viene de GIPHY y no lo guarda', async () => {
+    const { gateway, chatService } = createGateway();
+    const participant: RoomParticipant = {
+      kind: 'room-participant',
+      sub: 'participant-3',
+      roomCode: 'abc-defg-hij',
+      name: 'Caro',
+    };
+    const client = createSocket(participant);
+    await gateway.handleJoinRoom(client as never, { code: 'abc-defg-hij' });
+
+    await gateway.handleSendMessage(client as never, {
+      kind: 'gif',
+      content: 'https://example.com/tracker.gif',
+    });
+
+    expect(client.emit).toHaveBeenCalledWith('error', { message: 'El GIF no es válido' });
+    expect(chatService.createMessage).not.toHaveBeenCalled();
   });
 });

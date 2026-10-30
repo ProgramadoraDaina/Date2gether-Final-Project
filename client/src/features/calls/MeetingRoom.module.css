@@ -1,4 +1,5 @@
 .meetingRoom {
+  position: relative;
   min-height: 240px;
   flex: 3;
   display: flex;
