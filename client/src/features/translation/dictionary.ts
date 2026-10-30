@@ -96,6 +96,7 @@ const en: Record<string, string> = {
   'Cargando…': 'Loading…',
   'No se encontraron emojis': 'No emoji found',
   'Buscar GIF': 'Search GIF',
+  Reaccionar: 'React',
   'Buscar en GIPHY...': 'Search GIPHY...',
   'No se encontraron GIFs': 'No GIFs found',
   'Cargar más': 'Load more',

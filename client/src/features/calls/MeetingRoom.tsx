@@ -5,7 +5,6 @@ import {
   GridLayout,
   LiveKitRoom,
   MediaDeviceMenu,
-  ParticipantTile,
   RoomAudioRenderer,
   StartAudio,
   useDisconnectButton,
@@ -18,6 +17,9 @@ import { useState } from 'react';
 import { useTranslation } from '../translation/useTranslation';
 import type { CallSessionState } from './useCallSession';
 import styles from './MeetingRoom.module.css';
+import { ReactionPicker } from './reactions/ReactionPicker';
+import { ReactionsProvider } from './reactions/ReactionsProvider';
+import { ReactionTile } from './reactions/ReactionTile';
 
 const options: RoomOptions = {
   adaptiveStream: true,
@@ -159,12 +161,12 @@ function MeetingContent() {
     onlySubscribed: false,
   });
   return (
-    <>
+    <ReactionsProvider>
       <RoomAudioRenderer />
       <StartAudio label={t('Activar sonido de la reunión')} />
       <ConnectionStateToast />
       <GridLayout tracks={tracks} className={styles.meetingGrid}>
-        <ParticipantTile />
+        <ReactionTile />
       </GridLayout>
       {deviceError && (
         <p className={styles.error} role="alert">
@@ -187,10 +189,11 @@ function MeetingContent() {
             requestPermissions={false}
             aria-label={t('Elegir cámara')}
           />
+          <ReactionPicker buttonClassName={styles.iconButton} />
         </div>
         <HangUpButton />
       </div>
-    </>
+    </ReactionsProvider>
   );
 }
 

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { searchGifs, type Gif } from '@/lib/gifs';
 import styles from './GifPickerButton.module.css';
-import { useDismiss } from './useDismiss';
+import { useDismiss } from '@/lib/useDismiss';
 
 // La key beta de GIPHY permite 100 búsquedas por hora: no buscar en cada tecla.
 const SEARCH_DEBOUNCE_MS = 400;

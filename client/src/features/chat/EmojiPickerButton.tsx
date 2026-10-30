@@ -4,7 +4,7 @@ import { useCallback, useRef, useState } from 'react';
 import { EmojiPicker } from 'frimousse';
 import { useTranslation } from '@/features/translation/useTranslation';
 import styles from './EmojiPickerButton.module.css';
-import { useDismiss } from './useDismiss';
+import { useDismiss } from '@/lib/useDismiss';
 
 interface EmojiPickerButtonProps {
   onSelect: (emoji: string) => void;

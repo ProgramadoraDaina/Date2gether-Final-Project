@@ -77,7 +77,8 @@ export class CallsService {
       roomJoin: true,
       canPublish: true,
       canSubscribe: true,
-      canPublishData: false,
+      // Las reacciones viajan por el data channel; el cliente valida cada mensaje recibido.
+      canPublishData: true,
       roomAdmin: false,
       roomRecord: false,
     });
