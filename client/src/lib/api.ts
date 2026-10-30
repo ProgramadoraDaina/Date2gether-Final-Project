@@ -46,7 +46,8 @@ function withAuth(token: string, init: RequestInit): RequestInit {
   return {
     ...init,
     headers: {
-      'Content-Type': 'application/json',
+      // Con FormData el navegador arma su propio Content-Type con el boundary.
+      ...(init.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
       ...init.headers,
       Authorization: `Bearer ${token}`,
     },
@@ -121,4 +122,43 @@ export async function updateNameColor(nameColor: string): Promise<AuthUser> {
   });
   if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudo guardar el color'));
   return res.json();
+}
+
+export interface RoomEmoji {
+  id: string;
+  name: string;
+  hasSound: boolean;
+}
+
+export function roomEmojiImageUrl(code: string, id: string): string {
+  return `${API_URL}/rooms/${encodeURIComponent(code)}/emojis/${id}/image`;
+}
+
+export function roomEmojiSoundUrl(code: string, id: string): string {
+  return `${API_URL}/rooms/${encodeURIComponent(code)}/emojis/${id}/sound`;
+}
+
+// Público: también lo usan los invitados para reaccionar con los emojis de la sala.
+export async function getRoomEmojis(code: string): Promise<RoomEmoji[]> {
+  const res = await fetch(`${API_URL}/rooms/${encodeURIComponent(code)}/emojis`);
+  if (!res.ok) {
+    throw new ApiError(await extractErrorMessage(res, 'No se pudieron cargar los emojis'));
+  }
+  return res.json();
+}
+
+export async function createRoomEmoji(code: string, form: FormData): Promise<RoomEmoji> {
+  const res = await authFetch(`/rooms/${encodeURIComponent(code)}/emojis`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudo agregar el emoji'));
+  return res.json();
+}
+
+export async function deleteRoomEmoji(code: string, id: string): Promise<void> {
+  const res = await authFetch(`/rooms/${encodeURIComponent(code)}/emojis/${id}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudo borrar el emoji'));
 }

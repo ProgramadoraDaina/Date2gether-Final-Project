@@ -10,6 +10,7 @@ interface RoomSidebarProps {
   code: string;
   copied: boolean;
   onCopyLink: () => void;
+  onOpenEmojis: () => void;
   // Controlan el colapso animado y el ancho elegido con el handle de resize
   // (ver useResizablePanel en RoomPage). El wrapper externo anima `width`
   // entre 0 y `width`; el contenido interno mantiene `width` fijo para no
@@ -23,6 +24,7 @@ export function RoomSidebar({
   code,
   copied,
   onCopyLink,
+  onOpenEmojis,
   open,
   width,
   onResizeHandleMouseDown,
@@ -44,6 +46,10 @@ export function RoomSidebar({
           <ThemeToggle />
           <LanguageToggle />
         </div>
+
+        <button type="button" className={`secondary ${styles.emojisButton}`} onClick={onOpenEmojis}>
+          {t('Emojis de la sala')}
+        </button>
 
         <button type="button" className={`secondary ${styles.copyLink}`} onClick={onCopyLink}>
           {t(copied ? 'Enlace copiado' : 'Copiar enlace')}

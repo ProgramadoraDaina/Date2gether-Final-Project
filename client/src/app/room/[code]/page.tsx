@@ -7,6 +7,8 @@ import { useParams } from 'next/navigation';
 import type { Socket } from 'socket.io-client';
 import { ExpressionPicker } from '@/features/chat/ExpressionPicker';
 import { AppShell } from '@/features/navigation/AppShell';
+import { RoomEmojisDialog } from '@/features/room-emojis/RoomEmojisDialog';
+import { useRoomEmojis } from '@/features/room-emojis/useRoomEmojis';
 import { RoleTag } from '@/features/rooms/RoleTag';
 import roleTagStyles from '@/features/rooms/RoleTag.module.css';
 import { RoomSidebar } from '@/features/rooms/RoomSidebar';
@@ -83,8 +85,11 @@ export default function RoomPage() {
   const listRef = useRef<HTMLUListElement>(null);
   const draftInputRef = useRef<HTMLInputElement>(null);
   const callSession = useCallSession();
+  const [emojisOpen, setEmojisOpen] = useState(false);
+  const { emojis, refetchEmojis } = useRoomEmojis(access ? code : undefined);
   const {
     members,
+    currentUserRole,
     isCurrentUserAdmin,
     error: membersError,
     changeRole,
@@ -164,6 +169,9 @@ export default function RoomPage() {
     socket.on('memberRoleChanged', () => {
       refetchMembers();
     });
+    socket.on('roomEmojisChanged', () => {
+      void refetchEmojis();
+    });
 
     socket.connect();
 
@@ -172,7 +180,7 @@ export default function RoomPage() {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [code, access, refetchMembers, t]);
+  }, [code, access, refetchMembers, refetchEmojis, t]);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
@@ -391,11 +399,19 @@ export default function RoomPage() {
   return (
     <>
       {callOverlay}
+      <RoomEmojisDialog
+        code={code}
+        open={emojisOpen}
+        onClose={() => setEmojisOpen(false)}
+        emojis={emojis}
+        canManage={currentUserRole === 'administrador' || currentUserRole === 'colaborador'}
+      />
       <div className={styles.roomLayout}>
         <RoomSidebar
           code={code}
           copied={copied}
           onCopyLink={handleCopyLink}
+          onOpenEmojis={() => setEmojisOpen(true)}
           open={sidebarOpen}
           width={sidebarResize.width}
           onResizeHandleMouseDown={sidebarResize.handleMouseDown}

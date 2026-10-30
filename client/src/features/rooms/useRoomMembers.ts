@@ -59,9 +59,8 @@ export function useRoomMembers(code: string | undefined) {
     await refetchMembers();
   }
 
-  const isCurrentUserAdmin = members.some(
-    (member) => member.userId === currentUserId && member.role === 'administrador',
-  );
+  const currentUserRole = members.find((member) => member.userId === currentUserId)?.role;
+  const isCurrentUserAdmin = currentUserRole === 'administrador';
 
-  return { members, isCurrentUserAdmin, error, changeRole, refetchMembers };
+  return { members, currentUserRole, isCurrentUserAdmin, error, changeRole, refetchMembers };
 }
