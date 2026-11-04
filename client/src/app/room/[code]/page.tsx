@@ -5,6 +5,7 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useParams } from 'next/navigation';
 import type { Socket } from 'socket.io-client';
+import { ExpressionPicker } from '@/features/chat/ExpressionPicker';
 import { AppShell } from '@/features/navigation/AppShell';
 import { RoleTag } from '@/features/rooms/RoleTag';
 import roleTagStyles from '@/features/rooms/RoleTag.module.css';
@@ -25,6 +26,7 @@ const NAME_KEY = 'date2gether:userName';
 interface ChatMessage {
   id: string;
   authorName: string;
+  kind: 'text' | 'gif';
   content: string;
   createdAt: string;
 }
@@ -79,6 +81,7 @@ export default function RoomPage() {
   });
   const socketRef = useRef<Socket | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const draftInputRef = useRef<HTMLInputElement>(null);
   const callSession = useCallSession();
   const {
     members,
@@ -180,6 +183,22 @@ export default function RoomPage() {
     if (!draft.trim()) return;
     socketRef.current?.emit('sendMessage', { content: draft.trim() });
     setDraft('');
+  }
+
+  function handleGifSelect(url: string) {
+    socketRef.current?.emit('sendMessage', { kind: 'gif', content: url });
+  }
+
+  function handleEmojiSelect(emoji: string) {
+    const input = draftInputRef.current;
+    const start = input?.selectionStart ?? draft.length;
+    const end = input?.selectionEnd ?? draft.length;
+    setDraft(draft.slice(0, start) + emoji + draft.slice(end));
+    // El cursor se reubica después del re-render, cuando el value ya cambió.
+    requestAnimationFrame(() => {
+      input?.focus();
+      input?.setSelectionRange(start + emoji.length, start + emoji.length);
+    });
   }
 
   async function handleCopyLink() {
@@ -300,13 +319,24 @@ export default function RoomPage() {
                   <span className={styles.author} style={color ? { color } : undefined}>
                     {m.authorName}
                   </span>
-                  {m.content}
+                  {m.kind === 'gif' ? (
+                    <img className={styles.gifMessage} src={m.content} alt="GIF" loading="lazy" />
+                  ) : (
+                    m.content
+                  )}
                 </li>
               );
             })}
           </ul>
           <form className={styles.messageForm} onSubmit={handleSend}>
+            <ExpressionPicker
+              roomCode={code}
+              roomToken={access.token}
+              onEmojiSelect={handleEmojiSelect}
+              onGifSelect={handleGifSelect}
+            />
             <input
+              ref={draftInputRef}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               placeholder={t('Escribí un mensaje...')}

@@ -333,23 +333,32 @@
   line-height: 1.4;
 }
 
+.gifMessage {
+  display: block;
+  margin-top: 4px;
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 2px;
+}
+
 .message .author {
   font-weight: 600;
   margin-right: 6px;
 }
 
 .messageForm {
+  position: relative;
   display: flex;
   gap: 8px;
   padding: 16px 20px;
   border-top: 1px solid var(--color-border);
 }
 
-.messageForm input {
+.messageForm > input {
   margin-bottom: 0;
 }
 
-.messageForm button {
+.messageForm > button {
   width: auto;
 }
 

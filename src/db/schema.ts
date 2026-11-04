@@ -65,12 +65,18 @@ export const rooms = pgTable('rooms', {
   chimeMeetingId: varchar('chime_meeting_id', { length: 64 }),
 });
 
+export const MESSAGE_KINDS = ['text', 'gif'] as const;
+
+export const messageKindEnum = pgEnum('message_kind', MESSAGE_KINDS);
+
 export const messages = pgTable('messages', {
   id: uuid('id').defaultRandom().primaryKey(),
   roomId: uuid('room_id')
     .notNull()
     .references(() => rooms.id, { onDelete: 'cascade' }),
   authorName: varchar('author_name', { length: 60 }).notNull(),
+  // En los mensajes 'gif', content es la URL del GIF.
+  kind: messageKindEnum('kind').notNull().default('text'),
   content: text('content').notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
