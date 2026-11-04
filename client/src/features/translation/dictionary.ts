@@ -13,10 +13,8 @@ const en: Record<string, string> = {
   'Enlace copiado': 'Link copied',
   'No se pudo copiar el enlace': 'Could not copy the link',
   'Conectando...': 'Connecting...',
-  Llamar: 'Call',
+  'Cargando llamada…': 'Loading call…',
   Colgar: 'Hang up',
-  Micrófono: 'Microphone',
-  Cámara: 'Camera',
   'Elegir micrófono': 'Choose microphone',
   'Elegir cámara': 'Choose camera',
   'Activar sonido de la reunión': 'Enable meeting audio',
@@ -28,8 +26,12 @@ const en: Record<string, string> = {
   'No se pudo activar el dispositivo. Revisá los permisos del navegador; podés continuar en la llamada.':
     'Could not enable the device. Check your browser permissions; you can stay in the call.',
   Cancelar: 'Cancel',
+  Reintentar: 'Retry',
   'Activar micrófono': 'Unmute microphone',
+  'Desactivar micrófono': 'Mute microphone',
   'Silenciar micrófono': 'Mute microphone',
+  'Activar cámara': 'Enable camera',
+  'Desactivar cámara': 'Disable camera',
   'Las llamadas de audio todavía no están habilitadas': 'Audio calls are not enabled yet',
   'El servicio de audio necesita renovar su conexión':
     'The audio service needs to renew its connection',
@@ -86,16 +88,61 @@ const en: Record<string, string> = {
   Invitado: 'Guest',
   'se unió a la sala': 'joined the room',
   'salió de la sala': 'left the room',
-  Salir: 'Leave',
   'En la sala': 'In the room',
   'Escribí un mensaje...': 'Write a message...',
   Enviar: 'Send',
+  'Emojis y GIFs': 'Emojis and GIFs',
+  'Buscar emoji...': 'Search emoji...',
+  'Cargando…': 'Loading…',
+  'No se encontraron emojis': 'No emoji found',
+  'Buscar GIF': 'Search GIF',
+  Reaccionar: 'React',
+  'Buscar en GIPHY...': 'Search GIPHY...',
+  'No se encontraron GIFs': 'No GIFs found',
+  'Cargar más': 'Load more',
+  'No se pudieron cargar los GIFs': 'Could not load GIFs',
+  'No se pudieron cargar los GIFs. Intentá nuevamente.': 'Could not load GIFs. Please try again.',
+  'La búsqueda de GIFs no está configurada': 'GIF search is not configured',
   'Hacer colaborador': 'Make collaborator',
   'Quitar colaborador': 'Remove collaborator',
+  Conversación: 'Conversation',
+  Presentes: 'Attendees',
+  'Mostrar chat': 'Show chat',
+  'Ocultar chat': 'Hide chat',
 
   // Tema
   'Cambiar a modo claro': 'Switch to light mode',
   'Cambiar a modo oscuro': 'Switch to dark mode',
+
+  // Navegación
+  Inicio: 'Home',
+  Historial: 'History',
+  Configuración: 'Settings',
+  'Navegación principal': 'Main navigation',
+
+  // Historial
+  'Necesitás iniciar sesión para ver tu historial de llamadas.':
+    'You need to log in to see your call history.',
+  'Cargando historial…': 'Loading history…',
+  'Todavía no hiciste ninguna llamada.': "You haven't made any calls yet.",
+  'No se pudo obtener el historial': 'Could not fetch the history',
+
+  // Configuración
+  Apariencia: 'Appearance',
+  'Modo oscuro': 'Dark mode',
+  'Necesitás iniciar sesión para elegir el color de tu nombre.':
+    'You need to log in to choose your name color.',
+  'Elegí el color de tu nombre': 'Choose your name color',
+  Guardado: 'Saved',
+  'No se pudo guardar el color': 'Could not save the color',
+  Púrpura: 'Purple',
+  Rojo: 'Red',
+  'Verde azulado': 'Teal',
+  Ámbar: 'Amber',
+  'Azul marino': 'Navy',
+  Naranja: 'Orange',
+  Verde: 'Green',
+  Rosa: 'Pink',
 };
 
 export default en;

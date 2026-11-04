@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { login } from '@/lib/auth';
 import { useTranslation } from '@/features/translation/useTranslation';
+import styles from './page.module.css';
 
 const NAME_KEY = 'date2gether:userName';
 
@@ -32,9 +33,9 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="card">
+    <div className={styles.card}>
       <h1>{t('Iniciar sesión')}</h1>
-      <p className="subtitle">{t('Entrá con tu cuenta de Date2gether.')}</p>
+      <p className={styles.subtitle}>{t('Entrá con tu cuenta de Date2gether.')}</p>
 
       <form onSubmit={handleSubmit}>
         <label htmlFor="email">{t('Email')}</label>
@@ -62,9 +63,9 @@ export default function LoginPage() {
         </button>
       </form>
 
-      {error && <p className="error">{error}</p>}
+      {error && <p className={styles.error}>{error}</p>}
 
-      <p className="switch-link">
+      <p className={styles.switchLink}>
         {t('¿No tenés cuenta? ')}
         <Link href="/register">{t('Creá una')}</Link>
       </p>

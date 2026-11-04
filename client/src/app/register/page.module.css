@@ -1,0 +1,15 @@
+.card {
+  composes: card from '../../styles/form.module.css';
+}
+.subtitle {
+  composes: subtitle from '../../styles/form.module.css';
+}
+.hint {
+  composes: hint from '../../styles/form.module.css';
+}
+.error {
+  composes: error from '../../styles/form.module.css';
+}
+.switchLink {
+  composes: switchLink from '../../styles/form.module.css';
+}

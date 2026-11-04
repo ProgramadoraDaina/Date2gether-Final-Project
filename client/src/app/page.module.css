@@ -1,0 +1,24 @@
+.card {
+  composes: card from '../styles/form.module.css';
+}
+.subtitle {
+  composes: subtitle from '../styles/form.module.css';
+}
+.authBar {
+  composes: authBar from '../styles/form.module.css';
+}
+.linkButton {
+  composes: linkButton from '../styles/form.module.css';
+}
+.hintBelowButton {
+  composes: hintBelowButton from '../styles/form.module.css';
+}
+.divider {
+  composes: divider from '../styles/form.module.css';
+}
+.joinRow {
+  composes: joinRow from '../styles/form.module.css';
+}
+.error {
+  composes: error from '../styles/form.module.css';
+}
