@@ -22,6 +22,7 @@ jest.mock('@livekit/components-react', () => ({
   useMaybeTrackRefContext: jest.fn(() => undefined),
 }));
 jest.mock('livekit-client', () => ({
+  DefaultReconnectPolicy: jest.fn(),
   DisconnectReason: { CLIENT_INITIATED: 1 },
   Track: { Source: { Camera: 'camera', Microphone: 'microphone' } },
   VideoPresets: { h360: { resolution: { width: 640, height: 360 } }, h90: {}, h180: {} },
