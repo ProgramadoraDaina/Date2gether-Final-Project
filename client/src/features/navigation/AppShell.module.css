@@ -1,0 +1,29 @@
+/* El layout raíz (client/src/app/layout.module.css) le pone a <main> un
+   padding de 16px (8px en mobile) y lo centra con flex, pensado para las
+   páginas "tarjeta centrada" (login, registro, sala). AppShell necesita que
+   el riel de navegación llegue a los bordes de la ventana y ocupe el alto
+   completo, así que acá se cancela ese padding con margin negativo en vez
+   de duplicar la lógica de centrado en dos lugares. El breakpoint espeja
+   exactamente el de layout.module.css para que ambos padding coincidan. */
+.shell {
+  display: flex;
+  min-height: 100vh;
+  margin: -16px;
+  width: calc(100% + 32px);
+}
+
+.content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow: auto;
+}
+
+@media (max-width: 640px) {
+  .shell {
+    margin: -8px;
+    width: calc(100% + 16px);
+  }
+}

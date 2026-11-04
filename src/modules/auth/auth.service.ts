@@ -12,7 +12,7 @@ import { eq } from 'drizzle-orm';
 import type { StringValue } from 'ms';
 import { v4 as uuidv4 } from 'uuid';
 import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
-import { refreshTokens, users, type User } from '../../db/schema';
+import { refreshTokens, users, type NameColor, type User } from '../../db/schema';
 import type { AccessTokenPayload, AuthTokens, RefreshTokenPayload } from './auth.types';
 import type { LoginDto } from './dto/login.dto';
 import type { RegisterDto } from './dto/register.dto';
@@ -109,6 +109,18 @@ export class AuthService {
 
   async getProfile(userId: string): Promise<PublicUser> {
     const [user] = await this.db.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+    return this.toPublicUser(user);
+  }
+
+  async updateNameColor(userId: string, nameColor: NameColor): Promise<PublicUser> {
+    const [user] = await this.db
+      .update(users)
+      .set({ nameColor })
+      .where(eq(users.id, userId))
+      .returning();
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
     }

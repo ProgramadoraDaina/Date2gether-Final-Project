@@ -1,4 +1,4 @@
-import { extractErrorMessage, getAccessToken, refreshAccessToken } from './auth';
+import { extractErrorMessage, getAccessToken, refreshAccessToken, type AuthUser } from './auth';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -97,4 +97,28 @@ export async function updateMemberRole(
     body: JSON.stringify({ role }),
   });
   if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudo cambiar el rol'));
+}
+
+export interface CallHistoryEntry {
+  roomCode: string;
+  roomName: string;
+  startedAt: string;
+}
+
+// Solo cuentas: no hay historial para invitados (no hay endpoint para ellos).
+export async function getCallHistory(): Promise<CallHistoryEntry[]> {
+  const res = await authFetch('/calls/history');
+  if (!res.ok) {
+    throw new ApiError(await extractErrorMessage(res, 'No se pudo obtener el historial'));
+  }
+  return res.json();
+}
+
+export async function updateNameColor(nameColor: string): Promise<AuthUser> {
+  const res = await authFetch('/auth/me/color', {
+    method: 'PATCH',
+    body: JSON.stringify({ nameColor }),
+  });
+  if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudo guardar el color'));
+  return res.json();
 }

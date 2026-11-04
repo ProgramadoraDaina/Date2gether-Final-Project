@@ -1,0 +1,23 @@
+.roleTag {
+  margin-left: 0.4rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.6rem;
+  font-size: 0.7rem;
+  text-decoration: none;
+  background: #e8f0fe;
+  color: #1a5fb4;
+}
+
+.roleTagAdministrador {
+  background: #fce8e6;
+  color: #a50e0e;
+}
+
+.roleButton {
+  display: block;
+  margin-top: 0.25rem;
+  width: auto;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 400;
+}

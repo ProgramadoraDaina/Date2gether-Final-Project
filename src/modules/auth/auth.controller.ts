@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
+import { UpdateNameColorDto } from './dto/update-name-color.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import type { AccessTokenPayload } from './auth.types';
 
@@ -36,5 +37,11 @@ export class AuthController {
   @Get('me')
   me(@CurrentUser() user: AccessTokenPayload) {
     return this.authService.getProfile(user.sub);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('me/color')
+  updateNameColor(@CurrentUser() user: AccessTokenPayload, @Body() dto: UpdateNameColorDto) {
+    return this.authService.updateNameColor(user.sub, dto.nameColor);
   }
 }
