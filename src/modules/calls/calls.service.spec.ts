@@ -40,7 +40,7 @@ describe('CallsService: LiveKit', () => {
     jest.restoreAllMocks();
   });
 
-  it('firma un token de invitado limitado a su sala con el nombre confirmado', async () => {
+  it('firma un token de invitado limitado a su sala, con permisos de solo unirse (sin admin ni grabación)', async () => {
     const session = await service.join(room.code, participant);
     const claims = await new TokenVerifier(config.LIVEKIT_API_KEY, secret).verify(session.token);
     expect(claims.sub).toBe(participant.sub);
@@ -68,7 +68,7 @@ describe('CallsService: LiveKit', () => {
     });
   });
 
-  it('usa la misma sala ante solicitudes concurrentes y distingue identidades', async () => {
+  it('dos invitados que entran a la misma sala al mismo tiempo no se pisan: quedan en la misma sala de LiveKit, pero cada uno con su propio token', async () => {
     const results = await Promise.all([
       service.join(room.code, participant),
       service.join(room.code, { ...participant, sub: 'guest-2', name: 'Ana' }),
@@ -80,7 +80,7 @@ describe('CallsService: LiveKit', () => {
     );
   });
 
-  it('rechaza un pase de otra sala', async () => {
+  it('rechaza un pase emitido para otra sala, sin llegar a contactar a LiveKit', async () => {
     await expect(service.join('other-room', participant)).rejects.toBeInstanceOf(
       ForbiddenException,
     );
@@ -112,7 +112,7 @@ describe('CallsService: LiveKit', () => {
     expect(createRoom).not.toHaveBeenCalled();
   });
 
-  it('no expone respuestas internas del servidor de medios', async () => {
+  it('no expone el mensaje de error interno de LiveKit: lo reemplaza por un mensaje genérico para el cliente', async () => {
     createRoom.mockRejectedValueOnce(new Error('private server credentials'));
     await expect(service.join(room.code, participant)).rejects.toThrow(
       'El servidor de llamadas no está disponible. Intentá nuevamente.',

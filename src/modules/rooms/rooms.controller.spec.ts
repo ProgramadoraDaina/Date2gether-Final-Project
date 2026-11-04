@@ -39,7 +39,7 @@ describe('RoomsController', () => {
     expect(guards).toContain(JwtAuthGuard);
   });
 
-  it('delega la creación de la sala al RoomsService con el nombre', async () => {
+  it('delega la creación de la sala al RoomsService, con el nombre y el id del usuario autenticado', async () => {
     const fakeRoom = { id: 'room-1', code: 'abc-defg-hij', name: 'Reunión de Daina' };
     roomsService.createRoom.mockResolvedValue(fakeRoom);
 
