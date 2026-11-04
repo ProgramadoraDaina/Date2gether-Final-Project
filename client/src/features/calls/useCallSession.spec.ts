@@ -36,7 +36,7 @@ describe('useCallSession: LiveKit', () => {
     });
     expect(fake.startCall).toHaveBeenCalledTimes(1);
   });
-  it('cancelar descarta la respuesta tardía y elimina las credenciales', async () => {
+  it('salir de la llamada mientras todavía se está conectando cancela el pedido en curso, y si la conexión se confirma después de todas formas, la pantalla se queda como si nunca hubiera entrado', async () => {
     const fake = await setup();
     let resolve!: (session: typeof credentials) => void;
     (fake.startCall as jest.Mock<typeof fake.startCall>).mockReturnValueOnce(
@@ -77,7 +77,7 @@ describe('useCallSession: LiveKit', () => {
     await act(() => fake.result.current.joinCall('abc', 'token'));
     expect(fake.startCall).toHaveBeenCalledTimes(2);
   });
-  it('salir de la página cancela una solicitud en curso', async () => {
+  it('cerrar la pantalla mientras la llamada todavía se está conectando cancela el pedido en curso', async () => {
     const fake = await setup();
     (fake.startCall as jest.Mock<typeof fake.startCall>).mockReturnValueOnce(new Promise(() => {}));
     act(() => {

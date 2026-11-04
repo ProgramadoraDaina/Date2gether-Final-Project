@@ -71,7 +71,7 @@ describe('MeetingRoom', () => {
     expect(call.connected).toHaveBeenCalledTimes(1);
     expect(screen.getByText('Audio remoto')).toBeInTheDocument();
   });
-  it('un permiso rechazado muestra instrucciones y conserva los controles de la llamada', async () => {
+  it('si el navegador rechaza el permiso de cámara, se muestra "Revisá los permisos" sin cortar la llamada ni tratarlo como una desconexión', async () => {
     const MeetingRoom = (await import('./MeetingRoom')).default;
     const call = state();
     render(<MeetingRoom call={call} />);
@@ -80,7 +80,7 @@ describe('MeetingRoom', () => {
     expect(screen.getByRole('button', { name: 'Colgar' })).toBeInTheDocument();
     expect(call.failed).not.toHaveBeenCalled();
   });
-  it('distingue salida voluntaria y desconexión por error', async () => {
+  it('cuando LiveKit avisa que la conexión se cerró: si fue porque el usuario se fue, llama a leaveCall; si fue por un error de red, llama a failed', async () => {
     const { LiveKitRoom } = await import('@livekit/components-react');
     const MeetingRoom = (await import('./MeetingRoom')).default;
     const call = state();
