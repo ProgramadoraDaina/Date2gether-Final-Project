@@ -21,7 +21,7 @@ test.describe('Registro', () => {
     await page.getByRole('button', { name: 'Crear cuenta' }).click();
 
     await expect(page).toHaveURL('/');
-    await expect(page.locator('.auth-bar')).toContainText(user.name);
+    await expect(page.getByTestId('auth-bar')).toContainText(user.name);
   });
 
   // El input de contraseña solo bloquea en el navegador que tenga menos de
@@ -39,7 +39,7 @@ test.describe('Registro', () => {
     await page.getByLabel('Contraseña').fill(user.password);
     await page.getByRole('button', { name: 'Crear cuenta' }).click();
 
-    await expect(page.locator('.error')).toContainText('letra y un número');
+    await expect(page.getByTestId('error-message')).toContainText('letra y un número');
     await expect(page).toHaveURL('/register');
   });
 
@@ -57,7 +57,7 @@ test.describe('Registro', () => {
     await page.getByLabel('Contraseña').fill(user.password);
     await page.getByRole('button', { name: 'Crear cuenta' }).click();
 
-    await expect(page.locator('.error')).toContainText('Ya existe una cuenta con ese email');
+    await expect(page.getByTestId('error-message')).toContainText('Ya existe una cuenta con ese email');
     await expect(page).toHaveURL('/register');
   });
 });
@@ -77,7 +77,7 @@ test.describe('Login', () => {
     await page.getByRole('button', { name: 'Entrar' }).click();
 
     await expect(page).toHaveURL('/');
-    await expect(page.locator('.auth-bar')).toContainText(user.name);
+    await expect(page.getByTestId('auth-bar')).toContainText(user.name);
   });
 
   // Mismo email que una cuenta real, pero contraseña incorrecta. El backend
@@ -93,7 +93,7 @@ test.describe('Login', () => {
     await page.getByLabel('Contraseña').fill('la-contraseña-incorrecta-1');
     await page.getByRole('button', { name: 'Entrar' }).click();
 
-    await expect(page.locator('.error')).toContainText('incorrectos');
+    await expect(page.getByTestId('error-message')).toContainText('incorrectos');
     await expect(page).toHaveURL('/login');
   });
 });
@@ -116,7 +116,7 @@ test.describe('Sesión', () => {
 
     await page.reload();
 
-    await expect(page.locator('.auth-bar')).toContainText(user.name);
+    await expect(page.getByTestId('auth-bar')).toContainText(user.name);
   });
 
   // Logueado y en el home, hacer click en "Cerrar sesión" tiene que: (1)
@@ -132,7 +132,7 @@ test.describe('Sesión', () => {
     await page.getByLabel('Email').fill(user.email);
     await page.getByLabel('Contraseña').fill(user.password);
     await page.getByRole('button', { name: 'Crear cuenta' }).click();
-    await expect(page.locator('.auth-bar')).toContainText(user.name);
+    await expect(page.getByTestId('auth-bar')).toContainText(user.name);
 
     await page.getByRole('button', { name: 'Cerrar sesión' }).click();
     await expect(page.getByRole('link', { name: 'Iniciar sesión' })).toBeVisible();
