@@ -25,9 +25,13 @@ const config = {
 };
 
 function createDbMock() {
-  const insertValues = jest.fn().mockResolvedValue(undefined);
+  const insertValues = jest
+    .fn<(values: { roomId: string; userId: string }) => Promise<void>>()
+    .mockResolvedValue(undefined);
   const insert = jest.fn().mockReturnValue({ values: insertValues });
-  const limit = jest.fn().mockResolvedValue([]);
+  const limit = jest
+    .fn<(n: number) => Promise<{ roomCode: string; roomName: string; startedAt: Date }[]>>()
+    .mockResolvedValue([]);
   const orderBy = jest.fn().mockReturnValue({ limit });
   const where = jest.fn().mockReturnValue({ orderBy });
   const innerJoin = jest.fn().mockReturnValue({ where });

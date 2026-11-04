@@ -16,7 +16,9 @@ describe('ChatGateway', () => {
   });
 
   function createGateway(nameColorRow?: { nameColor: string | null }) {
-    const limit = jest.fn().mockResolvedValue(nameColorRow ? [nameColorRow] : []);
+    const limit = jest
+      .fn<() => Promise<{ nameColor: string | null }[]>>()
+      .mockResolvedValue(nameColorRow ? [nameColorRow] : []);
     const where = jest.fn().mockReturnValue({ limit });
     const from = jest.fn().mockReturnValue({ where });
     const select = jest.fn().mockReturnValue({ from });
@@ -41,7 +43,7 @@ describe('ChatGateway', () => {
     return {
       id: 'socket-1',
       data: { participant },
-      join: jest.fn().mockResolvedValue(undefined),
+      join: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
       emit: jest.fn(),
       to: jest.fn().mockReturnValue({ emit: toEmit }),
       toEmit,

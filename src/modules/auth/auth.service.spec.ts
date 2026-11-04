@@ -27,6 +27,7 @@ function buildUser(overrides: Partial<User> = {}): User {
     email: 'ana@example.test',
     passwordHash: 'reemplazado-en-cada-test',
     name: 'Ana',
+    nameColor: null,
     createdAt: new Date(),
     ...overrides,
   };

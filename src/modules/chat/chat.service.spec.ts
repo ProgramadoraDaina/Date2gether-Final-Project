@@ -13,6 +13,7 @@ describe('ChatService', () => {
         roomId: 'room-1',
         authorName: 'Ana',
         content: 'hola',
+        kind: 'text',
         createdAt: new Date('2026-01-01'),
       },
       {
@@ -20,6 +21,7 @@ describe('ChatService', () => {
         roomId: 'room-1',
         authorName: 'Bea',
         content: 'hola de nuevo',
+        kind: 'text',
         createdAt: new Date('2026-01-02'),
       },
     ];
@@ -39,6 +41,7 @@ describe('ChatService', () => {
       roomId: 'room-1',
       authorName: 'Ana',
       content: 'hola',
+      kind: 'text',
       createdAt: new Date(),
     };
     const insertChain = chain([created]);
@@ -52,6 +55,7 @@ describe('ChatService', () => {
       roomId: 'room-1',
       authorName: 'Ana',
       content: 'hola',
+      kind: 'text',
     });
   });
 });

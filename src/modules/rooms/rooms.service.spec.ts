@@ -36,7 +36,7 @@ describe('RoomsService', () => {
       const memberInsert = chain([]);
       db.transaction.mockImplementationOnce(async (cb: unknown) => {
         const tx = { insert: jest.fn().mockReturnValueOnce(roomInsert).mockReturnValueOnce(memberInsert) };
-        return (cb as (tx: typeof tx) => Promise<Room>)(tx);
+        return (cb as (transaction: typeof tx) => Promise<Room>)(tx);
       });
 
       const result = await service.createRoom('Reunión de Daina', 'owner-1');
