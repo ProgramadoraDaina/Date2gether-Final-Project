@@ -7,31 +7,14 @@
   composes: error from '../../../styles/form.module.css';
 }
 
-/* --- transición de carga antes de entrar a la llamada ---
-   Mientras el acceso a la sala ya está concedido pero LiveKit todavía no
-   terminó de conectar (status !== 'in-call'), .roomLayout (con
-   <MeetingRoom>) ya está montado para que la conexión avance en segundo
-   plano, pero queda tapado por este overlay de pantalla completa con la
-   misma tarjeta de "elegí tu nombre" + un filtro oscuro. Al llegar a
-   'in-call' el overlay deja de renderizarse y se revela la sala, ya lista. */
-.joinOverlayScreen {
-  position: fixed;
-  inset: 0;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-  background: var(--color-bg);
-}
-
-.joinScreen {
-  position: relative;
-}
-
-.callLoadingOverlay {
-  position: absolute;
-  inset: 0;
+/* --- estado de "conectando"/error de la llamada ---
+   Ocupa solo el espacio del video (mismo flex/min-height que .meetingRoom
+   en MeetingRoom.module.css), para que el chat y la lista de presentes
+   sigan usables mientras la llamada conecta o si nunca llega a conectar
+   (antes esto era un overlay de pantalla completa que tapaba todo). */
+.callLoadingPanel {
+  flex: 3;
+  min-height: 240px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -39,13 +22,13 @@
   gap: 14px;
   padding: 24px;
   border-radius: 12px;
-  background: rgba(0, 0, 0, 0.65);
-  color: #fff;
+  background: var(--color-surface);
+  color: var(--color-text);
   text-align: center;
-  animation: overlayFadeIn 200ms ease;
+  animation: callLoadingFadeIn 200ms ease;
 }
 
-.callLoadingOverlay p {
+.callLoadingPanel p {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
@@ -54,8 +37,8 @@
 .callLoadingSpinner {
   width: 28px;
   height: 28px;
-  border: 3px solid rgba(255, 255, 255, 0.3);
-  border-top-color: #fff;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-accent);
   border-radius: 50%;
   animation: callLoadingSpin 800ms linear infinite;
 }
@@ -64,23 +47,17 @@
   width: auto;
   padding: 8px 20px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  border: 1px solid var(--color-border);
   background: transparent;
-  color: #fff;
+  color: var(--color-accent);
   font-weight: 600;
 }
 
 .callLoadingButton:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--color-chip-bg);
 }
 
-.callLoadingLink {
-  color: #fff;
-  font-size: 13px;
-  text-decoration: underline;
-}
-
-@keyframes overlayFadeIn {
+@keyframes callLoadingFadeIn {
   from {
     opacity: 0;
   }

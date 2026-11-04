@@ -250,33 +250,29 @@ export default function RoomPage() {
     return <AppShell>{joinCard}</AppShell>;
   }
 
-  const callOverlay = callSession.status !== 'in-call' && (
-    <div className={styles.joinOverlayScreen}>
-      <div className={styles.joinScreen}>
-        {joinCard}
-        <div className={styles.callLoadingOverlay} role="status" aria-live="polite">
-          {callSession.status === 'error' ? (
-            <>
-              <p>{callSession.error ? t(callSession.error) : t('No se pudo conectar a la llamada')}</p>
-              <button
-                type="button"
-                className={styles.callLoadingButton}
-                onClick={() => callSession.joinCall(code, access.token)}
-              >
-                {t('Reintentar')}
-              </button>
-              <Link href="/" className={styles.callLoadingLink}>
-                {t('Volver al inicio')}
-              </Link>
-            </>
-          ) : (
-            <>
-              <div className={styles.callLoadingSpinner} />
-              <p>{t('Cargando llamada…')}</p>
-            </>
-          )}
-        </div>
-      </div>
+  // A diferencia de antes, este estado de "conectando"/"error" NO tapa toda
+  // la pantalla: el chat y la lista de presentes se pueden usar desde que se
+  // entra a la sala, sin esperar a que la llamada de audio/video termine de
+  // conectar (ni dependen de que llegue a conectar en absoluto).
+  const callLoadingPanel = (
+    <div className={styles.callLoadingPanel} role="status" aria-live="polite">
+      {callSession.status === 'error' ? (
+        <>
+          <p>{callSession.error ? t(callSession.error) : t('No se pudo conectar a la llamada')}</p>
+          <button
+            type="button"
+            className={styles.callLoadingButton}
+            onClick={() => callSession.joinCall(code, access.token)}
+          >
+            {t('Reintentar')}
+          </button>
+        </>
+      ) : (
+        <>
+          <div className={styles.callLoadingSpinner} />
+          <p>{t('Cargando llamada…')}</p>
+        </>
+      )}
     </div>
   );
 
@@ -391,7 +387,6 @@ export default function RoomPage() {
 
   return (
     <>
-      {callOverlay}
       <div className={styles.roomLayout}>
         <RoomSidebar
           code={code}
@@ -439,7 +434,7 @@ export default function RoomPage() {
           )}
 
           <div className={styles.meetingAndChat}>
-            {callSession.session && <MeetingRoom call={callSession} />}
+            {callSession.session ? <MeetingRoom call={callSession} /> : callLoadingPanel}
             <button
               type="button"
               className={styles.chatToggleButton}
