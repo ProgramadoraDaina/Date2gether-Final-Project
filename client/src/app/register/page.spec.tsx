@@ -24,6 +24,7 @@ describe('RegisterPage', () => {
       email: 'a@example.test',
       name: 'Daina',
       createdAt: new Date().toISOString(),
+      nameColor: null,
     });
     const RegisterPage = (await import('./page')).default;
     render(<RegisterPage />);
@@ -62,6 +63,7 @@ describe('RegisterPage', () => {
       email: string;
       name: string;
       createdAt: string;
+      nameColor: string | null;
     }) => void;
     (register as jest.Mock<typeof register>).mockReturnValue(
       new Promise((done) => {
@@ -81,6 +83,7 @@ describe('RegisterPage', () => {
         email: 'a@example.test',
         name: 'Daina',
         createdAt: new Date().toISOString(),
+        nameColor: null,
       });
     });
   });

@@ -24,6 +24,7 @@ describe('LoginPage', () => {
       email: 'a@example.test',
       name: 'Daina',
       createdAt: new Date().toISOString(),
+      nameColor: null,
     });
     const LoginPage = (await import('./page')).default;
     render(<LoginPage />);
@@ -59,6 +60,7 @@ describe('LoginPage', () => {
       email: string;
       name: string;
       createdAt: string;
+      nameColor: string | null;
     }) => void;
     (login as jest.Mock<typeof login>).mockReturnValue(
       new Promise((done) => {
@@ -77,6 +79,7 @@ describe('LoginPage', () => {
         email: 'a@example.test',
         name: 'Daina',
         createdAt: new Date().toISOString(),
+        nameColor: null,
       });
     });
   });
