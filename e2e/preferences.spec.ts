@@ -44,7 +44,11 @@ test.describe('Tema (claro/oscuro)', () => {
       colorScheme: 'dark',
     });
     const page = await context.newPage();
-    await page.goto('/');
+    // El toggle vive en Settings, pero el efecto que aplica data-theme corre
+    // en toda la app (ver TopBar.tsx) — entramos por Settings para poder
+    // verificar las dos cosas (atributo global + estado visual del control)
+    // en la misma página.
+    await page.goto('/settings');
 
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     await expect(page.getByTestId('theme-toggle')).toHaveAttribute('aria-pressed', 'true');
@@ -60,7 +64,7 @@ test.describe('Tema (claro/oscuro)', () => {
       colorScheme: 'light',
     });
     const page = await context.newPage();
-    await page.goto('/');
+    await page.goto('/settings');
 
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
     await expect(page.getByTestId('theme-toggle')).toHaveAttribute('aria-pressed', 'false');
@@ -77,7 +81,7 @@ test.describe('Tema (claro/oscuro)', () => {
       colorScheme: 'light',
     });
     const page = await context.newPage();
-    await page.goto('/');
+    await page.goto('/settings');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
 
     await page.getByTestId('theme-toggle').click();
@@ -110,9 +114,10 @@ test.describe('Tema (claro/oscuro)', () => {
     await context.close();
   });
 
-  // El toggle vive en el layout raíz (presente en toda la app), así que la
-  // elección tiene que sobrevivir a una navegación dentro de la SPA, no solo
-  // a un reload.
+  // El toggle vive en Settings, pero el efecto que aplica el tema corre en
+  // TopBar (presente en toda la app salvo /room/*), así que la elección
+  // tiene que sobrevivir a una navegación a OTRA página, no solo quedarse
+  // aplicada donde está el control.
   test('la preferencia de tema persiste al navegar a otra página sin recargar', async ({
     browser,
   }) => {
@@ -121,7 +126,7 @@ test.describe('Tema (claro/oscuro)', () => {
       colorScheme: 'light',
     });
     const page = await context.newPage();
-    await page.goto('/');
+    await page.goto('/settings');
     await page.getByTestId('theme-toggle').click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
 
