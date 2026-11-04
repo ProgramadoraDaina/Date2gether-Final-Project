@@ -4,7 +4,7 @@
   "description": "Date2gether - clon de Google Meet (proyecto final). Backend con NestJS, Socket.io y Drizzle ORM.",
   "private": true,
   "license": "UNLICENSED",
-  "packageManager": "pnpm@10.34.9",
+  "packageManager": "pnpm@11.18.0",
   "engines": {
     "node": ">=20"
   },
