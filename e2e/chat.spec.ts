@@ -19,7 +19,9 @@ test('un mensaje queda en el historial para alguien que se une después de que s
   await page.goto(`/room/${code}`);
   await page.getByLabel('Tu nombre en la reunión').fill('Mensajera');
   await page.getByRole('button', { name: 'Entrar a la reunión', exact: true }).click();
+  await page.getByRole('button', { name: 'Presentes', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'En la sala (1)' })).toBeVisible();
+  await page.getByRole('button', { name: 'Conversación', exact: true }).click();
   await page.getByPlaceholder('Escribí un mensaje...').fill('Mensaje para la posteridad');
   await page.getByRole('button', { name: 'Enviar', exact: true }).click();
   await expect(page.getByTestId('messages')).toContainText('Mensaje para la posteridad');
@@ -31,7 +33,9 @@ test('un mensaje queda en el historial para alguien que se une después de que s
   await page.getByLabel('Tu nombre en la reunión').fill('Lectora');
   await page.getByRole('button', { name: 'Entrar a la reunión', exact: true }).click();
 
+  await page.getByRole('button', { name: 'Presentes', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'En la sala (1)' })).toBeVisible();
+  await page.getByRole('button', { name: 'Conversación', exact: true }).click();
   await expect(page.getByTestId('messages')).toContainText('Mensaje para la posteridad');
 });
 
@@ -49,6 +53,7 @@ test('quienes ya están en la sala ven el aviso de que alguien se unió, y despu
     await first.goto(`/room/${code}`);
     await first.getByLabel('Tu nombre en la reunión').fill('Primero');
     await first.getByRole('button', { name: 'Entrar a la reunión', exact: true }).click();
+    await first.getByRole('button', { name: 'Presentes', exact: true }).click();
     await expect(first.getByRole('heading', { name: 'En la sala (1)' })).toBeVisible();
 
     await second.goto(`/room/${code}`);

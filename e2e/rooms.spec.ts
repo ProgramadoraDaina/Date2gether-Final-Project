@@ -20,6 +20,7 @@ test('crear una reunión requiere cuenta y conserva el rol de administrador', as
   await page.getByRole('button', { name: 'Crear reunión' }).click();
   await expect(page).toHaveURL(ROOM_URL_PATTERN);
   await page.getByRole('button', { name: 'Entrar a la reunión', exact: true }).click();
+  await page.getByRole('button', { name: 'Presentes', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'En la sala (1)' })).toBeVisible();
   await expect(page.getByTestId('role-tag-administrador')).toBeVisible();
 });
@@ -32,8 +33,8 @@ test('un invitado puede entrar con un código sin iniciar sesión', async ({ pag
   await page.getByRole('button', { name: 'Unirse', exact: true }).click();
   await expect(page).toHaveURL(`/room/${code}`);
   await page.getByRole('button', { name: 'Entrar a la reunión', exact: true }).click();
+  await page.getByRole('button', { name: 'Presentes', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'En la sala (1)' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Llamar', exact: true })).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem('date2gether:accessToken'))).toBeNull();
 });
 
@@ -46,6 +47,7 @@ test('el enlace directo exige un nombre antes de conectar', async ({ page, reque
   await expect(enter).toBeDisabled();
   await page.getByLabel('Tu nombre en la reunión').fill('  Invitada  ');
   await enter.click();
+  await page.getByRole('button', { name: 'Presentes', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'En la sala (1)' })).toBeVisible();
   await expect(page.getByTestId('users-panel')).toContainText('Invitada');
 });
@@ -64,13 +66,17 @@ test('dos invitados con el mismo nombre chatean y salir no elimina al otro', asy
       await page.goto(`/room/${code}`);
       await page.getByLabel('Tu nombre en la reunión').fill('Alex');
       await page.getByRole('button', { name: 'Entrar a la reunión', exact: true }).click();
+      await page.getByRole('button', { name: 'Presentes', exact: true }).click();
     }
     for (const page of [a, b])
       await expect(page.getByRole('heading', { name: 'En la sala (2)' })).toBeVisible();
+    await a.getByRole('button', { name: 'Conversación', exact: true }).click();
     await a.getByPlaceholder('Escribí un mensaje...').fill('Mensaje entre invitados');
     await a.getByRole('button', { name: 'Enviar', exact: true }).click();
+    await b.getByRole('button', { name: 'Conversación', exact: true }).click();
     await expect(b.getByTestId('messages')).toContainText('Mensaje entre invitados');
     await a.getByRole('link', { name: 'Salir', exact: true }).click();
+    await b.getByRole('button', { name: 'Presentes', exact: true }).click();
     await expect(b.getByRole('heading', { name: 'En la sala (1)' })).toBeVisible();
   } finally {
     await first.close();

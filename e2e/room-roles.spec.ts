@@ -38,6 +38,7 @@ test('el administrador puede ascender y después descender a un participante, y 
   await adminPage.waitForURL(/\/room\//);
   const code = adminPage.url().split('/').pop() as string;
   await adminPage.getByRole('button', { name: 'Entrar a la reunión', exact: true }).click();
+  await adminPage.getByRole('button', { name: 'Presentes', exact: true }).click();
   await expect(adminPage.getByRole('heading', { name: 'En la sala (1)' })).toBeVisible();
 
   const member = buildTestUser({ name: 'Beto' });
@@ -47,6 +48,7 @@ test('el administrador puede ascender y después descender a un participante, y 
   await loginViaUi(memberPage, member);
   await memberPage.goto(`/room/${code}`);
   await memberPage.getByRole('button', { name: 'Entrar a la reunión', exact: true }).click();
+  await memberPage.getByRole('button', { name: 'Presentes', exact: true }).click();
   await expect(memberPage.getByRole('heading', { name: 'En la sala (2)' })).toBeVisible();
   await expect(adminPage.getByRole('heading', { name: 'En la sala (2)' })).toBeVisible();
 
@@ -57,6 +59,7 @@ test('el administrador puede ascender y después descender a un participante, y 
   // para que la fila de Beto tenga su rol y, con eso, el botón para cambiarlo.
   await adminPage.reload();
   await adminPage.getByRole('button', { name: 'Entrar a la reunión', exact: true }).click();
+  await adminPage.getByRole('button', { name: 'Presentes', exact: true }).click();
   await expect(adminPage.getByRole('heading', { name: 'En la sala (2)' })).toBeVisible();
 
   const betoRowOnAdmin = adminPage.getByTestId('users-panel').locator('li').filter({ hasText: 'Beto' });
@@ -106,6 +109,7 @@ test('un colaborador no ve botones para cambiar roles, ni el suyo ni el de otra 
   await loginViaUi(otherPage, other.user);
   await otherPage.goto(`/room/${code}`);
   await otherPage.getByRole('button', { name: 'Entrar a la reunión', exact: true }).click();
+  await otherPage.getByRole('button', { name: 'Presentes', exact: true }).click();
   await expect(otherPage.getByRole('heading', { name: 'En la sala (1)' })).toBeVisible();
 
   const collaboratorContext = await browser.newContext({ storageState: SPANISH_STORAGE_STATE });
@@ -113,6 +117,7 @@ test('un colaborador no ve botones para cambiar roles, ni el suyo ni el de otra 
   await loginViaUi(collaboratorPage, collaborator.user);
   await collaboratorPage.goto(`/room/${code}`);
   await collaboratorPage.getByRole('button', { name: 'Entrar a la reunión', exact: true }).click();
+  await collaboratorPage.getByRole('button', { name: 'Presentes', exact: true }).click();
   await expect(collaboratorPage.getByRole('heading', { name: 'En la sala (2)' })).toBeVisible();
 
   await expect(collaboratorPage.getByTestId('role-tag-colaborador')).toBeVisible();
