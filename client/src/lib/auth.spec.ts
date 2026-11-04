@@ -1,7 +1,12 @@
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 
 const ACCESS_TOKEN_KEY = 'date2gether:accessToken';
 const REFRESH_TOKEN_KEY = 'date2gether:refreshToken';
+const originalFetch = global.fetch;
+
+afterEach(() => {
+  global.fetch = originalFetch;
+});
 
 describe('isLoggedIn', () => {
   beforeEach(() => {

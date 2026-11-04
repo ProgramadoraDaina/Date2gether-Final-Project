@@ -164,14 +164,19 @@ test.describe('Idioma (ES/EN)', () => {
     await context.close();
   });
 
-  test('el idioma elegido persiste después de recargar', async ({ page }) => {
+  test('el idioma elegido persiste después de recargar', async ({ browser }) => {
+    const context = await browser.newContext({ storageState: EMPTY_STORAGE_STATE });
+    const page = await context.newPage();
     await page.goto('/');
+
+    await page.locator('.language-toggle').click();
     await expect(page.locator('.subtitle')).toHaveText('Videollamadas simples, en el navegador.');
 
     await page.reload();
 
     await expect(page.locator('html')).toHaveAttribute('lang', 'es');
     await expect(page.locator('.subtitle')).toHaveText('Videollamadas simples, en el navegador.');
+    await context.close();
   });
 
   test('el idioma persiste al navegar a otra página sin recargar', async ({ browser }) => {
