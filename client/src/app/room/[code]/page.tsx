@@ -44,6 +44,26 @@ interface RoomPresence {
   nameColor?: string | null;
 }
 
+function renderMessageContent(content: string, users: RoomPresence[], messageId: string) {
+  const names = users
+    .map((user) => user.userName)
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+  if (names.length === 0) return content;
+  const escaped = names.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const parts = content.split(new RegExp(`(@(?:${escaped.join('|')}))`, 'gi'));
+  return parts.map((part, index) =>
+    part.startsWith('@') &&
+    names.some((name) => `@${name}`.toLocaleLowerCase() === part.toLocaleLowerCase()) ? (
+      <mark className={styles.mention} key={`${messageId}-${index}`}>
+        {part}
+      </mark>
+    ) : (
+      <span key={`${messageId}-${index}`}>{part}</span>
+    ),
+  );
+}
+
 // El id ya viene validado por el backend (uno de los 8 de NAME_COLOR_HEX),
 // pero se revalida acá antes de indexar para no romper si llega otro valor.
 function nameColorHex(nameColor?: string | null): string | undefined {
@@ -87,6 +107,7 @@ export default function RoomPage() {
     'save-error': 'No se pudieron guardar las notas. Tu borrador se conserva.',
     conflict: 'Otra persona actualizó las notas. Revisá ambas versiones antes de guardar.',
   }[sharedNotes.status];
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const sidebarResize = useResizablePanel({
@@ -213,6 +234,22 @@ export default function RoomPage() {
     if (!draft.trim()) return;
     socketRef.current?.emit('sendMessage', { content: draft.trim() });
     setDraft('');
+  }
+
+  function handleDraftChange(value: string) {
+    setDraft(value);
+    const match = value.match(/(?:^|\s)@([^\s@]*)$/);
+    setMentionQuery(match ? match[1].toLocaleLowerCase() : null);
+  }
+
+  function insertMention(user: RoomPresence) {
+    const match = draft.match(/(?:^|\s)@[^\s@]*$/);
+    const prefix = match
+      ? draft.slice(0, match.index! + (match[0].startsWith(' ') ? 1 : 0))
+      : draft;
+    setDraft(`${prefix}@${user.userName} `);
+    setMentionQuery(null);
+    draftInputRef.current?.focus();
   }
 
   function handleGifSelect(url: string) {
@@ -359,7 +396,7 @@ export default function RoomPage() {
                   {m.kind === 'gif' ? (
                     <img className={styles.gifMessage} src={m.content} alt="GIF" loading="lazy" />
                   ) : (
-                    m.content
+                    renderMessageContent(m.content, users, m.id)
                   )}
                 </li>
               );
@@ -372,13 +409,34 @@ export default function RoomPage() {
               onEmojiSelect={handleEmojiSelect}
               onGifSelect={handleGifSelect}
             />
-            <input
-              ref={draftInputRef}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder={t('Escribí un mensaje...')}
-              autoComplete="off"
-            />
+            <div className={styles.composerWrap}>
+              <input
+                ref={draftInputRef}
+                value={draft}
+                onChange={(e) => handleDraftChange(e.target.value)}
+                placeholder={t('Escribí un mensaje...')}
+                autoComplete="off"
+              />
+              {mentionQuery !== null &&
+                users.filter((user) => user.userName.toLocaleLowerCase().includes(mentionQuery))
+                  .length > 0 && (
+                  <ul
+                    className={styles.mentionSuggestions}
+                    role="listbox"
+                    aria-label={t('Mencionar participante')}
+                  >
+                    {users
+                      .filter((user) => user.userName.toLocaleLowerCase().includes(mentionQuery))
+                      .map((user) => (
+                        <li key={user.participantId}>
+                          <button type="button" role="option" onClick={() => insertMention(user)}>
+                            {user.userName}
+                          </button>
+                        </li>
+                      ))}
+                  </ul>
+                )}
+            </div>
             <button type="submit">{t('Enviar')}</button>
           </form>
         </>

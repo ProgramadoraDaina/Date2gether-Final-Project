@@ -358,6 +358,55 @@
   margin-bottom: 0;
 }
 
+.composerWrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.composerWrap > input {
+  width: 100%;
+}
+
+.mentionSuggestions {
+  position: absolute;
+  z-index: 5;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 6px);
+  max-height: 180px;
+  overflow-y: auto;
+  list-style: none;
+  padding: 4px;
+  margin: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.mentionSuggestions button {
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.mentionSuggestions button:hover {
+  background: var(--color-bg);
+}
+
+.mention {
+  border-radius: 4px;
+  padding: 0 2px;
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  color: var(--color-accent);
+}
+
 .notesPanel {
   display: flex;
   flex: 1;
