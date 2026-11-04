@@ -21,7 +21,7 @@ test('crear una reunión requiere cuenta y conserva el rol de administrador', as
   await expect(page).toHaveURL(ROOM_URL_PATTERN);
   await page.getByRole('button', { name: 'Entrar a la reunión', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'En la sala (1)' })).toBeVisible();
-  await expect(page.locator('.role-tag-administrador')).toBeVisible();
+  await expect(page.getByTestId('role-tag-administrador')).toBeVisible();
 });
 
 test('un invitado puede entrar con un código sin iniciar sesión', async ({ page, request }) => {
@@ -47,7 +47,7 @@ test('el enlace directo exige un nombre antes de conectar', async ({ page, reque
   await page.getByLabel('Tu nombre en la reunión').fill('  Invitada  ');
   await enter.click();
   await expect(page.getByRole('heading', { name: 'En la sala (1)' })).toBeVisible();
-  await expect(page.locator('.users-panel')).toContainText('Invitada');
+  await expect(page.getByTestId('users-panel')).toContainText('Invitada');
 });
 
 test('dos invitados con el mismo nombre chatean y salir no elimina al otro', async ({
@@ -69,7 +69,7 @@ test('dos invitados con el mismo nombre chatean y salir no elimina al otro', asy
       await expect(page.getByRole('heading', { name: 'En la sala (2)' })).toBeVisible();
     await a.getByPlaceholder('Escribí un mensaje...').fill('Mensaje entre invitados');
     await a.getByRole('button', { name: 'Enviar', exact: true }).click();
-    await expect(b.locator('#messages')).toContainText('Mensaje entre invitados');
+    await expect(b.getByTestId('messages')).toContainText('Mensaje entre invitados');
     await a.getByRole('link', { name: 'Salir', exact: true }).click();
     await expect(b.getByRole('heading', { name: 'En la sala (1)' })).toBeVisible();
   } finally {
@@ -82,7 +82,7 @@ test('un enlace inexistente muestra el error sin conectar a una sala', async ({ 
   await page.goto('/room/zzz-zzzz-zzz');
   await page.getByLabel('Tu nombre en la reunión').fill('Caro');
   await page.getByRole('button', { name: 'Entrar a la reunión', exact: true }).click();
-  await expect(page.locator('.error[role="alert"]')).toContainText('No existe una sala');
+  await expect(page.getByTestId('error-message')).toContainText('No existe una sala');
   await expect(page.getByRole('button', { name: 'Llamar', exact: true })).toHaveCount(0);
 });
 

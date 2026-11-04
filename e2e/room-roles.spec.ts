@@ -59,21 +59,21 @@ test('el administrador puede ascender y después descender a un participante, y 
   await adminPage.getByRole('button', { name: 'Entrar a la reunión', exact: true }).click();
   await expect(adminPage.getByRole('heading', { name: 'En la sala (2)' })).toBeVisible();
 
-  const betoRowOnAdmin = adminPage.locator('.users-panel li').filter({ hasText: 'Beto' });
-  const ownRowOnMember = memberPage.locator('.users-panel li').filter({ hasText: 'Beto' });
-  await expect(betoRowOnAdmin.locator('.role-tag-participante')).toBeVisible();
+  const betoRowOnAdmin = adminPage.getByTestId('users-panel').locator('li').filter({ hasText: 'Beto' });
+  const ownRowOnMember = memberPage.getByTestId('users-panel').locator('li').filter({ hasText: 'Beto' });
+  await expect(betoRowOnAdmin.getByTestId('role-tag-participante')).toBeVisible();
 
   await betoRowOnAdmin.getByRole('button', { name: 'Hacer colaborador' }).click();
 
-  await expect(betoRowOnAdmin.locator('.role-tag-colaborador')).toBeVisible();
+  await expect(betoRowOnAdmin.getByTestId('role-tag-colaborador')).toBeVisible();
   await expect(betoRowOnAdmin.getByRole('button', { name: 'Quitar colaborador' })).toBeVisible();
   // El evento llega también a la pantalla de Beto, sin que él recargue.
-  await expect(ownRowOnMember.locator('.role-tag-colaborador')).toBeVisible();
+  await expect(ownRowOnMember.getByTestId('role-tag-colaborador')).toBeVisible();
 
   await betoRowOnAdmin.getByRole('button', { name: 'Quitar colaborador' }).click();
 
-  await expect(betoRowOnAdmin.locator('.role-tag-participante')).toBeVisible();
-  await expect(ownRowOnMember.locator('.role-tag-participante')).toBeVisible();
+  await expect(betoRowOnAdmin.getByTestId('role-tag-participante')).toBeVisible();
+  await expect(ownRowOnMember.getByTestId('role-tag-participante')).toBeVisible();
 
   await adminContext.close();
   await memberContext.close();
@@ -115,9 +115,9 @@ test('un colaborador no ve botones para cambiar roles, ni el suyo ni el de otra 
   await collaboratorPage.getByRole('button', { name: 'Entrar a la reunión', exact: true }).click();
   await expect(collaboratorPage.getByRole('heading', { name: 'En la sala (2)' })).toBeVisible();
 
-  await expect(collaboratorPage.locator('.role-tag-colaborador')).toBeVisible();
-  await expect(collaboratorPage.locator('.role-tag-participante')).toBeVisible();
-  await expect(collaboratorPage.locator('.role-button')).toHaveCount(0);
+  await expect(collaboratorPage.getByTestId('role-tag-colaborador')).toBeVisible();
+  await expect(collaboratorPage.getByTestId('role-tag-participante')).toBeVisible();
+  await expect(collaboratorPage.getByTestId('role-button')).toHaveCount(0);
 
   await otherContext.close();
   await collaboratorContext.close();

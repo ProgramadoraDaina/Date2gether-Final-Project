@@ -19,7 +19,11 @@ export function RoleTag({ role }: RoleTagProps) {
   // el resto de los roles usa únicamente el estilo base, igual que antes.
   const variantClass = styles[`roleTag${role.charAt(0).toUpperCase()}${role.slice(1)}`] ?? '';
   return (
-    <abbr title={full} className={`${styles.roleTag} ${variantClass}`}>
+    <abbr
+      title={full}
+      className={`${styles.roleTag} ${variantClass}`}
+      data-testid={`role-tag-${role}`}
+    >
       {short}
     </abbr>
   );

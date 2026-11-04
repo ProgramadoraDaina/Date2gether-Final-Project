@@ -22,7 +22,7 @@ test('un mensaje queda en el historial para alguien que se une después de que s
   await expect(page.getByRole('heading', { name: 'En la sala (1)' })).toBeVisible();
   await page.getByPlaceholder('Escribí un mensaje...').fill('Mensaje para la posteridad');
   await page.getByRole('button', { name: 'Enviar', exact: true }).click();
-  await expect(page.locator('#messages')).toContainText('Mensaje para la posteridad');
+  await expect(page.getByTestId('messages')).toContainText('Mensaje para la posteridad');
 
   await page.getByRole('link', { name: 'Salir', exact: true }).click();
   await expect(page).toHaveURL('/');
@@ -32,7 +32,7 @@ test('un mensaje queda en el historial para alguien que se une después de que s
   await page.getByRole('button', { name: 'Entrar a la reunión', exact: true }).click();
 
   await expect(page.getByRole('heading', { name: 'En la sala (1)' })).toBeVisible();
-  await expect(page.locator('#messages')).toContainText('Mensaje para la posteridad');
+  await expect(page.getByTestId('messages')).toContainText('Mensaje para la posteridad');
 });
 
 test('quienes ya están en la sala ven el aviso de que alguien se unió, y después de que se fue', async ({
@@ -55,11 +55,11 @@ test('quienes ya están en la sala ven el aviso de que alguien se unió, y despu
     await second.getByLabel('Tu nombre en la reunión').fill('Segundo');
     await second.getByRole('button', { name: 'Entrar a la reunión', exact: true }).click();
 
-    await expect(first.locator('.notice')).toContainText('Segundo se unió a la sala');
+    await expect(first.getByTestId('notice')).toContainText('Segundo se unió a la sala');
 
     await second.getByRole('link', { name: 'Salir', exact: true }).click();
 
-    await expect(first.locator('.notice')).toContainText('Segundo salió de la sala');
+    await expect(first.getByTestId('notice')).toContainText('Segundo salió de la sala');
   } finally {
     await firstContext.close();
     await secondContext.close();

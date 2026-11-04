@@ -238,7 +238,7 @@ export default function RoomPage() {
         </button>
       </form>
       {joinError && (
-        <p className={styles.error} role="alert">
+        <p className={styles.error} role="alert" data-testid="error-message">
           {joinError}
         </p>
       )}
@@ -304,7 +304,7 @@ export default function RoomPage() {
       </div>
       {chatTab === 'chat' ? (
         <>
-          <ul className={styles.messages} ref={listRef}>
+          <ul className={styles.messages} ref={listRef} data-testid="messages">
             {messages.map((m) => {
               // No hay un id de autor persistido por mensaje: el color se
               // resuelve cruzando por nombre contra la presencia actual.
@@ -346,7 +346,7 @@ export default function RoomPage() {
           </form>
         </>
       ) : (
-        <div className={styles.usersPanel}>
+        <div className={styles.usersPanel} data-testid="users-panel">
           <h3>
             {t('En la sala')} ({users.length})
           </h3>
@@ -367,6 +367,7 @@ export default function RoomPage() {
                     <button
                       type="button"
                       className={roleTagStyles.roleButton}
+                      data-testid="role-button"
                       onClick={() =>
                         changeRole(
                           member.userId,
@@ -425,7 +426,7 @@ export default function RoomPage() {
 
         <div className={styles.roomMain}>
           {notice && (
-            <div className={styles.notice}>
+            <div className={styles.notice} data-testid="notice">
               {'text' in notice
                 ? notice.text
                 : `${notice.userName} ${t(notice.event === 'joined' ? 'se unió a la sala' : 'salió de la sala')}`}
