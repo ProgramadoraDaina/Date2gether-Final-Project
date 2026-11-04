@@ -47,8 +47,8 @@ test.describe('Tema (claro/oscuro)', () => {
     await page.goto('/');
 
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    await expect(page.locator('.theme-toggle')).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.locator('.theme-toggle')).toHaveText('☀️');
+    await expect(page.getByTestId('theme-toggle')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByTestId('theme-toggle')).toHaveText('☀️');
     await context.close();
   });
 
@@ -63,8 +63,8 @@ test.describe('Tema (claro/oscuro)', () => {
     await page.goto('/');
 
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-    await expect(page.locator('.theme-toggle')).toHaveAttribute('aria-pressed', 'false');
-    await expect(page.locator('.theme-toggle')).toHaveText('🌙');
+    await expect(page.getByTestId('theme-toggle')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.getByTestId('theme-toggle')).toHaveText('🌙');
     await context.close();
   });
 
@@ -80,7 +80,7 @@ test.describe('Tema (claro/oscuro)', () => {
     await page.goto('/');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
 
-    await page.locator('.theme-toggle').click();
+    await page.getByTestId('theme-toggle').click();
 
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     const stored = await page.evaluate(() => localStorage.getItem('date2gether:theme'));
@@ -122,7 +122,7 @@ test.describe('Tema (claro/oscuro)', () => {
     });
     const page = await context.newPage();
     await page.goto('/');
-    await page.locator('.theme-toggle').click();
+    await page.getByTestId('theme-toggle').click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
 
     await page.getByRole('link', { name: 'Iniciar sesión', exact: true }).click();
@@ -144,7 +144,7 @@ test.describe('Idioma (ES/EN)', () => {
     await page.goto('/');
 
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
-    await expect(page.locator('.subtitle')).toHaveText('Simple video calls, in the browser.');
+    await expect(page.getByTestId('subtitle')).toHaveText('Simple video calls, in the browser.');
     await context.close();
   });
 
@@ -155,10 +155,10 @@ test.describe('Idioma (ES/EN)', () => {
     const page = await context.newPage();
     await page.goto('/');
 
-    await page.locator('.language-toggle').click();
+    await page.getByTestId('language-toggle').click();
 
     await expect(page.locator('html')).toHaveAttribute('lang', 'es');
-    await expect(page.locator('.subtitle')).toHaveText('Videollamadas simples, en el navegador.');
+    await expect(page.getByTestId('subtitle')).toHaveText('Videollamadas simples, en el navegador.');
     const stored = await page.evaluate(() => localStorage.getItem('date2gether:language'));
     expect(JSON.parse(stored ?? '{}').state.language).toBe('es');
     await context.close();
@@ -169,13 +169,13 @@ test.describe('Idioma (ES/EN)', () => {
     const page = await context.newPage();
     await page.goto('/');
 
-    await page.locator('.language-toggle').click();
-    await expect(page.locator('.subtitle')).toHaveText('Videollamadas simples, en el navegador.');
+    await page.getByTestId('language-toggle').click();
+    await expect(page.getByTestId('subtitle')).toHaveText('Videollamadas simples, en el navegador.');
 
     await page.reload();
 
     await expect(page.locator('html')).toHaveAttribute('lang', 'es');
-    await expect(page.locator('.subtitle')).toHaveText('Videollamadas simples, en el navegador.');
+    await expect(page.getByTestId('subtitle')).toHaveText('Videollamadas simples, en el navegador.');
     await context.close();
   });
 
@@ -183,14 +183,14 @@ test.describe('Idioma (ES/EN)', () => {
     const context = await browser.newContext({ storageState: EMPTY_STORAGE_STATE });
     const page = await context.newPage();
     await page.goto('/');
-    await page.locator('.language-toggle').click();
+    await page.getByTestId('language-toggle').click();
     await expect(page.locator('html')).toHaveAttribute('lang', 'es');
 
     await page.getByRole('link', { name: 'Iniciar sesión', exact: true }).click();
 
     await expect(page).toHaveURL('/login');
     await expect(page.locator('html')).toHaveAttribute('lang', 'es');
-    await expect(page.locator('.subtitle')).toHaveText('Entrá con tu cuenta de Date2gether.');
+    await expect(page.getByTestId('subtitle')).toHaveText('Entrá con tu cuenta de Date2gether.');
   });
 
   // Regresión directa del bug que arregló f4dbcab: layout.tsx renderiza
