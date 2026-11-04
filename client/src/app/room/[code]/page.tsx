@@ -12,6 +12,7 @@ import roleTagStyles from '@/features/rooms/RoleTag.module.css';
 import { RoomSidebar } from '@/features/rooms/RoomSidebar';
 import { useResizablePanel } from '@/features/rooms/useResizablePanel';
 import { useRoomMembers } from '@/features/rooms/useRoomMembers';
+import { useRoomNotes } from '@/features/rooms/useRoomNotes';
 import { ApiError, requestRoomAccess, type RoomAccess } from '@/lib/api';
 import { useCallSession } from '@/features/calls/useCallSession';
 import { createRoomSocket } from '@/lib/socket';
@@ -50,6 +51,11 @@ function nameColorHex(nameColor?: string | null): string | undefined {
   return NAME_COLOR_HEX[nameColor];
 }
 
+function personalNotesKey(roomCode: string, participant: RoomAccess['participant']): string {
+  const identity = participant.userId ?? `guest:${participant.name.trim().toLocaleLowerCase()}`;
+  return `date2gether:notes:${roomCode}:${identity}`;
+}
+
 export default function RoomPage() {
   const { t } = useTranslation();
   const { code } = useParams<{ code: string }>();
@@ -62,7 +68,25 @@ export default function RoomPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [chatTab, setChatTab] = useState<'chat' | 'presentes'>('chat');
+  const [chatTab, setChatTab] = useState<'chat' | 'presentes' | 'notas'>('chat');
+  const [notesTab, setNotesTab] = useState<'personal' | 'sala'>('personal');
+  const [personalNotes, setPersonalNotes] = useState('');
+  const [notesStatus, setNotesStatus] = useState('');
+  const sharedNotes = useRoomNotes(
+    code,
+    access?.token,
+    access ? `${personalNotesKey(code, access.participant)}:shared-draft` : undefined,
+  );
+  const sharedNotesStatus = {
+    loading: 'Cargando notas de sala…',
+    ready: 'Estas notas son compartidas con la sala',
+    pending: 'Guardando…',
+    saving: 'Guardando…',
+    saved: 'Notas guardadas',
+    'load-error': 'No se pudieron cargar las notas de sala',
+    'save-error': 'No se pudieron guardar las notas. Tu borrador se conserva.',
+    conflict: 'Otra persona actualizó las notas. Revisá ambas versiones antes de guardar.',
+  }[sharedNotes.status];
   const [chatOpen, setChatOpen] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const sidebarResize = useResizablePanel({
@@ -94,6 +118,12 @@ export default function RoomPage() {
   useEffect(() => {
     setName(localStorage.getItem(NAME_KEY) ?? '');
   }, []);
+
+  useEffect(() => {
+    if (!access) return;
+    const key = personalNotesKey(code, access.participant);
+    setPersonalNotes(localStorage.getItem(key) ?? '');
+  }, [access, code]);
 
   async function handleJoin(e: FormEvent) {
     e.preventDefault();
@@ -301,6 +331,13 @@ export default function RoomPage() {
         >
           {t('Presentes')}
         </button>
+        <button
+          type="button"
+          className={`${styles.chatTab} ${chatTab === 'notas' ? styles.chatTabActive : ''}`}
+          onClick={() => setChatTab('notas')}
+        >
+          {t('Notas')}
+        </button>
       </div>
       {chatTab === 'chat' ? (
         <>
@@ -345,7 +382,7 @@ export default function RoomPage() {
             <button type="submit">{t('Enviar')}</button>
           </form>
         </>
-      ) : (
+      ) : chatTab === 'presentes' ? (
         <div className={styles.usersPanel}>
           <h3>
             {t('En la sala')} ({users.length})
@@ -384,6 +421,72 @@ export default function RoomPage() {
             })}
           </ul>
         </div>
+      ) : (
+        <section className={styles.notesPanel}>
+          <div className={styles.notesTabs}>
+            <button
+              type="button"
+              aria-pressed={notesTab === 'personal'}
+              onClick={() => setNotesTab('personal')}
+            >
+              {t('Personales')}
+            </button>
+            <button
+              type="button"
+              aria-pressed={notesTab === 'sala'}
+              onClick={() => setNotesTab('sala')}
+            >
+              {t('De la sala')}
+            </button>
+          </div>
+          <textarea
+            aria-label={
+              notesTab === 'personal' ? t('Notas personales') : t('Notas compartidas de la sala')
+            }
+            placeholder={t('Escribí tus notas...')}
+            value={notesTab === 'personal' ? personalNotes : sharedNotes.content}
+            disabled={notesTab === 'sala' && ['loading', 'load-error'].includes(sharedNotes.status)}
+            onChange={(event) => {
+              if (notesTab === 'personal') {
+                const value = event.target.value;
+                setPersonalNotes(value);
+                localStorage.setItem(personalNotesKey(code, access.participant), value);
+                setNotesStatus(t('Notas guardadas en este dispositivo'));
+              } else {
+                sharedNotes.edit(event.target.value);
+              }
+            }}
+            maxLength={20000}
+          />
+          <small aria-live="polite">
+            {notesTab === 'personal'
+              ? notesStatus || t('Solo vos podés ver estas notas')
+              : t(sharedNotesStatus)}
+          </small>
+          {notesTab === 'sala' && ['load-error', 'save-error'].includes(sharedNotes.status) && (
+            <button type="button" onClick={sharedNotes.retry}>
+              {t('Reintentar')}
+            </button>
+          )}
+          {notesTab === 'sala' &&
+            sharedNotes.status === 'conflict' &&
+            (sharedNotes.remote ? (
+              <div className={styles.notesConflict}>
+                <label htmlFor="room-notes-remote">{t('Versión actual de la sala')}</label>
+                <textarea id="room-notes-remote" value={sharedNotes.remote.content} readOnly />
+                <button type="button" onClick={() => sharedNotes.resolveConflict(false)}>
+                  {t('Descartar mi borrador y usar la versión de sala')}
+                </button>
+                <button type="button" onClick={() => sharedNotes.resolveConflict(true)}>
+                  {t('Reemplazar la versión de sala con mi borrador')}
+                </button>
+              </div>
+            ) : (
+              <button type="button" onClick={sharedNotes.retry}>
+                {t('Cargar versión actual')}
+              </button>
+            ))}
+        </section>
       )}
     </>
   );

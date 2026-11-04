@@ -18,7 +18,19 @@ jest.mock('@/features/rooms/useRoomMembers', () => {
   };
   return { useRoomMembers: () => state };
 });
-jest.mock('@/lib/api', () => ({ requestRoomAccess: jest.fn(), ApiError: class extends Error {} }));
+jest.mock('@/lib/api', () => ({
+  requestRoomAccess: jest.fn(),
+  getRoomNotes: jest.fn<() => Promise<unknown>>().mockResolvedValue({
+    roomId: 'room-1',
+    content: '',
+    revision: 0,
+    updatedAt: '2026-11-04T00:00:00Z',
+  }),
+  saveRoomNotes: jest.fn(),
+  RoomNotesConflictError: class extends Error {},
+  ApiError: class extends Error {},
+}));
+jest.mock('@/features/chat/ExpressionPicker', () => ({ ExpressionPicker: () => null }));
 jest.mock('@/lib/socket', () => ({ createRoomSocket: jest.fn() }));
 // joinCall/leaveCall se comparten entre renders (en vez de jest.fn() nuevos
 // dentro del factory) para poder verificar que el auto-join se dispara una
@@ -90,9 +102,7 @@ describe('RoomPage: enlace de invitado', () => {
     await waitFor(() => expect(createRoomSocket).toHaveBeenCalledWith('guest-token'));
     expect(requestRoomAccess).toHaveBeenCalledWith('abc-defg-hij', 'Alex');
     expect(fake.emit).toHaveBeenCalledWith('joinRoom', { code: 'abc-defg-hij' });
-    await waitFor(() =>
-      expect(mockJoinCall).toHaveBeenCalledWith('abc-defg-hij', 'guest-token'),
-    );
+    await waitFor(() => expect(mockJoinCall).toHaveBeenCalledWith('abc-defg-hij', 'guest-token'));
     expect(screen.queryByRole('button', { name: 'Llamar' })).not.toBeInTheDocument();
   });
   it('no vuelve a unirse a la llamada tras colgar ni ante otros re-renders', async () => {
@@ -277,7 +287,9 @@ describe('RoomPage: transición de carga antes de entrar a la llamada', () => {
     await waitFor(() => expect(mockJoinCall).toHaveBeenCalledTimes(1));
 
     expect(
-      screen.getByText('No se pudo conectar a la llamada. La sala puede estar llena o sin conexión.'),
+      screen.getByText(
+        'No se pudo conectar a la llamada. La sala puede estar llena o sin conexión.',
+      ),
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));

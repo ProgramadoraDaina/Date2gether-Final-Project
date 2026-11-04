@@ -43,6 +43,20 @@
       "when": 1793376444635,
       "tag": "0005_message_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793750400000,
+      "tag": "0006_room_notes",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793797220456,
+      "tag": "0007_room_notes_revision",
+      "breakpoints": true
     }
   ]
 }
