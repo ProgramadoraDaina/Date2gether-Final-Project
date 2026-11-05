@@ -17,6 +17,7 @@ export function ThemeToggle() {
       aria-label={isDark ? t('Cambiar a modo claro') : t('Cambiar a modo oscuro')}
       title={isDark ? t('Cambiar a modo claro') : t('Cambiar a modo oscuro')}
       className={styles.themeToggle}
+      data-testid="theme-toggle"
     >
       {isDark ? '☀️' : '🌙'}
     </button>

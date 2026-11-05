@@ -9,6 +9,7 @@ const en: Record<string, string> = {
   'No se pudo entrar a la sala': 'Could not join the room',
   'No se pudo conectar a la sala': 'Could not connect to the room',
   'Volver al inicio': 'Back to home',
+  Salir: 'Leave',
   'Copiar enlace': 'Copy link',
   'Enlace copiado': 'Link copied',
   'No se pudo copiar el enlace': 'Could not copy the link',

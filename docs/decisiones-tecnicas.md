@@ -343,6 +343,52 @@ El PostgreSQL del Compose de desarrollo se vincula a `127.0.0.1` en vez de a tod
 Los tokens de cuenta siguen en `localStorage`; un ataque de inyección de scripts podría acceder a ellos. La prueba de penetración, la revisión de la instancia EC2 desplegada y los controles de admisión y revocación de invitaciones no forman parte de esta comprobación y quedan pendientes.
 
 
+## 15. Cobertura de testing en capas (unitario, componentes, E2E) y pipeline de CI
+
+**Fecha:** 2026-11-04
+
+### Contexto
+
+La rama `feature/e2e-ci-coverage` partió con una suite E2E de Playwright (registro/login/logout, chat, preferencias de tema e idioma, roles de sala, creación/acceso a salas — 28 escenarios en 5 archivos) y un workflow de GitHub Actions que solo ejecutaba esa suite. Antes de dar por cerrada la rama se auditó, archivo por archivo, qué código de negocio real tenía test propio y cuál dependía exclusivamente del camino E2E para quedar ejercitado.
+
+### Criterio de cobertura aplicado
+
+Se testea unitariamente lo que tiene lógica propia (ramas, cálculos, reglas de negocio, manejo de errores); no se testea lo que es pura delegación de una línea (un controlador que solo reenvía al service, un botón que solo llama a un hook). Este criterio se aplicó tanto al auditar qué faltaba como al decidir qué no entraba en el alcance.
+
+### Brecha encontrada en el servidor
+
+El pipeline de CI solo corría `pnpm test:e2e`; los unitarios de Nest (`pnpm test`) y los de componentes de Next (`pnpm test:client`) existían en el repositorio pero no se ejecutaban en ningún workflow. Además, `RoomsService`, `ChatService`, `AuthService`, `RoomEventsService`, `RoomRolesGuard` y `generate-room-code` no tenían ningún test unitario propio: su única cobertura era indirecta, a través de los controladores (que mockean el service por completo) o de los escenarios E2E.
+
+Se agregaron 6 archivos de test (34 casos) para esos módulos, con un helper compartido (`src/test-support/fake-drizzle.ts`) que simula en memoria la cadena de consultas de Drizzle usada por `RoomsService`, `ChatService` y `AuthService`, evitando levantar una base real para probar lógica que no depende de SQL concreto. `AuthService` recibió la cobertura más profunda por ser la pieza de seguridad más crítica: hash de contraseña, mismo mensaje de error ante email inexistente o contraseña incorrecta (para no filtrar cuál de los dos falló), rotación y detección de reuso de refresh tokens, y logout idempotente.
+
+Desviación encontrada durante la implementación: forzar la colisión de código de sala en `RoomsService.createRoom` mediante `jest.mock()` sobre `generate-room-code` resultó poco confiable bajo el modo ESM experimental que usa este proyecto con ts-jest. Se optó por mockear directamente `db.select` (lo que `findByCode` consulta), logrando la misma cobertura de comportamiento sin depender de un mecanismo de mocking de módulos inestable en este entorno.
+
+### Brecha encontrada en el cliente
+
+`lib/auth.ts`, los hooks `useTheme`, `useSystemTheme` y `useTranslation`, `useRoomMembers`, el fallback defensivo de `RoleTag` y las páginas de login/registro tampoco tenían test propio. Se agregaron 10 archivos (49 casos), incluyendo el flujo de reintento de `getCurrentUser` tras un 401 y el filtrado por clave de `onAuthChange` (solo debe reaccionar a cambios de los tokens, no a cualquier escritura en `localStorage`).
+
+Quedaron fuera de alcance, a propósito, `ThemeToggle`, `LanguageToggle`, los stores de Zustand como archivos independientes y `dictionary.ts`: ninguno tiene lógica propia más allá de delegar a un hook ya testeado o de ser datos planos.
+
+### Pipeline de CI ampliado
+
+El workflow (antes `E2E`, ahora `CI`) pasó de un job a tres, corriendo en paralelo en cada push y pull request a `main`/`develop`: `unit-server` (`pnpm test`), `unit-client` (`pnpm test:client`) y `e2e` (`pnpm test:e2e`, con el service container de Postgres descartable que ya usaba). Ninguno depende de los otros, para no retrasar el feedback de los más rápidos por un E2E más lento.
+
+### Convención de naming de tests
+
+Durante el proceso se corrigieron nombres de test que no dejaban entender, sin leer el cuerpo, el escenario, el mecanismo verificado y el resultado esperado — por ejemplo, "cancelar descarta la respuesta tardía y elimina las credenciales" (impreciso: nunca se llega a guardar nada para borrarlo) se reescribió como "salir de la llamada mientras todavía se está conectando cancela el pedido en curso, y si la conexión se confirma después de todas formas, la pantalla se queda como si nunca hubiera entrado". El criterio quedó establecido para los tests nuevos desde el primer intento: describir el comportamiento en lenguaje de "qué pasa en pantalla", sin jerga interna de implementación (identificadores, nombres de variables), y sin acortar a costa de la precisión.
+
+### Limitación conocida y aceptada
+
+`applyThemeToDocument` y `applyLanguageToDocument` (en `dom-helpers.ts` de `theme` y `translation`) tienen una guarda `if (typeof document === 'undefined') return`. Sus únicos dos puntos de llamada están dentro de un `useEffect`, que por diseño de React nunca se ejecuta en el servidor — por lo tanto esa rama no se ejecuta ni en los tests (jsdom simula un `document` que siempre existe) ni en producción con el código actual. Se decidió conservarla como resguardo defensivo ante un eventual uso futuro fuera de un efecto, documentando que hoy es una rama sin cobertura real y sin impacto, en vez de testearla con un entorno Jest especial o eliminarla.
+
+### Estado final de cobertura en esta rama
+
+| Capa | Resultado |
+|---|---|
+| Unitario servidor (Jest) | 14 suites / 56 tests |
+| Unitario/componentes cliente (Jest + RTL) | 18 suites / 70 tests |
+| E2E (Playwright) | 28 escenarios en 5 archivos |
+| CI (GitHub Actions) | 3 jobs en paralelo por push/PR a `main`/`develop`: `unit-server`, `unit-client`, `e2e` |
 ## 14. Correcciones de arranque y construcción detectadas en el primer despliegue real a EC2
 
 **Fecha:** 2026-10-28

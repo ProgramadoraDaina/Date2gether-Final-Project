@@ -3,9 +3,9 @@ import type { ReactNode } from 'react';
 import { TopBar } from '@/features/layout/TopBar';
 import { THEME_SCRIPT } from '@/features/theme/themeScript';
 import { ThemeSync } from '@/features/theme/ThemeSync';
+import styles from './layout.module.css';
 import '@livekit/components-styles';
 import './globals.css';
-import styles from './layout.module.css';
 
 export const metadata: Metadata = {
   title: 'Date2gether',

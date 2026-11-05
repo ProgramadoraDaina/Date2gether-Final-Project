@@ -22,6 +22,7 @@ jest.mock('@livekit/components-react', () => ({
   useMaybeTrackRefContext: jest.fn(() => undefined),
 }));
 jest.mock('livekit-client', () => ({
+  DefaultReconnectPolicy: jest.fn(),
   DisconnectReason: { CLIENT_INITIATED: 1 },
   Track: { Source: { Camera: 'camera', Microphone: 'microphone' } },
   VideoPresets: { h360: { resolution: { width: 640, height: 360 } }, h90: {}, h180: {} },
@@ -129,7 +130,7 @@ describe('MeetingRoom', () => {
     expect(screen.getByRole('button', { name: 'Colgar' })).toBeInTheDocument();
     expect(call.failed).not.toHaveBeenCalled();
   });
-  it('distingue salida voluntaria y desconexión por error', async () => {
+  it('cuando LiveKit avisa que la conexión se cerró: si fue porque el usuario se fue, llama a leaveCall; si fue por un error de red, llama a failed', async () => {
     const { LiveKitRoom } = await import('@livekit/components-react');
     const MeetingRoom = (await import('./MeetingRoom')).default;
     const call = state();

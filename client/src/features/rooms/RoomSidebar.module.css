@@ -77,6 +77,16 @@
   margin-top: auto;
 }
 
+.leaveLink {
+  text-align: center;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.leaveLink:hover {
+  color: var(--color-accent);
+}
+
 @media (max-width: 640px) {
   /* En mobile la sidebar es una fila fija arriba, no un panel con ancho a
      gusto: ignora el --sidebar-width elegido en desktop. ".sidebarWrap" a
