@@ -116,10 +116,12 @@
   background: var(--color-chip-bg);
 }
 
+/* Recorta stickers y badges en el borde de la cámara: si se salen, generan scroll en la grilla. */
 .tileWrap {
   position: relative;
   width: 100%;
   height: 100%;
+  overflow: hidden;
 }
 
 .tileWrap > :global(.lk-participant-tile) {
@@ -220,20 +222,19 @@
   animation: sticker-shake 0.3s steps(2, end) infinite;
 }
 
-/* Aparece con un barrido y se desvanece en el último 10% de su duración. */
+/* Solo opacidad: un clip-path recortaría al glifo cuando flota, gira o tiembla fuera de su caja. */
 @keyframes sticker-life {
   0% {
-    clip-path: inset(100% 0 0 0);
+    opacity: 0;
   }
   4% {
-    clip-path: inset(0 0 0 0);
+    opacity: 1;
   }
   90% {
     opacity: 1;
   }
   100% {
     opacity: 0;
-    clip-path: inset(0 0 0 0);
   }
 }
 
