@@ -75,6 +75,26 @@
   gap: 8px;
 }
 
+/* Selector de micrófono/cámara de LiveKit: trae padding de píldora y su flecha
+   (::after) con margin-left, que la descentra. Se iguala al resto de los botones. */
+.controlsGroup :global(.lk-button-menu) {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--color-chip-bg);
+  color: var(--color-text);
+}
+
+.controlsGroup :global(.lk-button-menu)::after {
+  margin: -0.2em 0 0;
+}
+
+.controlsGroup :global(.lk-button-menu):hover {
+  border-color: var(--color-accent);
+}
+
 /* Botón de colgar: ícono redondo con la misma forma que .iconButton, pero
    con esquema "danger" (fondo var(--color-error)). El color del ícono usa
    var(--color-bg) a propósito en vez de un blanco fijo: ese token ya es

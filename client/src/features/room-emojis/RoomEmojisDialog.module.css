@@ -120,6 +120,7 @@
 .deleteAction:hover,
 .deleteAction[data-confirming='true'] {
   border-color: var(--color-error);
+  background: var(--color-surface);
   color: var(--color-error);
 }
 

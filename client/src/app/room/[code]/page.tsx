@@ -64,6 +64,11 @@ export default function RoomPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [notice, setNotice] = useState<Notice | null>(null);
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), 'text' in notice ? 6000 : 2500);
+    return () => clearTimeout(timer);
+  }, [notice]);
   const [chatTab, setChatTab] = useState<'chat' | 'presentes'>('chat');
   const [chatOpen, setChatOpen] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
