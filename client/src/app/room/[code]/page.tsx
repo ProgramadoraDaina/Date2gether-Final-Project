@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useParams } from 'next/navigation';
 import type { Socket } from 'socket.io-client';
-import { ExpressionPicker } from '@/features/chat/ExpressionPicker';
+import { ExpressionPicker, type ExpressionTab } from '@/features/chat/ExpressionPicker';
+import { MessageText } from '@/features/chat/MessageText';
+import { RoomEmojiShortcuts } from '@/features/chat/RoomEmojiShortcuts';
 import { AppShell } from '@/features/navigation/AppShell';
 import { RoomEmojisDialog } from '@/features/room-emojis/RoomEmojisDialog';
 import { useRoomEmojis } from '@/features/room-emojis/useRoomEmojis';
@@ -14,7 +16,7 @@ import roleTagStyles from '@/features/rooms/RoleTag.module.css';
 import { RoomSidebar } from '@/features/rooms/RoomSidebar';
 import { useResizablePanel } from '@/features/rooms/useResizablePanel';
 import { useRoomMembers } from '@/features/rooms/useRoomMembers';
-import { ApiError, requestRoomAccess, type RoomAccess } from '@/lib/api';
+import { ApiError, requestRoomAccess, type RoomAccess, type RoomEmoji } from '@/lib/api';
 import { useCallSession } from '@/features/calls/useCallSession';
 import { createRoomSocket } from '@/lib/socket';
 import { useTranslation } from '@/features/translation/useTranslation';
@@ -92,6 +94,9 @@ export default function RoomPage() {
   const callSession = useCallSession();
   const [emojisOpen, setEmojisOpen] = useState(false);
   const { emojis, refetchEmojis } = useRoomEmojis(access ? code : undefined);
+  const emojisByName = useMemo(() => new Map(emojis.map((e) => [e.name, e])), [emojis]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerTab, setPickerTab] = useState<ExpressionTab>('emoji');
   const {
     members,
     currentUserRole,
@@ -212,6 +217,10 @@ export default function RoomPage() {
       input?.focus();
       input?.setSelectionRange(start + emoji.length, start + emoji.length);
     });
+  }
+
+  function handleRoomEmojiSelect(emoji: RoomEmoji) {
+    handleEmojiSelect(`:${emoji.name}: `);
   }
 
   async function handleCopyLink() {
@@ -335,18 +344,33 @@ export default function RoomPage() {
                   {m.kind === 'gif' ? (
                     <img className={styles.gifMessage} src={m.content} alt="GIF" loading="lazy" />
                   ) : (
-                    m.content
+                    <MessageText text={m.content} roomCode={code} emojisByName={emojisByName} />
                   )}
                 </li>
               );
             })}
           </ul>
+          <RoomEmojiShortcuts
+            roomCode={code}
+            emojis={emojis}
+            onSelect={handleRoomEmojiSelect}
+            onShowAll={() => {
+              setPickerTab('room');
+              setPickerOpen(true);
+            }}
+          />
           <form className={styles.messageForm} onSubmit={handleSend}>
             <ExpressionPicker
               roomCode={code}
               roomToken={access.token}
+              roomEmojis={emojis}
+              open={pickerOpen}
+              onOpenChange={setPickerOpen}
+              tab={pickerTab}
+              onTabChange={setPickerTab}
               onEmojiSelect={handleEmojiSelect}
               onGifSelect={handleGifSelect}
+              onRoomEmojiSelect={handleRoomEmojiSelect}
             />
             <input
               ref={draftInputRef}

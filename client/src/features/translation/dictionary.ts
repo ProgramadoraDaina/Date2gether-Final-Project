@@ -100,6 +100,12 @@ const en: Record<string, string> = {
   'Emojis de la sala': 'Room emojis',
   'Subir imagen': 'Upload image',
   'Sonido opcional': 'Optional sound',
+  Sala: 'Room',
+  'Ver anteriores': 'Show previous',
+  'Ver siguientes': 'Show next',
+  'Ver todos los emojis de la sala': 'Show all room emojis',
+  'Esta sala todavía no tiene emojis propios. Se crean desde "Emojis de la sala".':
+    'This room has no custom emojis yet. Create them from "Room emojis".',
   'Sonido: subir archivo': 'Sound: upload file',
   'Sonido: Freesound': 'Sound: Freesound',
   'Buscar en Freesound (ej: bruh, airhorn)': 'Search Freesound (e.g. bruh, airhorn)',

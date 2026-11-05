@@ -1,0 +1,48 @@
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 20px 0;
+}
+
+.track {
+  display: flex;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.track::-webkit-scrollbar {
+  display: none;
+}
+
+.shortcut,
+.arrow {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.shortcut:hover,
+.shortcut:focus-visible,
+.arrow:hover,
+.arrow:focus-visible {
+  border-color: var(--color-border);
+  background: var(--color-chip-bg);
+  color: var(--color-accent);
+}
+
+.arrow {
+  border-color: var(--color-border);
+  font-family: ui-monospace, monospace;
+  font-size: 16px;
+}
