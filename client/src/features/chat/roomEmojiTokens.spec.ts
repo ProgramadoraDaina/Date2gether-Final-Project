@@ -5,6 +5,7 @@ import { splitRoomEmojiTokens } from './roomEmojiTokens';
 const bruh: RoomEmoji = {
   id: '3f1c2a9e-7b4d-4e8a-9c1f-2d5e6a7b8c9d',
   name: 'bruh',
+  kind: 'emoji',
   emoji: null,
   hasSound: true,
   soundAttribution: null,
@@ -32,6 +33,14 @@ describe('splitRoomEmojiTokens', () => {
     expect(splitRoomEmojiTokens(':bruh::bruh:', byName)).toEqual([
       { kind: 'emoji', emoji: bruh },
       { kind: 'emoji', emoji: bruh },
+    ]);
+  });
+
+  it('un sonido de sala escrito como :nombre: queda como texto', () => {
+    const airhorn: RoomEmoji = { ...bruh, id: '37cdf7e8-ff6a-47ce-8d6b-7f4e51bdd2ed', name: 'airhorn', kind: 'sound' };
+    const withSound = new Map([...byName, ['airhorn', airhorn]]);
+    expect(splitRoomEmojiTokens('dale :airhorn:', withSound)).toEqual([
+      { kind: 'text', text: 'dale :airhorn:' },
     ]);
   });
 

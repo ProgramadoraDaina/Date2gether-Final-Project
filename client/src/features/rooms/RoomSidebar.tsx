@@ -48,7 +48,7 @@ export function RoomSidebar({
         </div>
 
         <button type="button" className={`secondary ${styles.emojisButton}`} onClick={onOpenEmojis}>
-          {t('Emojis de la sala')}
+          {t('Emojis y sonidos')}
         </button>
 
         <button type="button" className={`secondary ${styles.copyLink}`} onClick={onCopyLink}>

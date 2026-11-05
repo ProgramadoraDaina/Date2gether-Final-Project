@@ -13,7 +13,8 @@ export function splitRoomEmojiTokens(
   let last = 0;
   for (const match of text.matchAll(TOKEN)) {
     const emoji = emojisByName.get(match[1]);
-    if (!emoji) continue;
+    // Los sonidos de sala no tienen imagen: solo se usan desde la botonera, nunca en el chat.
+    if (!emoji || emoji.kind !== 'emoji') continue;
     if (match.index > last) segments.push({ kind: 'text', text: text.slice(last, match.index) });
     segments.push({ kind: 'emoji', emoji });
     last = match.index + match[0].length;

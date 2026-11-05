@@ -98,6 +98,17 @@ const en: Record<string, string> = {
   'Buscar GIF': 'Search GIF',
   Reaccionar: 'React',
   'Emojis de la sala': 'Room emojis',
+  'Emojis y sonidos': 'Emojis and sounds',
+  'Emojis y sonidos de la sala': 'Room emojis and sounds',
+  Emojis: 'Emojis',
+  Sonidos: 'Sounds',
+  'Agregar sonido': 'Add sound',
+  'Sonido (MP3, OGG o WAV, hasta 5 s)': 'Sound (MP3, OGG or WAV, up to 5 s)',
+  'Agregá un sonido: subí un archivo o elegí uno de Freesound':
+    'Add a sound: upload a file or pick one from Freesound',
+  'Agregá una imagen, un emoji o un sonido': 'Add an image, an emoji or a sound',
+  'Esta sala todavía no tiene sonidos. Se reproducen desde el botón 🔊 de la llamada.':
+    'This room has no sounds yet. Play them from the 🔊 button in the call.',
   'Subir imagen': 'Upload image',
   'Sonido opcional': 'Optional sound',
   Sala: 'Room',
@@ -152,7 +163,8 @@ const en: Record<string, string> = {
   'La imagen no es válida. Usá PNG, JPG, WebP o GIF.':
     'The image is not valid. Use PNG, JPG, WebP or GIF.',
   'El audio no es válido. Usá MP3, OGG o WAV.': 'The sound is not valid. Use MP3, OGG or WAV.',
-  'Ya existe un emoji con ese nombre en la sala': 'An emoji with that name already exists in this room',
+  'Ya existe un emoji o sonido con ese nombre en la sala':
+    'An emoji or sound with that name already exists in this room',
   'La sala ya tiene 50 emojis': 'The room already has 50 emojis',
   'Tu rol en la sala no permite esta acción': 'Your room role does not allow this action',
   'No sos parte de esta sala': 'You are not part of this room',

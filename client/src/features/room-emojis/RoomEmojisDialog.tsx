@@ -46,10 +46,17 @@ function soundDuration(file: File): Promise<number> {
   });
 }
 
-export function RoomEmojisDialog({ code, open, onClose, emojis, canManage }: RoomEmojisDialogProps) {
+export function RoomEmojisDialog({
+  code,
+  open,
+  onClose,
+  emojis,
+  canManage,
+}: RoomEmojisDialogProps) {
   const { t } = useTranslation();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const [section, setSection] = useState<'emojis' | 'sounds'>('emojis');
   const [name, setName] = useState('');
   const [source, setSource] = useState<'image' | 'emoji'>('image');
   const [unicode, setUnicode] = useState<string | null>(null);
@@ -97,19 +104,24 @@ export function RoomEmojisDialog({ code, open, onClose, emojis, canManage }: Roo
       setError(t('El nombre debe tener de 2 a 32 caracteres: letras, números o guion bajo'));
       return;
     }
-    if (source === 'emoji' && !unicode) {
+    const isSound = section === 'sounds';
+    const fileSound = soundSource === 'file' ? sound : null;
+    if (isSound && !fileSound && !(soundSource === 'freesound' && freesoundSound)) {
+      setError(t('Agregá un sonido: subí un archivo o elegí uno de Freesound'));
+      return;
+    }
+    if (!isSound && source === 'emoji' && !unicode) {
       setError(t('Elegí un emoji'));
       return;
     }
-    if (source === 'image' && !image) {
+    if (!isSound && source === 'image' && !image) {
       setError(t('Falta la imagen del emoji'));
       return;
     }
-    if (image && source === 'image' && image.size > MAX_IMAGE_BYTES) {
+    if (!isSound && image && source === 'image' && image.size > MAX_IMAGE_BYTES) {
       setError(t('La imagen no puede superar los 2 MB'));
       return;
     }
-    const fileSound = soundSource === 'file' ? sound : null;
     if (fileSound) {
       if (fileSound.size > MAX_SOUND_BYTES) {
         setError(t('El audio no puede superar los 512 KB'));
@@ -124,8 +136,8 @@ export function RoomEmojisDialog({ code, open, onClose, emojis, canManage }: Roo
 
     const form = new FormData();
     form.append('name', normalized);
-    if (source === 'image' && image) form.append('image', image);
-    if (source === 'emoji' && unicode) form.append('emoji', unicode);
+    if (!isSound && source === 'image' && image) form.append('image', image);
+    if (!isSound && source === 'emoji' && unicode) form.append('emoji', unicode);
     if (fileSound) form.append('sound', fileSound);
     if (soundSource === 'freesound' && freesoundSound) {
       form.append('freesoundId', String(freesoundSound.id));
@@ -154,6 +166,10 @@ export function RoomEmojisDialog({ code, open, onClose, emojis, canManage }: Roo
     }
   }
 
+  const visible = emojis.filter((emoji) =>
+    section === 'sounds' ? emoji.kind === 'sound' : emoji.kind === 'emoji',
+  );
+
   function play(id: string) {
     void new Audio(roomEmojiSoundUrl(code, id)).play();
   }
@@ -166,7 +182,7 @@ export function RoomEmojisDialog({ code, open, onClose, emojis, canManage }: Roo
       aria-labelledby="room-emojis-title"
     >
       <header className={styles.header}>
-        <h2 id="room-emojis-title">{t('Emojis de la sala')}</h2>
+        <h2 id="room-emojis-title">{t('Emojis y sonidos de la sala')}</h2>
         <span className={styles.counter}>
           {emojis.length}/{MAX_EMOJIS}
         </span>
@@ -175,13 +191,41 @@ export function RoomEmojisDialog({ code, open, onClose, emojis, canManage }: Roo
         </button>
       </header>
 
-      {emojis.length === 0 ? (
-        <p className={styles.empty}>{t('Esta sala todavía no tiene emojis propios.')}</p>
+      <div className={styles.sectionTabs} role="tablist">
+        {(['emojis', 'sounds'] as const).map((value) => (
+          <button
+            key={value}
+            type="button"
+            role="tab"
+            aria-selected={section === value}
+            className={styles.sourceTab}
+            onClick={() => {
+              setSection(value);
+              setError(null);
+            }}
+          >
+            {value === 'emojis' ? t('Emojis') : t('Sonidos')}
+          </button>
+        ))}
+      </div>
+
+      {visible.length === 0 ? (
+        <p className={styles.empty}>
+          {section === 'emojis'
+            ? t('Esta sala todavía no tiene emojis propios.')
+            : t(
+                'Esta sala todavía no tiene sonidos. Se reproducen desde el botón 🔊 de la llamada.',
+              )}
+        </p>
       ) : (
         <ul className={styles.grid}>
-          {emojis.map((emoji) => (
+          {visible.map((emoji) => (
             <li key={emoji.id} className={styles.item}>
-              {emoji.emoji ? (
+              {emoji.kind === 'sound' ? (
+                <span className={styles.unicode} aria-hidden="true">
+                  🔊
+                </span>
+              ) : emoji.emoji ? (
                 <span className={styles.unicode} aria-hidden="true">
                   {emoji.emoji}
                 </span>
@@ -227,7 +271,7 @@ export function RoomEmojisDialog({ code, open, onClose, emojis, canManage }: Roo
 
       {canManage ? (
         <form ref={formRef} className={styles.form} onSubmit={handleSubmit}>
-          <h3>{t('Agregar emoji')}</h3>
+          <h3>{section === 'sounds' ? t('Agregar sonido') : t('Agregar emoji')}</h3>
           <label htmlFor="emoji-name">{t('Nombre')}</label>
           <div className={styles.nameField}>
             <span aria-hidden="true">:</span>
@@ -243,42 +287,46 @@ export function RoomEmojisDialog({ code, open, onClose, emojis, canManage }: Roo
             <span aria-hidden="true">:</span>
           </div>
 
-          <div className={styles.sourceTabs} role="radiogroup" aria-label={t('Apariencia')}>
-            {(['image', 'emoji'] as const).map((value) => (
-              <button
-                key={value}
-                type="button"
-                role="radio"
-                aria-checked={source === value}
-                className={styles.sourceTab}
-                onClick={() => setSource(value)}
-              >
-                {value === 'image' ? t('Subir imagen') : t('Emoji común')}
-              </button>
-            ))}
-          </div>
+          {section === 'emojis' && (
+            <>
+              <div className={styles.sourceTabs} role="radiogroup" aria-label={t('Apariencia')}>
+                {(['image', 'emoji'] as const).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={source === value}
+                    className={styles.sourceTab}
+                    onClick={() => setSource(value)}
+                  >
+                    {value === 'image' ? t('Subir imagen') : t('Emoji común')}
+                  </button>
+                ))}
+              </div>
 
-          {source === 'image' ? (
-            <>
-              <label htmlFor="emoji-image">{t('Imagen (PNG, JPG, WebP o GIF)')}</label>
-              <div className={styles.fileRow}>
-                <input
-                  id="emoji-image"
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/gif"
-                  onChange={(e) => pickImage(e.target.files?.[0] ?? null)}
-                />
-                {imagePreview && <img src={imagePreview} alt="" width={40} height={40} />}
-              </div>
-            </>
-          ) : (
-            <>
-              <p className={styles.selectedEmoji}>
-                {t('Elegido:')} <span>{unicode ?? '—'}</span>
-              </p>
-              <div className={styles.emojiPicker}>
-                <EmojiPanel key={pickerKey} onSelect={setUnicode} />
-              </div>
+              {source === 'image' ? (
+                <>
+                  <label htmlFor="emoji-image">{t('Imagen (PNG, JPG, WebP o GIF)')}</label>
+                  <div className={styles.fileRow}>
+                    <input
+                      id="emoji-image"
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/gif"
+                      onChange={(e) => pickImage(e.target.files?.[0] ?? null)}
+                    />
+                    {imagePreview && <img src={imagePreview} alt="" width={40} height={40} />}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className={styles.selectedEmoji}>
+                    {t('Elegido:')} <span>{unicode ?? '—'}</span>
+                  </p>
+                  <div className={styles.emojiPicker}>
+                    <EmojiPanel key={pickerKey} onSelect={setUnicode} />
+                  </div>
+                </>
+              )}
             </>
           )}
 
@@ -299,7 +347,11 @@ export function RoomEmojisDialog({ code, open, onClose, emojis, canManage }: Roo
 
           {soundSource === 'file' ? (
             <>
-              <label htmlFor="emoji-sound">{t('Sonido opcional (MP3, OGG o WAV, hasta 5 s)')}</label>
+              <label htmlFor="emoji-sound">
+                {section === 'sounds'
+                  ? t('Sonido (MP3, OGG o WAV, hasta 5 s)')
+                  : t('Sonido opcional (MP3, OGG o WAV, hasta 5 s)')}
+              </label>
               <input
                 id="emoji-sound"
                 type="file"
@@ -317,7 +369,11 @@ export function RoomEmojisDialog({ code, open, onClose, emojis, canManage }: Roo
             </p>
           )}
           <button type="submit" disabled={saving || emojis.length >= MAX_EMOJIS}>
-            {saving ? t('Subiendo…') : t('Agregar emoji')}
+            {saving
+              ? t('Subiendo…')
+              : section === 'sounds'
+                ? t('Agregar sonido')
+                : t('Agregar emoji')}
           </button>
         </form>
       ) : (

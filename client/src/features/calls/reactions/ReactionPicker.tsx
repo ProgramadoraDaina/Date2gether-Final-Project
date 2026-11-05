@@ -10,7 +10,8 @@ import styles from './Reactions.module.css';
 
 export function ReactionPicker({ buttonClassName }: { buttonClassName: string }) {
   const { t } = useTranslation();
-  const { sendReaction, roomEmojis } = useReactions();
+  const { sendReaction, roomEmojis: allRoomEmojis } = useReactions();
+  const roomEmojis = allRoomEmojis.filter((emoji) => emoji.kind === 'emoji');
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   useDismiss(

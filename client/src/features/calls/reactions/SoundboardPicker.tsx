@@ -56,12 +56,16 @@ export function SoundboardPicker({ buttonClassName }: { buttonClassName: string 
             <button
               key={emoji.id}
               type="button"
-              className={styles.pickerEmoji}
+              className={emoji.kind === 'sound' ? styles.pickerSound : styles.pickerEmoji}
               onClick={() => playSoundForAll(emoji.id)}
               aria-label={`${t('Reproducir para todos')} :${emoji.name}:`}
               title={`:${emoji.name}:`}
             >
-              <ReactionGlyph reactionKey={customReactionKey(emoji.id)} />
+              {emoji.kind === 'sound' ? (
+                `🔊 ${emoji.name}`
+              ) : (
+                <ReactionGlyph reactionKey={customReactionKey(emoji.id)} />
+              )}
             </button>
           ))}
         </div>

@@ -64,6 +64,13 @@
       "when": 1793899210263,
       "tag": "0008_room_emoji_sound_attribution",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793905049096,
+      "tag": "0009_room_sounds",
+      "breakpoints": true
     }
   ]
 }

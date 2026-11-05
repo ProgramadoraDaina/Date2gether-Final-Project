@@ -18,21 +18,37 @@ export const MAX_EMOJIS_PER_ROOM = 50;
 const UNIQUE_VIOLATION = '23505';
 
 // Drizzle envuelve el error de Postgres: el código queda en `cause`.
+export function kindOf(content: NewEmojiContent): RoomEmojiKind {
+  if (content.image && content.emoji) {
+    throw new BadRequestException('Subí una imagen o elegí un emoji (solo uno de los dos)');
+  }
+  if (content.sound && content.freesoundId) {
+    throw new BadRequestException('Subí un sonido o elegí uno de Freesound (solo uno de los dos)');
+  }
+  if (content.image || content.emoji) return 'emoji';
+  if (content.sound || content.freesoundId) return 'sound';
+  throw new BadRequestException('Agregá una imagen, un emoji o un sonido');
+}
+
 export function isUniqueViolation(error: unknown): boolean {
   const { code, cause } = (error ?? {}) as { code?: string; cause?: { code?: string } };
   return code === UNIQUE_VIOLATION || cause?.code === UNIQUE_VIOLATION;
 }
 
+// 'sound' = sonido de sala: sin imagen ni emoji, solo se usa desde la botonera.
+export type RoomEmojiKind = 'emoji' | 'sound';
+
 export interface RoomEmojiSummary {
   id: string;
   name: string;
+  kind: RoomEmojiKind;
   emoji: string | null;
   hasSound: boolean;
   soundAttribution: string | null;
 }
 
-// Exactamente uno entre `image` (archivo subido) y `emoji` (Unicode elegido del picker).
-interface NewEmojiContent {
+// Emoji: `image` o `emoji` (nunca los dos). Sonido de sala: ninguno de los dos y un sonido.
+export interface NewEmojiContent {
   image?: Buffer;
   emoji?: string;
   // Como mucho uno entre un archivo de sonido propio y un sonido de Freesound.
@@ -56,6 +72,7 @@ export class RoomEmojisService {
       .select({
         id: roomEmojis.id,
         name: roomEmojis.name,
+        kind: sql<RoomEmojiKind>`case when ${roomEmojis.image} is null and ${roomEmojis.emoji} is null then 'sound' else 'emoji' end`,
         emoji: roomEmojis.emoji,
         hasSound: sql<boolean>`${roomEmojis.sound} is not null`,
         soundAttribution: roomEmojis.soundAttribution,
@@ -71,14 +88,7 @@ export class RoomEmojisService {
     name: string,
     content: NewEmojiContent,
   ): Promise<RoomEmojiSummary> {
-    if (Boolean(content.image) === Boolean(content.emoji)) {
-      throw new BadRequestException('Subí una imagen o elegí un emoji (solo uno de los dos)');
-    }
-    if (content.sound && content.freesoundId) {
-      throw new BadRequestException(
-        'Subí un sonido o elegí uno de Freesound (solo uno de los dos)',
-      );
-    }
+    const kind = kindOf(content);
     const room = await this.roomsService.getByCodeOrThrow(code);
     const [{ total }] = await this.db
       .select({ total: count() })
@@ -115,12 +125,13 @@ export class RoomEmojisService {
       this.roomEvents.emitRoomEmojisChanged({ roomCode: code });
       return {
         ...created,
+        kind,
         hasSound: Boolean(sound),
         soundAttribution: freesound?.attribution ?? null,
       };
     } catch (error) {
       if (isUniqueViolation(error)) {
-        throw new ConflictException('Ya existe un emoji con ese nombre en la sala');
+        throw new ConflictException('Ya existe un emoji o sonido con ese nombre en la sala');
       }
       throw error;
     }

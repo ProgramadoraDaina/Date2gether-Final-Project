@@ -143,9 +143,10 @@ export const roomEmojis = pgTable(
   },
   (table) => [
     unique('room_emojis_room_id_name_unique').on(table.roomId, table.name),
+    // Emoji = imagen o Unicode (nunca los dos); sonido de sala = sin ninguno de los dos, con sonido.
     check(
-      'room_emojis_image_xor_emoji',
-      sql`(${table.image} is not null) <> (${table.emoji} is not null)`,
+      'room_emojis_kind_valid',
+      sql`not (${table.image} is not null and ${table.emoji} is not null) and (${table.image} is not null or ${table.emoji} is not null or ${table.sound} is not null)`,
     ),
   ],
 );

@@ -119,7 +119,10 @@ export function ReactionsProvider({ children, roomCode, roomEmojis }: ReactionsP
   );
 
   const { send } = useDataChannel(REACTIONS_TOPIC, (msg) => {
-    const key = decodeReaction(msg.payload, new Set(emojisByIdRef.current.keys()));
+    const emojiIds = new Set(
+      [...emojisByIdRef.current.values()].filter((e) => e.kind === 'emoji').map((e) => e.id),
+    );
+    const key = decodeReaction(msg.payload, emojiIds);
     if (!key || !msg.from) return;
     addReaction(key, msg.from.identity, msg.from.name || msg.from.identity);
   });
@@ -161,6 +164,7 @@ export function ReactionsProvider({ children, roomCode, roomEmojis }: ReactionsP
       if (!id) return { kind: 'text', text: key };
       const emoji = emojisById.get(id);
       if (!emoji) return null;
+      if (emoji.kind === 'sound') return { kind: 'text', text: '🔊' };
       if (emoji.emoji) return { kind: 'text', text: emoji.emoji };
       return { kind: 'image', src: roomEmojiImageUrl(roomCode, id), name: emoji.name };
     },

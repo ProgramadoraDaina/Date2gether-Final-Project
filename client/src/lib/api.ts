@@ -127,6 +127,8 @@ export async function updateNameColor(nameColor: string): Promise<AuthUser> {
 export interface RoomEmoji {
   id: string;
   name: string;
+  // 'sound': sonido de sala sin imagen; solo se usa desde la botonera, nunca en chat ni reacciones.
+  kind: 'emoji' | 'sound';
   // Emoji Unicode elegido del picker; null si el emoji de la sala es una imagen subida.
   emoji: string | null;
   hasSound: boolean;

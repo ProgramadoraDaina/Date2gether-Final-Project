@@ -94,7 +94,8 @@ export default function RoomPage() {
   const callSession = useCallSession();
   const [emojisOpen, setEmojisOpen] = useState(false);
   const { emojis, refetchEmojis } = useRoomEmojis(access ? code : undefined);
-  const emojisByName = useMemo(() => new Map(emojis.map((e) => [e.name, e])), [emojis]);
+  const chatEmojis = useMemo(() => emojis.filter((e) => e.kind === 'emoji'), [emojis]);
+  const emojisByName = useMemo(() => new Map(chatEmojis.map((e) => [e.name, e])), [chatEmojis]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerTab, setPickerTab] = useState<ExpressionTab>('emoji');
   const {
@@ -352,7 +353,7 @@ export default function RoomPage() {
           </ul>
           <RoomEmojiShortcuts
             roomCode={code}
-            emojis={emojis}
+            emojis={chatEmojis}
             onSelect={handleRoomEmojiSelect}
             onShowAll={() => {
               setPickerTab('room');
@@ -363,7 +364,7 @@ export default function RoomPage() {
             <ExpressionPicker
               roomCode={code}
               roomToken={access.token}
-              roomEmojis={emojis}
+              roomEmojis={chatEmojis}
               open={pickerOpen}
               onOpenChange={setPickerOpen}
               tab={pickerTab}
