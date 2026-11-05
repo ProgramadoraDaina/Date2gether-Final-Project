@@ -22,3 +22,24 @@ export function splitRoomEmojiTokens(
   if (last < text.length) segments.push({ kind: 'text', text: text.slice(last) });
   return segments;
 }
+
+const MAX_JUMBO_EMOJIS = 3;
+const PICTOGRAPHIC = /\p{Extended_Pictographic}|\p{Regional_Indicator}/u;
+const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+
+// Como en WhatsApp/Discord: un mensaje de pocos emojis solos se muestra grande, tipo sticker.
+export function isJumboEmojiMessage(segments: MessageSegment[]): boolean {
+  let count = 0;
+  for (const segment of segments) {
+    if (segment.kind === 'emoji') {
+      count++;
+      continue;
+    }
+    for (const { segment: grapheme } of graphemes.segment(segment.text)) {
+      if (/^\s+$/u.test(grapheme)) continue;
+      if (!PICTOGRAPHIC.test(grapheme)) return false;
+      count++;
+    }
+  }
+  return count > 0 && count <= MAX_JUMBO_EMOJIS;
+}
