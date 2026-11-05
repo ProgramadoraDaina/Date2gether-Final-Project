@@ -101,6 +101,8 @@ const en: Record<string, string> = {
   'Subir imagen': 'Upload image',
   'Sonido opcional': 'Optional sound',
   Sala: 'Room',
+  'Botonera de sonidos': 'Soundboard',
+  'Reproducir para todos': 'Play for everyone',
   'Ver anteriores': 'Show previous',
   'Ver siguientes': 'Show next',
   'Ver todos los emojis de la sala': 'Show all room emojis',

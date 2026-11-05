@@ -8,10 +8,14 @@ import {
   BURST_THRESHOLD,
   BURST_WINDOW_MS,
   customIdOf,
+  customReactionKey,
   decodeReaction,
+  decodeSound,
   encodeReaction,
+  encodeSound,
   REACTION_LIFETIME_MS,
   REACTIONS_TOPIC,
+  SOUNDS_TOPIC,
   type Reaction,
   type ReactionBurst,
   type ReactionKey,
@@ -36,6 +40,7 @@ export function ReactionsProvider({ children, roomCode, roomEmojis }: ReactionsP
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
   const pendingBurst = useRef<Reaction[]>([]);
   const lastSentAt = useRef(0);
+  const lastSoundSentAt = useRef(0);
   const recentSounds = useRef<number[]>([]);
 
   const emojisById = useMemo(() => new Map(roomEmojis.map((e) => [e.id, e])), [roomEmojis]);
@@ -131,6 +136,25 @@ export function ReactionsProvider({ children, roomCode, roomEmojis }: ReactionsP
     [addReaction, localParticipant, send],
   );
 
+  const { send: sendSoundData } = useDataChannel(SOUNDS_TOPIC, (msg) => {
+    const soundIds = new Set(
+      [...emojisByIdRef.current.values()].filter((e) => e.hasSound).map((e) => e.id),
+    );
+    const id = decodeSound(msg.payload, soundIds);
+    if (id) playSound(customReactionKey(id));
+  });
+
+  const playSoundForAll = useCallback(
+    (roomEmojiId: string) => {
+      const now = Date.now();
+      if (now - lastSoundSentAt.current < SEND_COOLDOWN_MS) return;
+      lastSoundSentAt.current = now;
+      playSound(customReactionKey(roomEmojiId));
+      void sendSoundData(encodeSound(roomEmojiId), { reliable: true, topic: SOUNDS_TOPIC });
+    },
+    [playSound, sendSoundData],
+  );
+
   const glyphFor = useCallback(
     (key: ReactionKey): ReactionGlyphData | null => {
       const id = customIdOf(key);
@@ -144,8 +168,8 @@ export function ReactionsProvider({ children, roomCode, roomEmojis }: ReactionsP
   );
 
   const value = useMemo(
-    () => ({ reactions, bursts, roomEmojis, glyphFor, sendReaction }),
-    [reactions, bursts, roomEmojis, glyphFor, sendReaction],
+    () => ({ reactions, bursts, roomEmojis, glyphFor, sendReaction, playSoundForAll }),
+    [reactions, bursts, roomEmojis, glyphFor, sendReaction, playSoundForAll],
   );
   return <ReactionsContext.Provider value={value}>{children}</ReactionsContext.Provider>;
 }

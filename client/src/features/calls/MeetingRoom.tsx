@@ -20,6 +20,7 @@ import type { CallSessionState } from './useCallSession';
 import styles from './MeetingRoom.module.css';
 import { ReactionOverlay } from './reactions/ReactionOverlay';
 import { ReactionPicker } from './reactions/ReactionPicker';
+import { SoundboardPicker } from './reactions/SoundboardPicker';
 import { ReactionsProvider } from './reactions/ReactionsProvider';
 import { ReactionTile } from './reactions/ReactionTile';
 
@@ -198,6 +199,7 @@ function MeetingContent({ roomCode, roomEmojis }: Omit<MeetingRoomProps, 'call'>
             aria-label={t('Elegir cámara')}
           />
           <ReactionPicker buttonClassName={styles.iconButton} />
+          <SoundboardPicker buttonClassName={styles.iconButton} />
         </div>
         <HangUpButton />
       </div>

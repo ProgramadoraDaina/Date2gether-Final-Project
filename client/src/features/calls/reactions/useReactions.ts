@@ -12,6 +12,7 @@ export interface ReactionsContextValue {
   roomEmojis: RoomEmoji[];
   glyphFor: (key: ReactionKey) => ReactionGlyphData | null;
   sendReaction: (key: ReactionKey) => void;
+  playSoundForAll: (roomEmojiId: string) => void;
 }
 
 export const ReactionsContext = createContext<ReactionsContextValue | null>(null);

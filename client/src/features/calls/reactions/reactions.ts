@@ -1,6 +1,8 @@
 import type { BurstPlan } from './burstEffects';
 
 export const REACTIONS_TOPIC = 'reactions';
+// Canal aparte: un sonido de la botonera no genera reacción visual ni cuenta para la explosión.
+export const SOUNDS_TOPIC = 'sounds';
 
 export const REACTION_EMOJIS = ['💖', '👍', '🎉', '👏', '😂', '😮', '😢', '🤔'] as const;
 
@@ -57,6 +59,20 @@ export function decodeReaction(
     if (REACTION_EMOJIS.some((emoji) => emoji === key)) return key;
     const customId = customIdOf(key);
     return customId && roomEmojiIds.has(customId) ? key : null;
+  } catch {
+    return null;
+  }
+}
+
+export function encodeSound(roomEmojiId: string): Uint8Array {
+  return encoder.encode(JSON.stringify({ id: roomEmojiId }));
+}
+
+// Solo se aceptan emojis de la sala que tienen sonido.
+export function decodeSound(payload: Uint8Array, soundEmojiIds: ReadonlySet<string>): string | null {
+  try {
+    const { id } = JSON.parse(decoder.decode(payload)) as { id?: unknown };
+    return typeof id === 'string' && soundEmojiIds.has(id) ? id : null;
   } catch {
     return null;
   }
