@@ -37,9 +37,54 @@
   vertical-align: -0.125em;
 }
 
+/* Botonera: emojis y sonidos separados, con un único scroll vertical. */
+.soundboard {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(352px, 90vw);
+  max-height: 300px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+  background: var(--color-surface);
+  transform: translateX(-50%);
+}
+
+.soundboardTitle {
+  margin: 0 0 4px;
+  color: var(--color-text-muted);
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.soundboardEmojis {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 40px);
+  gap: 2px;
+}
+
+.soundboardSounds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
 .pickerSound {
   width: auto;
-  height: 40px;
+  max-width: 100%;
+  height: 32px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding: 0 10px;
   border: 1px solid var(--color-border);
   border-radius: 2px;

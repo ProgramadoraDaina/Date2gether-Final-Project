@@ -19,8 +19,9 @@ export function SoundboardPicker({ buttonClassName }: { buttonClassName: string 
     useCallback(() => setOpen(false), []),
   );
 
-  const withSound = roomEmojis.filter((emoji) => emoji.hasSound);
-  if (withSound.length === 0) return null;
+  const emojisWithSound = roomEmojis.filter((e) => e.kind === 'emoji' && e.hasSound);
+  const sounds = roomEmojis.filter((e) => e.kind === 'sound');
+  if (emojisWithSound.length === 0 && sounds.length === 0) return null;
 
   const label = t('Botonera de sonidos');
 
@@ -51,23 +52,45 @@ export function SoundboardPicker({ buttonClassName }: { buttonClassName: string 
         </svg>
       </button>
       {open && (
-        <div className={styles.pickerBar} role="toolbar" aria-label={label}>
-          {withSound.map((emoji) => (
-            <button
-              key={emoji.id}
-              type="button"
-              className={emoji.kind === 'sound' ? styles.pickerSound : styles.pickerEmoji}
-              onClick={() => playSoundForAll(emoji.id)}
-              aria-label={`${t('Reproducir para todos')} :${emoji.name}:`}
-              title={`:${emoji.name}:`}
-            >
-              {emoji.kind === 'sound' ? (
-                `🔊 ${emoji.name}`
-              ) : (
-                <ReactionGlyph reactionKey={customReactionKey(emoji.id)} />
-              )}
-            </button>
-          ))}
+        <div className={styles.soundboard} role="toolbar" aria-label={label}>
+          {emojisWithSound.length > 0 && (
+            <section>
+              <h3 className={styles.soundboardTitle}>{t('Emojis')}</h3>
+              <div className={styles.soundboardEmojis}>
+                {emojisWithSound.map((emoji) => (
+                  <button
+                    key={emoji.id}
+                    type="button"
+                    className={styles.pickerEmoji}
+                    onClick={() => playSoundForAll(emoji.id)}
+                    aria-label={`${t('Reproducir para todos')} :${emoji.name}:`}
+                    title={`:${emoji.name}:`}
+                  >
+                    <ReactionGlyph reactionKey={customReactionKey(emoji.id)} />
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+          {sounds.length > 0 && (
+            <section>
+              <h3 className={styles.soundboardTitle}>{t('Sonidos')}</h3>
+              <div className={styles.soundboardSounds}>
+                {sounds.map((sound) => (
+                  <button
+                    key={sound.id}
+                    type="button"
+                    className={styles.pickerSound}
+                    onClick={() => playSoundForAll(sound.id)}
+                    aria-label={`${t('Reproducir para todos')} :${sound.name}:`}
+                    title={`:${sound.name}:`}
+                  >
+                    🔊 {sound.name}
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
         </div>
       )}
     </div>

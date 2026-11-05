@@ -181,6 +181,20 @@
   text-align: center;
 }
 
+.listToggle summary {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.listToggle summary:hover {
+  background: var(--color-chip-bg);
+  color: var(--color-accent);
+}
+
 .sectionTabs {
   display: flex;
   border-bottom: 1px solid var(--color-border);

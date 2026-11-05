@@ -99,6 +99,8 @@ const en: Record<string, string> = {
   Reaccionar: 'React',
   'Emojis de la sala': 'Room emojis',
   'Emojis y sonidos': 'Emojis and sounds',
+  'Ver emojis de la sala': 'Show room emojis',
+  'Ver sonidos de la sala': 'Show room sounds',
   'Emojis y sonidos de la sala': 'Room emojis and sounds',
   Emojis: 'Emojis',
   Sonidos: 'Sounds',

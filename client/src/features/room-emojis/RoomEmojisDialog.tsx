@@ -179,6 +179,10 @@ export function RoomEmojisDialog({
       ref={dialogRef}
       className={styles.dialog}
       onClose={onClose}
+      // Un click en el backdrop llega con el propio <dialog> como target: se cierra al tocar afuera.
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
       aria-labelledby="room-emojis-title"
     >
       <header className={styles.header}>
@@ -218,55 +222,63 @@ export function RoomEmojisDialog({
               )}
         </p>
       ) : (
-        <ul className={styles.grid}>
-          {visible.map((emoji) => (
-            <li key={emoji.id} className={styles.item}>
-              {emoji.kind === 'sound' ? (
-                <span className={styles.unicode} aria-hidden="true">
-                  🔊
-                </span>
-              ) : emoji.emoji ? (
-                <span className={styles.unicode} aria-hidden="true">
-                  {emoji.emoji}
-                </span>
-              ) : (
-                <img src={roomEmojiImageUrl(code, emoji.id)} alt="" width={40} height={40} />
-              )}
-              <span className={styles.nameBlock}>
-                <span className={styles.name} title={`:${emoji.name}:`}>
-                  :{emoji.name}:
-                </span>
-                {emoji.soundAttribution && (
-                  <span className={styles.credit} title={emoji.soundAttribution}>
-                    🔊 {emoji.soundAttribution}
+        // Colapsada por defecto: con muchos emojis, el formulario de crear queda a la vista.
+        <details className={styles.listToggle}>
+          <summary>
+            {section === 'emojis'
+              ? `${t('Ver emojis de la sala')} (${visible.length})`
+              : `${t('Ver sonidos de la sala')} (${visible.length})`}
+          </summary>
+          <ul className={styles.grid}>
+            {visible.map((emoji) => (
+              <li key={emoji.id} className={styles.item}>
+                {emoji.kind === 'sound' ? (
+                  <span className={styles.unicode} aria-hidden="true">
+                    🔊
                   </span>
+                ) : emoji.emoji ? (
+                  <span className={styles.unicode} aria-hidden="true">
+                    {emoji.emoji}
+                  </span>
+                ) : (
+                  <img src={roomEmojiImageUrl(code, emoji.id)} alt="" width={40} height={40} />
                 )}
-              </span>
-              {emoji.hasSound && (
-                <button
-                  type="button"
-                  className={styles.iconAction}
-                  onClick={() => play(emoji.id)}
-                  aria-label={`${t('Escuchar')} :${emoji.name}:`}
-                >
-                  ▶
-                </button>
-              )}
-              {canManage && (
-                <button
-                  type="button"
-                  className={styles.deleteAction}
-                  data-confirming={confirmingId === emoji.id}
-                  onClick={() => handleDelete(emoji.id)}
-                  onBlur={() => setConfirmingId(null)}
-                  aria-label={`${t('Borrar')} :${emoji.name}:`}
-                >
-                  {confirmingId === emoji.id ? t('¿Borrar?') : '✕'}
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
+                <span className={styles.nameBlock}>
+                  <span className={styles.name} title={`:${emoji.name}:`}>
+                    :{emoji.name}:
+                  </span>
+                  {emoji.soundAttribution && (
+                    <span className={styles.credit} title={emoji.soundAttribution}>
+                      🔊 {emoji.soundAttribution}
+                    </span>
+                  )}
+                </span>
+                {emoji.hasSound && (
+                  <button
+                    type="button"
+                    className={styles.iconAction}
+                    onClick={() => play(emoji.id)}
+                    aria-label={`${t('Escuchar')} :${emoji.name}:`}
+                  >
+                    ▶
+                  </button>
+                )}
+                {canManage && (
+                  <button
+                    type="button"
+                    className={styles.deleteAction}
+                    data-confirming={confirmingId === emoji.id}
+                    onClick={() => handleDelete(emoji.id)}
+                    onBlur={() => setConfirmingId(null)}
+                    aria-label={`${t('Borrar')} :${emoji.name}:`}
+                  >
+                    {confirmingId === emoji.id ? t('¿Borrar?') : '✕'}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
 
       {canManage ? (
