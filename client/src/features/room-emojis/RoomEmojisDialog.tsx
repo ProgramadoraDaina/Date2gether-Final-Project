@@ -10,9 +10,11 @@ import {
   roomEmojiSoundUrl,
   type FreesoundSound,
   type RoomEmoji,
+  type StickerOptions,
 } from '@/lib/api';
 import { EmojiPanel } from '@/features/chat/EmojiPanel';
 import { FreesoundSearch } from './FreesoundSearch';
+import { StickerOptionsFields } from './StickerOptionsFields';
 import styles from './RoomEmojisDialog.module.css';
 
 const MAX_EMOJIS = 50;
@@ -20,6 +22,12 @@ const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const MAX_SOUND_BYTES = 512 * 1024;
 const MAX_SOUND_SECONDS = 5;
 const NAME_PATTERN = /^[a-z0-9_]{2,32}$/;
+const DEFAULT_STICKER: StickerOptions = {
+  duration: 10,
+  position: 'top-right',
+  size: 'medium',
+  animation: 'static',
+};
 
 interface RoomEmojisDialogProps {
   code: string;
@@ -59,6 +67,8 @@ export function RoomEmojisDialog({
   const [section, setSection] = useState<'emojis' | 'sounds'>('emojis');
   const [name, setName] = useState('');
   const [source, setSource] = useState<'image' | 'emoji'>('image');
+  const [callMode, setCallMode] = useState<RoomEmoji['callMode']>('reaction');
+  const [stickerOptions, setStickerOptions] = useState<StickerOptions>(DEFAULT_STICKER);
   const [unicode, setUnicode] = useState<string | null>(null);
   // form.reset() no limpia el estado interno del picker: se lo vuelve a montar con otra key.
   const [pickerKey, setPickerKey] = useState(0);
@@ -138,6 +148,15 @@ export function RoomEmojisDialog({
     form.append('name', normalized);
     if (!isSound && source === 'image' && image) form.append('image', image);
     if (!isSound && source === 'emoji' && unicode) form.append('emoji', unicode);
+    if (!isSound) {
+      form.append('callMode', callMode);
+      if (callMode === 'sticker') {
+        form.append('stickerDuration', String(stickerOptions.duration));
+        form.append('stickerPosition', stickerOptions.position);
+        form.append('stickerSize', stickerOptions.size);
+        form.append('stickerAnimation', stickerOptions.animation);
+      }
+    }
     if (fileSound) form.append('sound', fileSound);
     if (soundSource === 'freesound' && freesoundSound) {
       form.append('freesoundId', String(freesoundSound.id));
@@ -338,6 +357,26 @@ export function RoomEmojisDialog({
                     <EmojiPanel key={pickerKey} onSelect={setUnicode} />
                   </div>
                 </>
+              )}
+
+              <div className={styles.sourceTabs} role="radiogroup" aria-label={t('En la llamada')}>
+                {(['reaction', 'sticker'] as const).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={callMode === value}
+                    className={styles.sourceTab}
+                    onClick={() => setCallMode(value)}
+                  >
+                    {value === 'reaction'
+                      ? t('En la llamada: reacción')
+                      : t('En la llamada: sticker')}
+                  </button>
+                ))}
+              </div>
+              {callMode === 'sticker' && (
+                <StickerOptionsFields value={stickerOptions} onChange={setStickerOptions} />
               )}
             </>
           )}

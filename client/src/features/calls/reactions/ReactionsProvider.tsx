@@ -11,17 +11,20 @@ import {
   customReactionKey,
   decodeReaction,
   decodeSound,
+  decodeSticker,
   encodeReaction,
   encodeSound,
+  encodeSticker,
   REACTION_LIFETIME_MS,
   REACTIONS_TOPIC,
   SOUNDS_TOPIC,
+  STICKERS_TOPIC,
   type Reaction,
   type ReactionBurst,
   type ReactionKey,
 } from './reactions';
 import { createBurstPlan } from './burstEffects';
-import { ReactionsContext, type ReactionGlyphData } from './useReactions';
+import { ReactionsContext, type ActiveSticker, type ReactionGlyphData } from './useReactions';
 
 const SEND_COOLDOWN_MS = 250;
 // Con varias personas spameando sonidos, se cortan los que superan este tope por segundo.
@@ -42,6 +45,8 @@ export function ReactionsProvider({ children, roomCode, roomEmojis }: ReactionsP
   const lastSentAt = useRef(0);
   const lastSoundSentAt = useRef(0);
   const recentSounds = useRef<number[]>([]);
+  const [stickers, setStickers] = useState<Record<string, ActiveSticker>>({});
+  const lastStickerSentAt = useRef(0);
 
   const emojisById = useMemo(() => new Map(roomEmojis.map((e) => [e.id, e])), [roomEmojis]);
   // El callback del data channel puede quedar con un cierre viejo: se lee siempre la última lista.
@@ -158,6 +163,49 @@ export function ReactionsProvider({ children, roomCode, roomEmojis }: ReactionsP
     [playSound, sendSoundData],
   );
 
+  const showSticker = useCallback(
+    (identity: string, roomEmojiId: string) => {
+      const emoji = emojisByIdRef.current.get(roomEmojiId);
+      if (!emoji || emoji.kind !== 'emoji' || emoji.callMode !== 'sticker') return;
+      const sticker: ActiveSticker = { id: crypto.randomUUID(), roomEmojiId, options: emoji.sticker };
+      setStickers((prev) => ({ ...prev, [identity]: sticker }));
+      playSound(customReactionKey(roomEmojiId));
+      // Solo se borra si sigue siendo el mismo: un sticker nuevo pudo haberlo reemplazado.
+      schedule(
+        () =>
+          setStickers((prev) => {
+            if (prev[identity]?.id !== sticker.id) return prev;
+            const next = { ...prev };
+            delete next[identity];
+            return next;
+          }),
+        emoji.sticker.duration * 1000,
+      );
+    },
+    [playSound, schedule],
+  );
+
+  const { send: sendStickerData } = useDataChannel(STICKERS_TOPIC, (msg) => {
+    const stickerIds = new Set(
+      [...emojisByIdRef.current.values()]
+        .filter((e) => e.kind === 'emoji' && e.callMode === 'sticker')
+        .map((e) => e.id),
+    );
+    const id = decodeSticker(msg.payload, stickerIds);
+    if (id && msg.from) showSticker(msg.from.identity, id);
+  });
+
+  const sendSticker = useCallback(
+    (roomEmojiId: string) => {
+      const now = Date.now();
+      if (now - lastStickerSentAt.current < SEND_COOLDOWN_MS) return;
+      lastStickerSentAt.current = now;
+      showSticker(localParticipant.identity, roomEmojiId);
+      void sendStickerData(encodeSticker(roomEmojiId), { reliable: true, topic: STICKERS_TOPIC });
+    },
+    [localParticipant, sendStickerData, showSticker],
+  );
+
   const glyphFor = useCallback(
     (key: ReactionKey): ReactionGlyphData | null => {
       const id = customIdOf(key);
@@ -172,8 +220,17 @@ export function ReactionsProvider({ children, roomCode, roomEmojis }: ReactionsP
   );
 
   const value = useMemo(
-    () => ({ reactions, bursts, roomEmojis, glyphFor, sendReaction, playSoundForAll }),
-    [reactions, bursts, roomEmojis, glyphFor, sendReaction, playSoundForAll],
+    () => ({
+      reactions,
+      bursts,
+      roomEmojis,
+      glyphFor,
+      sendReaction,
+      playSoundForAll,
+      stickers,
+      sendSticker,
+    }),
+    [reactions, bursts, roomEmojis, glyphFor, sendReaction, playSoundForAll, stickers, sendSticker],
   );
   return <ReactionsContext.Provider value={value}>{children}</ReactionsContext.Provider>;
 }

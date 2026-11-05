@@ -3,8 +3,10 @@ import {
   customReactionKey,
   decodeReaction,
   decodeSound,
+  decodeSticker,
   encodeReaction,
   encodeSound,
+  encodeSticker,
 } from './reactions';
 
 const encode = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
@@ -46,5 +48,13 @@ describe('decodeSound', () => {
     expect(decodeSound(encodeSound('00000000-0000-0000-0000-000000000000'), roomEmojiIds)).toBeNull();
     expect(decodeSound(encode({ id: 42 }), roomEmojiIds)).toBeNull();
     expect(decodeSound(new TextEncoder().encode('no es json'), roomEmojiIds)).toBeNull();
+  });
+});
+
+describe('decodeSticker', () => {
+  it('acepta solo ids de emojis de la sala configurados como sticker', () => {
+    const stickerIds = new Set([ROOM_EMOJI_ID]);
+    expect(decodeSticker(encodeSticker(ROOM_EMOJI_ID), stickerIds)).toBe(ROOM_EMOJI_ID);
+    expect(decodeSticker(encodeSticker(ROOM_EMOJI_ID), new Set())).toBeNull();
   });
 });

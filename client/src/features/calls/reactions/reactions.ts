@@ -3,6 +3,8 @@ import type { BurstPlan } from './burstEffects';
 export const REACTIONS_TOPIC = 'reactions';
 // Canal aparte: un sonido de la botonera no genera reacción visual ni cuenta para la explosión.
 export const SOUNDS_TOPIC = 'sounds';
+// Sticker temporal sobre la cámara de quien lo manda: uno por persona, el nuevo reemplaza al anterior.
+export const STICKERS_TOPIC = 'stickers';
 
 export const REACTION_EMOJIS = ['💖', '👍', '🎉', '👏', '😂', '😮', '😢', '🤔'] as const;
 
@@ -77,3 +79,8 @@ export function decodeSound(payload: Uint8Array, soundEmojiIds: ReadonlySet<stri
     return null;
   }
 }
+
+export const encodeSticker = encodeSound;
+
+// Solo se aceptan emojis de la sala configurados como sticker.
+export const decodeSticker = decodeSound;

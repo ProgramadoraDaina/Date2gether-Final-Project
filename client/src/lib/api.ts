@@ -134,6 +134,30 @@ export interface RoomEmoji {
   hasSound: boolean;
   // Crédito del sonido cuando viene de Freesound (requerido por la licencia CC BY).
   soundAttribution: string | null;
+  callMode: 'reaction' | 'sticker';
+  sticker: StickerOptions;
+}
+
+export const STICKER_DURATIONS = [5, 10, 30] as const;
+export const STICKER_POSITIONS = [
+  'top-left',
+  'top',
+  'top-right',
+  'left',
+  'center',
+  'right',
+  'bottom-left',
+  'bottom',
+  'bottom-right',
+] as const;
+export const STICKER_SIZES = ['small', 'medium', 'large'] as const;
+export const STICKER_ANIMATIONS = ['static', 'float', 'spin', 'pulse', 'shake'] as const;
+
+export interface StickerOptions {
+  duration: (typeof STICKER_DURATIONS)[number];
+  position: (typeof STICKER_POSITIONS)[number];
+  size: (typeof STICKER_SIZES)[number];
+  animation: (typeof STICKER_ANIMATIONS)[number];
 }
 
 export interface FreesoundSound {

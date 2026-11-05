@@ -145,6 +145,125 @@
   animation: badge-in 3s linear forwards;
 }
 
+/* Sticker temporal: la envoltura ubica, aparece y se va; el glifo interno anima. */
+.sticker {
+  position: absolute;
+  z-index: 2;
+  line-height: 1;
+  pointer-events: none;
+  animation: sticker-life var(--sticker-duration) linear forwards;
+}
+
+.sticker[data-size='small'] {
+  font-size: 40px;
+}
+
+.sticker[data-size='medium'] {
+  font-size: 72px;
+}
+
+.sticker[data-size='large'] {
+  font-size: 120px;
+}
+
+.sticker[data-position^='top'] {
+  top: 16px;
+}
+
+.sticker[data-position^='bottom'] {
+  bottom: 40px;
+}
+
+.sticker[data-position='left'],
+.sticker[data-position='center'],
+.sticker[data-position='right'] {
+  top: 50%;
+  translate: 0 -50%;
+}
+
+.sticker[data-position$='left'] {
+  left: 16px;
+}
+
+.sticker[data-position$='right'] {
+  right: 16px;
+}
+
+.sticker[data-position='top'],
+.sticker[data-position='bottom'] {
+  left: 50%;
+  translate: -50% 0;
+}
+
+.sticker[data-position='center'] {
+  left: 50%;
+  translate: -50% -50%;
+}
+
+.stickerGlyph {
+  display: inline-block;
+}
+
+.stickerGlyph[data-animation='float'] {
+  animation: sticker-float 2s ease-in-out infinite alternate;
+}
+
+.stickerGlyph[data-animation='spin'] {
+  animation: sticker-spin 3s linear infinite;
+}
+
+.stickerGlyph[data-animation='pulse'] {
+  animation: sticker-pulse 0.8s ease-in-out infinite alternate;
+}
+
+.stickerGlyph[data-animation='shake'] {
+  animation: sticker-shake 0.3s steps(2, end) infinite;
+}
+
+/* Aparece con un barrido y se desvanece en el último 10% de su duración. */
+@keyframes sticker-life {
+  0% {
+    clip-path: inset(100% 0 0 0);
+  }
+  4% {
+    clip-path: inset(0 0 0 0);
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes sticker-float {
+  to {
+    transform: translateY(-12px);
+  }
+}
+
+@keyframes sticker-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes sticker-pulse {
+  to {
+    transform: scale(1.15);
+  }
+}
+
+@keyframes sticker-shake {
+  0% {
+    transform: translate(-3px, 1px) rotate(-4deg);
+  }
+  100% {
+    transform: translate(3px, -1px) rotate(4deg);
+  }
+}
+
 /* Entra por barrido vertical y se desvanece: sin rebotes. */
 @keyframes badge-in {
   0% {
@@ -260,7 +379,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tileBadge {
+  .tileBadge,
+  .stickerGlyph[data-animation] {
     animation: none;
   }
 

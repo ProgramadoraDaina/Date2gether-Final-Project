@@ -9,6 +9,8 @@ const bruh: RoomEmoji = {
   emoji: null,
   hasSound: true,
   soundAttribution: null,
+  callMode: 'reaction',
+  sticker: { duration: 10, position: 'top-right', size: 'medium', animation: 'static' },
 };
 const calavera: RoomEmoji = { ...bruh, id: 'b65a259f-3755-430e-bb78-aff0813bee80', name: 'calavera', emoji: '💀' };
 const byName = new Map([bruh, calavera].map((e) => [e.name, e]));

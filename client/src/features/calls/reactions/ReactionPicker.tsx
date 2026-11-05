@@ -10,7 +10,7 @@ import styles from './Reactions.module.css';
 
 export function ReactionPicker({ buttonClassName }: { buttonClassName: string }) {
   const { t } = useTranslation();
-  const { sendReaction, roomEmojis: allRoomEmojis } = useReactions();
+  const { sendReaction, sendSticker, roomEmojis: allRoomEmojis } = useReactions();
   const roomEmojis = allRoomEmojis.filter((emoji) => emoji.kind === 'emoji');
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -68,9 +68,13 @@ export function ReactionPicker({ buttonClassName }: { buttonClassName: string })
               key={emoji.id}
               type="button"
               className={styles.pickerEmoji}
-              onClick={() => sendReaction(customReactionKey(emoji.id))}
+              onClick={() =>
+                emoji.callMode === 'sticker'
+                  ? sendSticker(emoji.id)
+                  : sendReaction(customReactionKey(emoji.id))
+              }
               aria-label={`${label} :${emoji.name}:`}
-              title={`:${emoji.name}:${emoji.hasSound ? ' 🔊' : ''}`}
+              title={`:${emoji.name}:${emoji.callMode === 'sticker' ? ' (sticker)' : ''}${emoji.hasSound ? ' 🔊' : ''}`}
             >
               <ReactionGlyph reactionKey={customReactionKey(emoji.id)} />
             </button>
