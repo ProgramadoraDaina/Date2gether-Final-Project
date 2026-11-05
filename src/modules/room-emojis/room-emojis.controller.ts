@@ -83,7 +83,7 @@ export class RoomEmojisController {
         { name: 'image', maxCount: 1 },
         { name: 'sound', maxCount: 1 },
       ],
-      { limits: { fileSize: MAX_UPLOAD_BYTES, files: 2, fields: 3 } },
+      { limits: { fileSize: MAX_UPLOAD_BYTES, files: 2, fields: 8 } },
     ),
   )
   @Post()
@@ -93,12 +93,26 @@ export class RoomEmojisController {
     @UploadedFiles() files: EmojiUploads,
     @CurrentUser() user: AccessTokenPayload,
   ) {
-    return this.roomEmojis.create(code, user.sub, dto.name, {
-      image: files.image?.[0]?.buffer,
-      emoji: dto.emoji,
-      freesoundId: dto.freesoundId,
-      sound: files.sound?.[0]?.buffer,
-    });
+    return this.roomEmojis.create(
+      code,
+      user.sub,
+      dto.name,
+      {
+        image: files.image?.[0]?.buffer,
+        emoji: dto.emoji,
+        freesoundId: dto.freesoundId,
+        sound: files.sound?.[0]?.buffer,
+      },
+      {
+        callMode: dto.callMode,
+        sticker: {
+          duration: dto.stickerDuration,
+          position: dto.stickerPosition,
+          size: dto.stickerSize,
+          animation: dto.stickerAnimation,
+        },
+      },
+    );
   }
 
   @UseGuards(JwtAuthGuard, RoomRolesGuard)

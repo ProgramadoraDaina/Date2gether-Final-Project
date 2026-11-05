@@ -1,5 +1,12 @@
 import { Transform, Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator';
+import {
+  CALL_MODES,
+  STICKER_ANIMATIONS,
+  STICKER_DURATIONS,
+  STICKER_POSITIONS,
+  STICKER_SIZES,
+} from '../../../db/schema';
 
 // Un solo emoji, incluidos tonos de piel, secuencias con ZWJ (👨‍👩‍👧) y banderas (🇦🇷).
 const SINGLE_EMOJI =
@@ -26,4 +33,25 @@ export class CreateRoomEmojiDto {
   @IsInt()
   @Min(1)
   freesoundId?: number;
+
+  @IsOptional()
+  @IsIn(CALL_MODES)
+  callMode?: (typeof CALL_MODES)[number];
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsIn(STICKER_DURATIONS)
+  stickerDuration?: (typeof STICKER_DURATIONS)[number];
+
+  @IsOptional()
+  @IsIn(STICKER_POSITIONS)
+  stickerPosition?: (typeof STICKER_POSITIONS)[number];
+
+  @IsOptional()
+  @IsIn(STICKER_SIZES)
+  stickerSize?: (typeof STICKER_SIZES)[number];
+
+  @IsOptional()
+  @IsIn(STICKER_ANIMATIONS)
+  stickerAnimation?: (typeof STICKER_ANIMATIONS)[number];
 }

@@ -7,7 +7,14 @@ import {
 } from '@nestjs/common';
 import { and, asc, count, eq, sql } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
-import { roomEmojis } from '../../db/schema';
+import {
+  CALL_MODES,
+  roomEmojis,
+  STICKER_ANIMATIONS,
+  STICKER_DURATIONS,
+  STICKER_POSITIONS,
+  STICKER_SIZES,
+} from '../../db/schema';
 import { RoomEventsService } from '../rooms/room-events.service';
 import { RoomsService } from '../rooms/rooms.service';
 import { processEmojiImage, validateEmojiSound, type ProcessedMedia } from './emoji-media';
@@ -18,6 +25,26 @@ export const MAX_EMOJIS_PER_ROOM = 50;
 const UNIQUE_VIOLATION = '23505';
 
 // Drizzle envuelve el error de Postgres: el código queda en `cause`.
+interface SummaryRow extends Omit<RoomEmojiSummary, 'sticker'> {
+  stickerDuration: number;
+  stickerPosition: StickerOptions['position'];
+  stickerSize: StickerOptions['size'];
+  stickerAnimation: StickerOptions['animation'];
+}
+
+function toSummary(row: SummaryRow): RoomEmojiSummary {
+  const { stickerDuration, stickerPosition, stickerSize, stickerAnimation, ...rest } = row;
+  return {
+    ...rest,
+    sticker: {
+      duration: stickerDuration as StickerOptions['duration'],
+      position: stickerPosition,
+      size: stickerSize,
+      animation: stickerAnimation,
+    },
+  };
+}
+
 export function kindOf(content: NewEmojiContent): RoomEmojiKind {
   if (content.image && content.emoji) {
     throw new BadRequestException('Subí una imagen o elegí un emoji (solo uno de los dos)');
@@ -38,6 +65,13 @@ export function isUniqueViolation(error: unknown): boolean {
 // 'sound' = sonido de sala: sin imagen ni emoji, solo se usa desde la botonera.
 export type RoomEmojiKind = 'emoji' | 'sound';
 
+export interface StickerOptions {
+  duration: (typeof STICKER_DURATIONS)[number];
+  position: (typeof STICKER_POSITIONS)[number];
+  size: (typeof STICKER_SIZES)[number];
+  animation: (typeof STICKER_ANIMATIONS)[number];
+}
+
 export interface RoomEmojiSummary {
   id: string;
   name: string;
@@ -45,6 +79,13 @@ export interface RoomEmojiSummary {
   emoji: string | null;
   hasSound: boolean;
   soundAttribution: string | null;
+  callMode: (typeof CALL_MODES)[number];
+  sticker: StickerOptions;
+}
+
+export interface EmojiCallOptions {
+  callMode?: (typeof CALL_MODES)[number];
+  sticker?: Partial<StickerOptions>;
 }
 
 // Emoji: `image` o `emoji` (nunca los dos). Sonido de sala: ninguno de los dos y un sonido.
@@ -68,7 +109,7 @@ export class RoomEmojisService {
   async list(code: string): Promise<RoomEmojiSummary[]> {
     const room = await this.roomsService.getByCodeOrThrow(code);
     // Select explícito: el listado nunca devuelve los archivos.
-    return this.db
+    const rows = await this.db
       .select({
         id: roomEmojis.id,
         name: roomEmojis.name,
@@ -76,10 +117,16 @@ export class RoomEmojisService {
         emoji: roomEmojis.emoji,
         hasSound: sql<boolean>`${roomEmojis.sound} is not null`,
         soundAttribution: roomEmojis.soundAttribution,
+        callMode: roomEmojis.callMode,
+        stickerDuration: roomEmojis.stickerDuration,
+        stickerPosition: roomEmojis.stickerPosition,
+        stickerSize: roomEmojis.stickerSize,
+        stickerAnimation: roomEmojis.stickerAnimation,
       })
       .from(roomEmojis)
       .where(eq(roomEmojis.roomId, room.id))
       .orderBy(asc(roomEmojis.createdAt));
+    return rows.map(toSummary);
   }
 
   async create(
@@ -87,8 +134,11 @@ export class RoomEmojisService {
     userId: string,
     name: string,
     content: NewEmojiContent,
+    options: EmojiCallOptions = {},
   ): Promise<RoomEmojiSummary> {
     const kind = kindOf(content);
+    // Un sonido de sala no aparece en la llamada como reacción ni como sticker.
+    const callMode = kind === 'sound' ? 'reaction' : (options.callMode ?? 'reaction');
     const room = await this.roomsService.getByCodeOrThrow(code);
     const [{ total }] = await this.db
       .select({ total: count() })
@@ -119,16 +169,26 @@ export class RoomEmojisService {
           sound: sound?.data ?? null,
           soundMime: sound?.mime ?? null,
           soundAttribution: freesound?.attribution ?? null,
+          callMode,
+          stickerDuration: options.sticker?.duration,
+          stickerPosition: options.sticker?.position,
+          stickerSize: options.sticker?.size,
+          stickerAnimation: options.sticker?.animation,
           createdBy: userId,
         })
-        .returning({ id: roomEmojis.id, name: roomEmojis.name, emoji: roomEmojis.emoji });
+        .returning({
+          id: roomEmojis.id,
+          name: roomEmojis.name,
+          emoji: roomEmojis.emoji,
+          soundAttribution: roomEmojis.soundAttribution,
+          callMode: roomEmojis.callMode,
+          stickerDuration: roomEmojis.stickerDuration,
+          stickerPosition: roomEmojis.stickerPosition,
+          stickerSize: roomEmojis.stickerSize,
+          stickerAnimation: roomEmojis.stickerAnimation,
+        });
       this.roomEvents.emitRoomEmojisChanged({ roomCode: code });
-      return {
-        ...created,
-        kind,
-        hasSound: Boolean(sound),
-        soundAttribution: freesound?.attribution ?? null,
-      };
+      return toSummary({ ...created, kind, hasSound: Boolean(sound) });
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new ConflictException('Ya existe un emoji o sonido con ese nombre en la sala');

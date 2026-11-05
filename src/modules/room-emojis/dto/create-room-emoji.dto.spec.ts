@@ -21,3 +21,29 @@ describe('CreateRoomEmojiDto.emoji', () => {
     },
   );
 });
+
+describe('CreateRoomEmojiDto opciones de sticker', () => {
+  function errorsFor(extra: Record<string, unknown>): string[] {
+    const dto = plainToInstance(CreateRoomEmojiDto, { name: 'test', emoji: '💀', ...extra });
+    return validateSync(dto).map((e) => e.property);
+  }
+
+  it('acepta un sticker completo, con la duración llegando como texto del formulario', () => {
+    expect(
+      errorsFor({
+        callMode: 'sticker',
+        stickerDuration: '30',
+        stickerPosition: 'bottom-left',
+        stickerSize: 'large',
+        stickerAnimation: 'spin',
+      }),
+    ).toEqual([]);
+  });
+
+  it('rechaza duraciones, posiciones o animaciones fuera de las opciones', () => {
+    expect(errorsFor({ stickerDuration: '7' })).toEqual(['stickerDuration']);
+    expect(errorsFor({ stickerPosition: 'arriba' })).toEqual(['stickerPosition']);
+    expect(errorsFor({ stickerAnimation: 'baila' })).toEqual(['stickerAnimation']);
+    expect(errorsFor({ callMode: 'otro' })).toEqual(['callMode']);
+  });
+});

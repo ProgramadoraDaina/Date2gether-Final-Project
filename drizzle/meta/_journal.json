@@ -71,6 +71,13 @@
       "when": 1793905049096,
       "tag": "0009_room_sounds",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793911177169,
+      "tag": "0010_room_emoji_stickers",
+      "breakpoints": true
     }
   ]
 }
