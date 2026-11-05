@@ -102,6 +102,18 @@ const en: Record<string, string> = {
   'En la llamada': 'In the call',
   'Emoji agregado': 'Emoji added',
   'Sonido agregado': 'Sound added',
+  'Emoji actualizado': 'Emoji updated',
+  'Sonido actualizado': 'Sound updated',
+  'No se pudo guardar el emoji': 'Could not save the emoji',
+  Editar: 'Edit',
+  Editando: 'Editing',
+  'Cancelar edición': 'Cancel editing',
+  'Guardar cambios': 'Save changes',
+  'Imagen nueva (opcional: si no, se mantiene la actual)':
+    'New image (optional: otherwise the current one is kept)',
+  'Quitar el sonido actual': 'Remove the current sound',
+  'Si no elegís un sonido nuevo, se mantiene el actual.':
+    "If you don't pick a new sound, the current one is kept.",
   'En la llamada: reacción': 'In the call: reaction',
   'En la llamada: sticker': 'In the call: sticker',
   Duración: 'Duration',

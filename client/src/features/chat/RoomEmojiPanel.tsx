@@ -33,7 +33,7 @@ export function RoomEmojiPanel({ roomCode, emojis, onSelect }: RoomEmojiPanelPro
           title={`:${emoji.name}:${emoji.hasSound ? ' 🔊' : ''}`}
         >
           <span className={styles.glyph}>
-            <RoomEmojiGlyph emoji={emoji} src={roomEmojiImageUrl(roomCode, emoji.id)} />
+            <RoomEmojiGlyph emoji={emoji} src={roomEmojiImageUrl(roomCode, emoji)} />
           </span>
           <span className={styles.name}>:{emoji.name}:</span>
         </button>

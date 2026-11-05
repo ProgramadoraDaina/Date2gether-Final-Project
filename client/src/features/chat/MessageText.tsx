@@ -27,15 +27,15 @@ export function MessageText({ text, roomCode, emojisByName }: MessageTextProps) 
             key={i}
             type="button"
             className={styles.soundEmoji}
-            onClick={() => void new Audio(roomEmojiSoundUrl(roomCode, emoji.id)).play().catch(() => undefined)}
+            onClick={() => void new Audio(roomEmojiSoundUrl(roomCode, emoji)).play().catch(() => undefined)}
             title={`${label} 🔊`}
             aria-label={label}
           >
-            <RoomEmojiGlyph emoji={emoji} src={roomEmojiImageUrl(roomCode, emoji.id)} />
+            <RoomEmojiGlyph emoji={emoji} src={roomEmojiImageUrl(roomCode, emoji)} />
           </button>
         ) : (
           <span key={i} className={styles.emoji} title={label}>
-            <RoomEmojiGlyph emoji={emoji} src={roomEmojiImageUrl(roomCode, emoji.id)} />
+            <RoomEmojiGlyph emoji={emoji} src={roomEmojiImageUrl(roomCode, emoji)} />
           </span>
         );
       })}

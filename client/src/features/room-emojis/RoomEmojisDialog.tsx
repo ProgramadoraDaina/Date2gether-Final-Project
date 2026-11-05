@@ -8,6 +8,7 @@ import {
   deleteRoomEmoji,
   roomEmojiImageUrl,
   roomEmojiSoundUrl,
+  updateRoomEmoji,
   type FreesoundSound,
   type RoomEmoji,
   type StickerOptions,
@@ -86,6 +87,8 @@ export function RoomEmojisDialog({
     return () => clearTimeout(timer);
   }, [success]);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<RoomEmoji | null>(null);
+  const [removeSound, setRemoveSound] = useState(false);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -110,6 +113,23 @@ export function RoomEmojisDialog({
     setSound(null);
     setFreesoundSound(null);
     setPickerKey((value) => value + 1);
+    setEditing(null);
+    setRemoveSound(false);
+    setCallMode('reaction');
+    setStickerOptions(DEFAULT_STICKER);
+  }
+
+  function startEdit(emoji: RoomEmoji) {
+    resetForm();
+    setEditing(emoji);
+    setSection(emoji.kind === 'sound' ? 'sounds' : 'emojis');
+    setName(emoji.name);
+    setSource(emoji.emoji ? 'emoji' : 'image');
+    setUnicode(emoji.emoji);
+    setCallMode(emoji.callMode);
+    setStickerOptions(emoji.sticker);
+    setError(null);
+    formRef.current?.scrollIntoView({ block: 'start' });
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -122,7 +142,8 @@ export function RoomEmojisDialog({
     }
     const isSound = section === 'sounds';
     const fileSound = soundSource === 'file' ? sound : null;
-    if (isSound && !fileSound && !(soundSource === 'freesound' && freesoundSound)) {
+    const keepsSound = Boolean(editing?.hasSound) && !removeSound;
+    if (isSound && !keepsSound && !fileSound && !(soundSource === 'freesound' && freesoundSound)) {
       setError(t('Agregá un sonido: subí un archivo o elegí uno de Freesound'));
       return;
     }
@@ -130,7 +151,8 @@ export function RoomEmojisDialog({
       setError(t('Elegí un emoji'));
       return;
     }
-    if (!isSound && source === 'image' && !image) {
+    const hadImage = Boolean(editing && editing.kind === 'emoji' && !editing.emoji);
+    if (!isSound && source === 'image' && !image && !hadImage) {
       setError(t('Falta la imagen del emoji'));
       return;
     }
@@ -153,7 +175,9 @@ export function RoomEmojisDialog({
     const form = new FormData();
     form.append('name', normalized);
     if (!isSound && source === 'image' && image) form.append('image', image);
-    if (!isSound && source === 'emoji' && unicode) form.append('emoji', unicode);
+    if (!isSound && source === 'emoji' && unicode && unicode !== editing?.emoji) {
+      form.append('emoji', unicode);
+    }
     if (!isSound) {
       form.append('callMode', callMode);
       if (callMode === 'sticker') {
@@ -167,17 +191,24 @@ export function RoomEmojisDialog({
     if (soundSource === 'freesound' && freesoundSound) {
       form.append('freesoundId', String(freesoundSound.id));
     }
+    const replacesSound = Boolean(fileSound) || (soundSource === 'freesound' && freesoundSound);
+    if (editing && removeSound && !replacesSound) form.append('removeSound', 'true');
     setSaving(true);
     try {
-      await createRoomEmoji(code, form);
-      setSuccess(
-        isSound
-          ? `${t('Sonido agregado')}: :${normalized}:`
-          : `${t('Emoji agregado')}: :${normalized}:`,
-      );
+      if (editing) await updateRoomEmoji(code, editing.id, form);
+      else await createRoomEmoji(code, form);
+      const label = editing
+        ? isSound
+          ? t('Sonido actualizado')
+          : t('Emoji actualizado')
+        : isSound
+          ? t('Sonido agregado')
+          : t('Emoji agregado');
+      setSuccess(`${label}: :${normalized}:`);
       resetForm();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t('No se pudo agregar el emoji'));
+      const fallback = editing ? t('No se pudo guardar el emoji') : t('No se pudo agregar el emoji');
+      setError(err instanceof ApiError ? err.message : fallback);
     } finally {
       setSaving(false);
     }
@@ -200,8 +231,8 @@ export function RoomEmojisDialog({
     section === 'sounds' ? emoji.kind === 'sound' : emoji.kind === 'emoji',
   );
 
-  function play(id: string) {
-    void new Audio(roomEmojiSoundUrl(code, id)).play();
+  function play(emoji: RoomEmoji) {
+    void new Audio(roomEmojiSoundUrl(code, emoji)).play();
   }
 
   return (
@@ -240,6 +271,7 @@ export function RoomEmojisDialog({
             aria-selected={section === value}
             className={styles.sourceTab}
             onClick={() => {
+              if (editing) resetForm();
               setSection(value);
               setError(null);
             }}
@@ -277,7 +309,7 @@ export function RoomEmojisDialog({
                     {emoji.emoji}
                   </span>
                 ) : (
-                  <img src={roomEmojiImageUrl(code, emoji.id)} alt="" width={40} height={40} />
+                  <img src={roomEmojiImageUrl(code, emoji)} alt="" width={40} height={40} />
                 )}
                 <span className={styles.nameBlock}>
                   <span className={styles.name} title={`:${emoji.name}:`}>
@@ -293,10 +325,22 @@ export function RoomEmojisDialog({
                   <button
                     type="button"
                     className={styles.iconAction}
-                    onClick={() => play(emoji.id)}
+                    onClick={() => play(emoji)}
                     aria-label={`${t('Escuchar')} :${emoji.name}:`}
                   >
                     ▶
+                  </button>
+                )}
+                {canManage && (
+                  <button
+                    type="button"
+                    className={styles.iconAction}
+                    aria-pressed={editing?.id === emoji.id}
+                    onClick={() => startEdit(emoji)}
+                    aria-label={`${t('Editar')} :${emoji.name}:`}
+                    title={t('Editar')}
+                  >
+                    ✎
                   </button>
                 )}
                 {canManage && (
@@ -319,7 +363,20 @@ export function RoomEmojisDialog({
 
       {canManage ? (
         <form ref={formRef} className={styles.form} onSubmit={handleSubmit}>
-          <h3>{section === 'sounds' ? t('Agregar sonido') : t('Agregar emoji')}</h3>
+          <div className={styles.formHeading}>
+            <h3>
+              {editing
+                ? `${t('Editando')} :${editing.name}:`
+                : section === 'sounds'
+                  ? t('Agregar sonido')
+                  : t('Agregar emoji')}
+            </h3>
+            {editing && (
+              <button type="button" className={styles.cancelEdit} onClick={resetForm}>
+                {t('Cancelar edición')}
+              </button>
+            )}
+          </div>
           <label htmlFor="emoji-name">{t('Nombre')}</label>
           <div className={styles.nameField}>
             <span aria-hidden="true">:</span>
@@ -354,7 +411,11 @@ export function RoomEmojisDialog({
 
               {source === 'image' ? (
                 <>
-                  <label htmlFor="emoji-image">{t('Imagen (PNG, JPG, WebP o GIF)')}</label>
+                  <label htmlFor="emoji-image">
+                    {editing && !editing.emoji
+                      ? t('Imagen nueva (opcional: si no, se mantiene la actual)')
+                      : t('Imagen (PNG, JPG, WebP o GIF)')}
+                  </label>
                   <div className={styles.fileRow}>
                     <input
                       id="emoji-image"
@@ -362,7 +423,14 @@ export function RoomEmojisDialog({
                       accept="image/png,image/jpeg,image/webp,image/gif"
                       onChange={(e) => pickImage(e.target.files?.[0] ?? null)}
                     />
-                    {imagePreview && <img src={imagePreview} alt="" width={40} height={40} />}
+                    {imagePreview ? (
+                      <img src={imagePreview} alt="" width={40} height={40} />
+                    ) : (
+                      editing?.kind === 'emoji' &&
+                      !editing.emoji && (
+                        <img src={roomEmojiImageUrl(code, editing)} alt="" width={40} height={40} />
+                      )
+                    )}
                   </div>
                 </>
               ) : (
@@ -431,15 +499,33 @@ export function RoomEmojisDialog({
             <FreesoundSearch code={code} selected={freesoundSound} onSelect={setFreesoundSound} />
           )}
 
+          {editing?.hasSound && section === 'emojis' && (
+            <label className={styles.checkRow}>
+              <input
+                type="checkbox"
+                checked={removeSound}
+                onChange={(e) => setRemoveSound(e.target.checked)}
+              />
+              {t('Quitar el sonido actual')}
+            </label>
+          )}
+          {editing?.hasSound && (
+            <p className={styles.hint}>
+              {t('Si no elegís un sonido nuevo, se mantiene el actual.')}
+            </p>
+          )}
+
           {error && (
             <p className={styles.error} role="alert">
               {t(error)}
             </p>
           )}
-          <button type="submit" disabled={saving || emojis.length >= MAX_EMOJIS}>
+          <button type="submit" disabled={saving || (!editing && emojis.length >= MAX_EMOJIS)}>
             {saving
               ? t('Subiendo…')
-              : section === 'sounds'
+              : editing
+                ? t('Guardar cambios')
+                : section === 'sounds'
                 ? t('Agregar sonido')
                 : t('Agregar emoji')}
           </button>

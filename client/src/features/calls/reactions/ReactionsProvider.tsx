@@ -71,12 +71,13 @@ export function ReactionsProvider({ children, roomCode, roomEmojis }: ReactionsP
   const playSound = useCallback(
     (key: ReactionKey) => {
       const id = customIdOf(key);
-      if (!id || !emojisByIdRef.current.get(id)?.hasSound) return;
+      const emoji = id ? emojisByIdRef.current.get(id) : undefined;
+      if (!emoji?.hasSound) return;
       const now = Date.now();
       recentSounds.current = recentSounds.current.filter((at) => now - at < 1000);
       if (recentSounds.current.length >= MAX_SOUNDS_PER_SECOND) return;
       recentSounds.current.push(now);
-      void new Audio(roomEmojiSoundUrl(roomCode, id)).play().catch(() => undefined);
+      void new Audio(roomEmojiSoundUrl(roomCode, emoji)).play().catch(() => undefined);
     },
     [roomCode],
   );
@@ -214,7 +215,7 @@ export function ReactionsProvider({ children, roomCode, roomEmojis }: ReactionsP
       if (!emoji) return null;
       if (emoji.kind === 'sound') return { kind: 'text', text: '🔊' };
       if (emoji.emoji) return { kind: 'text', text: emoji.emoji };
-      return { kind: 'image', src: roomEmojiImageUrl(roomCode, id), name: emoji.name };
+      return { kind: 'image', src: roomEmojiImageUrl(roomCode, emoji), name: emoji.name };
     },
     [emojisById, roomCode],
   );

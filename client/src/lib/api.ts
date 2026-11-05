@@ -136,6 +136,7 @@ export interface RoomEmoji {
   soundAttribution: string | null;
   callMode: 'reaction' | 'sticker';
   sticker: StickerOptions;
+  version: number;
 }
 
 export const STICKER_DURATIONS = [5, 10, 30] as const;
@@ -176,12 +177,13 @@ export async function searchFreesound(code: string, query: string): Promise<Free
   return res.json();
 }
 
-export function roomEmojiImageUrl(code: string, id: string): string {
-  return `${API_URL}/rooms/${encodeURIComponent(code)}/emojis/${id}/image`;
+// `?v=` cambia al editar: el backend cachea los archivos como inmutables.
+export function roomEmojiImageUrl(code: string, emoji: Pick<RoomEmoji, 'id' | 'version'>): string {
+  return `${API_URL}/rooms/${encodeURIComponent(code)}/emojis/${emoji.id}/image?v=${emoji.version}`;
 }
 
-export function roomEmojiSoundUrl(code: string, id: string): string {
-  return `${API_URL}/rooms/${encodeURIComponent(code)}/emojis/${id}/sound`;
+export function roomEmojiSoundUrl(code: string, emoji: Pick<RoomEmoji, 'id' | 'version'>): string {
+  return `${API_URL}/rooms/${encodeURIComponent(code)}/emojis/${emoji.id}/sound?v=${emoji.version}`;
 }
 
 // Público: también lo usan los invitados para reaccionar con los emojis de la sala.
@@ -199,6 +201,15 @@ export async function createRoomEmoji(code: string, form: FormData): Promise<Roo
     body: form,
   });
   if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudo agregar el emoji'));
+  return res.json();
+}
+
+export async function updateRoomEmoji(code: string, id: string, form: FormData): Promise<RoomEmoji> {
+  const res = await authFetch(`/rooms/${encodeURIComponent(code)}/emojis/${id}`, {
+    method: 'PATCH',
+    body: form,
+  });
+  if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudo guardar el emoji'));
   return res.json();
 }
 

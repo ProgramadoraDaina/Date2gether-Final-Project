@@ -85,7 +85,7 @@ export function RoomEmojiShortcuts({ roomCode, emojis, onSelect, onShowAll }: Ro
             title={`:${emoji.name}:${emoji.hasSound ? ' 🔊' : ''}`}
             aria-label={`:${emoji.name}:`}
           >
-            <RoomEmojiGlyph emoji={emoji} src={roomEmojiImageUrl(roomCode, emoji.id)} />
+            <RoomEmojiGlyph emoji={emoji} src={roomEmojiImageUrl(roomCode, emoji)} />
           </button>
         ))}
       </div>
