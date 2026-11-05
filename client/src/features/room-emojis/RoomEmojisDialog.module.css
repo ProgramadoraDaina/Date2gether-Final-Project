@@ -181,6 +181,30 @@
   text-align: center;
 }
 
+/* Pegado arriba: se ve aunque el formulario esté scrolleado hacia abajo. */
+.success {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--color-success);
+  background: var(--color-success-bg);
+  color: var(--color-success);
+  font-size: 13px;
+  font-weight: 600;
+  animation: success-in 0.25s linear;
+}
+
+@keyframes success-in {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
 .listToggle summary {
   padding: 10px 16px;
   border-bottom: 1px solid var(--color-border);

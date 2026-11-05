@@ -100,6 +100,8 @@ const en: Record<string, string> = {
   'Emojis de la sala': 'Room emojis',
   'Emojis y sonidos': 'Emojis and sounds',
   'En la llamada': 'In the call',
+  'Emoji agregado': 'Emoji added',
+  'Sonido agregado': 'Sound added',
   'En la llamada: reacción': 'In the call: reaction',
   'En la llamada: sticker': 'In the call: sticker',
   Duración: 'Duration',

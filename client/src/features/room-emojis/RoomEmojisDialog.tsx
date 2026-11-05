@@ -79,6 +79,12 @@ export function RoomEmojisDialog({
   const [freesoundSound, setFreesoundSound] = useState<FreesoundSound | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  useEffect(() => {
+    if (!success) return;
+    const timer = setTimeout(() => setSuccess(null), 3000);
+    return () => clearTimeout(timer);
+  }, [success]);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -164,6 +170,11 @@ export function RoomEmojisDialog({
     setSaving(true);
     try {
       await createRoomEmoji(code, form);
+      setSuccess(
+        isSound
+          ? `${t('Sonido agregado')}: :${normalized}:`
+          : `${t('Emoji agregado')}: :${normalized}:`,
+      );
       resetForm();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t('No se pudo agregar el emoji'));
@@ -213,6 +224,12 @@ export function RoomEmojisDialog({
           ✕
         </button>
       </header>
+
+      {success && (
+        <p className={styles.success} role="status">
+          ✓ {success}
+        </p>
+      )}
 
       <div className={styles.sectionTabs} role="tablist">
         {(['emojis', 'sounds'] as const).map((value) => (

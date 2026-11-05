@@ -11,6 +11,8 @@
   --color-accent-contrast: #fff;
   --color-disabled: #9aa0a6;
   --color-error: #d93025;
+  --color-success: #137333;
+  --color-success-bg: #e6f4ea;
   --color-notice-bg: #e8f0fe;
   --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
@@ -28,6 +30,8 @@
   --color-accent-contrast: #202124;
   --color-disabled: #5f6368;
   --color-error: #f28b82;
+  --color-success: #81c995;
+  --color-success-bg: #1e3a2a;
   --color-notice-bg: #28344a;
   --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
