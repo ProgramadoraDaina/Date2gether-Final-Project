@@ -20,6 +20,13 @@ jest.mock('@/features/rooms/useRoomMembers', () => {
 });
 jest.mock('@/lib/api', () => ({ requestRoomAccess: jest.fn(), ApiError: class extends Error {} }));
 jest.mock('@/lib/socket', () => ({ createRoomSocket: jest.fn() }));
+// MeetingRoom (LiveKit real) tiene su propia suite dedicada
+// (MeetingRoom.spec.tsx) con todos los mocks de @livekit/*; acá solo
+// interesa si RoomPage lo monta o no según haya `session`, no su interior.
+jest.mock('@/features/calls/MeetingRoom', () => ({
+  __esModule: true,
+  default: () => <div>Video de la llamada</div>,
+}));
 // joinCall/leaveCall se comparten entre renders (en vez de jest.fn() nuevos
 // dentro del factory) para poder verificar que el auto-join se dispara una
 // sola vez, apenas existe `access`, sin click manual.
@@ -33,11 +40,17 @@ const mockLeaveCall = jest.fn();
 // sala ya conectada (chat, sidebar), no la transición de carga en sí.
 let mockStatus: 'idle' | 'connecting' | 'in-call' | 'error' = 'in-call';
 let mockError: string | null = null;
+// null hasta que el "backend" devuelva credenciales (igual que
+// useCallSession real): MeetingRoom solo se monta cuando session existe,
+// sin importar status — por eso los tests de la transición de carga lo
+// setean a mano junto con mockStatus.
+let mockSession: { url: string; token: string; roomName: string; participantLimit: number } | null =
+  null;
 jest.mock('@/features/calls/useCallSession', () => ({
   useCallSession: () => ({
     status: mockStatus,
     error: mockError,
-    session: null,
+    session: mockSession,
     joinCall: mockJoinCall,
     leaveCall: mockLeaveCall,
   }),
@@ -218,9 +231,10 @@ describe('RoomPage: transición de carga antes de entrar a la llamada', () => {
     localStorage.clear();
     jest.clearAllMocks();
     mockError = null;
+    mockSession = null;
   });
 
-  it('mientras la llamada conecta, muestra un overlay de carga con la tarjeta de nombre encima de la sala (que ya se está armando detrás)', async () => {
+  it('mientras la llamada conecta (todavía sin session), el chat ya es usable y el video muestra "Cargando llamada…"', async () => {
     mockStatus = 'connecting';
     const { requestRoomAccess } = await import('@/lib/api');
     const { createRoomSocket } = await import('@/lib/socket');
@@ -243,12 +257,11 @@ describe('RoomPage: transición de carga antes de entrar a la llamada', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Entrar a la reunión' }));
     await waitFor(() => expect(mockJoinCall).toHaveBeenCalledTimes(1));
 
+    // El panel de "Cargando llamada…" ocupa el lugar del video nomás; no
+    // bloquea el resto de la sala (antes era un overlay de pantalla
+    // completa que tapaba todo, incluido el chat).
     expect(screen.getByText('Cargando llamada…')).toBeInTheDocument();
-    // La tarjeta de nombre se muestra en el overlay (sigue en el DOM).
-    expect(screen.getByLabelText('Tu nombre en la reunión')).toBeInTheDocument();
-    // La sala de atrás (con el chat) ya está montada para que LiveKit pueda
-    // conectar en segundo plano: solo queda tapada visualmente por el
-    // overlay (algo que jsdom no modela), no ausente del DOM.
+    expect(screen.queryByLabelText('Tu nombre en la reunión')).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText('Escribí un mensaje...')).toBeInTheDocument();
   });
 
@@ -312,10 +325,12 @@ describe('RoomPage: transición de carga antes de entrar a la llamada', () => {
     await waitFor(() => expect(mockJoinCall).toHaveBeenCalledTimes(1));
     expect(screen.getByText('Cargando llamada…')).toBeInTheDocument();
 
-    // Simula que LiveKit ya confirmó la conexión (useCallSession pasaría a
-    // 'in-call'); un evento de socket cualquiera fuerza el re-render que
-    // hace que RoomPage lea el mockStatus actualizado.
+    // Simula que el backend ya devolvió credenciales y LiveKit confirmó la
+    // conexión (useCallSession pasaría a 'in-call' con session seteada); un
+    // evento de socket cualquiera fuerza el re-render que hace que RoomPage
+    // lea los valores actualizados.
     mockStatus = 'in-call';
+    mockSession = { url: 'wss://media.example.test', token: 'token', roomName: 'abc-defg-hij', participantLimit: 6 };
     callbacks.newMessage?.({
       id: 'm1',
       authorName: 'Otra persona',
@@ -325,5 +340,9 @@ describe('RoomPage: transición de carga antes de entrar a la llamada', () => {
 
     await screen.findByPlaceholderText('Escribí un mensaje...');
     expect(screen.queryByText('Cargando llamada…')).not.toBeInTheDocument();
+    // next/dynamic (ssr:false) resuelve el chunk de forma asíncrona incluso
+    // con el módulo mockeado: hace falta esperarlo, un getByText síncrono
+    // llega demasiado pronto.
+    await screen.findByText('Video de la llamada');
   });
 });

@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import { TopBar } from '@/features/layout/TopBar';
+import styles from './layout.module.css';
 import '@livekit/components-styles';
 import './globals.css';
-import styles from './layout.module.css';
 
 export const metadata: Metadata = {
   title: 'Date2gether',

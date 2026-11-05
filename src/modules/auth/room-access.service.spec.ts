@@ -31,7 +31,7 @@ describe('Acceso de invitados con enlace', () => {
     expect(result.participant.name).toBe('Otro nombre');
   });
 
-  it('impide usar el pase de una sala para llamar en otra', async () => {
+  it('impide usar el pase de una sala para entrar a otra, pero lo permite en la sala correcta', async () => {
     const { token } = await access.create('abc-defg-hij', 'Alex');
     const request = {
       headers: { authorization: `Bearer ${token}` },
@@ -44,7 +44,7 @@ describe('Acceso de invitados con enlace', () => {
     await expect(new RoomAccessGuard(access).canActivate(httpContext(request))).resolves.toBe(true);
   });
 
-  it('no permite que un pase de sala cree reuniones o se convierta en una cuenta', async () => {
+  it('un pase de sala no sirve como token de cuenta: ni pasa el JwtAuthGuard ni emite un nuevo pase de invitado', async () => {
     const { token } = await access.create('abc-defg-hij', 'Administrador');
     const request = { headers: { authorization: `Bearer ${token}` } };
     await expect(new JwtAuthGuard(jwt, config).canActivate(httpContext(request))).rejects.toThrow();

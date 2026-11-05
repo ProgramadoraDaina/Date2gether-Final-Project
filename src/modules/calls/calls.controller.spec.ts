@@ -4,7 +4,7 @@ import { CallsController } from './calls.controller';
 import type { CallsService } from './calls.service';
 
 describe('CallsController', () => {
-  it('usa la identidad y el nombre del pase verificado para emitir la sesión LiveKit', async () => {
+  it('usa la identidad y el nombre del pase verificado para emitir la sesión LiveKit, y responde sin cachear (Cache-Control: no-store)', async () => {
     const session = {
       url: 'wss://media.example.com',
       token: 'signed-token',

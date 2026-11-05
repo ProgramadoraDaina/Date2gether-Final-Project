@@ -36,7 +36,9 @@ export default function RegisterPage() {
   return (
     <div className={styles.card}>
       <h1>{t('Crear cuenta')}</h1>
-      <p className={styles.subtitle}>{t('Registrate para usar Date2gether.')}</p>
+      <p className={styles.subtitle} data-testid="subtitle">
+        {t('Registrate para usar Date2gether.')}
+      </p>
 
       <form onSubmit={handleSubmit}>
         <label htmlFor="name">{t('Nombre')}</label>
@@ -75,7 +77,11 @@ export default function RegisterPage() {
         </button>
       </form>
 
-      {error && <p className={styles.error}>{error}</p>}
+      {error && (
+        <p className={styles.error} data-testid="error-message">
+          {error}
+        </p>
+      )}
 
       <p className={styles.switchLink}>
         {t('¿Ya tenés cuenta? ')}

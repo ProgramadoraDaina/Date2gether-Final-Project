@@ -11,7 +11,13 @@ import {
   useTracks,
   useTrackToggle,
 } from '@livekit/components-react';
-import { DisconnectReason, Track, VideoPresets, type RoomOptions } from 'livekit-client';
+import {
+  DefaultReconnectPolicy,
+  DisconnectReason,
+  Track,
+  VideoPresets,
+  type RoomOptions,
+} from 'livekit-client';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useTranslation } from '../translation/useTranslation';
@@ -30,7 +36,19 @@ const options: RoomOptions = {
     videoCodec: 'vp8',
     videoSimulcastLayers: [VideoPresets.h90, VideoPresets.h180],
   },
+  // La política por defecto de livekit-client hace 10 reintentos (con
+  // delays que suman más de 40s entre sí, sin contar cada intento real de
+  // conexión): si la red no deja pasar WebRTC, la llamada queda reintentando
+  // en silencio por minutos antes de avisar el error. Con pocos intentos
+  // cortos, alguien con un corte breve de red sigue reconectando solo, pero
+  // una falla sostenida llega rápido a la pantalla de "Reintentar".
+  reconnectPolicy: new DefaultReconnectPolicy([0, 500]),
 };
+
+// Default de livekit-client: 15s por intento antes de darlo por fallido.
+// Combinado con el reconnectPolicy acotado de arriba, el peor caso (2
+// intentos) queda bien por debajo de un timeout de test típico.
+const connectOptions = { peerConnectionTimeout: 5000 };
 
 function MicIcon({ muted }: { muted: boolean }) {
   return (
@@ -210,6 +228,7 @@ export default function MeetingRoom({ call }: { call: CallSessionState }) {
       audio={false}
       video={false}
       options={options}
+      connectOptions={connectOptions}
       onConnected={call.connected}
       onError={call.failed}
       onDisconnected={(reason) => {

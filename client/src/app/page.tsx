@@ -91,10 +91,12 @@ export default function HomePage() {
     <AppShell>
       <div className={styles.card}>
         <h1>Date2gether</h1>
-        <p className={styles.subtitle}>{t('Videollamadas simples, en el navegador.')}</p>
+        <p className={styles.subtitle} data-testid="subtitle">
+          {t('Videollamadas simples, en el navegador.')}
+        </p>
 
         {!checkingSession && (
-          <div className={styles.authBar}>
+          <div className={styles.authBar} data-testid="auth-bar">
             {user ? (
               <>
                 <span>
@@ -147,7 +149,11 @@ export default function HomePage() {
           </button>
         </form>
 
-        {error && <p className={styles.error}>{error}</p>}
+        {error && (
+          <p className={styles.error} data-testid="error-message">
+            {error}
+          </p>
+        )}
       </div>
     </AppShell>
   );

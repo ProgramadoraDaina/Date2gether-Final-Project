@@ -31,3 +31,12 @@ export const SPANISH_STORAGE_STATE = {
     },
   ],
 };
+
+// Sin ningún storage previo: simula a alguien que entra por primera vez,
+// sin preferencia de tema ni idioma guardada. Se usa para pisar el
+// SPANISH_STORAGE_STATE global en los tests que necesitan probar los
+// defaults reales de la app (ver preferences.spec.ts).
+export const EMPTY_STORAGE_STATE = {
+  cookies: [],
+  origins: [],
+};

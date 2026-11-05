@@ -14,6 +14,7 @@ export function LanguageToggle() {
       aria-label={isEs ? 'Switch language to English (EN)' : 'Cambiar idioma a español (ES)'}
       title={isEs ? 'English' : 'Español'}
       className={styles.languageToggle}
+      data-testid="language-toggle"
     >
       {isEs ? 'EN' : 'ES'}
     </button>

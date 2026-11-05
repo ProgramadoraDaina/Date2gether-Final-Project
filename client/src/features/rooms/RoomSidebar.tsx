@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react';
 import { ThemeToggle } from '@/features/theme/ThemeToggle';
 import { LanguageToggle } from '@/features/translation/LanguageToggle';
@@ -48,6 +49,13 @@ export function RoomSidebar({
         <button type="button" className={`secondary ${styles.copyLink}`} onClick={onCopyLink}>
           {t(copied ? 'Enlace copiado' : 'Copiar enlace')}
         </button>
+        {/* Única salida de la sala cuando la llamada todavía está
+            conectando o falló (MeetingRoom, con su botón de "Colgar", ni
+            se monta en esos casos): sin esto, la única forma de volver al
+            inicio era el botón de atrás del navegador. */}
+        <Link href="/" className={styles.leaveLink}>
+          {t('Salir')}
+        </Link>
       </div>
       <div
         className={styles.resizeHandle}
