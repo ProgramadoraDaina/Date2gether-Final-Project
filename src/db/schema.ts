@@ -168,6 +168,8 @@ export const roomEmojis = pgTable(
     stickerAnimation: stickerAnimationEnum('sticker_animation').notNull().default('static'),
     createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at').notNull().defaultNow(),
+    // Versiona las URLs de imagen y sonido: los archivos se cachean como inmutables.
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
   (table) => [
     unique('room_emojis_room_id_name_unique').on(table.roomId, table.name),

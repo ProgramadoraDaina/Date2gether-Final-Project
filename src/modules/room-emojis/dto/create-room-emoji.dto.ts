@@ -12,16 +12,15 @@ import {
 const SINGLE_EMOJI =
   /^(?:\p{Regional_Indicator}{2}|\p{Extended_Pictographic}️?\p{Emoji_Modifier}?(?:‍\p{Extended_Pictographic}️?\p{Emoji_Modifier}?)*)$/u;
 
-export class CreateRoomEmojiDto {
-  @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? value.trim().toLowerCase() : value,
-  )
-  @IsString()
-  @Matches(/^[a-z0-9_]{2,32}$/, {
-    message: 'El nombre debe tener de 2 a 32 caracteres: letras, números o guion bajo',
-  })
-  name: string;
+export const normalizeName = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? value.trim().toLowerCase() : value;
 
+export const NAME_PATTERN = /^[a-z0-9_]{2,32}$/;
+export const NAME_MESSAGE =
+  'El nombre debe tener de 2 a 32 caracteres: letras, números o guion bajo';
+
+// Campos opcionales compartidos entre crear y editar.
+export class RoomEmojiFieldsDto {
   @IsOptional()
   @IsString()
   @MaxLength(32)
@@ -54,4 +53,11 @@ export class CreateRoomEmojiDto {
   @IsOptional()
   @IsIn(STICKER_ANIMATIONS)
   stickerAnimation?: (typeof STICKER_ANIMATIONS)[number];
+}
+
+export class CreateRoomEmojiDto extends RoomEmojiFieldsDto {
+  @Transform(normalizeName)
+  @IsString()
+  @Matches(NAME_PATTERN, { message: NAME_MESSAGE })
+  name: string;
 }

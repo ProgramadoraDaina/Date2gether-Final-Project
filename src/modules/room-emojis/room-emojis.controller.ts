@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   Param,
+  Patch,
   ParseUUIDPipe,
   Post,
   Query,
@@ -20,11 +21,16 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RoomRoles } from '../rooms/decorators/room-roles.decorator';
 import { RoomRolesGuard } from '../rooms/guards/room-roles.guard';
-import { CreateRoomEmojiDto } from './dto/create-room-emoji.dto';
+import { CreateRoomEmojiDto, RoomEmojiFieldsDto } from './dto/create-room-emoji.dto';
+import { UpdateRoomEmojiDto } from './dto/update-room-emoji.dto';
 import { SearchSoundsDto } from './dto/search-sounds.dto';
 import { MAX_UPLOAD_BYTES, type ProcessedMedia } from './emoji-media';
 import { FreesoundService } from './freesound.service';
-import { RoomEmojisService } from './room-emojis.service';
+import {
+  RoomEmojisService,
+  type EmojiCallOptions,
+  type NewEmojiContent,
+} from './room-emojis.service';
 
 interface UploadedFile {
   buffer: Buffer;
@@ -77,15 +83,7 @@ export class RoomEmojisController {
 
   @UseGuards(JwtAuthGuard, RoomRolesGuard)
   @RoomRoles('administrador', 'colaborador')
-  @UseInterceptors(
-    FileFieldsInterceptor(
-      [
-        { name: 'image', maxCount: 1 },
-        { name: 'sound', maxCount: 1 },
-      ],
-      { limits: { fileSize: MAX_UPLOAD_BYTES, files: 2, fields: 8 } },
-    ),
-  )
+  @UseInterceptors(emojiUploads())
   @Post()
   create(
     @Param('code') code: string,
@@ -97,22 +95,27 @@ export class RoomEmojisController {
       code,
       user.sub,
       dto.name,
-      {
-        image: files.image?.[0]?.buffer,
-        emoji: dto.emoji,
-        freesoundId: dto.freesoundId,
-        sound: files.sound?.[0]?.buffer,
-      },
-      {
-        callMode: dto.callMode,
-        sticker: {
-          duration: dto.stickerDuration,
-          position: dto.stickerPosition,
-          size: dto.stickerSize,
-          animation: dto.stickerAnimation,
-        },
-      },
+      contentOf(dto, files),
+      callOptionsOf(dto),
     );
+  }
+
+  @UseGuards(JwtAuthGuard, RoomRolesGuard)
+  @RoomRoles('administrador', 'colaborador')
+  @UseInterceptors(emojiUploads())
+  @Patch(':id')
+  update(
+    @Param('code') code: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateRoomEmojiDto,
+    @UploadedFiles() files: EmojiUploads,
+  ) {
+    return this.roomEmojis.update(code, id, {
+      name: dto.name,
+      removeSound: dto.removeSound,
+      ...contentOf(dto, files),
+      ...callOptionsOf(dto),
+    });
   }
 
   @UseGuards(JwtAuthGuard, RoomRolesGuard)
@@ -124,8 +127,39 @@ export class RoomEmojisController {
   }
 }
 
+function emojiUploads() {
+  return FileFieldsInterceptor(
+    [
+      { name: 'image', maxCount: 1 },
+      { name: 'sound', maxCount: 1 },
+    ],
+    { limits: { fileSize: MAX_UPLOAD_BYTES, files: 2, fields: 10 } },
+  );
+}
+
+function contentOf(dto: RoomEmojiFieldsDto, files: EmojiUploads): NewEmojiContent {
+  return {
+    image: files.image?.[0]?.buffer,
+    emoji: dto.emoji,
+    freesoundId: dto.freesoundId,
+    sound: files.sound?.[0]?.buffer,
+  };
+}
+
+function callOptionsOf(dto: RoomEmojiFieldsDto): EmojiCallOptions {
+  return {
+    callMode: dto.callMode,
+    sticker: {
+      duration: dto.stickerDuration,
+      position: dto.stickerPosition,
+      size: dto.stickerSize,
+      animation: dto.stickerAnimation,
+    },
+  };
+}
+
 function send(res: Response, media: ProcessedMedia) {
-  // El id cambia si se reemplaza el emoji, así que el archivo nunca cambia bajo la misma URL.
+  // El cliente pide `?v=<version>`: al editar cambia la URL, nunca el archivo bajo la misma URL.
   res.set({
     'Content-Type': media.mime,
     'Cache-Control': 'public, max-age=31536000, immutable',

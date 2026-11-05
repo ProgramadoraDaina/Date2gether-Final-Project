@@ -9,7 +9,7 @@ function handler(name: keyof RoomEmojisController): object {
 }
 
 describe('RoomEmojisController', () => {
-  it.each(['create', 'remove'] as const)(
+  it.each(['create', 'update', 'remove'] as const)(
     '%s exige cuenta autenticada y luego el rol de la sala, en ese orden',
     (name) => {
       expect(Reflect.getMetadata('__guards__', handler(name))).toEqual([
@@ -19,7 +19,7 @@ describe('RoomEmojisController', () => {
     },
   );
 
-  it.each(['create', 'remove'] as const)(
+  it.each(['create', 'update', 'remove'] as const)(
     '%s solo lo permite a administrador y colaborador',
     (name) => {
       expect(Reflect.getMetadata(ROOM_ROLES_KEY, handler(name))).toEqual([
