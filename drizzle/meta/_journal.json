@@ -57,6 +57,13 @@
       "when": 1793390969426,
       "tag": "0007_room_emoji_unicode",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793899210263,
+      "tag": "0008_room_emoji_sound_attribution",
+      "breakpoints": true
     }
   ]
 }

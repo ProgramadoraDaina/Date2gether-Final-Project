@@ -7,6 +7,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
   Res,
   UploadedFiles,
   UseGuards,
@@ -20,7 +21,9 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RoomRoles } from '../rooms/decorators/room-roles.decorator';
 import { RoomRolesGuard } from '../rooms/guards/room-roles.guard';
 import { CreateRoomEmojiDto } from './dto/create-room-emoji.dto';
+import { SearchSoundsDto } from './dto/search-sounds.dto';
 import { MAX_UPLOAD_BYTES, type ProcessedMedia } from './emoji-media';
+import { FreesoundService } from './freesound.service';
 import { RoomEmojisService } from './room-emojis.service';
 
 interface UploadedFile {
@@ -36,11 +39,22 @@ interface EmojiUploads {
 // Los archivos se piden por uuid y no contienen datos personales.
 @Controller('rooms/:code/emojis')
 export class RoomEmojisController {
-  constructor(private readonly roomEmojis: RoomEmojisService) {}
+  constructor(
+    private readonly roomEmojis: RoomEmojisService,
+    private readonly freesound: FreesoundService,
+  ) {}
 
   @Get()
   list(@Param('code') code: string) {
     return this.roomEmojis.list(code);
+  }
+
+  // Protegido: solo quien puede crear emojis gasta la cuota de la API key de Freesound.
+  @UseGuards(JwtAuthGuard, RoomRolesGuard)
+  @RoomRoles('administrador', 'colaborador')
+  @Get('sounds')
+  searchSounds(@Query() dto: SearchSoundsDto) {
+    return this.freesound.search(dto.q);
   }
 
   @Get(':id/image')
@@ -69,7 +83,7 @@ export class RoomEmojisController {
         { name: 'image', maxCount: 1 },
         { name: 'sound', maxCount: 1 },
       ],
-      { limits: { fileSize: MAX_UPLOAD_BYTES, files: 2, fields: 2 } },
+      { limits: { fileSize: MAX_UPLOAD_BYTES, files: 2, fields: 3 } },
     ),
   )
   @Post()
@@ -82,6 +96,7 @@ export class RoomEmojisController {
     return this.roomEmojis.create(code, user.sub, dto.name, {
       image: files.image?.[0]?.buffer,
       emoji: dto.emoji,
+      freesoundId: dto.freesoundId,
       sound: files.sound?.[0]?.buffer,
     });
   }

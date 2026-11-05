@@ -8,9 +8,11 @@ import {
   deleteRoomEmoji,
   roomEmojiImageUrl,
   roomEmojiSoundUrl,
+  type FreesoundSound,
   type RoomEmoji,
 } from '@/lib/api';
 import { EmojiPanel } from '@/features/chat/EmojiPanel';
+import { FreesoundSearch } from './FreesoundSearch';
 import styles from './RoomEmojisDialog.module.css';
 
 const MAX_EMOJIS = 50;
@@ -56,6 +58,8 @@ export function RoomEmojisDialog({ code, open, onClose, emojis, canManage }: Roo
   const [image, setImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [sound, setSound] = useState<File | null>(null);
+  const [soundSource, setSoundSource] = useState<'file' | 'freesound'>('file');
+  const [freesoundSound, setFreesoundSound] = useState<FreesoundSound | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
@@ -81,6 +85,7 @@ export function RoomEmojisDialog({ code, open, onClose, emojis, canManage }: Roo
     pickImage(null);
     setUnicode(null);
     setSound(null);
+    setFreesoundSound(null);
     setPickerKey((value) => value + 1);
   }
 
@@ -104,12 +109,13 @@ export function RoomEmojisDialog({ code, open, onClose, emojis, canManage }: Roo
       setError(t('La imagen no puede superar los 2 MB'));
       return;
     }
-    if (sound) {
-      if (sound.size > MAX_SOUND_BYTES) {
+    const fileSound = soundSource === 'file' ? sound : null;
+    if (fileSound) {
+      if (fileSound.size > MAX_SOUND_BYTES) {
         setError(t('El audio no puede superar los 512 KB'));
         return;
       }
-      const seconds = await soundDuration(sound).catch(() => Number.NaN);
+      const seconds = await soundDuration(fileSound).catch(() => Number.NaN);
       if (!(seconds <= MAX_SOUND_SECONDS)) {
         setError(t('El audio no puede durar más de 5 segundos'));
         return;
@@ -120,7 +126,10 @@ export function RoomEmojisDialog({ code, open, onClose, emojis, canManage }: Roo
     form.append('name', normalized);
     if (source === 'image' && image) form.append('image', image);
     if (source === 'emoji' && unicode) form.append('emoji', unicode);
-    if (sound) form.append('sound', sound);
+    if (fileSound) form.append('sound', fileSound);
+    if (soundSource === 'freesound' && freesoundSound) {
+      form.append('freesoundId', String(freesoundSound.id));
+    }
     setSaving(true);
     try {
       await createRoomEmoji(code, form);
@@ -179,8 +188,15 @@ export function RoomEmojisDialog({ code, open, onClose, emojis, canManage }: Roo
               ) : (
                 <img src={roomEmojiImageUrl(code, emoji.id)} alt="" width={40} height={40} />
               )}
-              <span className={styles.name} title={`:${emoji.name}:`}>
-                :{emoji.name}:
+              <span className={styles.nameBlock}>
+                <span className={styles.name} title={`:${emoji.name}:`}>
+                  :{emoji.name}:
+                </span>
+                {emoji.soundAttribution && (
+                  <span className={styles.credit} title={emoji.soundAttribution}>
+                    🔊 {emoji.soundAttribution}
+                  </span>
+                )}
               </span>
               {emoji.hasSound && (
                 <button
@@ -266,13 +282,34 @@ export function RoomEmojisDialog({ code, open, onClose, emojis, canManage }: Roo
             </>
           )}
 
-          <label htmlFor="emoji-sound">{t('Sonido opcional (MP3, OGG o WAV, hasta 5 s)')}</label>
-          <input
-            id="emoji-sound"
-            type="file"
-            accept="audio/mpeg,audio/ogg,audio/wav"
-            onChange={(e) => setSound(e.target.files?.[0] ?? null)}
-          />
+          <div className={styles.sourceTabs} role="radiogroup" aria-label={t('Sonido opcional')}>
+            {(['file', 'freesound'] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={soundSource === value}
+                className={styles.sourceTab}
+                onClick={() => setSoundSource(value)}
+              >
+                {value === 'file' ? t('Sonido: subir archivo') : t('Sonido: Freesound')}
+              </button>
+            ))}
+          </div>
+
+          {soundSource === 'file' ? (
+            <>
+              <label htmlFor="emoji-sound">{t('Sonido opcional (MP3, OGG o WAV, hasta 5 s)')}</label>
+              <input
+                id="emoji-sound"
+                type="file"
+                accept="audio/mpeg,audio/ogg,audio/wav"
+                onChange={(e) => setSound(e.target.files?.[0] ?? null)}
+              />
+            </>
+          ) : (
+            <FreesoundSearch code={code} selected={freesoundSound} onSelect={setFreesoundSound} />
+          )}
 
           {error && (
             <p className={styles.error} role="alert">

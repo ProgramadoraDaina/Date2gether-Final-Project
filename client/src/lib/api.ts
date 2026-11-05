@@ -130,6 +130,24 @@ export interface RoomEmoji {
   // Emoji Unicode elegido del picker; null si el emoji de la sala es una imagen subida.
   emoji: string | null;
   hasSound: boolean;
+  // Crédito del sonido cuando viene de Freesound (requerido por la licencia CC BY).
+  soundAttribution: string | null;
+}
+
+export interface FreesoundSound {
+  id: number;
+  name: string;
+  username: string;
+  license: string;
+  duration: number;
+  previewUrl: string;
+}
+
+export async function searchFreesound(code: string, query: string): Promise<FreesoundSound[]> {
+  const params = new URLSearchParams({ q: query });
+  const res = await authFetch(`/rooms/${encodeURIComponent(code)}/emojis/sounds?${params}`);
+  if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudieron cargar los sonidos'));
+  return res.json();
 }
 
 export function roomEmojiImageUrl(code: string, id: string): string {

@@ -136,6 +136,8 @@ export const roomEmojis = pgTable(
     emoji: varchar('emoji', { length: 32 }),
     sound: bytea('sound'),
     soundMime: varchar('sound_mime', { length: 32 }),
+    // Crédito obligatorio para sonidos de Freesound con licencia CC BY.
+    soundAttribution: varchar('sound_attribution', { length: 300 }),
     createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },

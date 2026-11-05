@@ -77,8 +77,22 @@
   object-fit: contain;
 }
 
-.name {
+.nameBlock {
+  display: flex;
   flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.credit {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.name {
   min-width: 0;
   overflow: hidden;
   font-family: ui-monospace, monospace;

@@ -1,5 +1,5 @@
-import { Transform } from 'class-transformer';
-import { IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { IsInt, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator';
 
 // Un solo emoji, incluidos tonos de piel, secuencias con ZWJ (👨‍👩‍👧) y banderas (🇦🇷).
 const SINGLE_EMOJI =
@@ -20,4 +20,10 @@ export class CreateRoomEmojiDto {
   @MaxLength(32)
   @Matches(SINGLE_EMOJI, { message: 'Elegí un solo emoji' })
   emoji?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  freesoundId?: number;
 }
