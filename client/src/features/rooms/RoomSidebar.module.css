@@ -69,6 +69,10 @@
   gap: 8px;
 }
 
+.emojisButton {
+  border-radius: 2px;
+}
+
 .copyLink {
   margin-top: auto;
 }

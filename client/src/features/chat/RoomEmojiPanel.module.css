@@ -1,0 +1,59 @@
+.empty {
+  margin: 16px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+/* minmax(0, 1fr): sin el 0, un nombre largo estira la columna y aparece un scroll horizontal. */
+.grid {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-content: start;
+  gap: 4px;
+  min-height: 0;
+  padding: 8px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 4px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--color-text);
+}
+
+.item:hover,
+.item:focus-visible {
+  border-color: var(--color-border);
+  background: var(--color-chip-bg);
+}
+
+.glyph {
+  font-size: 24px;
+  line-height: 1;
+}
+
+/* Hasta 2 líneas, cortando en cualquier letra: los nombres usan _ y no tienen espacios. */
+.name {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-family: ui-monospace, monospace;
+  font-size: 9px;
+  line-height: 1.25;
+  text-align: center;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}

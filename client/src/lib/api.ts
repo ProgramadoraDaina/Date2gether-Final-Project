@@ -46,7 +46,8 @@ function withAuth(token: string, init: RequestInit): RequestInit {
   return {
     ...init,
     headers: {
-      'Content-Type': 'application/json',
+      // Con FormData el navegador arma su propio Content-Type con el boundary.
+      ...(init.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
       ...init.headers,
       Authorization: `Bearer ${token}`,
     },
@@ -121,4 +122,100 @@ export async function updateNameColor(nameColor: string): Promise<AuthUser> {
   });
   if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudo guardar el color'));
   return res.json();
+}
+
+export interface RoomEmoji {
+  id: string;
+  name: string;
+  // 'sound': sonido de sala sin imagen; solo se usa desde la botonera, nunca en chat ni reacciones.
+  kind: 'emoji' | 'sound';
+  // Emoji Unicode elegido del picker; null si el emoji de la sala es una imagen subida.
+  emoji: string | null;
+  hasSound: boolean;
+  // Crédito del sonido cuando viene de Freesound (requerido por la licencia CC BY).
+  soundAttribution: string | null;
+  callMode: 'reaction' | 'sticker';
+  sticker: StickerOptions;
+  version: number;
+}
+
+export const STICKER_DURATIONS = [5, 10, 30] as const;
+export const STICKER_POSITIONS = [
+  'top-left',
+  'top',
+  'top-right',
+  'left',
+  'center',
+  'right',
+  'bottom-left',
+  'bottom',
+  'bottom-right',
+] as const;
+export const STICKER_SIZES = ['small', 'medium', 'large'] as const;
+export const STICKER_ANIMATIONS = ['static', 'float', 'spin', 'pulse', 'shake'] as const;
+
+export interface StickerOptions {
+  duration: (typeof STICKER_DURATIONS)[number];
+  position: (typeof STICKER_POSITIONS)[number];
+  size: (typeof STICKER_SIZES)[number];
+  animation: (typeof STICKER_ANIMATIONS)[number];
+}
+
+export interface FreesoundSound {
+  id: number;
+  name: string;
+  username: string;
+  license: string;
+  duration: number;
+  previewUrl: string;
+}
+
+export async function searchFreesound(code: string, query: string): Promise<FreesoundSound[]> {
+  const params = new URLSearchParams({ q: query });
+  const res = await authFetch(`/rooms/${encodeURIComponent(code)}/emojis/sounds?${params}`);
+  if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudieron cargar los sonidos'));
+  return res.json();
+}
+
+// `?v=` cambia al editar: el backend cachea los archivos como inmutables.
+export function roomEmojiImageUrl(code: string, emoji: Pick<RoomEmoji, 'id' | 'version'>): string {
+  return `${API_URL}/rooms/${encodeURIComponent(code)}/emojis/${emoji.id}/image?v=${emoji.version}`;
+}
+
+export function roomEmojiSoundUrl(code: string, emoji: Pick<RoomEmoji, 'id' | 'version'>): string {
+  return `${API_URL}/rooms/${encodeURIComponent(code)}/emojis/${emoji.id}/sound?v=${emoji.version}`;
+}
+
+// Público: también lo usan los invitados para reaccionar con los emojis de la sala.
+export async function getRoomEmojis(code: string): Promise<RoomEmoji[]> {
+  const res = await fetch(`${API_URL}/rooms/${encodeURIComponent(code)}/emojis`);
+  if (!res.ok) {
+    throw new ApiError(await extractErrorMessage(res, 'No se pudieron cargar los emojis'));
+  }
+  return res.json();
+}
+
+export async function createRoomEmoji(code: string, form: FormData): Promise<RoomEmoji> {
+  const res = await authFetch(`/rooms/${encodeURIComponent(code)}/emojis`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudo agregar el emoji'));
+  return res.json();
+}
+
+export async function updateRoomEmoji(code: string, id: string, form: FormData): Promise<RoomEmoji> {
+  const res = await authFetch(`/rooms/${encodeURIComponent(code)}/emojis/${id}`, {
+    method: 'PATCH',
+    body: form,
+  });
+  if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudo guardar el emoji'));
+  return res.json();
+}
+
+export async function deleteRoomEmoji(code: string, id: string): Promise<void> {
+  const res = await authFetch(`/rooms/${encodeURIComponent(code)}/emojis/${id}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudo borrar el emoji'));
 }

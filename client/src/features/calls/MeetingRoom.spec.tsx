@@ -72,7 +72,7 @@ describe('MeetingRoom', () => {
     const { Track } = await import('livekit-client');
     const MeetingRoom = (await import('./MeetingRoom')).default;
     const call = state();
-    render(<MeetingRoom call={call} />);
+    render(<MeetingRoom call={call} roomCode="abc-defg-hij" roomEmojis={[]} />);
     const props = jest.mocked(LiveKitRoom).mock.calls[0][0];
     expect(props).toMatchObject({
       serverUrl: call.session!.url,
@@ -93,7 +93,7 @@ describe('MeetingRoom', () => {
   it('los botones de micrófono y cámara son íconos accesibles por aria-label/title', async () => {
     const MeetingRoom = (await import('./MeetingRoom')).default;
     const call = state();
-    render(<MeetingRoom call={call} />);
+    render(<MeetingRoom call={call} roomCode="abc-defg-hij" roomEmojis={[]} />);
     const micButton = screen.getByRole('button', { name: 'Desactivar micrófono' });
     const cameraButton = screen.getByRole('button', { name: 'Desactivar cámara' });
     expect(micButton).toHaveAttribute('title', 'Desactivar micrófono');
@@ -115,7 +115,7 @@ describe('MeetingRoom', () => {
     );
     const MeetingRoom = (await import('./MeetingRoom')).default;
     const call = state();
-    render(<MeetingRoom call={call} />);
+    render(<MeetingRoom call={call} roomCode="abc-defg-hij" roomEmojis={[]} />);
     const micButton = screen.getByRole('button', { name: 'Activar micrófono' });
     const cameraButton = screen.getByRole('button', { name: 'Desactivar cámara' });
     expect(micButton).toHaveAttribute('title', 'Activar micrófono');
@@ -124,7 +124,7 @@ describe('MeetingRoom', () => {
   it('un permiso rechazado muestra instrucciones y conserva los controles de la llamada', async () => {
     const MeetingRoom = (await import('./MeetingRoom')).default;
     const call = state();
-    render(<MeetingRoom call={call} />);
+    render(<MeetingRoom call={call} roomCode="abc-defg-hij" roomEmojis={[]} />);
     fireEvent.click(screen.getByRole('button', { name: 'Desactivar cámara' }));
     expect(screen.getByRole('alert')).toHaveTextContent('Revisá los permisos');
     expect(screen.getByRole('button', { name: 'Colgar' })).toBeInTheDocument();
@@ -134,7 +134,7 @@ describe('MeetingRoom', () => {
     const { LiveKitRoom } = await import('@livekit/components-react');
     const MeetingRoom = (await import('./MeetingRoom')).default;
     const call = state();
-    render(<MeetingRoom call={call} />);
+    render(<MeetingRoom call={call} roomCode="abc-defg-hij" roomEmojis={[]} />);
     const props = jest.mocked(LiveKitRoom).mock.calls[0][0];
     act(() => props.onDisconnected?.(1));
     expect(call.leaveCall).toHaveBeenCalledTimes(1);

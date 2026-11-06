@@ -1,0 +1,37 @@
+.glyphImage {
+  display: inline-block;
+  width: 1.4em;
+  height: 1.4em;
+  object-fit: contain;
+  vertical-align: -0.35em;
+}
+
+.emoji {
+  font-size: 1.15em;
+}
+
+/* Botón inline: sin el estilo global de botón, para que se lea como parte del texto. */
+.soundEmoji {
+  display: inline;
+  width: auto;
+  padding: 0 1px;
+  border: none;
+  border-bottom: 1px dashed var(--color-accent);
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 1.15em;
+  font-weight: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+
+.soundEmoji:hover {
+  background: var(--color-chip-bg);
+}
+
+.jumbo {
+  display: block;
+  font-size: 2.4em;
+  line-height: 1.2;
+}

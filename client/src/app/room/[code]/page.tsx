@@ -1,18 +1,22 @@
 'use client';
 
-import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useParams } from 'next/navigation';
 import type { Socket } from 'socket.io-client';
-import { ExpressionPicker } from '@/features/chat/ExpressionPicker';
+import { ExpressionPicker, type ExpressionTab } from '@/features/chat/ExpressionPicker';
+import { MessageText } from '@/features/chat/MessageText';
+import { RoomEmojiShortcuts } from '@/features/chat/RoomEmojiShortcuts';
 import { AppShell } from '@/features/navigation/AppShell';
+import { RoomEmojisDialog } from '@/features/room-emojis/RoomEmojisDialog';
+import { useRoomEmojis } from '@/features/room-emojis/useRoomEmojis';
 import { RoleTag } from '@/features/rooms/RoleTag';
 import roleTagStyles from '@/features/rooms/RoleTag.module.css';
 import { RoomSidebar } from '@/features/rooms/RoomSidebar';
 import { useResizablePanel } from '@/features/rooms/useResizablePanel';
 import { useRoomMembers } from '@/features/rooms/useRoomMembers';
-import { ApiError, requestRoomAccess, type RoomAccess } from '@/lib/api';
+import { ApiError, requestRoomAccess, type RoomAccess, type RoomEmoji } from '@/lib/api';
 import { useCallSession } from '@/features/calls/useCallSession';
 import { createRoomSocket } from '@/lib/socket';
 import { useTranslation } from '@/features/translation/useTranslation';
@@ -62,6 +66,11 @@ export default function RoomPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [notice, setNotice] = useState<Notice | null>(null);
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), 'text' in notice ? 6000 : 2500);
+    return () => clearTimeout(timer);
+  }, [notice]);
   const [chatTab, setChatTab] = useState<'chat' | 'presentes'>('chat');
   const [chatOpen, setChatOpen] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -83,8 +92,15 @@ export default function RoomPage() {
   const listRef = useRef<HTMLUListElement>(null);
   const draftInputRef = useRef<HTMLInputElement>(null);
   const callSession = useCallSession();
+  const [emojisOpen, setEmojisOpen] = useState(false);
+  const { emojis, refetchEmojis } = useRoomEmojis(access ? code : undefined);
+  const chatEmojis = useMemo(() => emojis.filter((e) => e.kind === 'emoji'), [emojis]);
+  const emojisByName = useMemo(() => new Map(chatEmojis.map((e) => [e.name, e])), [chatEmojis]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerTab, setPickerTab] = useState<ExpressionTab>('emoji');
   const {
     members,
+    currentUserRole,
     isCurrentUserAdmin,
     error: membersError,
     changeRole,
@@ -164,6 +180,9 @@ export default function RoomPage() {
     socket.on('memberRoleChanged', () => {
       refetchMembers();
     });
+    socket.on('roomEmojisChanged', () => {
+      void refetchEmojis();
+    });
 
     socket.connect();
 
@@ -172,7 +191,7 @@ export default function RoomPage() {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [code, access, refetchMembers, t]);
+  }, [code, access, refetchMembers, refetchEmojis, t]);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
@@ -199,6 +218,10 @@ export default function RoomPage() {
       input?.focus();
       input?.setSelectionRange(start + emoji.length, start + emoji.length);
     });
+  }
+
+  function handleRoomEmojiSelect(emoji: RoomEmoji) {
+    handleEmojiSelect(`:${emoji.name}: `);
   }
 
   async function handleCopyLink() {
@@ -318,18 +341,33 @@ export default function RoomPage() {
                   {m.kind === 'gif' ? (
                     <img className={styles.gifMessage} src={m.content} alt="GIF" loading="lazy" />
                   ) : (
-                    m.content
+                    <MessageText text={m.content} roomCode={code} emojisByName={emojisByName} />
                   )}
                 </li>
               );
             })}
           </ul>
+          <RoomEmojiShortcuts
+            roomCode={code}
+            emojis={chatEmojis}
+            onSelect={handleRoomEmojiSelect}
+            onShowAll={() => {
+              setPickerTab('room');
+              setPickerOpen(true);
+            }}
+          />
           <form className={styles.messageForm} onSubmit={handleSend}>
             <ExpressionPicker
               roomCode={code}
               roomToken={access.token}
+              roomEmojis={chatEmojis}
+              open={pickerOpen}
+              onOpenChange={setPickerOpen}
+              tab={pickerTab}
+              onTabChange={setPickerTab}
               onEmojiSelect={handleEmojiSelect}
               onGifSelect={handleGifSelect}
+              onRoomEmojiSelect={handleRoomEmojiSelect}
             />
             <input
               ref={draftInputRef}
@@ -387,11 +425,19 @@ export default function RoomPage() {
 
   return (
     <>
+      <RoomEmojisDialog
+        code={code}
+        open={emojisOpen}
+        onClose={() => setEmojisOpen(false)}
+        emojis={emojis}
+        canManage={currentUserRole === 'administrador' || currentUserRole === 'colaborador'}
+      />
       <div className={styles.roomLayout}>
         <RoomSidebar
           code={code}
           copied={copied}
           onCopyLink={handleCopyLink}
+          onOpenEmojis={() => setEmojisOpen(true)}
           open={sidebarOpen}
           width={sidebarResize.width}
           onResizeHandleMouseDown={sidebarResize.handleMouseDown}
@@ -434,7 +480,11 @@ export default function RoomPage() {
           )}
 
           <div className={styles.meetingAndChat}>
-            {callSession.session ? <MeetingRoom call={callSession} /> : callLoadingPanel}
+            {callSession.session ? (
+              <MeetingRoom call={callSession} roomCode={code} roomEmojis={emojis} />
+            ) : (
+              callLoadingPanel
+            )}
             <button
               type="button"
               className={styles.chatToggleButton}

@@ -1,0 +1,2 @@
+ALTER TABLE "room_emojis" DROP CONSTRAINT "room_emojis_image_xor_emoji";--> statement-breakpoint
+ALTER TABLE "room_emojis" ADD CONSTRAINT "room_emojis_kind_valid" CHECK (not ("room_emojis"."image" is not null and "room_emojis"."emoji" is not null) and ("room_emojis"."image" is not null or "room_emojis"."emoji" is not null or "room_emojis"."sound" is not null));

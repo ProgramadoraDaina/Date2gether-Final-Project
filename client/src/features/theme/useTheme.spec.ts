@@ -37,15 +37,4 @@ describe('useTheme', () => {
     act(() => result.current.toggle());
     expect(result.current.theme).toBe('dark');
   });
-
-  it('aplica el tema actual al documento cada vez que cambia', async () => {
-    const { applyThemeToDocument } = await import('./dom-helpers');
-    const { useSystemTheme } = await import('./useSystemTheme');
-    (useSystemTheme as jest.Mock<typeof useSystemTheme>).mockReturnValue('light');
-    const { useTheme } = await import('./useTheme');
-    const { result } = renderHook(() => useTheme());
-    expect(applyThemeToDocument).toHaveBeenCalledWith('light');
-    act(() => result.current.toggle());
-    expect(applyThemeToDocument).toHaveBeenLastCalledWith('dark');
-  });
 });

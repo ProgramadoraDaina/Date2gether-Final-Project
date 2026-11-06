@@ -1,0 +1,1 @@
+ALTER TABLE "room_emojis" ADD COLUMN "sound_attribution" varchar(300);

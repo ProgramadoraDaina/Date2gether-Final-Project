@@ -1,41 +1,55 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef } from 'react';
 import { useTranslation } from '@/features/translation/useTranslation';
+import type { RoomEmoji } from '@/lib/api';
 import { useDismiss } from '@/lib/useDismiss';
 import { EmojiPanel } from './EmojiPanel';
 import styles from './ExpressionPicker.module.css';
 import { GifPanel } from './GifPanel';
+import { RoomEmojiPanel } from './RoomEmojiPanel';
 
-type Tab = 'emoji' | 'gif';
+export type ExpressionTab = 'emoji' | 'gif' | 'room';
 
+// Controlado desde afuera: los atajos de la sala lo abren directo en la pestaña "Sala".
 interface ExpressionPickerProps {
   roomCode: string;
   roomToken: string;
+  roomEmojis: RoomEmoji[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  tab: ExpressionTab;
+  onTabChange: (tab: ExpressionTab) => void;
   onEmojiSelect: (emoji: string) => void;
   onGifSelect: (url: string) => void;
+  onRoomEmojiSelect: (emoji: RoomEmoji) => void;
 }
 
 export function ExpressionPicker({
   roomCode,
   roomToken,
+  roomEmojis,
+  open,
+  onOpenChange,
+  tab,
+  onTabChange,
   onEmojiSelect,
   onGifSelect,
+  onRoomEmojiSelect,
 }: ExpressionPickerProps) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<Tab>('emoji');
   const wrapRef = useRef<HTMLDivElement>(null);
   useDismiss(
     open,
     wrapRef,
-    useCallback(() => setOpen(false), []),
+    useCallback(() => onOpenChange(false), [onOpenChange]),
   );
 
   const label = t('Emojis y GIFs');
-  const tabs: { id: Tab; label: string }[] = [
+  const tabs: { id: ExpressionTab; label: string }[] = [
     { id: 'emoji', label: 'Emoji' },
     { id: 'gif', label: 'GIF' },
+    { id: 'room', label: t('Sala') },
   ];
 
   return (
@@ -43,7 +57,7 @@ export function ExpressionPicker({
       <button
         type="button"
         className={styles.trigger}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => onOpenChange(!open)}
         aria-label={label}
         title={label}
         aria-expanded={open}
@@ -76,27 +90,38 @@ export function ExpressionPicker({
                 role="tab"
                 aria-selected={tab === id}
                 className={styles.tab}
-                onClick={() => setTab(id)}
+                onClick={() => onTabChange(id)}
               >
                 {tabLabel}
               </button>
             ))}
           </div>
           <div className={styles.panel} role="tabpanel">
-            {tab === 'emoji' ? (
+            {tab === 'emoji' && (
               <EmojiPanel
                 onSelect={(emoji) => {
                   onEmojiSelect(emoji);
-                  setOpen(false);
+                  onOpenChange(false);
                 }}
               />
-            ) : (
+            )}
+            {tab === 'gif' && (
               <GifPanel
                 roomCode={roomCode}
                 roomToken={roomToken}
                 onSelect={(url) => {
                   onGifSelect(url);
-                  setOpen(false);
+                  onOpenChange(false);
+                }}
+              />
+            )}
+            {tab === 'room' && (
+              <RoomEmojiPanel
+                roomCode={roomCode}
+                emojis={roomEmojis}
+                onSelect={(emoji) => {
+                  onRoomEmojiSelect(emoji);
+                  onOpenChange(false);
                 }}
               />
             )}

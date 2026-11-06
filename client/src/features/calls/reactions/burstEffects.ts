@@ -1,8 +1,8 @@
-import type { ReactionEmoji } from './reactions';
+import type { ReactionKey } from './reactions';
 
 export interface BurstParticle {
   kind: 'emoji' | 'ring' | 'line';
-  emoji?: ReactionEmoji;
+  reactionKey?: ReactionKey;
   size: number;
   keyframes: Keyframe[];
   options: KeyframeAnimationOptions;
@@ -149,7 +149,7 @@ const orbit: Effect = (r) => {
 
 const EFFECTS = [shatter, fountain, spiral, glitch, implode, zigzag, stretch, orbit] as const;
 
-function emojiParticle(emoji: ReactionEmoji, effect: Effect, delay: number, r: Rng): BurstParticle {
+function emojiParticle(reactionKey: ReactionKey, effect: Effect, delay: number, r: Rng): BurstParticle {
   const shard = r.chance(0.35);
   const ox = r.between(-24, 24);
   const oy = r.between(-24, 24);
@@ -159,7 +159,7 @@ function emojiParticle(emoji: ReactionEmoji, effect: Effect, delay: number, r: R
   }));
   return {
     kind: 'emoji',
-    emoji,
+    reactionKey,
     size: shard ? r.between(12, 20) : r.between(26, 44),
     keyframes,
     options: {
@@ -220,14 +220,14 @@ function decorations(r: Rng): BurstParticle[] {
   }
 }
 
-export function createBurstPlan(emojis: ReactionEmoji[], r: Rng = rng): BurstPlan {
+export function createBurstPlan(keys: ReactionKey[], r: Rng = rng): BurstPlan {
   const count = Math.round(r.between(8, 22));
   const mode = r.pick(['unison', 'chaos', 'waves'] as const);
   const unisonEffect = r.pick(EFFECTS);
   const waveEffects = Array.from({ length: Math.round(r.between(2, 3)) }, () => r.pick(EFFECTS));
 
   const particles = Array.from({ length: count }, (_, i) => {
-    const emoji = emojis[i % emojis.length];
+    const emoji = keys[i % keys.length];
     if (mode === 'unison') return emojiParticle(emoji, unisonEffect, r.between(0, 120), r);
     if (mode === 'chaos') return emojiParticle(emoji, r.pick(EFFECTS), r.between(0, 300), r);
     const wave = i % waveEffects.length;

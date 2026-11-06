@@ -23,7 +23,7 @@ export const useThemeStore = create<ThemeState>()(
       // Evita leer localStorage antes del primer render del cliente: el SSR
       // no tiene storage, así que el primer render del cliente debe partir
       // del mismo default ('theme: null') para no romper la hidratación.
-      // useTheme() dispara rehydrate() manualmente en un efecto post-mount.
+      // ThemeSync dispara rehydrate() manualmente en un efecto post-mount.
       skipHydration: true,
     },
   ),

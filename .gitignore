@@ -33,3 +33,4 @@ CLAUDE.md
 /deploy/ec2/runtime/
 /deploy/ec2/backups/
 **/__pycache__/
+.claude/

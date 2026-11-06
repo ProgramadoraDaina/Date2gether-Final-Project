@@ -43,6 +43,48 @@
       "when": 1793376444635,
       "tag": "0005_message_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793383800329,
+      "tag": "0006_room_emojis",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793390969426,
+      "tag": "0007_room_emoji_unicode",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793899210263,
+      "tag": "0008_room_emoji_sound_attribution",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793905049096,
+      "tag": "0009_room_sounds",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793911177169,
+      "tag": "0010_room_emoji_stickers",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1793914527529,
+      "tag": "0011_room_emoji_updated_at",
+      "breakpoints": true
     }
   ]
 }
