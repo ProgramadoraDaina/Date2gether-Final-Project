@@ -2,7 +2,13 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { ApiError, getCallHistory, type CallHistoryEntry } from '@/lib/api';
+import {
+  ApiError,
+  getCallHistory,
+  getCallSessions,
+  type CallHistoryEntry,
+  type CallSessionSummary,
+} from '@/lib/api';
 import { isLoggedIn } from '@/lib/auth';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { AppShell } from '@/features/navigation/AppShell';
@@ -15,6 +21,9 @@ export default function HistoryPage() {
   const [entries, setEntries] = useState<CallHistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<CallSessionSummary[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
 
   // Corre solo al montar: `t` se omite a propósito de las dependencias para
   // no repetir el fetch del historial cada vez que cambia el idioma.
@@ -32,6 +41,21 @@ export default function HistoryPage() {
         if (!isLoggedIn()) setLoggedIn(false);
       })
       .finally(() => setLoading(false));
+
+    // Sesiones materializadas por PR4/PR5: una lista aparte de `callHistory`
+    // (ver design.md "Lectura y autorización" — no se enriquece el historial
+    // existente, es un dato nuevo con su propia fuente).
+    setSessionsLoading(true);
+    getCallSessions()
+      .then(setSessions)
+      .catch((err) => {
+        setSessionsError(
+          err instanceof ApiError
+            ? err.message
+            : t('No se pudieron obtener las sesiones de llamada'),
+        );
+      })
+      .finally(() => setSessionsLoading(false));
   }, []);
 
   function formatDate(iso: string): string {
@@ -84,6 +108,38 @@ export default function HistoryPage() {
                   <span className={styles.code}>{entry.roomCode}</span>
                 </div>
                 <span className={styles.date}>{formatDate(entry.startedAt)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className={styles.card}>
+        <h2>{t('Sesiones de llamada')}</h2>
+
+        {sessionsLoading && <p>{t('Cargando sesiones…')}</p>}
+        {sessionsError && (
+          <p className={styles.error} role="alert">
+            {sessionsError}
+          </p>
+        )}
+
+        {!sessionsLoading && !sessionsError && sessions.length === 0 && (
+          <p>{t('Todavía no participaste de ninguna sesión de llamada.')}</p>
+        )}
+
+        {!sessionsLoading && sessions.length > 0 && (
+          <ul className={styles.list}>
+            {sessions.map((session) => (
+              <li key={session.id} className={styles.entry}>
+                <div className={styles.entryMain}>
+                  <strong>{session.roomName ?? session.roomCode}</strong>
+                  <span className={styles.code}>{session.roomCode}</span>
+                </div>
+                <span className={styles.date}>{formatDate(session.startedAt)}</span>
+                <Link href={`/history/${session.id}`} className={styles.sessionLink}>
+                  {t('Ver línea de tiempo')}
+                </Link>
               </li>
             ))}
           </ul>
