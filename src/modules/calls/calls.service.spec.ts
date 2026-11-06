@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { ForbiddenException, ServiceUnavailableException } from '@nestjs/common';
 import { RoomServiceClient, TokenVerifier } from 'livekit-server-sdk';
 import type { DrizzleDb } from '../../db/drizzle.module';
-import type { Room } from '../../db/schema';
+import { callParticipantIdentities, type Room } from '../../db/schema';
 import type { RoomParticipant } from '../auth/room-access.service';
 import { RoomsService } from '../rooms/rooms.service';
 import { CallsService } from './calls.service';
@@ -28,7 +28,19 @@ function createDbMock() {
   const insertValues = jest
     .fn<(values: { roomId: string; userId: string }) => Promise<void>>()
     .mockResolvedValue(undefined);
-  const insert = jest.fn().mockReturnValue({ values: insertValues });
+  const historyInsert = jest.fn().mockReturnValue({ values: insertValues });
+  // La correlación de identidad usa un upsert: insert().values().onConflictDoUpdate().
+  const identityOnConflictDoUpdate = jest
+    .fn<(config: unknown) => Promise<void>>()
+    .mockResolvedValue(undefined);
+  const identityValues = jest
+    .fn()
+    .mockReturnValue({ onConflictDoUpdate: identityOnConflictDoUpdate });
+  const identityInsert = jest.fn().mockReturnValue({ values: identityValues });
+  // Un solo db.insert(table) real: distingue por la tabla recibida, como hace Drizzle.
+  const insert = jest.fn((table: unknown) =>
+    table === callParticipantIdentities ? identityInsert() : historyInsert(),
+  );
   const limit = jest
     .fn<(n: number) => Promise<{ roomCode: string; roomName: string; startedAt: Date }[]>>()
     .mockResolvedValue([]);
@@ -37,7 +49,18 @@ function createDbMock() {
   const innerJoin = jest.fn().mockReturnValue({ where });
   const from = jest.fn().mockReturnValue({ innerJoin });
   const select = jest.fn().mockReturnValue({ from });
-  return { insert, insertValues, select, from, innerJoin, where, orderBy, limit };
+  return {
+    insert,
+    insertValues,
+    identityValues,
+    identityOnConflictDoUpdate,
+    select,
+    from,
+    innerJoin,
+    where,
+    orderBy,
+    limit,
+  };
 }
 
 describe('CallsService: LiveKit', () => {
@@ -156,7 +179,7 @@ describe('CallsService: LiveKit', () => {
 
   it('no registra historial para invitados sin cuenta', async () => {
     await service.join(room.code, participant);
-    expect(db.insert).not.toHaveBeenCalled();
+    expect(db.insertValues).not.toHaveBeenCalled();
   });
 
   it('no deja que un fallo al registrar el historial rompa la unión a la llamada', async () => {
@@ -165,6 +188,106 @@ describe('CallsService: LiveKit', () => {
     await expect(service.join(room.code, accountParticipant)).resolves.toMatchObject({
       roomName: room.code,
     });
+  });
+});
+
+describe('CallsService: correlación de identidad', () => {
+  let rooms: { getByCodeOrThrow: jest.Mock<RoomsService['getByCodeOrThrow']> };
+  let db: ReturnType<typeof createDbMock>;
+  let service: CallsService;
+  beforeEach(() => {
+    rooms = {
+      getByCodeOrThrow: jest.fn<RoomsService['getByCodeOrThrow']>().mockResolvedValue(room),
+    };
+    jest.spyOn(RoomServiceClient.prototype, 'createRoom').mockResolvedValue(
+      {} as Awaited<ReturnType<RoomServiceClient['createRoom']>>,
+    );
+    db = createDbMock();
+    service = new CallsService(
+      rooms as unknown as RoomsService,
+      new ConfigService(config),
+      db as unknown as DrizzleDb,
+    );
+  });
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('usuario registrado se une: persiste la correlación identity↔userId,roomId antes de emitir el token', async () => {
+    const accountParticipant = { ...participant, userId: 'user-1' };
+    await service.join(room.code, accountParticipant);
+    expect(db.insert).toHaveBeenCalledWith(callParticipantIdentities);
+    expect(db.identityValues).toHaveBeenCalledWith({
+      livekitIdentity: accountParticipant.sub,
+      roomId: room.id,
+      userId: 'user-1',
+      displayName: accountParticipant.name,
+    });
+  });
+
+  it('upsertea por onConflictDoUpdate sobre livekitIdentity (reintento con el mismo identity de la JWT de 24h)', async () => {
+    const accountParticipant = { ...participant, userId: 'user-1' };
+    await service.join(room.code, accountParticipant);
+    expect(db.identityOnConflictDoUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ target: callParticipantIdentities.livekitIdentity }),
+    );
+  });
+
+  it('invitado se une: persiste la correlación con displayName y sin userId', async () => {
+    await service.join(room.code, participant);
+    expect(db.identityValues).toHaveBeenCalledWith({
+      livekitIdentity: participant.sub,
+      roomId: room.id,
+      userId: null,
+      displayName: participant.name,
+    });
+  });
+
+  it('misma cuenta se reconecta en la misma sesión: dos correlaciones con identity distinto, mismo userId', async () => {
+    const accountParticipant = { ...participant, userId: 'user-1' };
+    await service.join(room.code, accountParticipant);
+    await service.join(room.code, { ...accountParticipant, sub: 'account-reconnect-2' });
+
+    expect(db.identityValues).toHaveBeenNthCalledWith(1, {
+      livekitIdentity: accountParticipant.sub,
+      roomId: room.id,
+      userId: 'user-1',
+      displayName: accountParticipant.name,
+    });
+    expect(db.identityValues).toHaveBeenNthCalledWith(2, {
+      livekitIdentity: 'account-reconnect-2',
+      roomId: room.id,
+      userId: 'user-1',
+      displayName: accountParticipant.name,
+    });
+  });
+
+  it('mismo invitado se reconecta en la misma sesión: dos correlaciones con identity distinto, mismo nombre', async () => {
+    await service.join(room.code, participant);
+    await service.join(room.code, { ...participant, sub: 'guest-reconnect-2' });
+
+    expect(db.identityValues).toHaveBeenNthCalledWith(1, {
+      livekitIdentity: participant.sub,
+      roomId: room.id,
+      userId: null,
+      displayName: participant.name,
+    });
+    expect(db.identityValues).toHaveBeenNthCalledWith(2, {
+      livekitIdentity: 'guest-reconnect-2',
+      roomId: room.id,
+      userId: null,
+      displayName: participant.name,
+    });
+  });
+
+  it('regresión: las condiciones actuales de callHistory no cambian por la correlación de identidad (registrado sí, invitado no)', async () => {
+    const accountParticipant = { ...participant, userId: 'user-1' };
+    await service.join(room.code, accountParticipant);
+    expect(db.insertValues).toHaveBeenCalledWith({ roomId: room.id, userId: 'user-1' });
+
+    db.insertValues.mockClear();
+    await service.join(room.code, participant);
+    expect(db.insertValues).not.toHaveBeenCalled();
   });
 });
 

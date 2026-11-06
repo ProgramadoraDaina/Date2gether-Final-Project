@@ -10,7 +10,7 @@ import { desc, eq } from 'drizzle-orm';
 import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
 import type { RoomParticipant } from '../auth/room-access.service';
 import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
-import { callHistory, rooms } from '../../db/schema';
+import { callHistory, callParticipantIdentities, rooms } from '../../db/schema';
 import { RoomsService } from '../rooms/rooms.service';
 
 const HISTORY_LIMIT = 50;
@@ -67,6 +67,27 @@ export class CallsService {
         'El servidor de llamadas no está disponible. Intentá nuevamente.',
       );
     }
+    // Correlación identity↔usuario/invitado para esta sala, escrita antes de
+    // emitir el token (es el único lugar que tiene juntos participant.sub,
+    // participant.userId, participant.name y room.id). El JWT de acceso a la
+    // sala vive 24h con un participant.sub FIJO, así que este POST puede
+    // reenviarse con el MISMO identity (reintento, re-montaje del cliente):
+    // por eso es un upsert por livekitIdentity y no un insert simple.
+    // NOTA: role_at_issue queda sin asignar en este PR; su resolución
+    // (lookup de roomMembers) llega con el gate de admin.
+    await this.db
+      .insert(callParticipantIdentities)
+      .values({
+        livekitIdentity: participant.sub,
+        roomId: room.id,
+        userId: participant.userId ?? null,
+        displayName: participant.name,
+      })
+      .onConflictDoUpdate({
+        target: callParticipantIdentities.livekitIdentity,
+        set: { issuedAt: new Date() },
+      });
+
     const access = new AccessToken(apiKey, apiSecret, {
       identity: participant.sub,
       name: participant.name,
