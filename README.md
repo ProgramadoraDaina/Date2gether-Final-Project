@@ -12,6 +12,7 @@ Las reglas de producto están en [docs/requirements.md](docs/requirements.md). E
 - Los usuarios registrados conservan los roles por sala: administrador, colaborador y participante. Los invitados no reciben permisos de administración.
 - Hay chat de texto persistente, presencia en tiempo real, interfaz ES/EN y tema claro/oscuro.
 - El botón **Llamar** conecta audio y video con LiveKit. Hay grilla de participantes, controles y selección de cámara y micrófono; ambos dispositivos empiezan apagados. Las llamadas admiten seis personas por defecto. Compartir pantalla sigue pendiente.
+- El botón **CC** de la llamada activa los subtítulos en vivo con la Web Speech API del navegador (solo Chrome y Edge). Cada persona transcribe únicamente su propio micrófono, y solo mientras lo tiene prendido; el texto viaja a los demás por el data channel de LiveKit (topic `transcript`). Las frases finales se guardan en `transcript_lines`, asociadas al sid de la llamada de LiveKit. **Ver transcripción**, en el panel lateral, muestra el acta de esa llamada, y al colgar se abre sola. En Chrome, el audio de los subtítulos pasa por los servidores de Google.
 - El ingreso actual es directo con enlace y nombre. La sala de espera, el bloqueo de ingresos y el cupo de admisión al chat son funcionalidades pendientes; no se presentan como controles implementados.
 
 ## Requisitos
@@ -119,6 +120,8 @@ Los cambios de LiveKit y seguridad deben revisarse en el PR antes de desplegarlo
 | GET    | `/rooms/:code/members`                                           | Cuenta miembro de la sala                                          |
 | PATCH  | `/rooms/:code/members/:userId`                                   | Administrador de la sala                                           |
 | POST   | `/calls/:roomCode`                                               | Pase de participante de esa sala; devuelve `{ url, token, roomName, participantLimit }` |
+| POST   | `/transcripts/:roomCode`                                         | Pase de participante; `{ callSid, content }`. El nombre sale del pase |
+| GET    | `/transcripts/:roomCode?callSid=`                                | Pase de participante; acta de esa llamada en orden                 |
 
 `POST /rooms/:code/access` devuelve `{ token, participant }`. El frontend conserva el pase en memoria durante la visita; abrir o recargar el enlace vuelve a pedir confirmación del nombre. Una reconexión automática del socket usa el mismo pase. El nombre anterior puede estar precargado, pero no se ingresa automáticamente.
 

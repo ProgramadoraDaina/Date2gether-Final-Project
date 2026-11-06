@@ -29,6 +29,15 @@ const en: Record<string, string> = {
     "The connection to the browser's captions service was lost.",
   'Los subtítulos dejaron de funcionar. Probá desactivarlos y activarlos de nuevo.':
     'Captions stopped working. Try turning them off and on again.',
+  'No se pudieron guardar tus últimas frases en la transcripción.':
+    'Your latest phrases could not be saved to the transcript.',
+  'Ver transcripción': 'View transcript',
+  'Transcripción de la llamada': 'Call transcript',
+  frases: 'phrases',
+  'Cargando transcripción…': 'Loading transcript…',
+  'No se pudo cargar la transcripción': 'Could not load the transcript',
+  'Todavía no hay frases. Activá los subtítulos y hablá con el micrófono prendido.':
+    'No phrases yet. Turn on captions and speak with your microphone on.',
   'Las llamadas todavía no están configuradas': 'Calls are not configured yet',
   'El servidor de llamadas no está disponible. Intentá nuevamente.':
     'The call server is unavailable. Please try again.',
@@ -179,10 +188,12 @@ const en: Record<string, string> = {
   Usar: 'Use',
   Elegido: 'Selected',
   'No se pudieron cargar los sonidos': 'Could not load the sounds',
-  'No se pudieron cargar los sonidos. Intentá nuevamente.': 'Could not load the sounds. Please try again.',
+  'No se pudieron cargar los sonidos. Intentá nuevamente.':
+    'Could not load the sounds. Please try again.',
   'La búsqueda de sonidos no está configurada': 'Sound search is not configured',
   'Ese sonido de Freesound no está disponible': 'That Freesound sound is not available',
-  'No se pudo descargar el sonido. Intentá nuevamente.': 'Could not download the sound. Please try again.',
+  'No se pudo descargar el sonido. Intentá nuevamente.':
+    'Could not download the sound. Please try again.',
   'Subí un sonido o elegí uno de Freesound (solo uno de los dos)':
     'Upload a sound or pick one from Freesound (only one of them)',
   'Emoji común': 'Standard emoji',

@@ -18,6 +18,7 @@ import { useResizablePanel } from '@/features/rooms/useResizablePanel';
 import { useRoomMembers } from '@/features/rooms/useRoomMembers';
 import { ApiError, requestRoomAccess, type RoomAccess, type RoomEmoji } from '@/lib/api';
 import { useCallSession } from '@/features/calls/useCallSession';
+import { TranscriptDialog } from '@/features/calls/transcription/TranscriptDialog';
 import { createRoomSocket } from '@/lib/socket';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { NAME_COLOR_HEX, isNameColorId } from '@/lib/nameColors';
@@ -93,6 +94,9 @@ export default function RoomPage() {
   const draftInputRef = useRef<HTMLInputElement>(null);
   const callSession = useCallSession();
   const [emojisOpen, setEmojisOpen] = useState(false);
+  const [transcriptCallSid, setTranscriptCallSid] = useState<string | null>(null);
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
+  const [callEnded, setCallEnded] = useState(false);
   const { emojis, refetchEmojis } = useRoomEmojis(access ? code : undefined);
   const chatEmojis = useMemo(() => emojis.filter((e) => e.kind === 'emoji'), [emojis]);
   const emojisByName = useMemo(() => new Map(chatEmojis.map((e) => [e.name, e])), [chatEmojis]);
@@ -432,12 +436,23 @@ export default function RoomPage() {
         emojis={emojis}
         canManage={currentUserRole === 'administrador' || currentUserRole === 'colaborador'}
       />
+      {access && transcriptCallSid && (
+        <TranscriptDialog
+          open={transcriptOpen}
+          onClose={() => setTranscriptOpen(false)}
+          roomCode={code}
+          roomToken={access.token}
+          callSid={transcriptCallSid}
+          callEnded={callEnded}
+        />
+      )}
       <div className={styles.roomLayout}>
         <RoomSidebar
           code={code}
           copied={copied}
           onCopyLink={handleCopyLink}
           onOpenEmojis={() => setEmojisOpen(true)}
+          onOpenTranscript={transcriptCallSid ? () => setTranscriptOpen(true) : undefined}
           open={sidebarOpen}
           width={sidebarResize.width}
           onResizeHandleMouseDown={sidebarResize.handleMouseDown}
@@ -481,7 +496,21 @@ export default function RoomPage() {
 
           <div className={styles.meetingAndChat}>
             {callSession.session ? (
-              <MeetingRoom call={callSession} roomCode={code} roomEmojis={emojis} />
+              <MeetingRoom
+                call={callSession}
+                roomCode={code}
+                roomToken={access.token}
+                roomEmojis={emojis}
+                onTranscriptAvailable={setTranscriptCallSid}
+                onHangUp={
+                  transcriptCallSid
+                    ? () => {
+                        setCallEnded(true);
+                        setTranscriptOpen(true);
+                      }
+                    : undefined
+                }
+              />
             ) : (
               callLoadingPanel
             )}

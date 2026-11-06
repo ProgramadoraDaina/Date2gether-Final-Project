@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useLanguageStore } from '../../translation/store';
 import { encodeCaption } from './transcript';
 
@@ -21,6 +21,7 @@ jest.mock('@livekit/components-react', () => ({
     localParticipant: { identity: 'ana-id', name: 'Ana' },
     isMicrophoneEnabled: micEnabled,
   })),
+  useRoomContext: jest.fn(() => ({ getSid: () => Promise.resolve('RM_call1') })),
 }));
 
 class FakeRecognition {
@@ -44,11 +45,18 @@ class FakeRecognition {
 
 const decode = (payload: Uint8Array) => JSON.parse(new TextDecoder().decode(payload));
 
+const mockFetch = jest.fn<typeof fetch>();
+const onTranscriptAvailable = jest.fn();
+
 async function renderCaptions() {
   const { TranscriptionProvider } = await import('./TranscriptionProvider');
   const { CaptionsButton, CaptionsOverlay } = await import('./Captions');
   render(
-    <TranscriptionProvider>
+    <TranscriptionProvider
+      roomCode="abc-defg-hij"
+      roomToken="guest-room-token"
+      onTranscriptAvailable={onTranscriptAvailable}
+    >
       <CaptionsOverlay />
       <CaptionsButton buttonClassName="btn" activeClassName="active" />
     </TranscriptionProvider>,
@@ -60,6 +68,8 @@ describe('Subtítulos en vivo', () => {
     jest.clearAllMocks();
     FakeRecognition.instances = [];
     micEnabled = true;
+    mockFetch.mockResolvedValue(new Response(null, { status: 201 }));
+    global.fetch = mockFetch;
     useLanguageStore.setState({ language: 'es' });
     (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition =
       FakeRecognition;
@@ -91,6 +101,39 @@ describe('Subtítulos en vivo', () => {
     const [payload, options] = mockSend.mock.calls[0] as unknown as [Uint8Array, object];
     expect(decode(payload)).toMatchObject({ text: 'Hola a todos', final: true });
     expect(options).toEqual({ reliable: true, topic: 'transcript' });
+  });
+
+  it('guarda cada frase final propia en el acta de la llamada y avisa el sid', async () => {
+    await renderCaptions();
+    fireEvent.click(screen.getByRole('button', { name: 'Activar subtítulos' }));
+    await waitFor(() => expect(onTranscriptAvailable).toHaveBeenCalledWith('RM_call1'));
+    const recognition = FakeRecognition.instances[0];
+
+    act(() => recognition.say('Hola a', false));
+    expect(mockFetch).not.toHaveBeenCalled();
+    act(() => recognition.say('Hola a todos', true));
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [url, init] = mockFetch.mock.calls[0];
+    expect(String(url)).toMatch(/\/transcripts\/abc-defg-hij$/);
+    expect(init).toMatchObject({
+      method: 'POST',
+      headers: { Authorization: 'Bearer guest-room-token' },
+    });
+    expect(JSON.parse(String(init?.body))).toEqual({
+      callSid: 'RM_call1',
+      content: 'Hola a todos',
+    });
+  });
+
+  it('si el backend no guarda la frase, avisa sin cortar los subtítulos', async () => {
+    mockFetch.mockResolvedValue(new Response('{}', { status: 500 }));
+    await renderCaptions();
+    fireEvent.click(screen.getByRole('button', { name: 'Activar subtítulos' }));
+    await waitFor(() => expect(onTranscriptAvailable).toHaveBeenCalled());
+    act(() => FakeRecognition.instances[0].say('Hola', true));
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudieron guardar');
+    expect(screen.getByText('Hola')).toBeInTheDocument();
   });
 
   it('con el micrófono apagado no transcribe aunque los subtítulos estén activos', async () => {

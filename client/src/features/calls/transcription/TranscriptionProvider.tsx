@@ -1,7 +1,8 @@
 'use client';
 
-import { useDataChannel, useLocalParticipant } from '@livekit/components-react';
+import { useDataChannel, useLocalParticipant, useRoomContext } from '@livekit/components-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { saveTranscriptLine } from '@/lib/transcripts';
 import { useTranslation } from '../../translation/useTranslation';
 import {
   CAPTION_LIFETIME_MS,
@@ -23,8 +24,24 @@ import { TranscriptionContext } from './useTranscription';
 // Los resultados parciales llegan muchas veces por segundo: se mandan como mucho cada tanto.
 const INTERIM_SEND_INTERVAL_MS = 300;
 
-export function TranscriptionProvider({ children }: { children: ReactNode }) {
+interface TranscriptionProviderProps {
+  children: ReactNode;
+  roomCode: string;
+  roomToken: string;
+  // Avisa el sid de la llamada apenas se activan los subtítulos, para poder pedir el acta después.
+  onTranscriptAvailable?: (callSid: string) => void;
+}
+
+export function TranscriptionProvider({
+  children,
+  roomCode,
+  roomToken,
+  onTranscriptAvailable,
+}: TranscriptionProviderProps) {
   const { language } = useTranslation();
+  const room = useRoomContext();
+  const [callSid, setCallSid] = useState<string | null>(null);
+  const [saveFailed, setSaveFailed] = useState(false);
   const { localParticipant, isMicrophoneEnabled } = useLocalParticipant();
   const supported = useSpeechRecognitionSupported();
   const [enabled, setEnabled] = useState(false);
@@ -32,6 +49,21 @@ export function TranscriptionProvider({ children }: { children: ReactNode }) {
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
   const phraseId = useRef<string | null>(null);
   const lastInterimSentAt = useRef(0);
+
+  useEffect(() => {
+    let active = true;
+    room
+      .getSid()
+      .then((sid) => active && setCallSid(sid))
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [room]);
+
+  useEffect(() => {
+    if (enabled && callSid) onTranscriptAvailable?.(callSid);
+  }, [enabled, callSid, onTranscriptAvailable]);
 
   useEffect(() => {
     const pending = timers.current;
@@ -72,7 +104,16 @@ export function TranscriptionProvider({ children }: { children: ReactNode }) {
         text: text.slice(0, MAX_CAPTION_LENGTH),
         final,
       };
-      if (final) phraseId.current = null;
+      if (final) {
+        phraseId.current = null;
+        // Cada persona guarda solo sus propias frases: así el acta no se duplica.
+        if (callSid) {
+          saveTranscriptLine(roomCode, roomToken, callSid, message.text).then(
+            () => setSaveFailed(false),
+            () => setSaveFailed(true),
+          );
+        }
+      }
       // LiveKit no le devuelve al emisor sus propios mensajes: se muestra localmente.
       showCaption({
         ...message,
@@ -85,7 +126,7 @@ export function TranscriptionProvider({ children }: { children: ReactNode }) {
       lastInterimSentAt.current = now;
       void send(encodeCaption(message), { reliable: final, topic: TRANSCRIPT_TOPIC });
     },
-    [localParticipant, send, showCaption],
+    [callSid, localParticipant, roomCode, roomToken, send, showCaption],
   );
 
   const { error } = useSpeechRecognition({
@@ -102,9 +143,10 @@ export function TranscriptionProvider({ children }: { children: ReactNode }) {
       enabled,
       toggle,
       error,
+      saveFailed,
       captions: enabled ? Object.values(captions).sort((a, b) => a.at - b.at) : [],
     }),
-    [supported, enabled, toggle, error, captions],
+    [supported, enabled, toggle, error, saveFailed, captions],
   );
   return <TranscriptionContext.Provider value={value}>{children}</TranscriptionContext.Provider>;
 }

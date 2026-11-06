@@ -179,10 +179,19 @@ function CameraToggleButton({ setDeviceError }: { setDeviceError: (value: boolea
 interface MeetingRoomProps {
   call: CallSessionState;
   roomCode: string;
+  roomToken: string;
   roomEmojis: RoomEmoji[];
+  onTranscriptAvailable?: (callSid: string) => void;
+  // Reemplaza la vuelta al inicio al colgar (por ejemplo, para mostrar el acta).
+  onHangUp?: () => void;
 }
 
-function MeetingContent({ roomCode, roomEmojis }: Omit<MeetingRoomProps, 'call'>) {
+function MeetingContent({
+  roomCode,
+  roomToken,
+  roomEmojis,
+  onTranscriptAvailable,
+}: Omit<MeetingRoomProps, 'call' | 'onHangUp'>) {
   const { t } = useTranslation();
   const [deviceError, setDeviceError] = useState(false);
   const tracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], {
@@ -190,7 +199,11 @@ function MeetingContent({ roomCode, roomEmojis }: Omit<MeetingRoomProps, 'call'>
   });
   return (
     <ReactionsProvider roomCode={roomCode} roomEmojis={roomEmojis}>
-      <TranscriptionProvider>
+      <TranscriptionProvider
+        roomCode={roomCode}
+        roomToken={roomToken}
+        onTranscriptAvailable={onTranscriptAvailable}
+      >
         <RoomAudioRenderer />
         <StartAudio label={t('Activar sonido de la reunión')} />
         <ConnectionStateToast />
@@ -234,7 +247,14 @@ function MeetingContent({ roomCode, roomEmojis }: Omit<MeetingRoomProps, 'call'>
   );
 }
 
-export default function MeetingRoom({ call, roomCode, roomEmojis }: MeetingRoomProps) {
+export default function MeetingRoom({
+  call,
+  roomCode,
+  roomToken,
+  roomEmojis,
+  onTranscriptAvailable,
+  onHangUp,
+}: MeetingRoomProps) {
   const router = useRouter();
   if (!call.session) return null;
   return (
@@ -251,13 +271,19 @@ export default function MeetingRoom({ call, roomCode, roomEmojis }: MeetingRoomP
       onDisconnected={(reason) => {
         if (reason === undefined || reason === DisconnectReason.CLIENT_INITIATED) {
           call.leaveCall();
-          router.push('/');
+          if (onHangUp) onHangUp();
+          else router.push('/');
         } else call.failed(new Error('Disconnected'));
       }}
       data-lk-theme="default"
       className={styles.meetingRoom}
     >
-      <MeetingContent roomCode={roomCode} roomEmojis={roomEmojis} />
+      <MeetingContent
+        roomCode={roomCode}
+        roomToken={roomToken}
+        roomEmojis={roomEmojis}
+        onTranscriptAvailable={onTranscriptAvailable}
+      />
     </LiveKitRoom>
   );
 }

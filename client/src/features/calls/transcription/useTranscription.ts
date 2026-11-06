@@ -7,6 +7,7 @@ export interface TranscriptionContextValue {
   enabled: boolean;
   toggle: () => void;
   error: SpeechRecognitionError | null;
+  saveFailed: boolean;
   // Una línea por persona: la frase que está diciendo o la última que terminó.
   captions: Caption[];
 }

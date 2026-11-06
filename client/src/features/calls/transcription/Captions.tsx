@@ -62,13 +62,18 @@ export function CaptionsButton({
 
 export function CaptionsOverlay() {
   const { t } = useTranslation();
-  const { enabled, captions, error } = useTranscription();
+  const { enabled, captions, error, saveFailed } = useTranscription();
   if (!enabled) return null;
   return (
     <div className={styles.captions} aria-live="polite">
       {error && (
         <p className={styles.error} role="alert">
           {t(ERROR_MESSAGES[error])}
+        </p>
+      )}
+      {saveFailed && (
+        <p className={styles.error} role="alert">
+          {t('No se pudieron guardar tus últimas frases en la transcripción.')}
         </p>
       )}
       {captions.map((caption) => (
