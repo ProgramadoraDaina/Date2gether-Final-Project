@@ -1,0 +1,72 @@
+change: call-participation-timeline
+created: 2026-11-06
+description: >
+  Post-call participation timeline/dashboard: per-participant join/leave times
+  from LiveKit, duration, whether their mic was open ("spoke"), and whether
+  they screen-shared, keyed off new LiveKit webhooks. Also enforces the host rule
+  "no admin, no call": joining the videocall requires at least one connected room
+  administrador, and the departure of the last connected admin force-closes the
+  LiveKit session for everyone (which is what reliably triggers room_finished and
+  the timeline materialization).
+
+dag:
+  proposal: done
+  specs: done
+  design: done
+  tasks: done
+  apply: pending
+  verify: pending
+  archive: pending
+
+artifacts:
+  proposal: openspec/changes/call-participation-timeline/proposal.md
+  specs:
+    - openspec/changes/call-participation-timeline/specs/call-webhook-ingestion/spec.md
+    - openspec/changes/call-participation-timeline/specs/call-participant-identity/spec.md
+    - openspec/changes/call-participation-timeline/specs/call-host-gate/spec.md
+    - openspec/changes/call-participation-timeline/specs/call-participation-timeline/spec.md
+  design: openspec/changes/call-participation-timeline/design.md
+  tasks: openspec/changes/call-participation-timeline/tasks.md
+  verify_report: null
+
+next_recommended: sdd-apply
+notes:
+  - No LiveKit webhook handling exists yet in src/modules/calls; this will be the first webhook consumer.
+  - call-history.controller/service already exist in src/modules/calls and are a likely integration point.
+  - "explore.md written: LiveKit identity is a random per-join UUID, not userId — needs a new correlation table at CallsService.join() time, not a callHistory extension."
+  - "explore.md written: call-session boundary is room.sid (room_started/room_finished), not roomCode or rooms.isActive."
+  - "explore.md recommends append-only event log (dedup by LiveKit event id) + summary materialized on room_finished."
+  - "proposal.md written (Spanish). Product decisions closed: guests ARE included; entry point is a dedicated route linked from history/page.tsx; raw event log retained indefinitely; any session participant can see all participants of that session."
+  - "Proposal confirms explore.md's hybrid data model: append-only event log (dedup by LiveKit event id) + per-participant summary materialized on room_finished."
+  - "New capabilities declared for sdd-spec: call-webhook-ingestion, call-participant-identity, call-host-gate, call-participation-timeline. No modified capabilities (openspec/specs/ is empty)."
+  - "Out of scope, explicitly: live in-call dashboard, real voice activity detection, Google Sign-In / real profile photos, room lifecycle changes, admin role transfer/promotion mid-call, waiting room, countdown before forced close."
+  - "Open for sdd-design: exact rawBody scoping (global vs per-route middleware), livekit.yaml webhook.urls deploy config, re-materialization path when room_finished never arrives."
+  - >
+    2026-11-06 proposal AMPLIFIED (still approved, dag.proposal stays done): user added the
+    closed business rule "sin admin no hay llamada" (Zoom-style host model), scoped exclusively
+    to the LiveKit videocall — the room, its chat and its member list are unaffected. Nobody may
+    join the videocall unless at least one roomMembers.role = 'administrador' of that room is
+    already connected; an admin may always join (otherwise no call could start); a room may have
+    several admins and the call survives while at least one stays; when the LAST connected admin
+    leaves, the LiveKit session is force-closed for everyone. That forced close is the reliable
+    trigger for room_finished and therefore for materializing the participation timeline — the
+    new rule and the original feature are coupled, not independent.
+  - "New capability call-host-gate added: admin-presence access control + forced session close. Deliberately kept separate from call-participant-identity, though it reuses that identity<->user correlation table to know which connected identity is an admin."
+  - "Confirmed in src/db/schema.ts (~L93-109): roomRoleEnum = administrador | colaborador | participante; roomMembers PK is (roomId, userId) with NO uniqueness constraint limiting one admin per room; default role is participante. Role is per-room."
+  - "Confirmed in src/modules/calls/calls.service.ts::join(): today there is NO role/admin check before issuing the LiveKit AccessToken (only roomCode match, room.isActive and config checks). RoomParticipant (room-access.service.ts) carries no role, so the gate must query roomMembers by (roomId, userId)."
+  - "Affected areas added: CallsService.join() needs the admin-presence check before token issuance; the webhook handler needs, on participant_left of an admin, to check for remaining connected admins and otherwise force-close the LiveKit room for everyone via RoomServiceClient.deleteRoom (idempotently)."
+  - "New risks recorded: race condition when two admin participant_left events arrive near-simultaneously (forced close MUST be idempotent); last-admin network reconnection misread as departure; the gate breaking join flow for rooms with no admin assigned."
+  - "Open for sdd-design (NOT decided in proposal): how to reliably determine who is connected right now for the synchronous join() check (live RoomServiceClient.listParticipants vs event-log-derived state, plus behavior when LiveKit is unreachable); grace window vs departureTimeout; exact idempotency mechanism for the forced close; client UX for forced disconnection."
+  - "design.md written (Spanish, 2026-11-06). All 4 proposal open questions RESOLVED: (D1) presence = live RoomServiceClient.listParticipants, not event-log-derived (log is a lagging projection -> false negatives); (D2) LiveKit unreachable = fail-closed with 503 (not 403, which would lie to the user), and admins short-circuit before the presence query so they can always start a call; (D3) 15s grace window implemented as a DEFERRED RE-CHECK (a reconnecting admin returns with a NEW random identity, so waiting for the same identity is impossible) bounded below by ~8s page-refresh cost and above by departureTimeout 30s; (D4) forced-close idempotency = 3 layers (in-process single-flight Map<roomSid,Timeout> + Postgres compare-and-set UPDATE ... WHERE forced_close_at IS NULL RETURNING id + tolerant deleteRoom logged at level `log`, never `error`, never rethrown)."
+  - "design.md (D5): client distinguishes forced close via DisconnectReason.ROOM_DELETED = 5 ('RoomService.DeleteRoom was called'), VERIFIED in @livekit/protocol livekit_models_pb.d.ts; ROOM_CLOSED = 10 covers LiveKit-initiated close. No data channel or Socket.io message needed. MeetingRoom.tsx already receives this reason in onDisconnected but today collapses it into the generic network-failure message. useCallSession gains status 'ended' + endReason 'host-left' + endedByHost(). Gate rejection carries a stable code NO_HOST_CONNECTED so the client does not couple to server wording."
+  - "design.md (D6): rawBody goes GLOBAL (NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true })) because it is additive (JSON parsing unchanged, raw buffer retained via body-parser verify hook); per-route middleware rejected as more invasive. NON-OBVIOUS GOTCHA CAPTURED: LiveKit posts Content-Type application/webhook+json, which Express's default JSON parser ignores, so req.rawBody would be EMPTY and HMAC would always fail. Fix: app.useBodyParser('json', { type: ['application/json', 'application/webhook+json'] }) — VERIFIED present in @nestjs/platform-express@12 and documented as respecting the rawBody option. This is the first thing apply must cover with a test."
+  - "design.md (D7): raw log physical design — PK is LiveKit's own event id (dedup free via ON CONFLICT (id) DO NOTHING, no extra unique index); indexes (livekit_room_sid, occurred_at) and (livekit_identity); no index on event_type; no FKs and no UPDATE/DELETE so the log survives room/user deletion per indefinite retention; NO partitioning now (~700k rows/year at 100 sessions/day), revisit trigger >50M rows or materialization scan >100ms, escape hatch monthly RANGE partitioning on occurred_at."
+  - "design.md (D8) DECLARED DEVIATION from proposal: 4 new tables, not 3. The proposal's '3 tablas nuevas' text predates the host-rule amplification; resolving open question 3 (close idempotency) requires a persisted compare-and-set target, i.e. a session header table call_sessions. Rejected alternatives: putting forced_close_at on the append-only event log (breaks the immutability the whole idempotency rests on), on the participant summary (wrong cardinality), or pg_advisory_xact_lock (does not survive process restart and forces re-deriving the session header on every read). call_sessions also provides the public timeline URL id and materialized_at as the materialization idempotency guard."
+  - "design.md tables: call_participant_identities (identity UNIQUE, upsert because the 24h room-access JWT carries a FIXED participant.sub so POST /calls/:roomCode can be retried with the SAME identity — verified subtlety), call_events (append-only), call_sessions (header + close/materialization state), call_session_participants (summary, UNIQUE (session_id, participant_key) where participant_key = user_id or 'guest:'+lower(display_name) — this is what collapses several random identities of one person into one row, resolving the unstable-identity risk)."
+  - "design.md order-of-operations in join(): roomCode/isActive/config -> local roomMembers role lookup -> createRoom() (idempotent, BEFORE listParticipants so an empty list unambiguously means 'nobody connected' rather than 'room does not exist') -> if not admin, listParticipants + identity/role cross-reference -> 403 NO_HOST_CONNECTED or 503 -> upsert identity correlation (before token issuance) -> AccessToken + existing callHistory insert unchanged. Accepted cost: a rejected non-admin may leave an empty LiveKit room alive up to emptyTimeout 300s, producing a zero-participant room_started/room_finished pair; materialization tolerates zero-participant sessions and the session list filters them out."
+  - "design.md webhook controller: POST /calls/livekit/webhook in its own @Controller('calls/livekit') class with NO guards (a separate class does not inherit CallsController's class-level RoomAccessGuard), @SkipThrottle() (global HttpOnlyThrottlerGuard is 60 req/min/IP and LiveKit hits from one IP, ~19 events when a 6-person room closes), @HttpCode(200) always once signature is valid and the event is persisted, and @Req() ONLY with no @Body() DTO because the global ValidationPipe uses forbidNonWhitelisted: true and would reject LiveKit's payload. Unhandled event types are still persisted (complete audit log) but trigger no side effects."
+  - "design.md read path: GET /calls/history stays UNTOUCHED (callHistory semantics must not change); new GET /calls/sessions + GET /calls/sessions/:sessionId/timeline under JwtAuthGuard, returning 404 (not 403) when the requester is not a participant so session existence is not leaked. Guests APPEAR in the timeline but cannot READ it (no account/JWT; entry point is Historial which already gates on isLoggedIn()). New client route client/src/app/history/[sessionId]/page.tsx plus InitialsAvatar reusing the existing NAME_COLOR_IDS palette."
+  - "design.md deployment order is load-bearing: deploy rawBody FIRST, then configure livekit.yaml webhook.urls, then enable the admin gate LAST (it is the only change that can block a join that works today). BLOCKING data precondition: audit that every room with calls has at least one roomMembers.role = 'administrador', otherwise the gate locks out every non-admin of that room."
+  - "design.md remaining open items (operational, not design blockers): the 15s grace timer is in-process so an API restart inside the window loses it (mitigated by re-evaluating admin presence on EVERY participant_joined/participant_left, which makes it self-healing, but a room can stay admin-less if no further events arrive); no scheduled re-materialization job if room_finished never arrives (aggregateSession is a pure function so a manual re-run over the raw log is always possible)."
+  - "sdd-spec: 4 specs completas (nuevas, sin deltas porque openspec/specs/ estaba vacío) escritas en openspec/changes/call-participation-timeline/specs/{capability}/spec.md: call-webhook-ingestion, call-participant-identity, call-host-gate, call-participation-timeline. Cubren firma HMAC/idempotencia/orden de entrega de webhooks, identity inestable entre reconexiones, invitados sin cuenta, gate de admin con condición de carrera idempotente y exclusión explícita de invitados como admin, materialización con fallback sin track_unpublished, reconexiones agregadas, y acceso de lectura restringido a participantes de la sesión."
+  - "sdd-tasks: tasks.md escrito (español) con 11 fases, ~78 tareas chicas en ciclo RED/GREEN (TDD estricto), agrupadas por área (esquema DB, bootstrap rawBody+gotcha Content-Type, correlación de identidad, webhook de ingestión, gate de admin, cierre forzado idempotente, materialización, endpoints de lectura, cliente, despliegue). Review Workload Forecast: 400-line budget risk HIGH, Chained PRs recommended YES (7 work units PR1..PR7), Chain strategy PENDING (no decidida), Decision needed before apply YES por delivery_strategy=ask-on-risk. PR7 (gate de admin + cierre forzado + estado terminal de cliente) es el de mayor riesgo y debe desplegarse último (Fase 11), con la auditoría bloqueante de roomMembers.role='administrador' (11.2) resuelta antes de activarlo."
