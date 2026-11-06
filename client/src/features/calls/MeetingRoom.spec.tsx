@@ -24,7 +24,9 @@ jest.mock('@livekit/components-react', () => ({
 jest.mock('livekit-client', () => ({
   DefaultReconnectPolicy: jest.fn(),
   DisconnectReason: { CLIENT_INITIATED: 1 },
-  Track: { Source: { Camera: 'camera', Microphone: 'microphone' } },
+  Track: {
+    Source: { Camera: 'camera', Microphone: 'microphone', ScreenShare: 'screen_share' },
+  },
   VideoPresets: { h360: { resolution: { width: 640, height: 360 } }, h90: {}, h180: {} },
 }));
 jest.mock('next/navigation', () => ({
@@ -46,9 +48,7 @@ function state(): CallSessionState {
     failed: jest.fn(),
   };
 }
-function defaultUseTrackToggle({
-  onDeviceError,
-}: { onDeviceError?: (error: Error) => void } = {}) {
+function defaultUseTrackToggle({ onDeviceError }: { onDeviceError?: (error: Error) => void } = {}) {
   return {
     toggle: jest.fn(),
     enabled: true,
@@ -81,7 +81,10 @@ describe('MeetingRoom', () => {
       video: false,
     });
     expect(useTracks).toHaveBeenCalledWith(
-      [{ source: Track.Source.Camera, withPlaceholder: true }],
+      [
+        { source: Track.Source.Camera, withPlaceholder: true },
+        { source: Track.Source.ScreenShare, withPlaceholder: false },
+      ],
       {
         onlySubscribed: false,
       },
@@ -129,6 +132,21 @@ describe('MeetingRoom', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Revisá los permisos');
     expect(screen.getByRole('button', { name: 'Colgar' })).toBeInTheDocument();
     expect(call.failed).not.toHaveBeenCalled();
+  });
+  it('el botón de compartir pantalla es un ícono accesible y pide audio del sistema al activarse', async () => {
+    const { useTrackToggle } = await import('@livekit/components-react');
+    const { Track } = await import('livekit-client');
+    const MeetingRoom = (await import('./MeetingRoom')).default;
+    const call = state();
+    render(<MeetingRoom call={call} roomCode="abc-defg-hij" roomEmojis={[]} />);
+    const screenShareButton = screen.getByRole('button', { name: 'Dejar de compartir pantalla' });
+    expect(screenShareButton).toHaveAttribute('title', 'Dejar de compartir pantalla');
+    expect(jest.mocked(useTrackToggle)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: Track.Source.ScreenShare,
+        captureOptions: { audio: true },
+      }),
+    );
   });
   it('cuando LiveKit avisa que la conexión se cerró: si fue porque el usuario se fue, llama a leaveCall; si fue por un error de red, llama a failed', async () => {
     const { LiveKitRoom } = await import('@livekit/components-react');

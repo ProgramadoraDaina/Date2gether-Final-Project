@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 import { TopBar } from '@/features/layout/TopBar';
 import { THEME_SCRIPT } from '@/features/theme/themeScript';
@@ -11,6 +11,15 @@ export const metadata: Metadata = {
   title: 'Date2gether',
   description: 'Videollamadas simples, en el navegador.',
   icons: { icon: '/favicon.svg' },
+};
+
+// Sin esto, Chrome en Android no sabe que la página ya maneja su propio
+// tema oscuro (ver globals.css, :root[data-theme='dark']) y puede aplicar
+// su "forced dark" heurístico encima: repinta botones con un color plano
+// ignorando background/border reales, lo que puede llegar a verse como
+// bloques sólidos sin separación entre sí.
+export const viewport: Viewport = {
+  colorScheme: 'light dark',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
