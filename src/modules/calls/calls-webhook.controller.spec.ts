@@ -23,7 +23,7 @@ describe('CallsWebhookController', () => {
   });
 
   it(
-    'expone @SkipThrottle() a nivel de clase (el HttpOnlyThrottlerGuard global no debe aplicar) ' +
+    'expone @SkipThrottle() a nivel de clase (el ThrottlerGuard global no debe aplicar) ' +
       'y @HttpCode(200) en el handler',
     () => {
       // 'THROTTLER:SKIPdefault' y '__httpCode__' son las claves de metadata
