@@ -6,6 +6,8 @@ import { CallsModule } from './calls.module';
 import { CallsService } from './calls.service';
 import { CallsWebhookController } from './calls-webhook.controller';
 import { CallsWebhookService } from './calls-webhook.service';
+import { CallTimelineController } from './call-timeline.controller';
+import { CallTimelineService } from './call-timeline.service';
 
 describe('CallsModule', () => {
   it('resuelve el CallsService con sus dependencias conectadas', async () => {
@@ -33,5 +35,17 @@ describe('CallsModule', () => {
 
     expect(module.get(CallsWebhookService)).toBeInstanceOf(CallsWebhookService);
     expect(module.get(CallsWebhookController)).toBeInstanceOf(CallsWebhookController);
+  });
+
+  it('registra CallTimelineController y CallTimelineService (endpoints de lectura de sesiones)', async () => {
+    const module = await Test.createTestingModule({
+      imports: [ConfigModule.forRoot({ isGlobal: true }), DrizzleModule, CallsModule],
+    })
+      .overrideProvider(DRIZZLE)
+      .useValue({})
+      .compile();
+
+    expect(module.get(CallTimelineService)).toBeInstanceOf(CallTimelineService);
+    expect(module.get(CallTimelineController)).toBeInstanceOf(CallTimelineController);
   });
 });
