@@ -104,14 +104,14 @@ PR7 es el de mayor riesgo y el único que toca una ruta ya productiva (`join()` 
 
 ## Fase 7 — Materialización de la línea de tiempo (PR4, depende de Fase 1 y 4)
 
-- [ ] 7.1 [RED] `aggregateSession()` con 3 participantes (incl. invitado) → resumen con join/leave/duración/spoke/screenShared por cada uno (spec timeline/materialización).
-- [ ] 7.2 [GREEN] Implementar `aggregateSession(events, identities, fallbackEndAt)` como función pura.
-- [ ] 7.3 [RED] Mismo participante con dos pares join/leave → una sola entrada, duración = suma de intervalos, `rejoin_count` (spec timeline/reconexiones).
-- [ ] 7.4 [RED] Track publicado sin evento de cierre explícito → `spoke`/`screenShared` true, cierre implícito con `fallbackEndAt` (spec timeline/cierre-implícito).
-- [ ] 7.5 [GREEN] Confirmar 7.3/7.4 (plegado por `participant_key`, cierre de tracks abiertos al `fallbackEndAt`).
-- [ ] 7.6 [RED] `room_finished` dispara upsert de `call_sessions` (`materialized_at IS NULL`) + insert de `call_session_participants` en una transacción; reentrega no duplica (spec timeline/resiliencia parcial).
-- [ ] 7.7 [GREEN] Handler de `room_finished`: compare-and-set sobre `materialized_at` + agregación + insert transaccional.
-- [ ] 7.8 [RED+GREEN] Regresión: `callHistory` no cambia con el despliegue de esta fase (spec timeline/independencia-callHistory).
+- [x] 7.1 [RED] `aggregateSession()` con 3 participantes (incl. invitado) → resumen con join/leave/duración/spoke/screenShared por cada uno (spec timeline/materialización).
+- [x] 7.2 [GREEN] Implementar `aggregateSession(events, identities, fallbackEndAt)` como función pura.
+- [x] 7.3 [RED] Mismo participante con dos pares join/leave → una sola entrada, duración = suma de intervalos, `rejoin_count` (spec timeline/reconexiones).
+- [x] 7.4 [RED] Track publicado sin evento de cierre explícito → `spoke`/`screenShared` true, cierre implícito con `fallbackEndAt` (spec timeline/cierre-implícito).
+- [x] 7.5 [GREEN] Confirmar 7.3/7.4 (plegado por `participant_key`, cierre de tracks abiertos al `fallbackEndAt`).
+- [x] 7.6 [RED] `room_finished` dispara upsert de `call_sessions` (`materialized_at IS NULL`) + insert de `call_session_participants` en una transacción; reentrega no duplica (spec timeline/resiliencia parcial).
+- [x] 7.7 [GREEN] Handler de `room_finished`: compare-and-set sobre `materialized_at` + agregación + insert transaccional.
+- [x] 7.8 [RED+GREEN] Regresión: `callHistory` no cambia con el despliegue de esta fase (spec timeline/independencia-callHistory).
 
 ## Fase 8 — Endpoints de lectura (PR5, depende de Fase 7)
 
