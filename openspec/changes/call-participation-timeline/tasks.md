@@ -115,13 +115,13 @@ PR7 es el de mayor riesgo y el único que toca una ruta ya productiva (`join()` 
 
 ## Fase 8 — Endpoints de lectura (PR5, depende de Fase 7)
 
-- [ ] 8.1 Crear `call-timeline.controller.ts`: `GET /calls/sessions` bajo `JwtAuthGuard`.
-- [ ] 8.2 [RED] Devuelve solo las sesiones donde participó el solicitante.
-- [ ] 8.3 [GREEN] Query filtrando `call_session_participants.userId = solicitante`.
-- [ ] 8.4 [RED] `GET /calls/sessions/:sessionId/timeline` — participante de la sesión ve el resumen completo (spec timeline/lectura-participante).
-- [ ] 8.5 [RED] Usuario ajeno a la sesión → 404, no 403 (spec timeline/lectura-ajeno).
-- [ ] 8.6 [GREEN] Implementar el endpoint con chequeo de pertenencia antes de devolver datos.
-- [ ] 8.7 [RED+GREEN] Regresión explícita: `GET /calls/history` devuelve el mismo payload y semántica que antes del cambio.
+- [x] 8.1 Crear `call-timeline.controller.ts`: `GET /calls/sessions` bajo `JwtAuthGuard`.
+- [x] 8.2 [RED] Devuelve solo las sesiones donde participó el solicitante.
+- [x] 8.3 [GREEN] Query filtrando `call_session_participants.userId = solicitante`.
+- [x] 8.4 [RED] `GET /calls/sessions/:sessionId/timeline` — participante de la sesión ve el resumen completo (spec timeline/lectura-participante).
+- [x] 8.5 [RED] Usuario ajeno a la sesión → 404, no 403 (spec timeline/lectura-ajeno).
+- [x] 8.6 [GREEN] Implementar el endpoint con chequeo de pertenencia antes de devolver datos.
+- [x] 8.7 [RED+GREEN] Regresión explícita: `GET /calls/history` devuelve el mismo payload y semántica que antes del cambio.
 
 ## Fase 9 — Cliente: timeline y navegación (PR6, depende de Fase 8)
 
