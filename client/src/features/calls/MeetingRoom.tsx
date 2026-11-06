@@ -96,6 +96,28 @@ function CameraIcon({ off }: { off: boolean }) {
   );
 }
 
+function ScreenShareIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="20"
+      height="20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="4" width="18" height="12" rx="2" />
+      <path d="M8 20h8" />
+      <path d="M12 16v4" />
+      <path d="M9 11l3-3 3 3" />
+      <path d="M12 8v4" />
+    </svg>
+  );
+}
+
 function HangUpIcon() {
   return (
     <svg
@@ -176,6 +198,28 @@ function CameraToggleButton({ setDeviceError }: { setDeviceError: (value: boolea
   );
 }
 
+function ScreenShareToggleButton({ setDeviceError }: { setDeviceError: (value: boolean) => void }) {
+  const { t } = useTranslation();
+  const { buttonProps, enabled } = useTrackToggle({
+    source: Track.Source.ScreenShare,
+    captureOptions: { audio: true },
+    onDeviceError: () => setDeviceError(true),
+    onChange: () => setDeviceError(false),
+  });
+  const label = enabled ? t('Dejar de compartir pantalla') : t('Compartir pantalla');
+  return (
+    <button
+      {...buttonProps}
+      type="button"
+      className={`${styles.iconButton} ${enabled ? styles.iconButtonActive : ''}`}
+      title={label}
+      aria-label={label}
+    >
+      <ScreenShareIcon />
+    </button>
+  );
+}
+
 interface MeetingRoomProps {
   call: CallSessionState;
   roomCode: string;
@@ -185,9 +229,13 @@ interface MeetingRoomProps {
 function MeetingContent({ roomCode, roomEmojis }: Omit<MeetingRoomProps, 'call'>) {
   const { t } = useTranslation();
   const [deviceError, setDeviceError] = useState(false);
-  const tracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], {
-    onlySubscribed: false,
-  });
+  const tracks = useTracks(
+    [
+      { source: Track.Source.Camera, withPlaceholder: true },
+      { source: Track.Source.ScreenShare, withPlaceholder: false },
+    ],
+    { onlySubscribed: false },
+  );
   return (
     <ReactionsProvider roomCode={roomCode} roomEmojis={roomEmojis}>
       <RoomAudioRenderer />
@@ -218,6 +266,7 @@ function MeetingContent({ roomCode, roomEmojis }: Omit<MeetingRoomProps, 'call'>
             requestPermissions={false}
             aria-label={t('Elegir cámara')}
           />
+          <ScreenShareToggleButton setDeviceError={setDeviceError} />
           <ReactionPicker buttonClassName={styles.iconButton} />
           <SoundboardPicker buttonClassName={styles.iconButton} />
         </div>
