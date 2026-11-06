@@ -20,6 +20,8 @@ import { RoomRolesGuard } from './guards/room-roles.guard';
 import { RoomsService } from './rooms.service';
 import { RoomAccessService } from '../auth/room-access.service';
 import { RoomAccessDto } from './dto/room-access.dto';
+import { RoomAccessGuard } from '../auth/guards/room-access.guard';
+import { SaveRoomNotesDto } from './dto/save-room-notes.dto';
 
 @Controller('rooms')
 export class RoomsController {
@@ -40,6 +42,18 @@ export class RoomsController {
     if (access.participant.userId)
       await this.roomsService.joinRoom(code, access.participant.userId);
     return access;
+  }
+
+  @UseGuards(RoomAccessGuard)
+  @Get(':roomCode/notes')
+  getRoomNotes(@Param('roomCode') roomCode: string) {
+    return this.roomsService.getRoomNotes(roomCode);
+  }
+
+  @UseGuards(RoomAccessGuard)
+  @Patch(':roomCode/notes')
+  saveRoomNotes(@Param('roomCode') roomCode: string, @Body() dto: SaveRoomNotesDto) {
+    return this.roomsService.saveRoomNotes(roomCode, dto.content, dto.revision);
   }
 
   @UseGuards(JwtAuthGuard)
