@@ -43,6 +43,16 @@ jest.mock('livekit-client', () => ({
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
 }));
+// AmbientMusicPlayer (IFrame API de YouTube) tiene su propia suite dedicada
+// (AmbientMusicPlayer.spec.tsx); acá solo interesa si MeetingRoom lo monta
+// con el socket/rol correctos, no su interior.
+const mockAmbientMusicPlayer = jest.fn((_props: { socket: unknown; isAdmin: boolean }) => (
+  <div>Música ambiental</div>
+));
+jest.mock('./AmbientMusicPlayer', () => ({
+  AmbientMusicPlayer: (props: { socket: unknown; isAdmin: boolean }) =>
+    mockAmbientMusicPlayer(props),
+}));
 function state(): CallSessionState {
   return {
     status: 'connecting',
@@ -216,5 +226,22 @@ describe('MeetingRoom', () => {
     expect(mockRoom.localParticipant.setMicrophoneEnabled).toHaveBeenCalledWith(true);
     expect(call.failed).not.toHaveBeenCalled();
     expect(screen.getByText('Audio remoto')).toBeVisible();
+  });
+  it('monta la música ambiental con el socket de la sala y el rol de quien mira', async () => {
+    const MeetingRoom = (await import('./MeetingRoom')).default;
+    const call = state();
+    const socket = { id: 'fake-socket' };
+    render(<MeetingRoom call={call} socket={socket as never} isAdmin />);
+
+    expect(mockAmbientMusicPlayer).toHaveBeenCalledWith(
+      expect.objectContaining({ socket, isAdmin: true }),
+    );
+  });
+  it('sin un socket de sala todavía disponible, no monta la música ambiental', async () => {
+    const MeetingRoom = (await import('./MeetingRoom')).default;
+    const call = state();
+    render(<MeetingRoom call={call} socket={null} isAdmin={false} />);
+
+    expect(mockAmbientMusicPlayer).not.toHaveBeenCalled();
   });
 });

@@ -23,9 +23,11 @@ import {
 } from 'livekit-client';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { Socket } from 'socket.io-client';
 import { DEFAULT_CALL_DEVICES, type CallDevices } from './callDevices';
-import { useTranslation } from '../translation/useTranslation';
 import type { RoomEmoji } from '@/lib/api';
+import { useTranslation } from '../translation/useTranslation';
+import { AmbientMusicPlayer } from './AmbientMusicPlayer';
 import type { CallSessionState } from './useCallSession';
 import styles from './MeetingRoom.module.css';
 import { ReactionOverlay } from './reactions/ReactionOverlay';
@@ -51,10 +53,12 @@ const options: RoomOptions = {
   reconnectPolicy: new DefaultReconnectPolicy([0, 500]),
 };
 
-// Default de livekit-client: 15s por intento antes de darlo por fallido.
-// Combinado con el reconnectPolicy acotado de arriba, el peor caso (2
-// intentos) queda bien por debajo de un timeout de test típico.
-const connectOptions = { peerConnectionTimeout: 5000 };
+// Los tests e2e simulan LiveKit por completo (no hacen una conexión WebRTC
+// real, ver e2e/README.md), así que este valor no está acotado por ningún
+// timeout de test. 5s era insuficiente para la primera negociación ICE real
+// (ej. latencia extra del reenvío de puertos UDP de Docker Desktop en
+// Windows); se vuelve al default de livekit-client.
+const connectOptions = { peerConnectionTimeout: 15000 };
 
 function MicIcon({ muted }: { muted: boolean }) {
   return (
@@ -183,6 +187,8 @@ interface MeetingRoomProps {
   roomCode: string;
   roomEmojis: RoomEmoji[];
   initialDevices?: CallDevices;
+  socket?: Socket | null;
+  isAdmin?: boolean;
 }
 
 // Un permiso revocado después del lobby no debe hacer fallar la llamada.
@@ -218,6 +224,8 @@ function MeetingContent({
   roomCode,
   roomEmojis,
   initialDevices = DEFAULT_CALL_DEVICES,
+  socket,
+  isAdmin = false,
 }: Omit<MeetingRoomProps, 'call'>) {
   const { t } = useTranslation();
   const [deviceError, setDeviceError] = useState(false);
@@ -235,6 +243,10 @@ function MeetingContent({
         <ReactionTile />
       </GridLayout>
       <ReactionOverlay />
+      {/* El socket de la sala todavía puede no existir en el primer render
+          (se crea en un efecto aparte de RoomPage); sin él no hay con qué
+          sincronizar la música, así que no tiene sentido montarla. */}
+      {socket && <AmbientMusicPlayer socket={socket} isAdmin={isAdmin} />}
       {deviceError && (
         <p className={styles.error} role="alert">
           {t(
@@ -270,6 +282,8 @@ export default function MeetingRoom({
   roomCode,
   roomEmojis,
   initialDevices = DEFAULT_CALL_DEVICES,
+  socket = null,
+  isAdmin = false,
 }: MeetingRoomProps) {
   const router = useRouter();
   const roomOptions = useMemo(
@@ -304,7 +318,13 @@ export default function MeetingRoom({
       data-lk-theme="default"
       className={styles.meetingRoom}
     >
-      <MeetingContent roomCode={roomCode} roomEmojis={roomEmojis} initialDevices={initialDevices} />
+      <MeetingContent
+        roomCode={roomCode}
+        roomEmojis={roomEmojis}
+        initialDevices={initialDevices}
+        socket={socket}
+        isAdmin={isAdmin}
+      />
     </LiveKitRoom>
   );
 }
