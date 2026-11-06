@@ -23,11 +23,9 @@ import {
 } from 'livekit-client';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Socket } from 'socket.io-client';
 import { DEFAULT_CALL_DEVICES, type CallDevices } from './callDevices';
 import type { RoomEmoji } from '@/lib/api';
 import { useTranslation } from '../translation/useTranslation';
-import { AmbientMusicPlayer } from './AmbientMusicPlayer';
 import type { CallSessionState } from './useCallSession';
 import styles from './MeetingRoom.module.css';
 import { ReactionOverlay } from './reactions/ReactionOverlay';
@@ -187,8 +185,6 @@ interface MeetingRoomProps {
   roomCode: string;
   roomEmojis: RoomEmoji[];
   initialDevices?: CallDevices;
-  socket?: Socket | null;
-  isAdmin?: boolean;
 }
 
 // Un permiso revocado después del lobby no debe hacer fallar la llamada.
@@ -224,8 +220,6 @@ function MeetingContent({
   roomCode,
   roomEmojis,
   initialDevices = DEFAULT_CALL_DEVICES,
-  socket,
-  isAdmin = false,
 }: Omit<MeetingRoomProps, 'call'>) {
   const { t } = useTranslation();
   const [deviceError, setDeviceError] = useState(false);
@@ -243,10 +237,6 @@ function MeetingContent({
         <ReactionTile />
       </GridLayout>
       <ReactionOverlay />
-      {/* El socket de la sala todavía puede no existir en el primer render
-          (se crea en un efecto aparte de RoomPage); sin él no hay con qué
-          sincronizar la música, así que no tiene sentido montarla. */}
-      {socket && <AmbientMusicPlayer socket={socket} isAdmin={isAdmin} />}
       {deviceError && (
         <p className={styles.error} role="alert">
           {t(
@@ -282,8 +272,6 @@ export default function MeetingRoom({
   roomCode,
   roomEmojis,
   initialDevices = DEFAULT_CALL_DEVICES,
-  socket = null,
-  isAdmin = false,
 }: MeetingRoomProps) {
   const router = useRouter();
   const roomOptions = useMemo(
@@ -322,8 +310,6 @@ export default function MeetingRoom({
         roomCode={roomCode}
         roomEmojis={roomEmojis}
         initialDevices={initialDevices}
-        socket={socket}
-        isAdmin={isAdmin}
       />
     </LiveKitRoom>
   );

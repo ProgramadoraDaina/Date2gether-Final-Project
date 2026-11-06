@@ -73,8 +73,11 @@
   border-radius: 2px;
 }
 
-.copyLink {
+.bottomActions {
   margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .leaveLink {
@@ -136,8 +139,10 @@
     flex-wrap: wrap;
   }
 
-  .copyLink {
+  .bottomActions {
     margin-top: 0;
     margin-left: auto;
+    flex-direction: row;
+    align-items: center;
   }
 }
