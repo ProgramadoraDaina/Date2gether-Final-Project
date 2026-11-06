@@ -1,0 +1,41 @@
+.captions {
+  position: absolute;
+  left: 50%;
+  bottom: 96px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: min(720px, calc(100% - 32px));
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+/* Negro translúcido con texto blanco: la convención de subtítulos se lee igual sobre cualquier video. */
+.line,
+.error {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 2px;
+  background: rgb(0 0 0 / 0.75);
+  color: #fff;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.speaker {
+  margin-right: 8px;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.75;
+}
+
+.interim {
+  opacity: 0.8;
+}
+
+.error {
+  font-size: 0.9rem;
+}

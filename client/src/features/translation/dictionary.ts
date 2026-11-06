@@ -19,6 +19,16 @@ const en: Record<string, string> = {
   'Elegir micrófono': 'Choose microphone',
   'Elegir cámara': 'Choose camera',
   'Activar sonido de la reunión': 'Enable meeting audio',
+  'Activar subtítulos': 'Turn on captions',
+  'Desactivar subtítulos': 'Turn off captions',
+  'Tu navegador no tiene subtítulos en vivo. Probá con Chrome o Edge.':
+    'Your browser does not support live captions. Try Chrome or Edge.',
+  'El navegador no dio permiso para transcribir tu micrófono.':
+    'The browser did not allow transcribing your microphone.',
+  'Se cortó la conexión con el servicio de subtítulos del navegador.':
+    "The connection to the browser's captions service was lost.",
+  'Los subtítulos dejaron de funcionar. Probá desactivarlos y activarlos de nuevo.':
+    'Captions stopped working. Try turning them off and on again.',
   'Las llamadas todavía no están configuradas': 'Calls are not configured yet',
   'El servidor de llamadas no está disponible. Intentá nuevamente.':
     'The call server is unavailable. Please try again.',

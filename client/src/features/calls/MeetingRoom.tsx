@@ -29,6 +29,8 @@ import { ReactionPicker } from './reactions/ReactionPicker';
 import { SoundboardPicker } from './reactions/SoundboardPicker';
 import { ReactionsProvider } from './reactions/ReactionsProvider';
 import { ReactionTile } from './reactions/ReactionTile';
+import { CaptionsButton, CaptionsOverlay } from './transcription/Captions';
+import { TranscriptionProvider } from './transcription/TranscriptionProvider';
 
 const options: RoomOptions = {
   adaptiveStream: true,
@@ -188,39 +190,46 @@ function MeetingContent({ roomCode, roomEmojis }: Omit<MeetingRoomProps, 'call'>
   });
   return (
     <ReactionsProvider roomCode={roomCode} roomEmojis={roomEmojis}>
-      <RoomAudioRenderer />
-      <StartAudio label={t('Activar sonido de la reunión')} />
-      <ConnectionStateToast />
-      <GridLayout tracks={tracks} className={styles.meetingGrid}>
-        <ReactionTile />
-      </GridLayout>
-      <ReactionOverlay />
-      {deviceError && (
-        <p className={styles.error} role="alert">
-          {t(
-            'No se pudo activar el dispositivo. Revisá los permisos del navegador; podés continuar en la llamada.',
-          )}
-        </p>
-      )}
-      <div className={styles.controlsDock}>
-        <div className={styles.controlsGroup}>
-          <MicToggleButton setDeviceError={setDeviceError} />
-          <MediaDeviceMenu
-            kind="audioinput"
-            requestPermissions={false}
-            aria-label={t('Elegir micrófono')}
-          />
-          <CameraToggleButton setDeviceError={setDeviceError} />
-          <MediaDeviceMenu
-            kind="videoinput"
-            requestPermissions={false}
-            aria-label={t('Elegir cámara')}
-          />
-          <ReactionPicker buttonClassName={styles.iconButton} />
-          <SoundboardPicker buttonClassName={styles.iconButton} />
+      <TranscriptionProvider>
+        <RoomAudioRenderer />
+        <StartAudio label={t('Activar sonido de la reunión')} />
+        <ConnectionStateToast />
+        <GridLayout tracks={tracks} className={styles.meetingGrid}>
+          <ReactionTile />
+        </GridLayout>
+        <ReactionOverlay />
+        <CaptionsOverlay />
+        {deviceError && (
+          <p className={styles.error} role="alert">
+            {t(
+              'No se pudo activar el dispositivo. Revisá los permisos del navegador; podés continuar en la llamada.',
+            )}
+          </p>
+        )}
+        <div className={styles.controlsDock}>
+          <div className={styles.controlsGroup}>
+            <MicToggleButton setDeviceError={setDeviceError} />
+            <MediaDeviceMenu
+              kind="audioinput"
+              requestPermissions={false}
+              aria-label={t('Elegir micrófono')}
+            />
+            <CameraToggleButton setDeviceError={setDeviceError} />
+            <MediaDeviceMenu
+              kind="videoinput"
+              requestPermissions={false}
+              aria-label={t('Elegir cámara')}
+            />
+            <ReactionPicker buttonClassName={styles.iconButton} />
+            <SoundboardPicker buttonClassName={styles.iconButton} />
+            <CaptionsButton
+              buttonClassName={styles.iconButton}
+              activeClassName={styles.iconButtonActive}
+            />
+          </div>
+          <HangUpButton />
         </div>
-        <HangUpButton />
-      </div>
+      </TranscriptionProvider>
     </ReactionsProvider>
   );
 }
