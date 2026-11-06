@@ -360,16 +360,13 @@ export const callSessionsRelations = relations(callSessions, ({ one, many }) => 
   participants: many(callSessionParticipants),
 }));
 
-export const callSessionParticipantsRelations = relations(
-  callSessionParticipants,
-  ({ one }) => ({
-    session: one(callSessions, {
-      fields: [callSessionParticipants.sessionId],
-      references: [callSessions.id],
-    }),
-    user: one(users, { fields: [callSessionParticipants.userId], references: [users.id] }),
+export const callSessionParticipantsRelations = relations(callSessionParticipants, ({ one }) => ({
+  session: one(callSessions, {
+    fields: [callSessionParticipants.sessionId],
+    references: [callSessions.id],
   }),
-);
+  user: one(users, { fields: [callSessionParticipants.userId], references: [users.id] }),
+}));
 
 export type CallParticipantIdentity = typeof callParticipantIdentities.$inferSelect;
 export type NewCallParticipantIdentity = typeof callParticipantIdentities.$inferInsert;
