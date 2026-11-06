@@ -29,3 +29,32 @@ describe('createRoom', () => {
     });
   });
 });
+
+describe('notas compartidas', () => {
+  beforeEach(() => {
+    global.fetch = jest.fn() as unknown as typeof fetch;
+  });
+
+  it('envía la revisión y permite terminar el guardado al salir de la página', async () => {
+    const fetchMock = jest.mocked(global.fetch);
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ content: 'Nota', revision: 4 }), { status: 200 }),
+    );
+    const { saveRoomNotes } = await import('./api');
+    await saveRoomNotes('abc-defg-hij', 'room-token', 'Nota', 3, true);
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({
+      method: 'PATCH',
+      headers: { Authorization: 'Bearer room-token' },
+      body: JSON.stringify({ content: 'Nota', revision: 3 }),
+      keepalive: true,
+    });
+  });
+
+  it('distingue un conflicto de revisión de los errores de red para conservar el borrador', async () => {
+    jest.mocked(global.fetch).mockResolvedValue(new Response('{}', { status: 409 }));
+    const { RoomNotesConflictError, saveRoomNotes } = await import('./api');
+    await expect(saveRoomNotes('abc-defg-hij', 'room-token', 'Nota', 3)).rejects.toBeInstanceOf(
+      RoomNotesConflictError,
+    );
+  });
+});
