@@ -125,13 +125,13 @@ PR7 es el de mayor riesgo y el único que toca una ruta ya productiva (`join()` 
 
 ## Fase 9 — Cliente: timeline y navegación (PR6, depende de Fase 8)
 
-- [ ] 9.1 [RED] `InitialsAvatar`: iniciales de 1/2/3+ palabras, nombres Unicode, color estable por nombre.
-- [ ] 9.2 [GREEN] Implementar `client/src/features/calls/InitialsAvatar.tsx`.
-- [ ] 9.3 [RED] `ParticipationTimeline`: lista por participante con avatar, horarios, duración, chips "habló"/"compartió pantalla".
-- [ ] 9.4 [GREEN] Implementar `client/src/features/calls/ParticipationTimeline.tsx`.
-- [ ] 9.5 Crear `client/src/app/history/[sessionId]/page.tsx` (reusa `AppShell`, `isLoggedIn()`, `useTranslation`).
-- [ ] 9.6 Modificar `client/src/app/history/page.tsx`: sección "Sesiones de llamada" desde `GET /calls/sessions`, link a la línea de tiempo.
-- [ ] 9.7 Modificar `client/src/lib/api.ts` / `client/src/lib/calls.ts`: clientes para los endpoints nuevos.
+- [x] 9.1 [RED] `InitialsAvatar`: iniciales de 1/2/3+ palabras, nombres Unicode, color estable por nombre.
+- [x] 9.2 [GREEN] Implementar `client/src/features/calls/InitialsAvatar.tsx`.
+- [x] 9.3 [RED] `ParticipationTimeline`: lista por participante con avatar, horarios, duración, chips "habló"/"compartió pantalla".
+- [x] 9.4 [GREEN] Implementar `client/src/features/calls/ParticipationTimeline.tsx`.
+- [x] 9.5 Crear `client/src/app/history/[sessionId]/page.tsx` (reusa `AppShell`, `isLoggedIn()`, `useTranslation`).
+- [x] 9.6 Modificar `client/src/app/history/page.tsx`: sección "Sesiones de llamada" desde `GET /calls/sessions`, link a la línea de tiempo.
+- [x] 9.7 Modificar `client/src/lib/api.ts` / `client/src/lib/calls.ts`: clientes para los endpoints nuevos.
 
 ## Fase 10 — Gate en el cliente + estado terminal (parte de PR7, depende de Fase 6 y 9)
 
