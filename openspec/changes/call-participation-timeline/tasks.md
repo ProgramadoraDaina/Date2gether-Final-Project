@@ -64,18 +64,18 @@ PR7 es el de mayor riesgo y el único que toca una ruta ya productiva (`join()` 
 
 ## Fase 4 — Webhook de LiveKit: ingestión (PR3, depende de Fase 1)
 
-- [ ] 4.1 Crear `calls-webhook.controller.ts`: `POST /calls/livekit/webhook`, clase propia sin guards, `@SkipThrottle()`, `@HttpCode(200)`, body leído solo de `@Req()`.
-- [ ] 4.2 [RED] Firma inválida/ausente → 401, sin persistencia (spec webhook/firma-inválida).
-- [ ] 4.3 [GREEN] Verificación HMAC con `WebhookReceiver.receive(rawBody, authorizeHeader)`.
-- [ ] 4.4 [RED] `rawBody` ausente/vacío → 400.
-- [ ] 4.5 [GREEN] Guard explícito antes de llamar a `WebhookReceiver`.
-- [ ] 4.6 [RED] Evento duplicado (mismo `id`) → 200, sin fila ni efecto adicional (spec webhook/idempotencia).
-- [ ] 4.7 [GREEN] Insert `ON CONFLICT (id) DO NOTHING`; despachar efectos solo si el insert afectó una fila.
-- [ ] 4.8 [RED] Evento de tipo no reconocido → se persiste, sin efecto de negocio (spec webhook/eventos-soportados).
-- [ ] 4.9 [GREEN] Dispatcher por `event_type` para los 6 tipos soportados; cualquier otro solo se persiste.
-- [ ] 4.10 [RED] Dos `room.sid` del mismo `roomCode` no mezclan eventos (spec webhook/alcance-sesión).
-- [ ] 4.11 [GREEN] Confirmar que toda consulta de sesión usa `livekit_room_sid`, nunca `room_code` solo.
-- [ ] 4.12 Registrar controller/service en `CallsModule`.
+- [x] 4.1 Crear `calls-webhook.controller.ts`: `POST /calls/livekit/webhook`, clase propia sin guards, `@SkipThrottle()`, `@HttpCode(200)`, body leído solo de `@Req()`.
+- [x] 4.2 [RED] Firma inválida/ausente → 401, sin persistencia (spec webhook/firma-inválida).
+- [x] 4.3 [GREEN] Verificación HMAC con `WebhookReceiver.receive(rawBody, authorizeHeader)`.
+- [x] 4.4 [RED] `rawBody` ausente/vacío → 400.
+- [x] 4.5 [GREEN] Guard explícito antes de llamar a `WebhookReceiver`.
+- [x] 4.6 [RED] Evento duplicado (mismo `id`) → 200, sin fila ni efecto adicional (spec webhook/idempotencia).
+- [x] 4.7 [GREEN] Insert `ON CONFLICT (id) DO NOTHING`; despachar efectos solo si el insert afectó una fila.
+- [x] 4.8 [RED] Evento de tipo no reconocido → se persiste, sin efecto de negocio (spec webhook/eventos-soportados).
+- [x] 4.9 [GREEN] Dispatcher por `event_type` para los 6 tipos soportados; cualquier otro solo se persiste.
+- [x] 4.10 [RED] Dos `room.sid` del mismo `roomCode` no mezclan eventos (spec webhook/alcance-sesión).
+- [x] 4.11 [GREEN] Confirmar que toda consulta de sesión usa `livekit_room_sid`, nunca `room_code` solo.
+- [x] 4.12 Registrar controller/service en `CallsModule`.
 
 ## Fase 5 — Gate de admin en `join()` (parte de PR7, depende de Fase 3)
 
