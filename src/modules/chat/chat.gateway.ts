@@ -18,6 +18,8 @@ import { RoomEventsService } from '../rooms/room-events.service';
 import { RoomsService } from '../rooms/rooms.service';
 import { ChatService } from './chat.service';
 import { JoinRoomDto } from './dto/join-room.dto';
+import { MusicPositionDto } from './dto/music-position.dto';
+import { MusicSetTrackDto } from './dto/music-set-track.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 
 // Solo GIFs servidos por GIPHY: evita que se inyecten imágenes de cualquier dominio.
@@ -27,6 +29,35 @@ function isGiphyUrl(url: string): boolean {
     require_protocol: true,
     host_whitelist: [/^media\d?\.giphy\.com$/],
   });
+}
+
+const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
+
+// El cliente puede mandar el id "pelado" o un link completo; no se confía en
+// que lo haya parseado bien del lado del cliente, así que el id real
+// siempre se extrae y valida acá.
+function extractYouTubeId(input: string): string | null {
+  const trimmed = input.trim();
+  if (YOUTUBE_VIDEO_ID.test(trimmed)) return trimmed;
+
+  try {
+    const url = new URL(trimmed);
+    if (url.hostname === 'youtu.be') {
+      const id = url.pathname.slice(1);
+      return YOUTUBE_VIDEO_ID.test(id) ? id : null;
+    }
+    if (url.hostname === 'www.youtube.com' || url.hostname === 'youtube.com') {
+      if (url.pathname === '/watch') {
+        const id = url.searchParams.get('v');
+        return id && YOUTUBE_VIDEO_ID.test(id) ? id : null;
+      }
+      const embedMatch = /^\/(?:embed|shorts)\/([A-Za-z0-9_-]{11})$/.exec(url.pathname);
+      if (embedMatch) return embedMatch[1];
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 interface ConnectedUser {
@@ -42,6 +73,13 @@ interface ConnectedUser {
 // internos (roomId), para no declarar un segundo tipo con los mismos campos.
 type RoomUser = Pick<ConnectedUser, 'participantId' | 'userName' | 'userId' | 'nameColor'>;
 
+interface MusicState {
+  videoId: string;
+  isPlaying: boolean;
+  positionSeconds: number;
+  updatedAt: number;
+}
+
 @WebSocketGateway({
   namespace: '/rooms',
   cors: { origin: process.env.CORS_ORIGIN ?? '*' },
@@ -52,6 +90,7 @@ export class ChatGateway implements OnGatewayDisconnect {
   server!: Server;
 
   private readonly connectedUsers = new Map<string, ConnectedUser>();
+  private readonly musicStateByRoom = new Map<string, MusicState>();
 
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleDb,
@@ -100,6 +139,11 @@ export class ChatGateway implements OnGatewayDisconnect {
     client.emit('roomHistory', history);
     client.emit('roomUsers', this.getUsersInRoom(dto.code));
 
+    // Sincroniza al que recién entra con lo que ya se está escuchando; si
+    // nadie eligió nada todavía no tiene sentido mandar un estado vacío.
+    const musicState = this.musicStateByRoom.get(dto.code);
+    if (musicState) client.emit('musicState', musicState);
+
     client.to(dto.code).emit('userJoined', presence);
   }
 
@@ -132,6 +176,60 @@ export class ChatGateway implements OnGatewayDisconnect {
     this.server.to(user.roomCode).emit('newMessage', message);
   }
 
+  @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage('musicSetTrack')
+  async handleMusicSetTrack(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() dto: MusicSetTrackDto,
+  ) {
+    const user = await this.requireMusicAdmin(client);
+    if (!user) return;
+
+    const videoId = extractYouTubeId(dto.videoId);
+    if (!videoId) {
+      client.emit('error', { message: 'El link o ID de YouTube no es válido' });
+      return;
+    }
+
+    const state: MusicState = {
+      videoId,
+      isPlaying: false,
+      positionSeconds: 0,
+      updatedAt: Date.now(),
+    };
+    this.musicStateByRoom.set(user.roomCode, state);
+    this.server.to(user.roomCode).emit('musicState', state);
+  }
+
+  @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage('musicPlay')
+  async handleMusicPlay(@ConnectedSocket() client: Socket, @MessageBody() dto: MusicPositionDto) {
+    await this.updateMusicState(client, (state) => ({
+      ...state,
+      isPlaying: true,
+      positionSeconds: dto.positionSeconds,
+    }));
+  }
+
+  @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage('musicPause')
+  async handleMusicPause(@ConnectedSocket() client: Socket, @MessageBody() dto: MusicPositionDto) {
+    await this.updateMusicState(client, (state) => ({
+      ...state,
+      isPlaying: false,
+      positionSeconds: dto.positionSeconds,
+    }));
+  }
+
+  @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage('musicSeek')
+  async handleMusicSeek(@ConnectedSocket() client: Socket, @MessageBody() dto: MusicPositionDto) {
+    await this.updateMusicState(client, (state) => ({
+      ...state,
+      positionSeconds: dto.positionSeconds,
+    }));
+  }
+
   handleDisconnect(client: Socket) {
     this.removeClient(client);
   }
@@ -147,6 +245,52 @@ export class ChatGateway implements OnGatewayDisconnect {
       userName: user.userName,
       userId: user.userId,
     });
+
+    // Los códigos de sala son efímeros: sin esto el mapa de música crecería
+    // sin límite a medida que se van creando y vaciando salas nuevas.
+    if (this.getUsersInRoom(user.roomCode).length === 0) {
+      this.musicStateByRoom.delete(user.roomCode);
+    }
+  }
+
+  // Devuelve al usuario conectado si es administrador de la sala; si no,
+  // emite el error correspondiente y devuelve undefined.
+  private async requireMusicAdmin(client: Socket): Promise<ConnectedUser | undefined> {
+    const user = this.connectedUsers.get(client.id);
+    if (!user) {
+      client.emit('error', { message: 'Tenés que unirte a una sala antes de controlar la música' });
+      return undefined;
+    }
+    if (!user.userId) {
+      client.emit('error', { message: 'Necesitás una cuenta para controlar la música de la sala' });
+      return undefined;
+    }
+    const role = await this.roomsService.getMemberRole(user.roomCode, user.userId);
+    if (role !== 'administrador') {
+      client.emit('error', {
+        message: 'Solo el administrador de la sala puede controlar la música',
+      });
+      return undefined;
+    }
+    return user;
+  }
+
+  private async updateMusicState(
+    client: Socket,
+    apply: (state: MusicState) => Omit<MusicState, 'updatedAt'>,
+  ) {
+    const user = await this.requireMusicAdmin(client);
+    if (!user) return;
+
+    const current = this.musicStateByRoom.get(user.roomCode);
+    if (!current) {
+      client.emit('error', { message: 'Todavía no se eligió una canción para la sala' });
+      return;
+    }
+
+    const next: MusicState = { ...apply(current), updatedAt: Date.now() };
+    this.musicStateByRoom.set(user.roomCode, next);
+    this.server.to(user.roomCode).emit('musicState', next);
   }
 
   private getUsersInRoom(roomCode: string): RoomUser[] {

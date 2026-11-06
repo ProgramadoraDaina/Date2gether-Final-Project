@@ -402,3 +402,31 @@ La verificación de integridad de `docker-compose` no verificaba nada: el `UserD
 `docker compose build backend frontend` (en `deploy/ec2/start.sh`) fallaba con `docker: 'buildx' is not a docker command`, porque el paquete `docker` de Amazon Linux instalado vía `dnf` no incluye el plugin CLI `buildx`, requerido por Compose v2 para construir imágenes. Se agrega al `UserData` la descarga e instalación de `docker-buildx` como plugin CLI, con la misma verificación de checksum contra su archivo original que se corrigió para `docker-compose`.
 
 Ninguna de las tres fallas es visible en desarrollo local (ahí no se usa `start:prod` fuera de Docker, y `docker compose up -d` no pasa por `build` ni por el `UserData` de EC2), lo que explica por qué llegaron sin detectarse hasta el despliegue real. No cambia el comportamiento documentado en el README ni en la [guía de EC2](../deploy/ec2/README.md): los mismos pasos ahora sí completan el arranque.
+
+---
+
+## 16. Música ambiental sincronizada en la llamada: reproducción local por cliente, no audio retransmitido por LiveKit
+
+**Fecha:** 2026-11-05
+**Rama:** `feature/call-ambient-music` (creada desde `feature/e2e-ci-coverage`)
+
+### Contexto
+
+Se pidió una función de música ambiental para las salas de llamada: el administrador de la sala elige un video de YouTube y el resto de los participantes escucha "lo mismo" mientras dura la llamada.
+
+### Alternativas consideradas
+
+- **Capturar el audio del reproductor de YouTube y publicarlo como track de LiveKit.** Técnicamente inviable: el iframe de YouTube es cross-origin, y los navegadores bloquean `captureStream()` sobre audio de un origen distinto por seguridad.
+- **Extraer el stream de audio crudo de YouTube (estilo `ytdl-core`/`yt-dlp`, como hacen los bots de música de Discord) y retransmitirlo por LiveKit.** Viola los Términos de Servicio de YouTube (sección 5.B, prohíbe descargar/extraer contenido fuera del reproductor oficial). Hay precedente de aplicación real: Google envió cese y desista a Rythm y Groovy (los dos bots de música más grandes de Discord) en 2021, forzando su cierre por esta misma práctica.
+- **Reproducción local sincronizada.** Cada cliente carga su propia instancia del YouTube IFrame Player API (oficial, gratuito) con el mismo `videoId`, y el administrador controla play/pause/cambio de video mediante eventos de Socket.io que se retransmiten a toda la sala. El audio nunca viaja por el servidor ni por LiveKit.
+
+### Decisión
+
+Se optó por la **reproducción local sincronizada por Socket.io**, reutilizando el gateway de sala ya existente (`src/modules/chat/chat.gateway.ts`, namespace `/rooms`) en vez de introducir el data channel de LiveKit como segundo transporte de tiempo real.
+
+### Justificación
+
+- Es la única opción sin riesgo legal: no depende de scraping ni de extracción de streams, y usa el mecanismo de embebido que YouTube ofrece explícitamente para este fin.
+- El rol de "anfitrión" no requirió ningún concepto nuevo: coincide con el rol `administrador` por sala que ya existe en `roomMembers` (quien crea la sala queda como `administrador`, ver `rooms.service.ts`).
+- La sincronización es aproximada (margen de ~1 segundo por latencia de red), no a nivel de muestra de audio — aceptado explícitamente para este caso de uso, ya que se trata de música de fondo y no de reproducción que requiera sincronía exacta.
+- El chequeo de rol de administrador en los eventos de Socket.io se hace a mano dentro del handler (`roomsService.getMemberRole`), porque `RoomRolesGuard` solo funciona sobre contexto HTTP y no corre sobre gateways WebSocket.
