@@ -430,3 +430,102 @@ Se optó por la **reproducción local sincronizada por Socket.io**, reutilizando
 - El rol de "anfitrión" no requirió ningún concepto nuevo: coincide con el rol `administrador` por sala que ya existe en `roomMembers` (quien crea la sala queda como `administrador`, ver `rooms.service.ts`).
 - La sincronización es aproximada (margen de ~1 segundo por latencia de red), no a nivel de muestra de audio — aceptado explícitamente para este caso de uso, ya que se trata de música de fondo y no de reproducción que requiera sincronía exacta.
 - El chequeo de rol de administrador en los eventos de Socket.io se hace a mano dentro del handler (`roomsService.getMemberRole`), porque `RoomRolesGuard` solo funciona sobre contexto HTTP y no corre sobre gateways WebSocket.
+
+---
+
+## 17. Música ambiental: de una sola canción a playlist, título resuelto por el cliente
+
+**Fecha:** 2026-11-06
+**Rama:** `feature/call-ambient-music`
+
+### Contexto
+
+La sección 16 dejó `MusicState` con un solo `videoId`: el admin reemplazaba la canción entera al elegir una nueva. El pedido fue agregar una playlist real (varias canciones encoladas, con sus títulos visibles y navegación anterior/siguiente), con la UI del reproductor rediseñada a un formato tipo tarjeta.
+
+### Decisiones
+
+- **Quién agrega canciones a la cola:** se mantiene admin-only, igual que el resto de los controles de música (decidido explícitamente con el usuario en vez de asumir un modelo de cola colaborativa estilo bot de Discord). Evita el riesgo de que cualquier participante llene la cola sin control.
+- **De dónde sale el título de cada canción:** el cliente lo resuelve con el oEmbed público de YouTube (`https://www.youtube.com/oembed?...&format=json`, sin API key, CORS habilitado) antes de emitir `musicAddTrack`. El servidor no vuelve a resolverlo: solo guarda y retransmite `{ videoId, title }` tal como llegan, igual que ya hacía con `videoId` (el id real se sigue extrayendo/validando en el gateway, el título no se valida más allá del largo).
+- **Forma del estado compartido:** `MusicState` pasa de `{ videoId, ... }` a `{ tracks: {videoId, title}[], currentIndex, ... }`. Agregar una canción a una lista que ya está sonando no interrumpe la reproducción en curso (`isPlaying`/`positionSeconds` se preservan); solo la primera canción de la sala arranca en `currentIndex 0`, pausada, en el segundo 0.
+- **Eventos nuevos:** `musicAddTrack` reemplaza a `musicSetTrack` (semántica distinta: agrega al final en vez de reemplazar). Se suman `musicRemoveTrack` (por índice, reacomoda `currentIndex` si la canción sacada estaba antes de la actual, o reinicia reproducción si era la que sonaba), `musicNext` y `musicPrevious` (no envuelven la lista: se quedan en el primer/último tema).
+
+### Justificación
+
+- Resolver el título en el cliente evita que el backend dependa de la API de YouTube (ni API key, ni llamadas salientes nuevas desde el servidor) para algo que es puramente informativo.
+- Mantener el modelo admin-only para agregar canciones es consistente con el resto del feature (play/pause/seek ya eran admin-only desde la sección 16): una sola superficie de permisos para toda la música de la sala, no dos.
+
+---
+
+## 18. `ThrottlerGuard` global rompía los eventos de WebSocket sin `@MessageBody()`
+
+**Fecha:** 2026-11-06
+**Rama:** `feature/call-ambient-music`
+
+### Contexto
+
+Al probar `musicNext`/`musicPrevious` manualmente (no están cubiertos por los tests unitarios del gateway, que llaman a los métodos directo y se saltan el pipeline de guards de Nest), el cliente recibía `Internal server error`. El log del backend mostraba `TypeError: Cannot read properties of undefined (reading 'header')` en `ThrottlerGuard.setResponseHeader`.
+
+### Causa
+
+`ThrottlerGuard` está registrado como `APP_GUARD` global (`app.module.ts`), pensado para limitar los endpoints HTTP (60 req/min). Nest corre las guards globales también sobre los handlers de WebSocket de `ChatGateway`, pero `ThrottlerGuard` asume contexto HTTP: llama a `context.switchToHttp().getResponse()` para setear headers `X-RateLimit-*`. En un handler de WS que **no** declara `@MessageBody()` (como `handleMusicNext`/`handleMusicPrevious`, que no reciben payload), Nest arma el array de argumentos del contexto sin un segundo elemento, así que `getResponse()` devuelve `undefined` y `setResponseHeader` explota al leer `.header` de `undefined`. Los demás handlers de música (`musicAddTrack`, `musicPlay`, etc.) no lo sufrían porque, al declarar `@MessageBody() dto: AlgunDto`, ese DTO terminaba ocupando el lugar de "response" — sin los métodos `.header`/`.setHeader`, así que `setResponseHeader` no hacía nada en vez de explotar. Era frágil: cualquier handler de WS sin `@MessageBody()` iba a pisar la misma mina.
+
+### Decisión
+
+Se creó `HttpOnlyThrottlerGuard` (`src/common/http-only-throttler.guard.ts`), que extiende `ThrottlerGuard` y sobreescribe `shouldSkip` para saltar cualquier contexto que no sea `'http'`. Reemplaza a `ThrottlerGuard` como `APP_GUARD` en `app.module.ts`. El límite de 60 req/min sigue aplicando a los endpoints REST igual que antes; los gateways de WebSocket quedan completamente afuera de esta guard (ya tienen su propio control de acceso vía `WsJwtAuthGuard` y el chequeo de rol admin a mano en `ChatGateway`).
+
+### Nota sobre testing
+
+No se pudo agregar un test unitario para `HttpOnlyThrottlerGuard`: cualquier archivo de test que importe `@nestjs/common` y `@nestjs/throttler` en el mismo módulo revienta con `Cannot require() ES Module ... in a cycle`, un bug confirmado de la combinación ts-jest + `--experimental-vm-modules` + esta versión de `@nestjs/throttler` (reproducido de forma aislada, independiente del código del guard). El fix se verificó manualmente contra el servidor real.
+
+---
+
+## 19. Barra de avance (scrub bar) de la música ambiental: sin seek local optimista
+
+**Fecha:** 2026-11-06
+**Rama:** `feature/call-ambient-music`
+
+### Contexto
+
+El reproductor de música ambiental solo tenía play/pause/anterior/siguiente; faltaba una línea de tiempo tipo YouTube que muestre el progreso de la canción y permita al admin saltar a un punto específico arrastrándola.
+
+### Alternativas consideradas
+
+- **Seek optimista:** al arrastrar la barra, llamar a `player.seekTo()` directamente en el browser del admin para feedback instantáneo, y además emitir `musicSeek` para el resto de la sala. Da respuesta inmediata a quien arrastra, pero rompe el invariante ya documentado en `reconcilePlayerState` (`ambientMusic.ts`): el player nunca se controla directamente desde la UI, siempre reacciona a `musicState`. El admin podría terminar viendo una posición distinta a la que el servidor termina confirmando (por ejemplo, si el seek se emite pero el evento se pierde o llega fuera de orden).
+- **Seek solo por socket:** la barra nunca llama al player; al soltar, solo emite `musicSeek({ positionSeconds })`, y el player local del admin (igual que el de cualquier otro participante) recién se mueve cuando llega el próximo `musicState` y `reconcilePlayerState` lo aplica.
+
+### Decisión
+
+Se eligió **seek solo por socket**, manteniendo el mismo invariante que ya rige play/pause/next/previous.
+
+### Justificación
+
+- Preserva una única fuente de verdad (`musicState` retransmitido por el gateway) para la posición de reproducción de todos los participantes, admin incluido, en vez de abrir una excepción puntual para el seek.
+- Evita divergencia entre lo que el admin ve localmente tras arrastrar y lo que el resto de la sala termina viendo si el seek no se aplica exactamente igual en ambos lados.
+- El backend (`handleMusicSeek` en `chat.gateway.ts`) ya preserva `isPlaying` al recibir `musicSeek`, por lo que no hace falta lógica adicional en el cliente para mantenerlo.
+
+### Consecuencias
+
+- Hay un pequeño retraso perceptible entre que el admin suelta la barra y la ve moverse a la posición elegida (tiene que esperar el viaje de ida del evento, su aplicación en el servidor, y el `musicState` de vuelta), en vez de salto instantáneo. Es el mismo tradeoff ya aceptado para play/pause desde la sección 16, extendido a seek de forma consistente.
+
+---
+
+## 20. Música ambiental: el admin se une solo, y el volumen es una preferencia local
+
+**Fecha:** 2026-11-06
+**Rama:** `feature/call-ambient-music`
+
+### Contexto
+
+El botón "Unirme a la música" se mostraba a todos los participantes por igual, admin incluido. Para el admin es una fricción sin sentido: es quien controla la playlist (agregar, play/pause, seek), así que pedirle que además "solicite permiso" para escuchar su propia música no tiene sentido de producto. Tampoco había ninguna forma de bajar o silenciar el volumen una vez unido.
+
+### Decisiones
+
+- **El admin se une solo.** El botón "Unirme a la música" ahora se oculta para el admin (`!joined && !isAdmin`); en su lugar, un `useEffect` dispara la misma lógica de `handleJoinMusic` (crear el player YouTube + `unMute()`) automáticamente al montar. Para el momento en que este componente es interactivo, el usuario ya hizo un gesto en la página (entrar a la reunión), así que ese `unMute()` disparado desde un efecto no choca con la política de autoplay con sonido del navegador — el mismo razonamiento que ya justificaba el flujo de un solo click para los invitados.
+- **El volumen es un estado puramente local, nunca se sincroniza por el socket.** Una alternativa considerada fue incluir el volumen por usuario dentro de `musicState` para que sea visible/debugueable por el resto de la sala. Se rechazó: el volumen es una preferencia de escucha personal, sin ningún motivo para que otros participantes la vean o les importe — a diferencia de la posición/canción actual, que sí tienen que ser idénticas para todos.
+- **`muted` y `volume` son dos estados separados, no uno derivado del otro.** La API de YouTube no deshace un `mute()` previo con `setVolume()`: el audio sigue en silencio hasta un `unMute()` explícito. Tocar el slider de volumen estando silenciado también limpia el `muted` local y llama a `unMute()`, replicando el comportamiento estándar del control de volumen nativo de `<video>`/`<audio>`.
+
+### Justificación
+
+- Mantiene consistencia con el resto del feature: el admin ya no interactúa con ningún gate de "pedir unirse" para algo que controla de punta a punta.
+- Evita acoplar una preferencia individual (volumen) al estado compartido de la sala, que hasta ahora solo modela lo que tiene que verse igual para todos (`tracks`, `currentIndex`, `isPlaying`, `positionSeconds`).
+- Mientras se arrastra, la UI usa un valor local de "preview" (no derivado de `musicState`) para que el drag se sienta fluido; ese valor se descarta al soltar y la barra vuelve a reflejar la posición autoritativa del servidor.
