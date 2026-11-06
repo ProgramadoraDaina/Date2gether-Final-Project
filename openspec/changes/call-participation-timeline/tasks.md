@@ -53,14 +53,14 @@ PR7 es el de mayor riesgo y el único que toca una ruta ya productiva (`join()` 
 
 ## Fase 3 — Correlación de identidad en `join()` (PR2, depende de Fase 1)
 
-- [ ] 3.1 [RED] Usuario registrado se une → se persiste correlación `identity↔userId,roomId` (spec identity/persistencia-registrado).
-- [ ] 3.2 [GREEN] Upsert `onConflictDoUpdate(livekitIdentity)` en `CallsService.join()`, antes de emitir el token.
-- [ ] 3.3 [RED] Invitado se une → correlación sin `userId`, con `displayName` (spec identity/invitado).
-- [ ] 3.4 [GREEN] Extender el upsert al caso invitado.
-- [ ] 3.5 [RED] Misma cuenta se reconecta → dos correlaciones, `identity` distinto, mismo `userId` (spec identity/reconexión-cuenta).
-- [ ] 3.6 [RED] Mismo invitado se reconecta → dos correlaciones, mismo nombre (spec identity/reconexión-invitado).
-- [ ] 3.7 [GREEN] Confirmar 3.5/3.6 en verde (el `unique(livekitIdentity)` por unión ya lo garantiza).
-- [ ] 3.8 [RED+GREEN] Regresión: condiciones actuales de inserción en `callHistory` para invitados no cambian (spec identity/callHistory-invitados).
+- [x] 3.1 [RED] Usuario registrado se une → se persiste correlación `identity↔userId,roomId` (spec identity/persistencia-registrado).
+- [x] 3.2 [GREEN] Upsert `onConflictDoUpdate(livekitIdentity)` en `CallsService.join()`, antes de emitir el token.
+- [x] 3.3 [RED] Invitado se une → correlación sin `userId`, con `displayName` (spec identity/invitado).
+- [x] 3.4 [GREEN] Extender el upsert al caso invitado.
+- [x] 3.5 [RED] Misma cuenta se reconecta → dos correlaciones, `identity` distinto, mismo `userId` (spec identity/reconexión-cuenta).
+- [x] 3.6 [RED] Mismo invitado se reconecta → dos correlaciones, mismo nombre (spec identity/reconexión-invitado).
+- [x] 3.7 [GREEN] Confirmar 3.5/3.6 en verde (el `unique(livekitIdentity)` por unión ya lo garantiza).
+- [x] 3.8 [RED+GREEN] Regresión: condiciones actuales de inserción en `callHistory` para invitados no cambian (spec identity/callHistory-invitados).
 
 ## Fase 4 — Webhook de LiveKit: ingestión (PR3, depende de Fase 1)
 
