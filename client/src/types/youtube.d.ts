@@ -27,8 +27,10 @@ declare namespace YT {
     pauseVideo(): void;
     seekTo(seconds: number, allowSeekAhead: boolean): void;
     getCurrentTime(): number;
+    getDuration(): number;
     mute(): void;
     unMute(): void;
+    setVolume(volume: number): void;
     destroy(): void;
   }
 }
