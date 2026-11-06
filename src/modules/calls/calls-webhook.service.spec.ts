@@ -3,7 +3,15 @@ import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { WebhookReceiver, type WebhookEvent } from 'livekit-server-sdk';
 import type { DrizzleDb } from '../../db/drizzle.module';
-import { callEvents } from '../../db/schema';
+import {
+  callEvents,
+  callHistory,
+  callParticipantIdentities,
+  callSessionParticipants,
+  callSessions,
+  rooms,
+} from '../../db/schema';
+import { chain } from '../../test-support/fake-drizzle';
 import { CallsWebhookService } from './calls-webhook.service';
 
 const config = {
@@ -31,7 +39,86 @@ function createDbMock() {
   const onConflictDoNothing = jest.fn().mockReturnValue({ returning });
   const values = jest.fn().mockReturnValue({ onConflictDoNothing });
   const insert = jest.fn().mockReturnValue({ values });
-  return { insert, values, onConflictDoNothing, returning };
+  // Default genérico para cualquier dispatch que caiga en una transacción
+  // (p. ej. room_finished) sin que el test particular configure su propio
+  // tx: selects vacíos, compare-and-set sin filas -> no materializa nada,
+  // no revienta.
+  const transaction = jest
+    .fn<(cb: (tx: unknown) => unknown) => Promise<unknown>>()
+    .mockImplementation(async (cb) =>
+      cb({
+        select: jest.fn().mockReturnValue(chain([])),
+        insert: jest.fn().mockReturnValue(chain(undefined)),
+        update: jest.fn().mockReturnValue(chain([])),
+      }),
+    );
+  return { insert, values, onConflictDoNothing, returning, transaction };
+}
+
+// tx dedicado para los tests de materialización en room_finished: cada tabla
+// enruta a un resultado distinto, como hace Drizzle de verdad.
+function createMaterializationTxMock(opts: {
+  sessionEvents?: Array<{
+    eventType: string;
+    livekitIdentity: string | null;
+    trackSource: string | null;
+    occurredAt: Date;
+  }>;
+  identities?: Array<{ livekitIdentity: string; userId: string | null; displayName: string }>;
+  room?: { id: string } | null;
+  claimed?: { id: string }[];
+}) {
+  const sessionEvents = opts.sessionEvents ?? [];
+  const identities = opts.identities ?? [];
+  const room = opts.room === undefined ? { id: 'room-1' } : opts.room;
+  const claimed = opts.claimed ?? [{ id: 'session-1' }];
+
+  const participantsInsertValues = jest
+    .fn<(values: unknown) => Promise<void>>()
+    .mockResolvedValue(undefined);
+  const sessionInsertOnConflictDoNothing = jest
+    .fn<(config: unknown) => Promise<void>>()
+    .mockResolvedValue(undefined);
+  const sessionInsertValues = jest
+    .fn()
+    .mockReturnValue({ onConflictDoNothing: sessionInsertOnConflictDoNothing });
+  const updateReturning = jest
+    .fn<(cols: unknown) => Promise<{ id: string }[]>>()
+    .mockResolvedValue(claimed);
+  const updateWhere = jest.fn().mockReturnValue({ returning: updateReturning });
+  const updateSet = jest.fn().mockReturnValue({ where: updateWhere });
+
+  const select = jest.fn().mockImplementation(() => ({
+    from: jest.fn().mockImplementation((table: unknown) => {
+      if (table === callEvents) return chain(sessionEvents);
+      if (table === callParticipantIdentities) return chain(identities);
+      if (table === rooms) return chain(room ? [room] : []);
+      return chain([]);
+    }),
+  }));
+
+  const insert = jest.fn().mockImplementation((table: unknown) => {
+    if (table === callSessions) return { values: sessionInsertValues };
+    if (table === callSessionParticipants) return { values: participantsInsertValues };
+    return { values: jest.fn() };
+  });
+
+  const update = jest.fn().mockImplementation((table: unknown) => {
+    if (table === callSessions) return { set: updateSet };
+    return { set: jest.fn() };
+  });
+
+  return {
+    select,
+    insert,
+    update,
+    sessionInsertValues,
+    sessionInsertOnConflictDoNothing,
+    participantsInsertValues,
+    updateSet,
+    updateWhere,
+    updateReturning,
+  };
 }
 
 describe('CallsWebhookService', () => {
@@ -153,5 +240,96 @@ describe('CallsWebhookService', () => {
       2,
       expect.objectContaining({ livekitRoomSid: 'RM_session-B', roomCode: 'abc-defg-hij' }),
     );
+  });
+});
+
+describe('CallsWebhookService: materialización en room_finished', () => {
+  let db: ReturnType<typeof createDbMock>;
+  let service: CallsWebhookService;
+  let receive: jest.SpiedFunction<WebhookReceiver['receive']>;
+
+  beforeEach(() => {
+    db = createDbMock();
+    service = new CallsWebhookService(new ConfigService(config), db as unknown as DrizzleDb);
+    receive = jest.spyOn(WebhookReceiver.prototype, 'receive');
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('con materialized_at IS NULL: agrega el log crudo y materializa call_session_participants en una sola transacción (spec timeline/materialización)', async () => {
+    const sessionEvents = [
+      {
+        eventType: 'participant_joined',
+        livekitIdentity: 'id-a',
+        trackSource: null,
+        occurredAt: new Date('2026-11-06T10:00:00Z'),
+      },
+      {
+        eventType: 'participant_left',
+        livekitIdentity: 'id-a',
+        trackSource: null,
+        occurredAt: new Date('2026-11-06T10:05:00Z'),
+      },
+    ];
+    const identities = [{ livekitIdentity: 'id-a', userId: 'user-a', displayName: 'Ana' }];
+    const tx = createMaterializationTxMock({ sessionEvents, identities });
+    db.transaction.mockImplementation(async (cb: (tx: unknown) => unknown) => cb(tx));
+    receive.mockResolvedValue(buildEvent({ event: 'room_finished' }));
+
+    await service.handle(Buffer.from('{}'), 'valid-sig');
+
+    expect(db.transaction).toHaveBeenCalledTimes(1);
+    expect(tx.update).toHaveBeenCalledWith(callSessions);
+    expect(tx.updateSet).toHaveBeenCalledWith(
+      expect.objectContaining({ materializedAt: expect.any(Date), endedAt: expect.any(Date) }),
+    );
+    expect(tx.insert).toHaveBeenCalledWith(callSessionParticipants);
+    expect(tx.participantsInsertValues).toHaveBeenCalledWith([
+      expect.objectContaining({
+        sessionId: 'session-1',
+        participantKey: 'user-a',
+        displayName: 'Ana',
+        totalSeconds: 300,
+      }),
+    ]);
+  });
+
+  it('reentrega de room_finished (compare-and-set sin filas afectadas) no duplica el resumen (spec timeline/resiliencia-parcial)', async () => {
+    const tx = createMaterializationTxMock({ claimed: [] });
+    db.transaction.mockImplementation(async (cb: (tx: unknown) => unknown) => cb(tx));
+    receive.mockResolvedValue(buildEvent({ event: 'room_finished' }));
+
+    await service.handle(Buffer.from('{}'), 'valid-sig');
+
+    expect(tx.updateWhere).toHaveBeenCalled();
+    expect(tx.participantsInsertValues).not.toHaveBeenCalled();
+  });
+
+  it('regresión: materializar la sesión no toca call_history (spec timeline/independencia-callHistory)', async () => {
+    const sessionEvents = [
+      {
+        eventType: 'participant_joined',
+        livekitIdentity: 'id-a',
+        trackSource: null,
+        occurredAt: new Date('2026-11-06T10:00:00Z'),
+      },
+      {
+        eventType: 'participant_left',
+        livekitIdentity: 'id-a',
+        trackSource: null,
+        occurredAt: new Date('2026-11-06T10:05:00Z'),
+      },
+    ];
+    const identities = [{ livekitIdentity: 'id-a', userId: 'user-a', displayName: 'Ana' }];
+    const tx = createMaterializationTxMock({ sessionEvents, identities });
+    db.transaction.mockImplementation(async (cb: (tx: unknown) => unknown) => cb(tx));
+    receive.mockResolvedValue(buildEvent({ event: 'room_finished' }));
+
+    await service.handle(Buffer.from('{}'), 'valid-sig');
+
+    expect(tx.insert).not.toHaveBeenCalledWith(callHistory);
+    expect(tx.update).not.toHaveBeenCalledWith(callHistory);
   });
 });
