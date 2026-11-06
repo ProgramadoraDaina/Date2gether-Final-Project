@@ -14,7 +14,8 @@ import { Controller, HttpCode, Post, Req, type RawBodyRequest } from '@nestjs/co
 // Se importa SOLO la constante desde su archivo real (sin pasar por
 // throttler.decorator.ts, que es el que requiere @nestjs/common), y se
 // escribe a mano la MISMA metadata que @SkipThrottle() define — es lo único
-// que lee el guard global (HttpOnlyThrottlerGuard, vía Reflector). Verificado
+// que lee el guard global (ThrottlerGuard, registrado vía APP_GUARD en
+// app.module.ts, leído vía Reflector). Verificado
 // contra @nestjs/throttler@6.7.1: ver throttler.decorator.js,
 // `SkipThrottle = (skip = { default: true }) => ... Reflect.defineMetadata(THROTTLER_SKIP + key, ...)`.
 import { THROTTLER_SKIP } from '@nestjs/throttler/dist/throttler.constants.js';
@@ -32,7 +33,7 @@ function skipGlobalThrottle(): ClassDecorator {
 // esta ruta quede sin NINGÚN guard es que no extienda ni comparta clase con
 // un controller que ya tenga uno (ver comentario de CallHistoryController).
 // skipGlobalThrottle() (equivalente a @SkipThrottle(), ver nota arriba)
-// porque el HttpOnlyThrottlerGuard global es 60 req/min/IP y LiveKit pega
+// porque el ThrottlerGuard global (app.module.ts) es 60 req/min/IP y LiveKit pega
 // desde una sola IP: cerrar una sala de 6 personas puede generar ~19 eventos
 // seguidos.
 @Controller('calls/livekit')
