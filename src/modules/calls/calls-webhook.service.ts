@@ -1,5 +1,6 @@
 import { BadRequestException, Inject, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import {
   TrackSource,
   WebhookReceiver,
@@ -7,7 +8,14 @@ import {
   type WebhookEvent,
 } from 'livekit-server-sdk';
 import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
-import { callEvents } from '../../db/schema';
+import {
+  callEvents,
+  callParticipantIdentities,
+  callSessionParticipants,
+  callSessions,
+  rooms,
+} from '../../db/schema';
+import { aggregateSession, type SessionEvent } from './aggregate-session';
 
 // Los 6 tipos de evento que esta fase sabe identificar y despachar (spec
 // webhook/eventos-soportados). Cualquier otro tipo se persiste igual, sin
@@ -78,7 +86,7 @@ export class CallsWebhookService {
       return;
     }
 
-    this.dispatch(event);
+    await this.dispatch(event);
   }
 
   private toEventRow(event: WebhookEvent, bodyText: string) {
@@ -105,7 +113,7 @@ export class CallsWebhookService {
   // (materialización, room_finished) y PR7 (gate de admin + cierre forzado,
   // participant_joined/left). Los métodos de abajo son los huecos donde esa
   // lógica se enchufa — vacíos a propósito en este PR.
-  private dispatch(event: WebhookEvent): void {
+  private async dispatch(event: WebhookEvent): Promise<void> {
     if (!this.isSupportedEventType(event.event)) {
       // Tipo no reconocido (p. ej. egress_started): ya quedó persistido
       // arriba, auditoría completa sin generar ningún efecto.
@@ -116,7 +124,7 @@ export class CallsWebhookService {
         this.onRoomStarted(event);
         break;
       case 'room_finished':
-        this.onRoomFinished(event);
+        await this.onRoomFinished(event);
         break;
       case 'participant_joined':
         this.onParticipantJoined(event);
@@ -137,11 +145,97 @@ export class CallsWebhookService {
     return (SUPPORTED_EVENT_TYPES as readonly string[]).includes(eventType);
   }
 
-  // --- Huecos para PR4/PR7 (ver design.md), deliberadamente vacíos aquí ---
+  // --- Huecos para PR7 (ver design.md), deliberadamente vacíos aquí ---
   private onRoomStarted(_event: WebhookEvent): void {}
-  private onRoomFinished(_event: WebhookEvent): void {}
   private onParticipantJoined(_event: WebhookEvent): void {}
   private onParticipantLeft(_event: WebhookEvent): void {}
   private onTrackPublished(_event: WebhookEvent): void {}
   private onTrackUnpublished(_event: WebhookEvent): void {}
+
+  /**
+   * Materialización de la línea de tiempo (PR4, ver design.md "Flujo 2").
+   *
+   * `room_started`/`participant_*` siguen siendo huecos vacíos en este PR
+   * (PR7), así que la cabecera de `call_sessions` puede no existir todavía
+   * cuando llega `room_finished`: por eso este handler también la crea de
+   * forma perezosa (ON CONFLICT DO NOTHING) antes de intentar reclamarla,
+   * en lugar de asumir que ya la creó otro handler.
+   *
+   * El compare-and-set sobre `materialized_at` es la segunda capa de
+   * idempotencia (la primera es el insert deduplicado por id de evento en
+   * `handle()`): protege contra una reentrega de `room_finished` con un id
+   * de evento distinto pero que describe el mismo fin de sesión.
+   */
+  private async onRoomFinished(event: WebhookEvent): Promise<void> {
+    const livekitRoomSid = event.room?.sid;
+    if (!livekitRoomSid) return;
+    const roomCode = event.room?.name ?? '';
+    const endedAt = new Date(Number(event.createdAt) * 1000);
+
+    await this.db.transaction(async (tx) => {
+      const sessionEvents: SessionEvent[] = await tx
+        .select({
+          eventType: callEvents.eventType,
+          livekitIdentity: callEvents.livekitIdentity,
+          trackSource: callEvents.trackSource,
+          occurredAt: callEvents.occurredAt,
+        })
+        .from(callEvents)
+        .where(eq(callEvents.livekitRoomSid, livekitRoomSid));
+
+      // started_at más antiguo que ya haya quedado persistido en el log para
+      // este sid (incluye room_started, aunque su dispatch sea un hueco
+      // vacío: igual se persiste en handle() antes de despachar).
+      const startedAt = sessionEvents.reduce<Date>(
+        (earliest, e) => (e.occurredAt < earliest ? e.occurredAt : earliest),
+        sessionEvents[0]?.occurredAt ?? endedAt,
+      );
+
+      const [room] = roomCode
+        ? await tx.select({ id: rooms.id }).from(rooms).where(eq(rooms.code, roomCode)).limit(1)
+        : [];
+
+      await tx
+        .insert(callSessions)
+        .values({ livekitRoomSid, roomId: room?.id ?? null, roomCode, startedAt })
+        .onConflictDoNothing();
+
+      const claimed = await tx
+        .update(callSessions)
+        .set({ endedAt, materializedAt: new Date() })
+        .where(
+          and(eq(callSessions.livekitRoomSid, livekitRoomSid), isNull(callSessions.materializedAt)),
+        )
+        .returning({ id: callSessions.id });
+
+      if (claimed.length === 0) {
+        // Reentrega de room_finished: ya se materializó antes, sin efecto.
+        return;
+      }
+      const sessionId = claimed[0].id;
+
+      const identityKeys = [
+        ...new Set(
+          sessionEvents.map((e) => e.livekitIdentity).filter((id): id is string => !!id),
+        ),
+      ];
+      const identities = identityKeys.length
+        ? await tx
+            .select({
+              livekitIdentity: callParticipantIdentities.livekitIdentity,
+              userId: callParticipantIdentities.userId,
+              displayName: callParticipantIdentities.displayName,
+            })
+            .from(callParticipantIdentities)
+            .where(inArray(callParticipantIdentities.livekitIdentity, identityKeys))
+        : [];
+
+      const summaries = aggregateSession(sessionEvents, identities, endedAt);
+      if (summaries.length === 0) return;
+
+      await tx
+        .insert(callSessionParticipants)
+        .values(summaries.map((summary) => ({ sessionId, ...summary })));
+    });
+  }
 }
