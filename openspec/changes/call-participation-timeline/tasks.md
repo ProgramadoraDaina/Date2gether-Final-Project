@@ -40,16 +40,16 @@ PR7 es el de mayor riesgo y el único que toca una ruta ya productiva (`join()` 
 
 ## Fase 1 — Esquema de datos y migración (PR1)
 
-- [ ] 1.1 Modificar `src/db/schema.ts`: agregar `call_participant_identities`, `call_events`, `call_sessions`, `call_session_participants` + relaciones + tipos inferidos; no tocar tablas existentes.
-- [ ] 1.2 Generar `pnpm drizzle-kit generate` → `drizzle/0012_call_participation_timeline.sql`; confirmar que solo contiene `CREATE TABLE` + índices, sin `ALTER`.
-- [ ] 1.3 Aplicar en desarrollo y correr `pnpm test` completo para confirmar que nada existente se rompe por la adición.
+- [x] 1.1 Modificar `src/db/schema.ts`: agregar `call_participant_identities`, `call_events`, `call_sessions`, `call_session_participants` + relaciones + tipos inferidos; no tocar tablas existentes.
+- [x] 1.2 Generar `pnpm drizzle-kit generate` → `drizzle/0012_call_participation_timeline.sql`; confirmar que solo contiene `CREATE TABLE` + índices, sin `ALTER`.
+- [x] 1.3 Aplicar en desarrollo y correr `pnpm test` completo para confirmar que nada existente se rompe por la adición.
 
 ## Fase 2 — Bootstrap de ingesta: `rawBody` + gotcha de Content-Type (PR1)
 
-- [ ] 2.1 [RED] Test: POST con `Content-Type: application/webhook+json` → `req.rawBody` vacío (reproduce el gotcha D6 antes de corregirlo).
-- [ ] 2.2 [GREEN] `src/main.ts`: `NestFactory.create<NestExpressApplication>(AppModule,{rawBody:true})` + `app.useBodyParser('json',{type:['application/json','application/webhook+json']})`.
-- [ ] 2.3 [RED] Test de regresión: una ruta JSON existente responde igual con `rawBody: true`.
-- [ ] 2.4 [GREEN] Confirmar 2.3 en verde sin tocar ningún controller existente.
+- [x] 2.1 [RED] Test: POST con `Content-Type: application/webhook+json` → `req.rawBody` vacío (reproduce el gotcha D6 antes de corregirlo).
+- [x] 2.2 [GREEN] `src/main.ts`: `NestFactory.create<NestExpressApplication>(AppModule,{rawBody:true})` + `app.useBodyParser('json',{type:['application/json','application/webhook+json']})`.
+- [x] 2.3 [RED] Test de regresión: una ruta JSON existente responde igual con `rawBody: true`.
+- [x] 2.4 [GREEN] Confirmar 2.3 en verde sin tocar ningún controller existente.
 
 ## Fase 3 — Correlación de identidad en `join()` (PR2, depende de Fase 1)
 
