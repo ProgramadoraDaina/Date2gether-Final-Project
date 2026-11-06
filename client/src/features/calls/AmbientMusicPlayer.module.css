@@ -1,0 +1,28 @@
+.ambientMusic {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* El target de montaje del IFrame Player necesita existir como elemento
+   visible al momento de crearse (requisito de la API de YouTube), pero el
+   audio es ambiental: no hace falta mostrar el video. */
+.hiddenPlayer {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.adminControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.error {
+  color: var(--color-error, #c0392b);
+  font-size: 0.85rem;
+}
