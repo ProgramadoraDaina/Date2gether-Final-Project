@@ -154,10 +154,13 @@ describe('ChatGateway', () => {
       return { ...setup, client };
     }
 
-    it('rechaza musicSetTrack de alguien que no es administrador de la sala', async () => {
+    it('rechaza musicAddTrack de alguien que no es administrador de la sala', async () => {
       const { gateway, client, serverEmit } = await joinedAdmin('participante');
 
-      await gateway.handleMusicSetTrack(client as never, { videoId: 'dQw4w9WgXcQ' });
+      await gateway.handleMusicAddTrack(client as never, {
+        videoId: 'dQw4w9WgXcQ',
+        title: 'Love Song Baby',
+      });
 
       expect(client.emit).toHaveBeenCalledWith('error', {
         message: 'Solo el administrador de la sala puede controlar la música',
@@ -165,10 +168,13 @@ describe('ChatGateway', () => {
       expect(serverEmit).not.toHaveBeenCalled();
     });
 
-    it('rechaza musicSetTrack de un invitado sin cuenta, aunque esté en la sala', async () => {
+    it('rechaza musicAddTrack de un invitado sin cuenta, aunque esté en la sala', async () => {
       const { gateway, client, serverEmit } = await joinedGuest();
 
-      await gateway.handleMusicSetTrack(client as never, { videoId: 'dQw4w9WgXcQ' });
+      await gateway.handleMusicAddTrack(client as never, {
+        videoId: 'dQw4w9WgXcQ',
+        title: 'Love Song Baby',
+      });
 
       expect(client.emit).toHaveBeenCalledWith('error', {
         message: 'Necesitás una cuenta para controlar la música de la sala',
@@ -176,18 +182,49 @@ describe('ChatGateway', () => {
       expect(serverEmit).not.toHaveBeenCalled();
     });
 
-    it('un administrador puede elegir una canción por id y se difunde a toda la sala', async () => {
+    it('un administrador puede agregar la primera canción de la lista y se difunde a toda la sala', async () => {
       const { gateway, client, serverTo, serverEmit } = await joinedAdmin('administrador');
 
-      await gateway.handleMusicSetTrack(client as never, { videoId: 'dQw4w9WgXcQ' });
+      await gateway.handleMusicAddTrack(client as never, {
+        videoId: 'dQw4w9WgXcQ',
+        title: 'Love Song Baby',
+      });
 
       expect(serverTo).toHaveBeenCalledWith('abc-defg-hij');
       expect(serverEmit).toHaveBeenCalledWith(
         'musicState',
         expect.objectContaining({
-          videoId: 'dQw4w9WgXcQ',
+          tracks: [{ videoId: 'dQw4w9WgXcQ', title: 'Love Song Baby' }],
+          currentIndex: 0,
           isPlaying: false,
           positionSeconds: 0,
+        }),
+      );
+    });
+
+    it('una segunda canción se agrega al final de la lista sin interrumpir lo que ya suena', async () => {
+      const { gateway, client, serverEmit } = await joinedAdmin('administrador');
+      await gateway.handleMusicAddTrack(client as never, {
+        videoId: 'dQw4w9WgXcQ',
+        title: 'Love Song Baby',
+      });
+      await gateway.handleMusicPlay(client as never, { positionSeconds: 12 });
+
+      await gateway.handleMusicAddTrack(client as never, {
+        videoId: 'jNQXAC9IVRw',
+        title: 'Otro Tema',
+      });
+
+      expect(serverEmit).toHaveBeenLastCalledWith(
+        'musicState',
+        expect.objectContaining({
+          tracks: [
+            { videoId: 'dQw4w9WgXcQ', title: 'Love Song Baby' },
+            { videoId: 'jNQXAC9IVRw', title: 'Otro Tema' },
+          ],
+          currentIndex: 0,
+          isPlaying: true,
+          positionSeconds: 12,
         }),
       );
     });
@@ -195,20 +232,24 @@ describe('ChatGateway', () => {
     it('acepta un link completo de YouTube y extrae el id real', async () => {
       const { gateway, client, serverEmit } = await joinedAdmin('administrador');
 
-      await gateway.handleMusicSetTrack(client as never, {
+      await gateway.handleMusicAddTrack(client as never, {
         videoId: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=10s',
+        title: 'Love Song Baby',
       });
 
       expect(serverEmit).toHaveBeenCalledWith(
         'musicState',
-        expect.objectContaining({ videoId: 'dQw4w9WgXcQ' }),
+        expect.objectContaining({ tracks: [{ videoId: 'dQw4w9WgXcQ', title: 'Love Song Baby' }] }),
       );
     });
 
     it('rechaza un link o id de YouTube inválido y no actualiza el estado', async () => {
       const { gateway, client, serverEmit } = await joinedAdmin('administrador');
 
-      await gateway.handleMusicSetTrack(client as never, { videoId: '<script>evil</script>' });
+      await gateway.handleMusicAddTrack(client as never, {
+        videoId: '<script>evil</script>',
+        title: 'Love Song Baby',
+      });
 
       expect(client.emit).toHaveBeenCalledWith('error', {
         message: 'El link o ID de YouTube no es válido',
@@ -218,7 +259,10 @@ describe('ChatGateway', () => {
 
     it('musicPlay actualiza isPlaying/posición y se difunde a toda la sala, incluido el admin', async () => {
       const { gateway, client, serverTo, serverEmit } = await joinedAdmin('administrador');
-      await gateway.handleMusicSetTrack(client as never, { videoId: 'dQw4w9WgXcQ' });
+      await gateway.handleMusicAddTrack(client as never, {
+        videoId: 'dQw4w9WgXcQ',
+        title: 'Love Song Baby',
+      });
 
       await gateway.handleMusicPlay(client as never, { positionSeconds: 12 });
 
@@ -231,7 +275,10 @@ describe('ChatGateway', () => {
 
     it('musicPause actualiza isPlaying/posición y se difunde', async () => {
       const { gateway, client, serverEmit } = await joinedAdmin('administrador');
-      await gateway.handleMusicSetTrack(client as never, { videoId: 'dQw4w9WgXcQ' });
+      await gateway.handleMusicAddTrack(client as never, {
+        videoId: 'dQw4w9WgXcQ',
+        title: 'Love Song Baby',
+      });
       await gateway.handleMusicPlay(client as never, { positionSeconds: 12 });
 
       await gateway.handleMusicPause(client as never, { positionSeconds: 20 });
@@ -244,7 +291,10 @@ describe('ChatGateway', () => {
 
     it('musicSeek cambia la posición sin tocar isPlaying', async () => {
       const { gateway, client, serverEmit } = await joinedAdmin('administrador');
-      await gateway.handleMusicSetTrack(client as never, { videoId: 'dQw4w9WgXcQ' });
+      await gateway.handleMusicAddTrack(client as never, {
+        videoId: 'dQw4w9WgXcQ',
+        title: 'Love Song Baby',
+      });
       await gateway.handleMusicPlay(client as never, { positionSeconds: 12 });
 
       await gateway.handleMusicSeek(client as never, { positionSeconds: 42 });
@@ -266,6 +316,128 @@ describe('ChatGateway', () => {
       expect(serverEmit).not.toHaveBeenCalled();
     });
 
+    it('musicNext avanza a la siguiente canción y reinicia la posición, sin pasarse del final', async () => {
+      const { gateway, client, serverEmit } = await joinedAdmin('administrador');
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'dQw4w9WgXcQ', title: 'A' });
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'jNQXAC9IVRw', title: 'B' });
+      await gateway.handleMusicPlay(client as never, { positionSeconds: 30 });
+
+      await gateway.handleMusicNext(client as never);
+
+      expect(serverEmit).toHaveBeenLastCalledWith(
+        'musicState',
+        expect.objectContaining({ currentIndex: 1, positionSeconds: 0, isPlaying: true }),
+      );
+
+      serverEmit.mockClear();
+      await gateway.handleMusicNext(client as never);
+
+      expect(serverEmit).toHaveBeenLastCalledWith(
+        'musicState',
+        expect.objectContaining({ currentIndex: 1 }),
+      );
+    });
+
+    it('musicPrevious retrocede a la canción anterior y reinicia la posición, sin pasarse del principio', async () => {
+      const { gateway, client, serverEmit } = await joinedAdmin('administrador');
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'dQw4w9WgXcQ', title: 'A' });
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'jNQXAC9IVRw', title: 'B' });
+      await gateway.handleMusicNext(client as never);
+      await gateway.handleMusicPlay(client as never, { positionSeconds: 30 });
+
+      await gateway.handleMusicPrevious(client as never);
+
+      expect(serverEmit).toHaveBeenLastCalledWith(
+        'musicState',
+        expect.objectContaining({ currentIndex: 0, positionSeconds: 0, isPlaying: true }),
+      );
+
+      serverEmit.mockClear();
+      await gateway.handleMusicPrevious(client as never);
+
+      expect(serverEmit).toHaveBeenLastCalledWith(
+        'musicState',
+        expect.objectContaining({ currentIndex: 0 }),
+      );
+    });
+
+    it('musicRemoveTrack saca una canción de la lista y se difunde', async () => {
+      const { gateway, client, serverTo, serverEmit } = await joinedAdmin('administrador');
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'dQw4w9WgXcQ', title: 'A' });
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'jNQXAC9IVRw', title: 'B' });
+
+      await gateway.handleMusicRemoveTrack(client as never, { index: 1 });
+
+      expect(serverTo).toHaveBeenCalledWith('abc-defg-hij');
+      expect(serverEmit).toHaveBeenLastCalledWith(
+        'musicState',
+        expect.objectContaining({
+          tracks: [{ videoId: 'dQw4w9WgXcQ', title: 'A' }],
+          currentIndex: 0,
+        }),
+      );
+    });
+
+    it('al sacar la canción que está sonando, la reproducción se detiene y la posición se reinicia', async () => {
+      const { gateway, client, serverEmit } = await joinedAdmin('administrador');
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'dQw4w9WgXcQ', title: 'A' });
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'jNQXAC9IVRw', title: 'B' });
+      await gateway.handleMusicPlay(client as never, { positionSeconds: 30 });
+
+      await gateway.handleMusicRemoveTrack(client as never, { index: 0 });
+
+      expect(serverEmit).toHaveBeenLastCalledWith(
+        'musicState',
+        expect.objectContaining({
+          tracks: [{ videoId: 'jNQXAC9IVRw', title: 'B' }],
+          currentIndex: 0,
+          isPlaying: false,
+          positionSeconds: 0,
+        }),
+      );
+    });
+
+    it('rechaza musicRemoveTrack con un índice fuera de rango', async () => {
+      const { gateway, client, serverEmit } = await joinedAdmin('administrador');
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'dQw4w9WgXcQ', title: 'A' });
+      serverEmit.mockClear();
+
+      await gateway.handleMusicRemoveTrack(client as never, { index: 5 });
+
+      expect(client.emit).toHaveBeenCalledWith('error', {
+        message: 'Esa canción ya no está en la lista',
+      });
+      expect(serverEmit).not.toHaveBeenCalled();
+    });
+
+    it('musicJumpToTrack salta directo a la canción elegida, reinicia la posición y preserva isPlaying', async () => {
+      const { gateway, client, serverTo, serverEmit } = await joinedAdmin('administrador');
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'dQw4w9WgXcQ', title: 'A' });
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'jNQXAC9IVRw', title: 'B' });
+      await gateway.handleMusicPlay(client as never, { positionSeconds: 30 });
+
+      await gateway.handleMusicJumpToTrack(client as never, { index: 1 });
+
+      expect(serverTo).toHaveBeenCalledWith('abc-defg-hij');
+      expect(serverEmit).toHaveBeenLastCalledWith(
+        'musicState',
+        expect.objectContaining({ currentIndex: 1, positionSeconds: 0, isPlaying: true }),
+      );
+    });
+
+    it('rechaza musicJumpToTrack con un índice fuera de rango', async () => {
+      const { gateway, client, serverEmit } = await joinedAdmin('administrador');
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'dQw4w9WgXcQ', title: 'A' });
+      serverEmit.mockClear();
+
+      await gateway.handleMusicJumpToTrack(client as never, { index: 5 });
+
+      expect(client.emit).toHaveBeenCalledWith('error', {
+        message: 'Esa canción ya no está en la lista',
+      });
+      expect(serverEmit).not.toHaveBeenCalled();
+    });
+
     it('a quien se une después, se le manda el estado de música actual de la sala', async () => {
       const getMemberRole = jest
         .fn<RoomsService['getMemberRole']>()
@@ -273,14 +445,19 @@ describe('ChatGateway', () => {
       const setup = createGateway(undefined, getMemberRole);
       const adminClient = createSocket(admin, 'socket-admin');
       await setup.gateway.handleJoinRoom(adminClient as never, { code: 'abc-defg-hij' });
-      await setup.gateway.handleMusicSetTrack(adminClient as never, { videoId: 'dQw4w9WgXcQ' });
+      await setup.gateway.handleMusicAddTrack(adminClient as never, {
+        videoId: 'dQw4w9WgXcQ',
+        title: 'Love Song Baby',
+      });
 
       const lateClient = createSocket(guest, 'socket-guest');
       await setup.gateway.handleJoinRoom(lateClient as never, { code: 'abc-defg-hij' });
 
       expect(lateClient.emit).toHaveBeenCalledWith(
         'musicState',
-        expect.objectContaining({ videoId: 'dQw4w9WgXcQ' }),
+        expect.objectContaining({
+          tracks: [{ videoId: 'dQw4w9WgXcQ', title: 'Love Song Baby' }],
+        }),
       );
     });
 

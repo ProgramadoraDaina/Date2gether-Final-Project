@@ -18,8 +18,9 @@ import { RoomEventsService } from '../rooms/room-events.service';
 import { RoomsService } from '../rooms/rooms.service';
 import { ChatService } from './chat.service';
 import { JoinRoomDto } from './dto/join-room.dto';
+import { MusicAddTrackDto } from './dto/music-add-track.dto';
 import { MusicPositionDto } from './dto/music-position.dto';
-import { MusicSetTrackDto } from './dto/music-set-track.dto';
+import { MusicTrackIndexDto } from './dto/music-track-index.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 
 // Solo GIFs servidos por GIPHY: evita que se inyecten imágenes de cualquier dominio.
@@ -73,8 +74,14 @@ interface ConnectedUser {
 // internos (roomId), para no declarar un segundo tipo con los mismos campos.
 type RoomUser = Pick<ConnectedUser, 'participantId' | 'userName' | 'userId' | 'nameColor'>;
 
-interface MusicState {
+interface MusicTrack {
   videoId: string;
+  title: string;
+}
+
+interface MusicState {
+  tracks: MusicTrack[];
+  currentIndex: number;
   isPlaying: boolean;
   positionSeconds: number;
   updatedAt: number;
@@ -177,10 +184,10 @@ export class ChatGateway implements OnGatewayDisconnect {
   }
 
   @UseGuards(WsJwtAuthGuard)
-  @SubscribeMessage('musicSetTrack')
-  async handleMusicSetTrack(
+  @SubscribeMessage('musicAddTrack')
+  async handleMusicAddTrack(
     @ConnectedSocket() client: Socket,
-    @MessageBody() dto: MusicSetTrackDto,
+    @MessageBody() dto: MusicAddTrackDto,
   ) {
     const user = await this.requireMusicAdmin(client);
     if (!user) return;
@@ -190,15 +197,103 @@ export class ChatGateway implements OnGatewayDisconnect {
       client.emit('error', { message: 'El link o ID de YouTube no es válido' });
       return;
     }
+    const title = dto.title.trim();
+    if (!title) {
+      client.emit('error', { message: 'El título de la canción no puede estar vacío' });
+      return;
+    }
+
+    const current = this.musicStateByRoom.get(user.roomCode);
+    // Agregar una canción a una lista que ya está sonando no debe interrumpir
+    // la reproducción en curso: solo la primera canción de la sala arranca
+    // en currentIndex 0, pausada, en el segundo 0.
+    const state: MusicState = {
+      tracks: [...(current?.tracks ?? []), { videoId, title }],
+      currentIndex: current?.currentIndex ?? 0,
+      isPlaying: current?.isPlaying ?? false,
+      positionSeconds: current?.positionSeconds ?? 0,
+      updatedAt: Date.now(),
+    };
+    this.musicStateByRoom.set(user.roomCode, state);
+    this.server.to(user.roomCode).emit('musicState', state);
+  }
+
+  @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage('musicRemoveTrack')
+  async handleMusicRemoveTrack(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() dto: MusicTrackIndexDto,
+  ) {
+    const user = await this.requireMusicAdmin(client);
+    if (!user) return;
+
+    const current = this.musicStateByRoom.get(user.roomCode);
+    if (!current || dto.index >= current.tracks.length) {
+      client.emit('error', { message: 'Esa canción ya no está en la lista' });
+      return;
+    }
+
+    const removingCurrent = dto.index === current.currentIndex;
+    const tracks = current.tracks.filter((_, index) => index !== dto.index);
+    // Si se saca una canción antes de la actual, el resto se corre un lugar
+    // y el índice tiene que acompañar ese corrimiento para seguir apuntando
+    // a la misma canción que ya estaba sonando.
+    const currentIndex = Math.min(
+      current.currentIndex > dto.index ? current.currentIndex - 1 : current.currentIndex,
+      Math.max(tracks.length - 1, 0),
+    );
+    const state: MusicState = {
+      tracks,
+      currentIndex,
+      isPlaying: removingCurrent ? false : current.isPlaying,
+      positionSeconds: removingCurrent ? 0 : current.positionSeconds,
+      updatedAt: Date.now(),
+    };
+    this.musicStateByRoom.set(user.roomCode, state);
+    this.server.to(user.roomCode).emit('musicState', state);
+  }
+
+  @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage('musicJumpToTrack')
+  async handleMusicJumpToTrack(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() dto: MusicTrackIndexDto,
+  ) {
+    const user = await this.requireMusicAdmin(client);
+    if (!user) return;
+
+    const current = this.musicStateByRoom.get(user.roomCode);
+    if (!current || dto.index >= current.tracks.length) {
+      client.emit('error', { message: 'Esa canción ya no está en la lista' });
+      return;
+    }
 
     const state: MusicState = {
-      videoId,
-      isPlaying: false,
+      ...current,
+      currentIndex: dto.index,
       positionSeconds: 0,
       updatedAt: Date.now(),
     };
     this.musicStateByRoom.set(user.roomCode, state);
     this.server.to(user.roomCode).emit('musicState', state);
+  }
+
+  @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage('musicNext')
+  async handleMusicNext(@ConnectedSocket() client: Socket) {
+    await this.updateMusicState(client, (state) => {
+      if (state.currentIndex >= state.tracks.length - 1) return state;
+      return { ...state, currentIndex: state.currentIndex + 1, positionSeconds: 0 };
+    });
+  }
+
+  @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage('musicPrevious')
+  async handleMusicPrevious(@ConnectedSocket() client: Socket) {
+    await this.updateMusicState(client, (state) => {
+      if (state.currentIndex <= 0) return state;
+      return { ...state, currentIndex: state.currentIndex - 1, positionSeconds: 0 };
+    });
   }
 
   @UseGuards(WsJwtAuthGuard)
@@ -283,7 +378,7 @@ export class ChatGateway implements OnGatewayDisconnect {
     if (!user) return;
 
     const current = this.musicStateByRoom.get(user.roomCode);
-    if (!current) {
+    if (!current || current.tracks.length === 0) {
       client.emit('error', { message: 'Todavía no se eligió una canción para la sala' });
       return;
     }
