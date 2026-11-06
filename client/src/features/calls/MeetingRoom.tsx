@@ -20,8 +20,8 @@ import {
 } from 'livekit-client';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { useTranslation } from '../translation/useTranslation';
 import type { RoomEmoji } from '@/lib/api';
+import { useTranslation } from '../translation/useTranslation';
 import type { CallSessionState } from './useCallSession';
 import styles from './MeetingRoom.module.css';
 import { ReactionOverlay } from './reactions/ReactionOverlay';
@@ -47,10 +47,12 @@ const options: RoomOptions = {
   reconnectPolicy: new DefaultReconnectPolicy([0, 500]),
 };
 
-// Default de livekit-client: 15s por intento antes de darlo por fallido.
-// Combinado con el reconnectPolicy acotado de arriba, el peor caso (2
-// intentos) queda bien por debajo de un timeout de test típico.
-const connectOptions = { peerConnectionTimeout: 5000 };
+// Los tests e2e simulan LiveKit por completo (no hacen una conexión WebRTC
+// real, ver e2e/README.md), así que este valor no está acotado por ningún
+// timeout de test. 5s era insuficiente para la primera negociación ICE real
+// (ej. latencia extra del reenvío de puertos UDP de Docker Desktop en
+// Windows); se vuelve al default de livekit-client.
+const connectOptions = { peerConnectionTimeout: 15000 };
 
 function MicIcon({ muted }: { muted: boolean }) {
   return (

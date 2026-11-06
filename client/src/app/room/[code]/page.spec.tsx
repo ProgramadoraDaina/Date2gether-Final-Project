@@ -8,24 +8,35 @@ jest.mock('@/features/translation/useTranslation', () => {
   const t = (key: string) => key;
   return { useTranslation: () => ({ t }) };
 });
-jest.mock('@/features/rooms/useRoomMembers', () => {
-  const state = {
-    members: [],
-    isCurrentUserAdmin: false,
-    error: null,
-    changeRole: jest.fn(),
-    refetchMembers: jest.fn(),
-  };
-  return { useRoomMembers: () => state };
-});
+// Mutable (no un objeto fijo): algunos tests necesitan simular que quien
+// mira es admin de la sala para verificar que ese rol llega a MeetingRoom.
+const mockRoomMembersState = {
+  members: [] as unknown[],
+  isCurrentUserAdmin: false,
+  error: null as string | null,
+  changeRole: jest.fn(),
+  refetchMembers: jest.fn(),
+};
+jest.mock('@/features/rooms/useRoomMembers', () => ({
+  useRoomMembers: () => mockRoomMembersState,
+}));
 jest.mock('@/lib/api', () => ({ requestRoomAccess: jest.fn(), ApiError: class extends Error {} }));
 jest.mock('@/lib/socket', () => ({ createRoomSocket: jest.fn() }));
 // MeetingRoom (LiveKit real) tiene su propia suite dedicada
 // (MeetingRoom.spec.tsx) con todos los mocks de @livekit/*; acá solo
-// interesa si RoomPage lo monta o no según haya `session`, no su interior.
+// interesa si RoomPage lo monta o no según haya `session`, y con qué props
+// (el socket de la sala y el rol de quien mira), no su interior.
+const mockMeetingRoom = jest.fn((_props: unknown) => <div>Video de la llamada</div>);
 jest.mock('@/features/calls/MeetingRoom', () => ({
   __esModule: true,
-  default: () => <div>Video de la llamada</div>,
+  default: (props: unknown) => mockMeetingRoom(props),
+}));
+// AmbientMusicPlayer (IFrame API de YouTube) tiene su propia suite dedicada
+// (AmbientMusicPlayer.spec.tsx); acá solo interesa si RoomPage lo monta en
+// la sidebar con el socket de la sala y el rol de quien mira, no su interior.
+const mockAmbientMusicPlayer = jest.fn((_props: unknown) => <div>Música ambiental</div>);
+jest.mock('@/features/calls/AmbientMusicPlayer', () => ({
+  AmbientMusicPlayer: (props: unknown) => mockAmbientMusicPlayer(props),
 }));
 // joinCall/leaveCall se comparten entre renders (en vez de jest.fn() nuevos
 // dentro del factory) para poder verificar que el auto-join se dispara una
@@ -62,6 +73,7 @@ describe('RoomPage: enlace de invitado', () => {
     jest.clearAllMocks();
     mockStatus = 'in-call';
     mockError = null;
+    mockRoomMembersState.isCurrentUserAdmin = false;
   });
   it('solicita el nombre y no conecta automáticamente al abrir el enlace', async () => {
     const { createRoomSocket } = await import('@/lib/socket');
@@ -224,6 +236,40 @@ describe('RoomPage: enlace de invitado', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Mostrar panel lateral' }));
     expect(wrap).toHaveAttribute('data-open', 'true');
   });
+  it('le pasa a la música ambiental de la sidebar el socket de la sala y si quien mira es administrador', async () => {
+    mockRoomMembersState.isCurrentUserAdmin = true;
+    mockSession = {
+      url: 'wss://media.example.test',
+      token: 'token',
+      roomName: 'abc-defg-hij',
+      participantLimit: 6,
+    };
+    const { requestRoomAccess } = await import('@/lib/api');
+    const { createRoomSocket } = await import('@/lib/socket');
+    (requestRoomAccess as jest.Mock<typeof requestRoomAccess>).mockResolvedValue({
+      token: 'guest-token',
+      participant: { sub: 'guest-1', name: 'Alex', roomCode: 'abc-defg-hij' },
+    });
+    const fake = {
+      on: jest.fn(),
+      connect: jest.fn(),
+      emit: jest.fn(),
+      disconnect: jest.fn(),
+      removeAllListeners: jest.fn(),
+    };
+    (createRoomSocket as jest.Mock<typeof createRoomSocket>).mockReturnValue(fake as never);
+    const Page = (await import('./page')).default;
+    render(<Page />);
+    fireEvent.change(screen.getByLabelText('Tu nombre en la reunión'), {
+      target: { value: 'Alex' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar a la reunión' }));
+    await waitFor(() => expect(mockJoinCall).toHaveBeenCalledTimes(1));
+
+    expect(mockAmbientMusicPlayer).toHaveBeenCalledWith(
+      expect.objectContaining({ socket: fake, isAdmin: true }),
+    );
+  });
 });
 
 describe('RoomPage: transición de carga antes de entrar a la llamada', () => {
@@ -232,6 +278,7 @@ describe('RoomPage: transición de carga antes de entrar a la llamada', () => {
     jest.clearAllMocks();
     mockError = null;
     mockSession = null;
+    mockRoomMembersState.isCurrentUserAdmin = false;
   });
 
   it('mientras la llamada conecta (todavía sin session), el chat ya es usable y el video muestra "Cargando llamada…"', async () => {

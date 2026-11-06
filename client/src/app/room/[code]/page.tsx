@@ -24,6 +24,10 @@ import { NAME_COLOR_HEX, isNameColorId } from '@/lib/nameColors';
 import styles from './page.module.css';
 
 const MeetingRoom = dynamic(() => import('@/features/calls/MeetingRoom'), { ssr: false });
+const AmbientMusicPlayer = dynamic(
+  () => import('@/features/calls/AmbientMusicPlayer').then((m) => m.AmbientMusicPlayer),
+  { ssr: false },
+);
 
 const NAME_KEY = 'date2gether:userName';
 
@@ -74,6 +78,12 @@ export default function RoomPage() {
   const [chatTab, setChatTab] = useState<'chat' | 'presentes'>('chat');
   const [chatOpen, setChatOpen] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Además del ref (que el resto del componente ya usaba para emitir desde
+  // handlers sin re-render), se guarda en estado para pasarlo como prop a
+  // MeetingRoom: mutar un ref no dispara un re-render, así que sin esto
+  // AmbientMusicPlayer podía quedarse con socket=null aunque el ref ya
+  // tuviera la conexión real.
+  const [roomSocket, setRoomSocket] = useState<Socket | null>(null);
   const sidebarResize = useResizablePanel({
     storageKey: 'date2gether:sidebarWidth',
     defaultWidth: 220,
@@ -144,6 +154,7 @@ export default function RoomPage() {
     if (!code || !access) return;
     const socket = createRoomSocket(access.token);
     socketRef.current = socket;
+    setRoomSocket(socket);
 
     socket.on('connect', () => {
       socket.emit('joinRoom', { code });
@@ -190,6 +201,7 @@ export default function RoomPage() {
       socket.removeAllListeners();
       socket.disconnect();
       socketRef.current = null;
+      setRoomSocket(null);
     };
   }, [code, access, refetchMembers, refetchEmojis, t]);
 
@@ -441,6 +453,9 @@ export default function RoomPage() {
           open={sidebarOpen}
           width={sidebarResize.width}
           onResizeHandleMouseDown={sidebarResize.handleMouseDown}
+          musicPlayer={
+            roomSocket && <AmbientMusicPlayer socket={roomSocket} isAdmin={isCurrentUserAdmin} />
+          }
         />
         <button
           type="button"
