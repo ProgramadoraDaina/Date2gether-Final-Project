@@ -1,0 +1,20 @@
+.card {
+  composes: card from '../../../styles/form.module.css';
+  max-width: 640px;
+}
+
+.error {
+  composes: error from '../../../styles/form.module.css';
+}
+
+.backLink {
+  display: inline-block;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.sessionMeta {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
