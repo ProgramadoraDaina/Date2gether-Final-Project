@@ -20,10 +20,8 @@ import {
 } from 'livekit-client';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import type { Socket } from 'socket.io-client';
 import type { RoomEmoji } from '@/lib/api';
 import { useTranslation } from '../translation/useTranslation';
-import { AmbientMusicPlayer } from './AmbientMusicPlayer';
 import type { CallSessionState } from './useCallSession';
 import styles from './MeetingRoom.module.css';
 import { ReactionOverlay } from './reactions/ReactionOverlay';
@@ -182,16 +180,9 @@ interface MeetingRoomProps {
   call: CallSessionState;
   roomCode: string;
   roomEmojis: RoomEmoji[];
-  socket?: Socket | null;
-  isAdmin?: boolean;
 }
 
-function MeetingContent({
-  roomCode,
-  roomEmojis,
-  socket,
-  isAdmin = false,
-}: Omit<MeetingRoomProps, 'call'>) {
+function MeetingContent({ roomCode, roomEmojis }: Omit<MeetingRoomProps, 'call'>) {
   const { t } = useTranslation();
   const [deviceError, setDeviceError] = useState(false);
   const tracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], {
@@ -206,10 +197,6 @@ function MeetingContent({
         <ReactionTile />
       </GridLayout>
       <ReactionOverlay />
-      {/* El socket de la sala todavía puede no existir en el primer render
-          (se crea en un efecto aparte de RoomPage); sin él no hay con qué
-          sincronizar la música, así que no tiene sentido montarla. */}
-      {socket && <AmbientMusicPlayer socket={socket} isAdmin={isAdmin} />}
       {deviceError && (
         <p className={styles.error} role="alert">
           {t(
@@ -240,13 +227,7 @@ function MeetingContent({
   );
 }
 
-export default function MeetingRoom({
-  call,
-  roomCode,
-  roomEmojis,
-  socket = null,
-  isAdmin = false,
-}: MeetingRoomProps) {
+export default function MeetingRoom({ call, roomCode, roomEmojis }: MeetingRoomProps) {
   const router = useRouter();
   if (!call.session) return null;
   return (
@@ -269,7 +250,7 @@ export default function MeetingRoom({
       data-lk-theme="default"
       className={styles.meetingRoom}
     >
-      <MeetingContent roomCode={roomCode} roomEmojis={roomEmojis} socket={socket} isAdmin={isAdmin} />
+      <MeetingContent roomCode={roomCode} roomEmojis={roomEmojis} />
     </LiveKitRoom>
   );
 }

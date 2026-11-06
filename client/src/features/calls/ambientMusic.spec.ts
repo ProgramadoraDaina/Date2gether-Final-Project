@@ -1,5 +1,5 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { reconcilePlayerState, type MusicState } from './ambientMusic';
+import { currentTrack, formatTime, reconcilePlayerState, type MusicState } from './ambientMusic';
 
 function fakePlayer(currentTime = 0) {
   return {
@@ -14,7 +14,8 @@ function fakePlayer(currentTime = 0) {
 
 function state(overrides: Partial<MusicState> = {}): MusicState {
   return {
-    videoId: 'dQw4w9WgXcQ',
+    tracks: [{ videoId: 'dQw4w9WgXcQ', title: 'Love Song Baby' }],
+    currentIndex: 0,
     isPlaying: false,
     positionSeconds: 10,
     updatedAt: Date.now(),
@@ -22,7 +23,50 @@ function state(overrides: Partial<MusicState> = {}): MusicState {
   };
 }
 
+describe('formatTime', () => {
+  it('formatea segundos a minutos:segundos sin cero inicial en los minutos', () => {
+    expect(formatTime(65)).toBe('1:05');
+  });
+
+  it('redondea hacia abajo los segundos con decimales', () => {
+    expect(formatTime(59.8)).toBe('0:59');
+  });
+
+  it('negativos o NaN se muestran como 0:00', () => {
+    expect(formatTime(-5)).toBe('0:00');
+    expect(formatTime(NaN)).toBe('0:00');
+  });
+});
+
+describe('currentTrack', () => {
+  it('devuelve la canción en currentIndex', () => {
+    expect(
+      currentTrack(
+        state({
+          tracks: [
+            { videoId: 'a', title: 'A' },
+            { videoId: 'b', title: 'B' },
+          ],
+          currentIndex: 1,
+        }),
+      ),
+    ).toEqual({ videoId: 'b', title: 'B' });
+  });
+
+  it('devuelve null si la lista está vacía', () => {
+    expect(currentTrack(state({ tracks: [], currentIndex: 0 }))).toBeNull();
+  });
+});
+
 describe('reconcilePlayerState', () => {
+  it('con la lista vacía, no toca el player', () => {
+    const player = fakePlayer();
+    reconcilePlayerState(player as never, null, state({ tracks: [], currentIndex: 0 }));
+
+    expect(player.loadVideoById).not.toHaveBeenCalled();
+    expect(player.cueVideoById).not.toHaveBeenCalled();
+  });
+
   it('si cambia el video y está sonando, lo carga (autoplay) en la posición correspondiente', () => {
     const player = fakePlayer();
     reconcilePlayerState(player as never, null, state({ isPlaying: true, positionSeconds: 30 }));
@@ -37,6 +81,25 @@ describe('reconcilePlayerState', () => {
 
     expect(player.cueVideoById).toHaveBeenCalledWith('dQw4w9WgXcQ', 30);
     expect(player.loadVideoById).not.toHaveBeenCalled();
+  });
+
+  it('al avanzar a la siguiente canción de la lista (currentIndex cambia), carga el nuevo video', () => {
+    const player = fakePlayer();
+    reconcilePlayerState(
+      player as never,
+      'dQw4w9WgXcQ',
+      state({
+        tracks: [
+          { videoId: 'dQw4w9WgXcQ', title: 'A' },
+          { videoId: 'jNQXAC9IVRw', title: 'B' },
+        ],
+        currentIndex: 1,
+        isPlaying: true,
+        positionSeconds: 0,
+      }),
+    );
+
+    expect(player.loadVideoById).toHaveBeenCalledWith('jNQXAC9IVRw', 0);
   });
 
   it('mismo video, sin drift relevante: no busca posición, solo refleja isPlaying', () => {

@@ -24,6 +24,10 @@ import { NAME_COLOR_HEX, isNameColorId } from '@/lib/nameColors';
 import styles from './page.module.css';
 
 const MeetingRoom = dynamic(() => import('@/features/calls/MeetingRoom'), { ssr: false });
+const AmbientMusicPlayer = dynamic(
+  () => import('@/features/calls/AmbientMusicPlayer').then((m) => m.AmbientMusicPlayer),
+  { ssr: false },
+);
 
 const NAME_KEY = 'date2gether:userName';
 
@@ -449,6 +453,9 @@ export default function RoomPage() {
           open={sidebarOpen}
           width={sidebarResize.width}
           onResizeHandleMouseDown={sidebarResize.handleMouseDown}
+          musicPlayer={
+            roomSocket && <AmbientMusicPlayer socket={roomSocket} isAdmin={isCurrentUserAdmin} />
+          }
         />
         <button
           type="button"
@@ -489,13 +496,7 @@ export default function RoomPage() {
 
           <div className={styles.meetingAndChat}>
             {callSession.session ? (
-              <MeetingRoom
-                call={callSession}
-                roomCode={code}
-                roomEmojis={emojis}
-                socket={roomSocket}
-                isAdmin={isCurrentUserAdmin}
-              />
+              <MeetingRoom call={callSession} roomCode={code} roomEmojis={emojis} />
             ) : (
               callLoadingPanel
             )}

@@ -31,6 +31,13 @@ jest.mock('@/features/calls/MeetingRoom', () => ({
   __esModule: true,
   default: (props: unknown) => mockMeetingRoom(props),
 }));
+// AmbientMusicPlayer (IFrame API de YouTube) tiene su propia suite dedicada
+// (AmbientMusicPlayer.spec.tsx); acá solo interesa si RoomPage lo monta en
+// la sidebar con el socket de la sala y el rol de quien mira, no su interior.
+const mockAmbientMusicPlayer = jest.fn((_props: unknown) => <div>Música ambiental</div>);
+jest.mock('@/features/calls/AmbientMusicPlayer', () => ({
+  AmbientMusicPlayer: (props: unknown) => mockAmbientMusicPlayer(props),
+}));
 // joinCall/leaveCall se comparten entre renders (en vez de jest.fn() nuevos
 // dentro del factory) para poder verificar que el auto-join se dispara una
 // sola vez, apenas existe `access`, sin click manual.
@@ -229,7 +236,7 @@ describe('RoomPage: enlace de invitado', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Mostrar panel lateral' }));
     expect(wrap).toHaveAttribute('data-open', 'true');
   });
-  it('le pasa a MeetingRoom el socket de la sala y si quien mira es administrador', async () => {
+  it('le pasa a la música ambiental de la sidebar el socket de la sala y si quien mira es administrador', async () => {
     mockRoomMembersState.isCurrentUserAdmin = true;
     mockSession = {
       url: 'wss://media.example.test',
@@ -259,7 +266,7 @@ describe('RoomPage: enlace de invitado', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Entrar a la reunión' }));
     await waitFor(() => expect(mockJoinCall).toHaveBeenCalledTimes(1));
 
-    expect(mockMeetingRoom).toHaveBeenCalledWith(
+    expect(mockAmbientMusicPlayer).toHaveBeenCalledWith(
       expect.objectContaining({ socket: fake, isAdmin: true }),
     );
   });
