@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic';
 import { useParams } from 'next/navigation';
 import type { Socket } from 'socket.io-client';
 import { ExpressionPicker, type ExpressionTab } from '@/features/chat/ExpressionPicker';
+import { MentionInput } from '@/features/chat/MentionInput';
 import { MessageText } from '@/features/chat/MessageText';
 import { RoomEmojiShortcuts } from '@/features/chat/RoomEmojiShortcuts';
 import { AppShell } from '@/features/navigation/AppShell';
@@ -69,6 +70,7 @@ export default function RoomPage() {
   const [joinError, setJoinError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [users, setUsers] = useState<RoomPresence[]>([]);
+  const [mentionNames, setMentionNames] = useState<string[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -185,10 +187,20 @@ export default function RoomPage() {
     socket.on('exception', ({ message }: { message: string }) => setNotice({ text: message }));
     socket.on('connect_error', () => setNotice({ text: t('No se pudo conectar a la sala') }));
 
-    socket.on('roomHistory', (history: ChatMessage[]) => setMessages(history));
-    socket.on('roomUsers', (list: RoomPresence[]) => setUsers(list));
+    function rememberNames(names: string[]) {
+      setMentionNames((prev) => Array.from(new Set([...prev, ...names])));
+    }
+    socket.on('roomHistory', (history: ChatMessage[]) => {
+      setMessages(history);
+      rememberNames(history.map((message) => message.authorName));
+    });
+    socket.on('roomUsers', (list: RoomPresence[]) => {
+      setUsers(list);
+      rememberNames(list.map((user) => user.userName));
+    });
 
     socket.on('userJoined', (joined: RoomPresence) => {
+      rememberNames([joined.userName]);
       setUsers((prev) =>
         prev.some((u) => u.participantId === joined.participantId) ? prev : [...prev, joined],
       );
@@ -382,6 +394,7 @@ export default function RoomPage() {
                       text={m.content}
                       roomCode={code}
                       emojisByName={emojisByName}
+                      mentionNames={mentionNames}
                     />
                   )}
                 </li>
@@ -410,12 +423,13 @@ export default function RoomPage() {
               onGifSelect={handleGifSelect}
               onRoomEmojiSelect={handleRoomEmojiSelect}
             />
-            <input
-              ref={draftInputRef}
+            <MentionInput
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              onChange={setDraft}
+              inputRef={draftInputRef}
+              users={users}
               placeholder={t('Escribí un mensaje...')}
-              autoComplete="off"
+              label={t('Mencionar participante')}
             />
             <button type="submit">{t('Enviar')}</button>
           </form>

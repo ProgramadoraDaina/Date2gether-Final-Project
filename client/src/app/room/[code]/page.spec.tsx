@@ -423,5 +423,28 @@ describe('RoomPage: notas y menciones', () => {
     expect(screen.getByLabelText('Notas compartidas de la sala')).toBeEnabled();
   });
 
-
+  it('envia una mencion y conserva su resaltado cuando sale el participante', async () => {
+    const { callbacks, socket } = await enter();
+    act(() => callbacks.roomUsers([{ participantId: 'ana', userName: 'Ana' }]));
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, { target: { value: '@an' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(input).toHaveValue('@Ana ');
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+    expect(socket.emit).toHaveBeenCalledWith('sendMessage', { content: '@Ana' });
+    act(() =>
+      callbacks.newMessage({
+        id: 'm-mention',
+        authorName: 'Alex',
+        kind: 'text',
+        content: 'Hola @Ana!',
+        createdAt: new Date().toISOString(),
+      }),
+    );
+    expect(screen.getByTestId('messages').querySelector('mark')).toHaveTextContent('@Ana');
+    act(() => callbacks.userLeft({ participantId: 'ana', userName: 'Ana' }));
+    expect(screen.getByTestId('messages').querySelector('mark')).toHaveTextContent('@Ana');
+    expect(input).toHaveValue('');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  });
 });
