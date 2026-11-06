@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 jest.mock('next/navigation', () => ({
   useParams: () => ({ code: 'abc-defg-hij' }),
   usePathname: () => '/room/abc-defg-hij',
@@ -18,7 +18,20 @@ jest.mock('@/features/rooms/useRoomMembers', () => {
   };
   return { useRoomMembers: () => state };
 });
-jest.mock('@/lib/api', () => ({ requestRoomAccess: jest.fn(), ApiError: class extends Error {} }));
+jest.mock('@/lib/api', () => ({
+  requestRoomAccess: jest.fn(),
+  getRoomEmojis: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
+  getRoomNotes: jest.fn<() => Promise<unknown>>().mockResolvedValue({
+    roomId: 'room-1',
+    content: '',
+    revision: 0,
+    updatedAt: '2026-11-04T00:00:00Z',
+  }),
+  saveRoomNotes: jest.fn(),
+  RoomNotesConflictError: class extends Error {},
+  ApiError: class extends Error {},
+}));
+jest.mock('@/features/chat/ExpressionPicker', () => ({ ExpressionPicker: () => null }));
 jest.mock('@/lib/socket', () => ({ createRoomSocket: jest.fn() }));
 // MeetingRoom (LiveKit real) tiene su propia suite dedicada
 // (MeetingRoom.spec.tsx) con todos los mocks de @livekit/*; acá solo
@@ -103,9 +116,7 @@ describe('RoomPage: enlace de invitado', () => {
     await waitFor(() => expect(createRoomSocket).toHaveBeenCalledWith('guest-token'));
     expect(requestRoomAccess).toHaveBeenCalledWith('abc-defg-hij', 'Alex');
     expect(fake.emit).toHaveBeenCalledWith('joinRoom', { code: 'abc-defg-hij' });
-    await waitFor(() =>
-      expect(mockJoinCall).toHaveBeenCalledWith('abc-defg-hij', 'guest-token'),
-    );
+    await waitFor(() => expect(mockJoinCall).toHaveBeenCalledWith('abc-defg-hij', 'guest-token'));
     expect(screen.queryByRole('button', { name: 'Llamar' })).not.toBeInTheDocument();
   });
   it('no vuelve a unirse a la llamada tras colgar ni ante otros re-renders', async () => {
@@ -141,12 +152,14 @@ describe('RoomPage: enlace de invitado', () => {
 
     // Fuerza un re-render ajeno (un mensaje de chat entrante) para confirmar
     // que el efecto no se reevalúa igual por cualquier cambio de estado.
-    callbacks.newMessage?.({
-      id: 'm1',
-      authorName: 'Otra persona',
-      content: 'hola',
-      createdAt: new Date().toISOString(),
-    });
+    act(() =>
+      callbacks.newMessage?.({
+        id: 'm1',
+        authorName: 'Otra persona',
+        content: 'hola',
+        createdAt: new Date().toISOString(),
+      }),
+    );
     await screen.findByText('hola');
 
     expect(mockJoinCall).toHaveBeenCalledTimes(1);
@@ -290,7 +303,9 @@ describe('RoomPage: transición de carga antes de entrar a la llamada', () => {
     await waitFor(() => expect(mockJoinCall).toHaveBeenCalledTimes(1));
 
     expect(
-      screen.getByText('No se pudo conectar a la llamada. La sala puede estar llena o sin conexión.'),
+      screen.getByText(
+        'No se pudo conectar a la llamada. La sala puede estar llena o sin conexión.',
+      ),
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
@@ -330,13 +345,20 @@ describe('RoomPage: transición de carga antes de entrar a la llamada', () => {
     // evento de socket cualquiera fuerza el re-render que hace que RoomPage
     // lea los valores actualizados.
     mockStatus = 'in-call';
-    mockSession = { url: 'wss://media.example.test', token: 'token', roomName: 'abc-defg-hij', participantLimit: 6 };
-    callbacks.newMessage?.({
-      id: 'm1',
-      authorName: 'Otra persona',
-      content: 'hola',
-      createdAt: new Date().toISOString(),
-    });
+    mockSession = {
+      url: 'wss://media.example.test',
+      token: 'token',
+      roomName: 'abc-defg-hij',
+      participantLimit: 6,
+    };
+    act(() =>
+      callbacks.newMessage?.({
+        id: 'm1',
+        authorName: 'Otra persona',
+        content: 'hola',
+        createdAt: new Date().toISOString(),
+      }),
+    );
 
     await screen.findByPlaceholderText('Escribí un mensaje...');
     expect(screen.queryByText('Cargando llamada…')).not.toBeInTheDocument();
@@ -344,5 +366,85 @@ describe('RoomPage: transición de carga antes de entrar a la llamada', () => {
     // con el módulo mockeado: hace falta esperarlo, un getByText síncrono
     // llega demasiado pronto.
     await screen.findByText('Video de la llamada');
+  });
+});
+
+describe('RoomPage: notas y menciones', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    jest.clearAllMocks();
+    mockStatus = 'in-call';
+    mockError = null;
+    mockSession = null;
+  });
+
+  async function enter() {
+    const { requestRoomAccess } = await import('@/lib/api');
+    const { createRoomSocket } = await import('@/lib/socket');
+    (requestRoomAccess as jest.Mock<typeof requestRoomAccess>).mockResolvedValue({
+      token: 'guest-token',
+      participant: { sub: 'guest-1', name: 'Alex', roomCode: 'abc-defg-hij' },
+    });
+    const callbacks: Record<string, (...args: unknown[]) => void> = {};
+    const socket = {
+      on: jest.fn((event: string, callback: (...args: unknown[]) => void) => {
+        callbacks[event] = callback;
+      }),
+      connect: jest.fn(() => callbacks.connect?.()),
+      emit: jest.fn(),
+      disconnect: jest.fn(),
+      removeAllListeners: jest.fn(),
+    };
+    (createRoomSocket as jest.Mock<typeof createRoomSocket>).mockReturnValue(socket as never);
+    const Page = (await import('./page')).default;
+    const view = render(<Page />);
+    fireEvent.change(screen.getByLabelText('Tu nombre en la reunión'), {
+      target: { value: 'Alex' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar a la reunión' }));
+    await screen.findByPlaceholderText('Escribí un mensaje...');
+    return { callbacks, socket, ...view };
+  }
+
+  it('guarda y recupera las notas personales al volver a la sala', async () => {
+    const first = await enter();
+    fireEvent.click(screen.getByRole('button', { name: /^Notas$/ }));
+    fireEvent.change(screen.getByLabelText('Notas personales'), {
+      target: { value: 'Pendiente de la reunion' },
+    });
+    expect(localStorage.getItem('date2gether:notes:abc-defg-hij:guest:alex')).toBe(
+      'Pendiente de la reunion',
+    );
+    first.unmount();
+    await enter();
+    fireEvent.click(screen.getByRole('button', { name: /^Notas$/ }));
+    expect(screen.getByLabelText('Notas personales')).toHaveValue('Pendiente de la reunion');
+    fireEvent.click(screen.getByRole('button', { name: 'De la sala' }));
+    expect(screen.getByLabelText('Notas compartidas de la sala')).toBeEnabled();
+  });
+
+  it('envia una mencion y conserva su resaltado cuando sale el participante', async () => {
+    const { callbacks, socket } = await enter();
+    act(() => callbacks.roomUsers([{ participantId: 'ana', userName: 'Ana' }]));
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, { target: { value: '@an' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(input).toHaveValue('@Ana ');
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+    expect(socket.emit).toHaveBeenCalledWith('sendMessage', { content: '@Ana' });
+    act(() =>
+      callbacks.newMessage({
+        id: 'm-mention',
+        authorName: 'Alex',
+        kind: 'text',
+        content: 'Hola @Ana!',
+        createdAt: new Date().toISOString(),
+      }),
+    );
+    expect(screen.getByTestId('messages').querySelector('mark')).toHaveTextContent('@Ana');
+    act(() => callbacks.userLeft({ participantId: 'ana', userName: 'Ana' }));
+    expect(screen.getByTestId('messages').querySelector('mark')).toHaveTextContent('@Ana');
+    expect(input).toHaveValue('');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
   });
 });
