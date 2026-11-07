@@ -16,6 +16,7 @@ import {
   rooms,
 } from '../../db/schema';
 import { aggregateSession, type SessionEvent } from './aggregate-session';
+import { CallSessionCloseService } from './call-session-close.service';
 
 // Los 6 tipos de evento que esta fase sabe identificar y despachar (spec
 // webhook/eventos-soportados). Cualquier otro tipo se persiste igual, sin
@@ -47,6 +48,7 @@ export class CallsWebhookService {
   constructor(
     config: ConfigService,
     @Inject(DRIZZLE) private readonly db: DrizzleDb,
+    private readonly closeService: CallSessionCloseService,
   ) {
     this.receiver = new WebhookReceiver(
       config.get<string>('LIVEKIT_API_KEY', ''),
@@ -130,7 +132,7 @@ export class CallsWebhookService {
         this.onParticipantJoined(event);
         break;
       case 'participant_left':
-        this.onParticipantLeft(event);
+        await this.onParticipantLeft(event);
         break;
       case 'track_published':
         this.onTrackPublished(event);
@@ -146,11 +148,34 @@ export class CallsWebhookService {
   }
 
   // --- Huecos para PR7 (ver design.md), deliberadamente vacíos aquí ---
+  // Solo participant_left se conecta en este PR (tasks.md 6.10): es el único
+  // punto de enganche que Fase 6 pide. room_started/participant_joined/
+  // track_* quedan vacíos a propósito — nada en Fase 5/6 de este cambio los
+  // necesita.
   private onRoomStarted(_event: WebhookEvent): void {}
   private onParticipantJoined(_event: WebhookEvent): void {}
-  private onParticipantLeft(_event: WebhookEvent): void {}
   private onTrackPublished(_event: WebhookEvent): void {}
   private onTrackUnpublished(_event: WebhookEvent): void {}
+
+  /**
+   * Cierre forzado idempotente (Fase 6, design.md D3/D4): si el identity que
+   * se fue tenía roleAtIssue='administrador' al emitir su token, se delega
+   * en CallSessionCloseService la decisión de agendar (o no) un cierre.
+   */
+  private async onParticipantLeft(event: WebhookEvent): Promise<void> {
+    const livekitRoomSid = event.room?.sid;
+    const identity = event.participant?.identity;
+    if (!livekitRoomSid || !identity) return;
+
+    const [row] = await this.db
+      .select({ roleAtIssue: callParticipantIdentities.roleAtIssue })
+      .from(callParticipantIdentities)
+      .where(eq(callParticipantIdentities.livekitIdentity, identity))
+      .limit(1);
+    if (row?.roleAtIssue !== 'administrador') return;
+
+    await this.closeService.onAdminLeft(livekitRoomSid, event.room?.name ?? '');
+  }
 
   /**
    * Materialización de la línea de tiempo (PR4, ver design.md "Flujo 2").
@@ -171,6 +196,10 @@ export class CallsWebhookService {
     if (!livekitRoomSid) return;
     const roomCode = event.room?.name ?? '';
     const endedAt = new Date(Number(event.createdAt) * 1000);
+
+    // La sesión ya terminó por su cuenta: cualquier cierre forzado agendado
+    // para este sid (Fase 6, D3) queda sin efecto. Ver design.md Flujo 2.
+    this.closeService.cancelPending(livekitRoomSid);
 
     await this.db.transaction(async (tx) => {
       const sessionEvents: SessionEvent[] = await tx

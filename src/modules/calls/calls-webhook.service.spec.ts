@@ -12,7 +12,15 @@ import {
   rooms,
 } from '../../db/schema';
 import { chain } from '../../test-support/fake-drizzle';
+import type { CallSessionCloseService } from './call-session-close.service';
 import { CallsWebhookService } from './calls-webhook.service';
+
+function createCloseServiceMock() {
+  return {
+    onAdminLeft: jest.fn<CallSessionCloseService['onAdminLeft']>().mockResolvedValue(undefined),
+    cancelPending: jest.fn<CallSessionCloseService['cancelPending']>(),
+  };
+}
 
 const config = {
   LIVEKIT_API_KEY: 'test-key',
@@ -39,6 +47,12 @@ function createDbMock() {
   const onConflictDoNothing = jest.fn().mockReturnValue({ returning });
   const values = jest.fn().mockReturnValue({ onConflictDoNothing });
   const insert = jest.fn().mockReturnValue({ values });
+  // select({roleAtIssue}).from(callParticipantIdentities).where(...).limit(1)
+  // — onParticipantLeft() resolviendo si el identity que se fue era admin.
+  // Default: sin fila (no se encuentra ninguna correlación), así que el
+  // dispatch de participant_left no llama a CallSessionCloseService salvo
+  // que el test particular configure lo contrario.
+  const select = jest.fn().mockReturnValue(chain([] as { roleAtIssue: string | null }[]));
   // Default genérico para cualquier dispatch que caiga en una transacción
   // (p. ej. room_finished) sin que el test particular configure su propio
   // tx: selects vacíos, compare-and-set sin filas -> no materializa nada,
@@ -52,7 +66,7 @@ function createDbMock() {
         update: jest.fn().mockReturnValue(chain([])),
       }),
     );
-  return { insert, values, onConflictDoNothing, returning, transaction };
+  return { insert, values, onConflictDoNothing, returning, select, transaction };
 }
 
 // tx dedicado para los tests de materialización en room_finished: cada tabla
@@ -123,12 +137,18 @@ function createMaterializationTxMock(opts: {
 
 describe('CallsWebhookService', () => {
   let db: ReturnType<typeof createDbMock>;
+  let closeService: ReturnType<typeof createCloseServiceMock>;
   let service: CallsWebhookService;
   let receive: jest.SpiedFunction<WebhookReceiver['receive']>;
 
   beforeEach(() => {
     db = createDbMock();
-    service = new CallsWebhookService(new ConfigService(config), db as unknown as DrizzleDb);
+    closeService = createCloseServiceMock();
+    service = new CallsWebhookService(
+      new ConfigService(config),
+      db as unknown as DrizzleDb,
+      closeService as unknown as CallSessionCloseService,
+    );
     receive = jest.spyOn(WebhookReceiver.prototype, 'receive');
   });
 
@@ -245,12 +265,18 @@ describe('CallsWebhookService', () => {
 
 describe('CallsWebhookService: materialización en room_finished', () => {
   let db: ReturnType<typeof createDbMock>;
+  let closeService: ReturnType<typeof createCloseServiceMock>;
   let service: CallsWebhookService;
   let receive: jest.SpiedFunction<WebhookReceiver['receive']>;
 
   beforeEach(() => {
     db = createDbMock();
-    service = new CallsWebhookService(new ConfigService(config), db as unknown as DrizzleDb);
+    closeService = createCloseServiceMock();
+    service = new CallsWebhookService(
+      new ConfigService(config),
+      db as unknown as DrizzleDb,
+      closeService as unknown as CallSessionCloseService,
+    );
     receive = jest.spyOn(WebhookReceiver.prototype, 'receive');
   });
 
@@ -296,6 +322,18 @@ describe('CallsWebhookService: materialización en room_finished', () => {
     ]);
   });
 
+  it('room_finished cancela cualquier cierre forzado agendado para ese sid (Flujo 2, design.md)', async () => {
+    const tx = createMaterializationTxMock({});
+    db.transaction.mockImplementation(async (cb: (tx: unknown) => unknown) => cb(tx));
+    receive.mockResolvedValue(
+      buildEvent({ event: 'room_finished', room: { sid: 'RM_session-A', name: 'abc-defg-hij' } }),
+    );
+
+    await service.handle(Buffer.from('{}'), 'valid-sig');
+
+    expect(closeService.cancelPending).toHaveBeenCalledWith('RM_session-A');
+  });
+
   it('reentrega de room_finished (compare-and-set sin filas afectadas) no duplica el resumen (spec timeline/resiliencia-parcial)', async () => {
     const tx = createMaterializationTxMock({ claimed: [] });
     db.transaction.mockImplementation(async (cb: (tx: unknown) => unknown) => cb(tx));
@@ -331,5 +369,71 @@ describe('CallsWebhookService: materialización en room_finished', () => {
 
     expect(tx.insert).not.toHaveBeenCalledWith(callHistory);
     expect(tx.update).not.toHaveBeenCalledWith(callHistory);
+  });
+});
+
+describe('CallsWebhookService: cierre forzado en participant_left (tasks.md 6.10)', () => {
+  let db: ReturnType<typeof createDbMock>;
+  let closeService: ReturnType<typeof createCloseServiceMock>;
+  let service: CallsWebhookService;
+  let receive: jest.SpiedFunction<WebhookReceiver['receive']>;
+
+  beforeEach(() => {
+    db = createDbMock();
+    closeService = createCloseServiceMock();
+    service = new CallsWebhookService(
+      new ConfigService(config),
+      db as unknown as DrizzleDb,
+      closeService as unknown as CallSessionCloseService,
+    );
+    receive = jest.spyOn(WebhookReceiver.prototype, 'receive');
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('participant_left de un identity con roleAtIssue=administrador invoca a CallSessionCloseService.onAdminLeft', async () => {
+    db.select.mockReturnValue(chain([{ roleAtIssue: 'administrador' }]));
+    receive.mockResolvedValue(
+      buildEvent({
+        event: 'participant_left',
+        room: { sid: 'RM_session-A', name: 'abc-defg-hij' },
+        participant: { identity: 'admin-1' },
+      }),
+    );
+
+    await service.handle(Buffer.from('{}'), 'valid-sig');
+
+    expect(closeService.onAdminLeft).toHaveBeenCalledWith('RM_session-A', 'abc-defg-hij');
+  });
+
+  it('participant_left de un identity sin roleAtIssue=administrador (invitado o no-admin) no invoca el cierre', async () => {
+    db.select.mockReturnValue(chain([{ roleAtIssue: 'participante' }]));
+    receive.mockResolvedValue(
+      buildEvent({
+        event: 'participant_left',
+        room: { sid: 'RM_session-A', name: 'abc-defg-hij' },
+        participant: { identity: 'guest-1' },
+      }),
+    );
+
+    await service.handle(Buffer.from('{}'), 'valid-sig');
+
+    expect(closeService.onAdminLeft).not.toHaveBeenCalled();
+  });
+
+  it('participant_left sin correlación de identidad conocida no invoca el cierre ni revienta', async () => {
+    db.select.mockReturnValue(chain([]));
+    receive.mockResolvedValue(
+      buildEvent({
+        event: 'participant_left',
+        room: { sid: 'RM_session-A', name: 'abc-defg-hij' },
+        participant: { identity: 'unknown-identity' },
+      }),
+    );
+
+    await expect(service.handle(Buffer.from('{}'), 'valid-sig')).resolves.toBeUndefined();
+    expect(closeService.onAdminLeft).not.toHaveBeenCalled();
   });
 });
