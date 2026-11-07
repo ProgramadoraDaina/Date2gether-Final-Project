@@ -5,7 +5,7 @@ import { CallsWebhookController } from './calls-webhook.controller';
 import type { CallsWebhookService } from './calls-webhook.service';
 
 describe('CallsWebhookController', () => {
-  it('lee el rawBody y el header Authorize solo vía @Req(), y delega en el servicio', async () => {
+  it('lee el rawBody y el header Authorization solo vía @Req(), y delega en el servicio', async () => {
     const webhookService = {
       handle: jest.fn<CallsWebhookService['handle']>().mockResolvedValue(undefined),
     };
@@ -14,7 +14,7 @@ describe('CallsWebhookController', () => {
     );
     const req = {
       rawBody: Buffer.from('{"event":"room_started"}'),
-      headers: { authorize: 'signed-jwt' },
+      headers: { authorization: 'signed-jwt' },
     } as unknown as RawBodyRequest<Request>;
 
     await controller.handle(req);
