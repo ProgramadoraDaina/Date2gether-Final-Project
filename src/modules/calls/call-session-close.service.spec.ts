@@ -3,6 +3,7 @@ import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RoomServiceClient, type ParticipantInfo } from 'livekit-server-sdk';
 import type { DrizzleDb } from '../../db/drizzle.module';
+import { callEvents, callSessions, rooms } from '../../db/schema';
 import { chain } from '../../test-support/fake-drizzle';
 import { CallSessionCloseService } from './call-session-close.service';
 
@@ -14,9 +15,27 @@ const config = {
 };
 
 function createDbMock() {
-  // select({id}).from(callParticipantIdentities).where(...).limit(1) —
-  // hasConnectedAdmin(). Default: nadie encontrado (sin admin conectado).
-  const select = jest.fn().mockReturnValue(chain([] as { id: string }[]));
+  // select(...).from(table).where(...).limit(1) — enrutado por tabla, mismo
+  // patrón que calls-webhook.service.spec.ts. Tres usos posibles: (a)
+  // callParticipantIdentities en hasConnectedAdmin() — default sin fila (sin
+  // admin conectado); (b) callEvents en ensureSessionRow() — default sin
+  // eventos (startedAt cae al fallback new Date()); (c) rooms en
+  // ensureSessionRow() — default sin sala (roomId queda null).
+  const select = jest.fn().mockImplementation(() => ({
+    from: jest.fn().mockImplementation((table: unknown) => {
+      if (table === callEvents) return chain([] as { occurredAt: Date }[]);
+      if (table === rooms) return chain([] as { id: string }[]);
+      return chain([] as { id: string }[]); // callParticipantIdentities
+    }),
+  }));
+
+  // insert(callSessions).values(...).onConflictDoNothing() — creación
+  // perezosa de la cabecera de sesión (ver claimAndClose/ensureSessionRow).
+  // Default: no-op exitoso, sin modelar si la fila ya existía o no.
+  const insertValues = jest.fn().mockReturnValue({
+    onConflictDoNothing: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+  });
+  const insert = jest.fn().mockReturnValue({ values: insertValues });
 
   // update(callSessions).set(...).where(...).returning(...) — claimAndClose().
   // Default: compare-and-set gana (1 fila devuelta).
@@ -27,7 +46,7 @@ function createDbMock() {
   const updateSet = jest.fn().mockReturnValue({ where: updateWhere });
   const update = jest.fn().mockReturnValue({ set: updateSet });
 
-  return { select, update, updateSet, updateWhere, updateReturning };
+  return { select, insert, insertValues, update, updateSet, updateWhere, updateReturning };
 }
 
 // Jest resuelve timers falsos y promesas mockeadas en microtasks separados;
@@ -108,6 +127,37 @@ describe('CallSessionCloseService', () => {
     await flushMicrotasks();
 
     expect(deleteRoom).not.toHaveBeenCalled();
+  });
+
+  it('[BUG] crea la fila de call_sessions de forma perezosa antes del compare-and-set: sin esto el UPDATE siempre afecta 0 filas porque la fila nunca existe todavía (no es "otro proceso ya la reclamó", es que jamás se creó)', async () => {
+    listParticipants.mockResolvedValue([]);
+
+    // Modela el comportamiento real de Postgres en vez de un mock ciego: el
+    // UPDATE solo puede afectar una fila si esa fila YA EXISTE (creada por un
+    // INSERT previo). El camino de cierre forzado llega ANTES que
+    // room_finished (es más: deleteRoom() es lo que lo provoca), así que la
+    // única función que hoy crea esa fila (CallsWebhookService.onRoomFinished)
+    // todavía no corrió. Sin una creación perezosa acá, rowExists nunca pasa
+    // a true y el UPDATE de abajo devuelve 0 filas SIEMPRE.
+    let rowExists = false;
+    db.insert.mockImplementation((table: unknown) => ({
+      values: jest.fn().mockReturnValue({
+        onConflictDoNothing: jest.fn().mockImplementation(() => {
+          if (table === callSessions) rowExists = true;
+          return Promise.resolve();
+        }),
+      }),
+    }));
+    db.updateReturning.mockImplementation(() =>
+      Promise.resolve(rowExists ? [{ id: 'session-1' }] : []),
+    );
+
+    await service.onAdminLeft('RM_session-A', 'abc-defg-hij');
+    await jest.advanceTimersByTimeAsync(15_000);
+    await flushMicrotasks();
+
+    expect(db.insert).toHaveBeenCalledWith(callSessions);
+    expect(deleteRoom).toHaveBeenCalledWith('abc-defg-hij');
   });
 
   it('idempotencia real de la capa 2: dos reclamos sobre el mismo sid solo producen un deleteRoom, nunca un error visible', async () => {
