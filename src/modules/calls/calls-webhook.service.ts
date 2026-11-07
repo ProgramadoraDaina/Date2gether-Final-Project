@@ -68,10 +68,15 @@ export class CallsWebhookService {
     let event: WebhookEvent;
     try {
       event = await this.receiver.receive(bodyText, authHeader);
-    } catch {
-      // No se registra el header ni el cuerpo: uno es la firma, el otro puede
+    } catch (error) {
+      // Se registra el motivo exacto (p. ej. "sha256 checksum of body does
+      // not match" vs "authorization header is empty" vs un error de
+      // verificación del JWT) porque son causas de diagnóstico muy distintas
+      // y un mensaje genérico las vuelve indistinguibles en producción. No se
+      // registra el header ni el cuerpo: uno es la firma, el otro puede
       // traer datos del participante (convención ya vigente en CallsService).
-      this.logger.warn('Webhook de LiveKit rechazado: firma inválida o ausente');
+      const reason = error instanceof Error ? error.message : 'motivo desconocido';
+      this.logger.warn(`Webhook de LiveKit rechazado: firma inválida o ausente (${reason})`);
       throw new UnauthorizedException('Firma de webhook inválida');
     }
 
