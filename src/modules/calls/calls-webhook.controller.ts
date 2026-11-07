@@ -48,7 +48,14 @@ export class CallsWebhookController {
   async handle(@Req() req: RawBodyRequest<Request>): Promise<void> {
     // Solo @Req(): el ValidationPipe global usa forbidNonWhitelisted: true y
     // rechazaría el payload real de LiveKit si se leyera con @Body().
-    const authHeader = req.headers.authorize;
+    // BUG CORREGIDO: `livekit-server-sdk` exporta una constante
+    // `authorizeHeader = "Authorize"` (WebhookReceiver.js) que no coincide
+    // con el header HTTP real que manda el servidor de LiveKit. Confirmado
+    // por captura de paquetes contra un despliegue real: el header que llega
+    // es el estándar `Authorization`, no `Authorize`. Leer `authorize` acá
+    // devolvía siempre undefined y rechazaba el 100% de los webhooks, incluso
+    // firmados correctamente.
+    const authHeader = req.headers.authorization;
     await this.webhookService.handle(
       req.rawBody,
       Array.isArray(authHeader) ? authHeader[0] : authHeader,
