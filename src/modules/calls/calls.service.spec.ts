@@ -1,9 +1,9 @@
 import { beforeEach, afterEach, describe, expect, it, jest } from '@jest/globals';
 import { ConfigService } from '@nestjs/config';
 import { ForbiddenException, ServiceUnavailableException } from '@nestjs/common';
-import { RoomServiceClient, TokenVerifier } from 'livekit-server-sdk';
+import { RoomServiceClient, TokenVerifier, type ParticipantInfo } from 'livekit-server-sdk';
 import type { DrizzleDb } from '../../db/drizzle.module';
-import { callParticipantIdentities, type Room } from '../../db/schema';
+import { callParticipantIdentities, roomMembers, type Room } from '../../db/schema';
 import type { RoomParticipant } from '../auth/room-access.service';
 import { RoomsService } from '../rooms/rooms.service';
 import { CallsService } from './calls.service';
@@ -41,13 +41,41 @@ function createDbMock() {
   const insert = jest.fn((table: unknown) =>
     table === callParticipantIdentities ? identityInsert() : historyInsert(),
   );
+
+  // select(...).from(callHistory).innerJoin(rooms, ...).where(...).orderBy(...).limit(...)
+  // — cadena de listHistory(), sin cambios por este PR.
   const limit = jest
     .fn<(n: number) => Promise<{ roomCode: string; roomName: string; startedAt: Date }[]>>()
     .mockResolvedValue([]);
   const orderBy = jest.fn().mockReturnValue({ limit });
-  const where = jest.fn().mockReturnValue({ orderBy });
-  const innerJoin = jest.fn().mockReturnValue({ where });
-  const from = jest.fn().mockReturnValue({ innerJoin });
+  const historyWhere = jest.fn().mockReturnValue({ orderBy });
+  const innerJoin = jest.fn().mockReturnValue({ where: historyWhere });
+  const historyFrom = jest.fn().mockReturnValue({ innerJoin });
+
+  // select({role}).from(roomMembers).where(...).limit(1) — resolveLocalRole().
+  // Default: ninguna fila (invitado, o cuenta sin rol admin/colaborador
+  // registrado todavía) para no asumir admin por accidente en los tests
+  // que no son del gate.
+  const roleLimit = jest.fn<() => Promise<{ role: string }[]>>().mockResolvedValue([]);
+  const roleWhere = jest.fn().mockReturnValue({ limit: roleLimit });
+  const roleFrom = jest.fn().mockReturnValue({ where: roleWhere });
+
+  // select({id}).from(callParticipantIdentities).where(...).limit(1) —
+  // cruce de identities conectadas contra roleAtIssue='administrador' en
+  // assertHostConnected(). Default: SÍ hay un admin conectado, para que los
+  // tests de join() preexistentes (que no ejercitan el gate en sí) sigan
+  // emitiendo token sin tener que mockear un anfitrión por separado.
+  const adminLimit = jest
+    .fn<() => Promise<{ id: string }[]>>()
+    .mockResolvedValue([{ id: 'already-connected-admin-identity' }]);
+  const adminWhere = jest.fn().mockReturnValue({ limit: adminLimit });
+  const adminFrom = jest.fn().mockReturnValue({ where: adminWhere });
+
+  const from = jest.fn((table: unknown) => {
+    if (table === roomMembers) return roleFrom();
+    if (table === callParticipantIdentities) return adminFrom();
+    return historyFrom();
+  });
   const select = jest.fn().mockReturnValue({ from });
   return {
     insert,
@@ -57,9 +85,11 @@ function createDbMock() {
     select,
     from,
     innerJoin,
-    where,
+    where: historyWhere,
     orderBy,
     limit,
+    roleLimit,
+    adminLimit,
   };
 }
 
@@ -75,6 +105,14 @@ describe('CallsService: LiveKit', () => {
     createRoom = jest
       .spyOn(RoomServiceClient.prototype, 'createRoom')
       .mockResolvedValue({} as Awaited<ReturnType<RoomServiceClient['createRoom']>>);
+    // Gate de anfitrión (Fase 5): estos tests no son sobre el gate en sí,
+    // así que por defecto se asume un anfitrión ya conectado (combinado con
+    // el adminLimit por defecto de createDbMock) para que el invitado de
+    // estos escenarios preexistentes pueda unirse sin tener que mockear la
+    // presencia de un admin en cada test.
+    jest
+      .spyOn(RoomServiceClient.prototype, 'listParticipants')
+      .mockResolvedValue([{ identity: 'already-connected-admin' } as ParticipantInfo]);
     db = createDbMock();
     service = new CallsService(
       rooms as unknown as RoomsService,
@@ -202,6 +240,12 @@ describe('CallsService: correlación de identidad', () => {
     jest.spyOn(RoomServiceClient.prototype, 'createRoom').mockResolvedValue(
       {} as Awaited<ReturnType<RoomServiceClient['createRoom']>>,
     );
+    // Ver el comentario equivalente en 'CallsService: LiveKit': estos tests
+    // son sobre la correlación de identidad, no sobre el gate de admin en
+    // sí, así que se asume un anfitrión ya conectado por defecto.
+    jest
+      .spyOn(RoomServiceClient.prototype, 'listParticipants')
+      .mockResolvedValue([{ identity: 'already-connected-admin' } as ParticipantInfo]);
     db = createDbMock();
     service = new CallsService(
       rooms as unknown as RoomsService,
@@ -217,11 +261,16 @@ describe('CallsService: correlación de identidad', () => {
     const accountParticipant = { ...participant, userId: 'user-1' };
     await service.join(room.code, accountParticipant);
     expect(db.insert).toHaveBeenCalledWith(callParticipantIdentities);
+    // roleAtIssue: null porque este describe no configura ninguna fila en
+    // roomMembers (resolveLocalRole no encuentra nada) — la población real
+    // de roleAtIssue con un rol efectivo se cubre en el describe del gate
+    // de administrador, más abajo (población pendiente desde PR2, Fase 5).
     expect(db.identityValues).toHaveBeenCalledWith({
       livekitIdentity: accountParticipant.sub,
       roomId: room.id,
       userId: 'user-1',
       displayName: accountParticipant.name,
+      roleAtIssue: null,
     });
   });
 
@@ -240,6 +289,7 @@ describe('CallsService: correlación de identidad', () => {
       roomId: room.id,
       userId: null,
       displayName: participant.name,
+      roleAtIssue: null,
     });
   });
 
@@ -253,12 +303,14 @@ describe('CallsService: correlación de identidad', () => {
       roomId: room.id,
       userId: 'user-1',
       displayName: accountParticipant.name,
+      roleAtIssue: null,
     });
     expect(db.identityValues).toHaveBeenNthCalledWith(2, {
       livekitIdentity: 'account-reconnect-2',
       roomId: room.id,
       userId: 'user-1',
       displayName: accountParticipant.name,
+      roleAtIssue: null,
     });
   });
 
@@ -271,12 +323,14 @@ describe('CallsService: correlación de identidad', () => {
       roomId: room.id,
       userId: null,
       displayName: participant.name,
+      roleAtIssue: null,
     });
     expect(db.identityValues).toHaveBeenNthCalledWith(2, {
       livekitIdentity: 'guest-reconnect-2',
       roomId: room.id,
       userId: null,
       displayName: participant.name,
+      roleAtIssue: null,
     });
   });
 
@@ -288,6 +342,108 @@ describe('CallsService: correlación de identidad', () => {
     db.insertValues.mockClear();
     await service.join(room.code, participant);
     expect(db.insertValues).not.toHaveBeenCalled();
+  });
+});
+
+describe('CallsService: gate de administrador (host-gate)', () => {
+  let rooms: { getByCodeOrThrow: jest.Mock<RoomsService['getByCodeOrThrow']> };
+  let db: ReturnType<typeof createDbMock>;
+  let service: CallsService;
+  let listParticipants: jest.SpiedFunction<RoomServiceClient['listParticipants']>;
+
+  beforeEach(() => {
+    rooms = {
+      getByCodeOrThrow: jest.fn<RoomsService['getByCodeOrThrow']>().mockResolvedValue(room),
+    };
+    jest
+      .spyOn(RoomServiceClient.prototype, 'createRoom')
+      .mockResolvedValue({} as Awaited<ReturnType<RoomServiceClient['createRoom']>>);
+    listParticipants = jest.spyOn(RoomServiceClient.prototype, 'listParticipants');
+    db = createDbMock();
+    service = new CallsService(
+      rooms as unknown as RoomsService,
+      new ConfigService(config),
+      db as unknown as DrizzleDb,
+    );
+  });
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('administrador se une a una sala vacía: se emite el token sin consultar listParticipants (spec host-gate/admin-siempre)', async () => {
+    db.roleLimit.mockResolvedValueOnce([{ role: 'administrador' }]);
+    const adminParticipant = { ...participant, sub: 'admin-sub', userId: 'admin-1' };
+
+    const session = await service.join(room.code, adminParticipant);
+
+    expect(session.token).toBeDefined();
+    expect(listParticipants).not.toHaveBeenCalled();
+  });
+
+  it('no-admin con al menos un admin conectado: se emite el token (spec host-gate/con-admin)', async () => {
+    listParticipants.mockResolvedValue([{ identity: 'admin-sub' } as ParticipantInfo]);
+    db.adminLimit.mockResolvedValueOnce([{ id: 'identity-row-1' }]);
+
+    const session = await service.join(room.code, participant);
+
+    expect(session.token).toBeDefined();
+  });
+
+  it('no-admin sin ningún admin conectado (sala vacía): 403 NO_HOST_CONNECTED, sin emitir token (spec host-gate/sin-admin)', async () => {
+    listParticipants.mockResolvedValue([]);
+
+    const error = await service.join(room.code, participant).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ForbiddenException);
+    expect((error as ForbiddenException).getResponse()).toMatchObject({
+      code: 'NO_HOST_CONNECTED',
+    });
+    // Rechazado antes de llegar a escribir la correlación de identidad: no
+    // se emitió ningún token.
+    expect(db.identityValues).not.toHaveBeenCalled();
+  });
+
+  it('listParticipants falla: 503, no 403 (D2 — el error es del sistema, no del solicitante)', async () => {
+    listParticipants.mockRejectedValue(new Error('livekit unreachable'));
+
+    await expect(service.join(room.code, participant)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+  });
+
+  it('solo invitados conectados, sin ningún admin: se rechaza igual que si no hubiera nadie (spec host-gate/invitados-no-admin)', async () => {
+    listParticipants.mockResolvedValue([
+      { identity: 'guest-x' } as ParticipantInfo,
+      { identity: 'guest-y' } as ParticipantInfo,
+    ]);
+    db.adminLimit.mockResolvedValueOnce([]); // el cruce no encuentra ningún admin entre los invitados
+
+    const error = await service.join(room.code, participant).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ForbiddenException);
+    expect((error as ForbiddenException).getResponse()).toMatchObject({
+      code: 'NO_HOST_CONNECTED',
+    });
+  });
+
+  it('con un admin de varios aún conectado, un nuevo no-admin puede seguir uniéndose (spec host-gate/sostiene-con-uno)', async () => {
+    listParticipants.mockResolvedValue([{ identity: 'admin-remaining' } as ParticipantInfo]);
+    db.adminLimit.mockResolvedValueOnce([{ id: 'identity-row-1' }]);
+
+    const session = await service.join(room.code, { ...participant, sub: 'newcomer' });
+
+    expect(session.token).toBeDefined();
+  });
+
+  it('el rol resuelto se persiste como roleAtIssue en la correlación de identidad (cierra la deuda de PR2)', async () => {
+    db.roleLimit.mockResolvedValueOnce([{ role: 'administrador' }]);
+    const adminParticipant = { ...participant, sub: 'admin-sub', userId: 'admin-1' };
+
+    await service.join(room.code, adminParticipant);
+
+    expect(db.identityValues).toHaveBeenCalledWith(
+      expect.objectContaining({ roleAtIssue: 'administrador' }),
+    );
   });
 });
 
