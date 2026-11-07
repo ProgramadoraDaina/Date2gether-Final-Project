@@ -79,28 +79,28 @@ PR7 es el de mayor riesgo y el único que toca una ruta ya productiva (`join()` 
 
 ## Fase 5 — Gate de admin en `join()` (parte de PR7, depende de Fase 3)
 
-- [ ] 5.1 [RED] Administrador se une a sala vacía → token emitido, sin consultar `listParticipants` (spec host-gate/admin-siempre).
-- [ ] 5.2 [GREEN] Resolver rol local (`roomMembers`); si es admin, cortocircuitar antes de cualquier chequeo de presencia.
-- [ ] 5.3 [RED] No-admin con admin conectado → token emitido (spec host-gate/con-admin).
-- [ ] 5.4 [RED] No-admin sin ningún admin conectado → 403 `NO_HOST_CONNECTED`, sin token (spec host-gate/sin-admin).
-- [ ] 5.5 [GREEN] `listParticipants()` + cruce contra `call_participant_identities.roleAtIssue` para resolver admins conectados.
-- [ ] 5.6 [RED] `listParticipants` falla → 503, no 403 (D2).
-- [ ] 5.7 [GREEN] Try/catch sobre la consulta de presencia → `ServiceUnavailableException`.
-- [ ] 5.8 [RED] Solo invitados conectados, sin admin → se rechaza igual que sala vacía (spec host-gate/invitados-no-admin).
-- [ ] 5.9 [RED] Dos admins conectados, uno se va → el otro sostiene la llamada, nuevos no-admin se siguen uniendo (spec host-gate/sostiene-con-uno).
+- [x] 5.1 [RED] Administrador se une a sala vacía → token emitido, sin consultar `listParticipants` (spec host-gate/admin-siempre).
+- [x] 5.2 [GREEN] Resolver rol local (`roomMembers`); si es admin, cortocircuitar antes de cualquier chequeo de presencia.
+- [x] 5.3 [RED] No-admin con admin conectado → token emitido (spec host-gate/con-admin).
+- [x] 5.4 [RED] No-admin sin ningún admin conectado → 403 `NO_HOST_CONNECTED`, sin token (spec host-gate/sin-admin).
+- [x] 5.5 [GREEN] `listParticipants()` + cruce contra `call_participant_identities.roleAtIssue` para resolver admins conectados.
+- [x] 5.6 [RED] `listParticipants` falla → 503, no 403 (D2).
+- [x] 5.7 [GREEN] Try/catch sobre la consulta de presencia → `ServiceUnavailableException`.
+- [x] 5.8 [RED] Solo invitados conectados, sin admin → se rechaza igual que sala vacía (spec host-gate/invitados-no-admin).
+- [x] 5.9 [RED] Dos admins conectados, uno se va → el otro sostiene la llamada, nuevos no-admin se siguen uniendo (spec host-gate/sostiene-con-uno).
 
 ## Fase 6 — Cierre forzado idempotente (parte de PR7, depende de Fase 4 y 5)
 
-- [ ] 6.1 Crear `call-session-close.service.ts` con `Map<roomSid, Timeout>` (single-flight).
-- [ ] 6.2 [RED] (timers falsos) Único admin se desconecta con otros presentes → tras 15s todos quedan desconectados y la sesión termina (spec host-gate/cierre-forzado).
-- [ ] 6.3 [GREEN] Handler de `participant_left` de admin → `listParticipants`; sin otro admin, agendar re-chequeo a T+15s.
-- [ ] 6.4 [RED] Admin se reconecta (nuevo identity) dentro de la ventana → se cancela el cierre agendado.
-- [ ] 6.5 [GREEN] En el re-chequeo a T+15s, admin presente → cancelar sin cerrar.
-- [ ] 6.6 [RED] Dos `participant_left` de admins casi simultáneos → un solo `deleteRoom`, sin error visible ni duplicado (spec host-gate/idempotencia-concurrente).
-- [ ] 6.7 [GREEN] Compare-and-set: `UPDATE call_sessions SET forced_close_at=now() WHERE livekit_room_sid=$1 AND forced_close_at IS NULL RETURNING id`; 0 filas → sin `deleteRoom`.
-- [ ] 6.8 [RED] `deleteRoom` falla (sala ya cerrada) → sin throw, log nivel `log`, sin payload externo.
-- [ ] 6.9 [GREEN] Try/catch sobre `deleteRoom` con mensaje propio `'La sala de medios ya estaba cerrada'`, nivel `log`, sin re-lanzar.
-- [ ] 6.10 Conectar `CallsWebhookService` → en `participant_left` de identity con `roleAtIssue='administrador'`, invocar `CallSessionCloseService`.
+- [x] 6.1 Crear `call-session-close.service.ts` con `Map<roomSid, Timeout>` (single-flight).
+- [x] 6.2 [RED] (timers falsos) Único admin se desconecta con otros presentes → tras 15s todos quedan desconectados y la sesión termina (spec host-gate/cierre-forzado).
+- [x] 6.3 [GREEN] Handler de `participant_left` de admin → `listParticipants`; sin otro admin, agendar re-chequeo a T+15s.
+- [x] 6.4 [RED] Admin se reconecta (nuevo identity) dentro de la ventana → se cancela el cierre agendado.
+- [x] 6.5 [GREEN] En el re-chequeo a T+15s, admin presente → cancelar sin cerrar.
+- [x] 6.6 [RED] Dos `participant_left` de admins casi simultáneos → un solo `deleteRoom`, sin error visible ni duplicado (spec host-gate/idempotencia-concurrente).
+- [x] 6.7 [GREEN] Compare-and-set: `UPDATE call_sessions SET forced_close_at=now() WHERE livekit_room_sid=$1 AND forced_close_at IS NULL RETURNING id`; 0 filas → sin `deleteRoom`.
+- [x] 6.8 [RED] `deleteRoom` falla (sala ya cerrada) → sin throw, log nivel `log`, sin payload externo.
+- [x] 6.9 [GREEN] Try/catch sobre `deleteRoom` con mensaje propio `'La sala de medios ya estaba cerrada'`, nivel `log`, sin re-lanzar.
+- [x] 6.10 Conectar `CallsWebhookService` → en `participant_left` de identity con `roleAtIssue='administrador'`, invocar `CallSessionCloseService`.
 
 ## Fase 7 — Materialización de la línea de tiempo (PR4, depende de Fase 1 y 4)
 
@@ -135,11 +135,11 @@ PR7 es el de mayor riesgo y el único que toca una ruta ya productiva (`join()` 
 
 ## Fase 10 — Gate en el cliente + estado terminal (parte de PR7, depende de Fase 6 y 9)
 
-- [ ] 10.1 [RED] `endedByHost()` produce `status:'ended'`, `endReason:'host-left'`.
-- [ ] 10.2 [GREEN] Implementar el estado terminal en `client/src/features/calls/useCallSession.ts`.
-- [ ] 10.3 [RED] `onDisconnected(ROOM_DELETED|ROOM_CLOSED)` → `endedByHost()`; otro reason → `failed()` sin regresión.
-- [ ] 10.4 [GREEN] Ruteo en `MeetingRoom.tsx` + panel terminal ("La llamada terminó porque el anfitrión se desconectó", links "Ver línea de tiempo" / "Volver a la sala").
-- [ ] 10.5 [RED+GREEN] Código `NO_HOST_CONNECTED` del 403 se mapea a mensaje traducido con botón "Reintentar"; cae al mensaje crudo si no viene el código.
+- [x] 10.1 [RED] `endedByHost()` produce `status:'ended'`, `endReason:'host-left'`.
+- [x] 10.2 [GREEN] Implementar el estado terminal en `client/src/features/calls/useCallSession.ts`.
+- [x] 10.3 [RED] `onDisconnected(ROOM_DELETED|ROOM_CLOSED)` → `endedByHost()`; otro reason → `failed()` sin regresión.
+- [x] 10.4 [GREEN] Ruteo en `MeetingRoom.tsx` + panel terminal ("La llamada terminó porque el anfitrión se desconectó", links "Ver línea de tiempo" / "Volver a la sala").
+- [x] 10.5 [RED+GREEN] Código `NO_HOST_CONNECTED` del 403 se mapea a mensaje traducido con botón "Reintentar"; cae al mensaje crudo si no viene el código.
 
 ## Fase 11 — Despliegue (orden crítico; checklist operativo, no PR de código)
 
