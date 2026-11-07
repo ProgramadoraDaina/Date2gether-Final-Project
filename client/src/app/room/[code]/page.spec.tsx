@@ -38,7 +38,7 @@ const mockLeaveCall = jest.fn();
 // de carga) para que el próximo render de RoomPage lea el valor nuevo.
 // Default 'in-call' porque la mayoría de los tests existentes ejercitan la
 // sala ya conectada (chat, sidebar), no la transición de carga en sí.
-let mockStatus: 'idle' | 'connecting' | 'in-call' | 'error' = 'in-call';
+let mockStatus: 'idle' | 'connecting' | 'in-call' | 'error' | 'ended' = 'in-call';
 let mockError: string | null = null;
 // null hasta que el "backend" devuelva credenciales (igual que
 // useCallSession real): MeetingRoom solo se monta cuando session existe,
@@ -46,13 +46,18 @@ let mockError: string | null = null;
 // setean a mano junto con mockStatus.
 let mockSession: { url: string; token: string; roomName: string; participantLimit: number } | null =
   null;
+const mockEndedByHost = jest.fn();
 jest.mock('@/features/calls/useCallSession', () => ({
   useCallSession: () => ({
     status: mockStatus,
     error: mockError,
+    endReason: mockStatus === 'ended' ? 'host-left' : null,
     session: mockSession,
     joinCall: mockJoinCall,
     leaveCall: mockLeaveCall,
+    connected: jest.fn(),
+    failed: jest.fn(),
+    endedByHost: mockEndedByHost,
   }),
 }));
 
@@ -295,6 +300,45 @@ describe('RoomPage: transición de carga antes de entrar a la llamada', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
     expect(mockJoinCall).toHaveBeenCalledWith('abc-defg-hij', 'guest-token');
+  });
+
+  it('cuando el anfitrión se desconecta y LiveKit fuerza el cierre, muestra el panel terminal con link a la línea de tiempo y botón para volver a la sala (D5, design.md)', async () => {
+    mockStatus = 'ended';
+    const { requestRoomAccess } = await import('@/lib/api');
+    const { createRoomSocket } = await import('@/lib/socket');
+    (requestRoomAccess as jest.Mock<typeof requestRoomAccess>).mockResolvedValue({
+      token: 'guest-token',
+      participant: { sub: 'guest-1', name: 'Alex', roomCode: 'abc-defg-hij' },
+    });
+    (createRoomSocket as jest.Mock<typeof createRoomSocket>).mockReturnValue({
+      on: jest.fn(),
+      connect: jest.fn(),
+      emit: jest.fn(),
+      disconnect: jest.fn(),
+      removeAllListeners: jest.fn(),
+    } as never);
+    const Page = (await import('./page')).default;
+    render(<Page />);
+    fireEvent.change(screen.getByLabelText('Tu nombre en la reunión'), {
+      target: { value: 'Alex' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar a la reunión' }));
+    await waitFor(() => expect(mockJoinCall).toHaveBeenCalledTimes(1));
+
+    expect(
+      screen.getByText('La llamada terminó porque el anfitrión se desconectó.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Ver línea de tiempo' })).toHaveAttribute(
+      'href',
+      '/history',
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Volver a la sala' }));
+    expect(
+      screen.queryByText('La llamada terminó porque el anfitrión se desconectó.'),
+    ).not.toBeInTheDocument();
+    // El chat sigue disponible sin cambios, aun con la llamada terminada.
+    expect(screen.getByPlaceholderText('Escribí un mensaje...')).toBeInTheDocument();
   });
 
   it('una vez que la llamada queda in-call, transiciona a la sala completa', async () => {
