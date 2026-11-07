@@ -350,6 +350,15 @@ export default function MeetingRoom({
         if (reason === undefined || reason === DisconnectReason.CLIENT_INITIATED) {
           call.leaveCall();
           router.push('/');
+        } else if (
+          // Cierre forzado por el anfitrión (D5, design.md): LiveKit
+          // reporta ROOM_DELETED cuando se llamó a RoomService.DeleteRoom
+          // (nuestro cierre forzado) y ROOM_CLOSED cuando LiveKit cierra la
+          // sala por su cuenta. Ninguno de los dos es un error de red.
+          reason === DisconnectReason.ROOM_DELETED ||
+          reason === DisconnectReason.ROOM_CLOSED
+        ) {
+          call.endedByHost();
         } else call.failed(new Error('Disconnected'));
       }}
       data-lk-theme="default"

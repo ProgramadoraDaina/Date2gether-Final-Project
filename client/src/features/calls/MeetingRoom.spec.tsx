@@ -36,7 +36,9 @@ jest.mock('livekit-client', () => ({
   DefaultReconnectPolicy: jest.fn(),
   ConnectionState: { Connected: 'connected' },
   RoomEvent: { Connected: 'connected' },
-  DisconnectReason: { CLIENT_INITIATED: 1 },
+  // Valores reales verificados en @livekit/protocol (design.md D5):
+  // ROOM_DELETED = 5 ("RoomService.DeleteRoom was called"), ROOM_CLOSED = 10.
+  DisconnectReason: { CLIENT_INITIATED: 1, ROOM_DELETED: 5, ROOM_CLOSED: 10 },
   Track: {
     Source: { Camera: 'camera', Microphone: 'microphone', ScreenShare: 'screen_share' },
   },
@@ -55,10 +57,12 @@ function state(): CallSessionState {
       roomName: 'abc',
       participantLimit: 6,
     },
+    endReason: null,
     joinCall: jest.fn<CallSessionState['joinCall']>(),
     leaveCall: jest.fn(),
     connected: jest.fn(),
     failed: jest.fn(),
+    endedByHost: jest.fn(),
   };
 }
 function defaultUseTrackToggle({ onDeviceError }: { onDeviceError?: (error: Error) => void } = {}) {
@@ -236,5 +240,28 @@ describe('MeetingRoom', () => {
     expect(mockRoom.localParticipant.setMicrophoneEnabled).toHaveBeenCalledWith(true);
     expect(call.failed).not.toHaveBeenCalled();
     expect(screen.getByText('Audio remoto')).toBeVisible();
+  });
+  it('cuando LiveKit cierra la sesión porque el anfitrión se desconectó (ROOM_DELETED), llama a endedByHost, no a failed (D5, design.md)', async () => {
+    const { LiveKitRoom } = await import('@livekit/components-react');
+    const { DisconnectReason } = await import('livekit-client');
+    const MeetingRoom = (await import('./MeetingRoom')).default;
+    const call = state();
+    render(<MeetingRoom call={call} roomCode="abc-defg-hij" roomEmojis={[]} />);
+    const props = jest.mocked(LiveKitRoom).mock.calls[0][0];
+    act(() => props.onDisconnected?.(DisconnectReason.ROOM_DELETED));
+    expect(call.endedByHost).toHaveBeenCalledTimes(1);
+    expect(call.failed).not.toHaveBeenCalled();
+    expect(call.leaveCall).not.toHaveBeenCalled();
+  });
+  it('cuando LiveKit cierra la sesión por su cuenta (ROOM_CLOSED), también llama a endedByHost', async () => {
+    const { LiveKitRoom } = await import('@livekit/components-react');
+    const { DisconnectReason } = await import('livekit-client');
+    const MeetingRoom = (await import('./MeetingRoom')).default;
+    const call = state();
+    render(<MeetingRoom call={call} roomCode="abc-defg-hij" roomEmojis={[]} />);
+    const props = jest.mocked(LiveKitRoom).mock.calls[0][0];
+    act(() => props.onDisconnected?.(DisconnectReason.ROOM_CLOSED));
+    expect(call.endedByHost).toHaveBeenCalledTimes(1);
+    expect(call.failed).not.toHaveBeenCalled();
   });
 });
