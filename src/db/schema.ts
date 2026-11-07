@@ -264,7 +264,13 @@ export const callParticipantIdentities = pgTable(
 export const callEvents = pgTable(
   'call_events',
   {
-    id: uuid('id').primaryKey(),
+    // BUG CORREGIDO: no es un UUID. LiveKit usa su propio formato de id de
+    // evento (p. ej. "EV_Qu5Dtyxm7rxe"), confirmado contra webhooks reales
+    // en un despliegue EC2 — un uuid('id') rechazaba cada insert porque
+    // Postgres no acepta ese string como UUID válido. La tabla nunca llegó
+    // a tener filas reales con el tipo viejo, así que este cambio no pierde
+    // datos.
+    id: varchar('id', { length: 40 }).primaryKey(),
     livekitRoomSid: varchar('livekit_room_sid', { length: 64 }).notNull(),
     // room.name; sin FK a propósito (ver D7).
     roomCode: varchar('room_code', { length: 20 }).notNull(),
