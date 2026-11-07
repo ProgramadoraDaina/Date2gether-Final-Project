@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { RoomServiceClient } from 'livekit-server-sdk';
 import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
-import { callParticipantIdentities, callSessions } from '../../db/schema';
+import { callEvents, callParticipantIdentities, callSessions, rooms } from '../../db/schema';
 
 // Ventana de gracia (D3, design.md): 15s. No es un sleep ciego antes de
 // cerrar: es una RE-VERIFICACIÓN agendada. Un admin que se reconecta vuelve
@@ -122,6 +122,15 @@ export class CallSessionCloseService {
   }
 
   private async claimAndClose(livekitRoomSid: string, roomCode: string): Promise<void> {
+    // BUG CORREGIDO: el camino de cierre forzado llega ANTES de que exista
+    // room_finished (de hecho, deleteRoom() más abajo es lo que lo provoca),
+    // así que la fila de call_sessions para este sid casi nunca existe
+    // todavía acá. Sin esta creación perezosa, el UPDATE de abajo siempre
+    // afectaría 0 filas -- no porque "otro handler ya reclamó el cierre",
+    // sino porque la fila jamás fue creada -- y deleteRoom() nunca se
+    // llamaría.
+    await this.ensureSessionRow(livekitRoomSid, roomCode);
+
     // Capa 2 (D4): compare-and-set persistido, atómico en Postgres — la
     // garantía real de exclusión, incluso entre procesos o reinicios.
     const claimed = await this.db
@@ -143,5 +152,37 @@ export class CallSessionCloseService {
     } catch {
       this.logger.log('La sala de medios ya estaba cerrada');
     }
+  }
+
+  /**
+   * Creación perezosa de la cabecera de call_sessions (D8), mismo patrón ya
+   * establecido en CallsWebhookService.onRoomFinished: ON CONFLICT DO
+   * NOTHING, así que si la fila ya existe (creada por este mismo método en
+   * una carrera, o por onRoomFinished si room_finished llegó primero) no se
+   * pisa nada. started_at se calcula igual que ahí: el mínimo occurred_at ya
+   * persistido en call_events para este sid (ese log tiene filas desde el
+   * inicio de la sesión aunque room_started/participant_joined sigan siendo
+   * huecos vacíos del dispatcher — el evento crudo se persiste en handle()
+   * antes de despachar). Si no hay eventos, new Date() como fallback
+   * defensivo (no debería pasar en producción).
+   */
+  private async ensureSessionRow(livekitRoomSid: string, roomCode: string): Promise<void> {
+    const events = await this.db
+      .select({ occurredAt: callEvents.occurredAt })
+      .from(callEvents)
+      .where(eq(callEvents.livekitRoomSid, livekitRoomSid));
+    const startedAt = events.reduce<Date>(
+      (earliest, e) => (e.occurredAt < earliest ? e.occurredAt : earliest),
+      events[0]?.occurredAt ?? new Date(),
+    );
+
+    const [room] = roomCode
+      ? await this.db.select({ id: rooms.id }).from(rooms).where(eq(rooms.code, roomCode)).limit(1)
+      : [];
+
+    await this.db
+      .insert(callSessions)
+      .values({ livekitRoomSid, roomId: room?.id ?? null, roomCode, startedAt })
+      .onConflictDoNothing();
   }
 }
