@@ -2,6 +2,7 @@ import { describe, expect, it } from '@jest/globals';
 import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { DRIZZLE, DrizzleModule } from '../../db/drizzle.module';
+import { CallSessionCloseService } from './call-session-close.service';
 import { CallsModule } from './calls.module';
 import { CallsService } from './calls.service';
 import { CallsWebhookController } from './calls-webhook.controller';
@@ -35,6 +36,17 @@ describe('CallsModule', () => {
 
     expect(module.get(CallsWebhookService)).toBeInstanceOf(CallsWebhookService);
     expect(module.get(CallsWebhookController)).toBeInstanceOf(CallsWebhookController);
+  });
+
+  it('registra CallSessionCloseService (cierre forzado idempotente del gate de administrador)', async () => {
+    const module = await Test.createTestingModule({
+      imports: [ConfigModule.forRoot({ isGlobal: true }), DrizzleModule, CallsModule],
+    })
+      .overrideProvider(DRIZZLE)
+      .useValue({})
+      .compile();
+
+    expect(module.get(CallSessionCloseService)).toBeInstanceOf(CallSessionCloseService);
   });
 
   it('registra CallTimelineController y CallTimelineService (endpoints de lectura de sesiones)', async () => {
