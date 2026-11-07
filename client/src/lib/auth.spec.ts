@@ -77,6 +77,37 @@ describe('extractErrorMessage', () => {
   });
 });
 
+describe('extractErrorDetails', () => {
+  it('devuelve message y code cuando el backend manda ambos', async () => {
+    const { extractErrorDetails } = await import('./auth');
+    const res = new Response(
+      JSON.stringify({ message: 'no hay anfitrión conectado', code: 'NO_HOST_CONNECTED' }),
+    );
+    await expect(extractErrorDetails(res, 'fallback')).resolves.toEqual({
+      message: 'no hay anfitrión conectado',
+      code: 'NO_HOST_CONNECTED',
+    });
+  });
+
+  it('code queda undefined cuando el backend no lo manda', async () => {
+    const { extractErrorDetails } = await import('./auth');
+    const res = new Response(JSON.stringify({ message: 'la sala está cerrada' }));
+    await expect(extractErrorDetails(res, 'fallback')).resolves.toEqual({
+      message: 'la sala está cerrada',
+      code: undefined,
+    });
+  });
+
+  it('devuelve el fallback sin code si la respuesta no trae un body JSON legible', async () => {
+    const { extractErrorDetails } = await import('./auth');
+    const res = new Response('esto no es JSON');
+    await expect(extractErrorDetails(res, 'mensaje por defecto')).resolves.toEqual({
+      message: 'mensaje por defecto',
+      code: undefined,
+    });
+  });
+});
+
 describe('register', () => {
   beforeEach(() => {
     localStorage.clear();

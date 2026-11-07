@@ -77,6 +77,12 @@ const en: Record<string, string> = {
   'Permití el acceso al micrófono para iniciar la llamada':
     'Allow microphone access to start the call',
   'No se pudo iniciar la llamada': 'Could not start the call',
+  'Esperá a que se conecte un anfitrión para unirte a la llamada.':
+    'Wait for a host to join before you can enter the call.',
+  'La llamada terminó porque el anfitrión se desconectó.':
+    'The call ended because the host disconnected.',
+  'Volver a la sala': 'Back to the room',
+  'Ver línea de tiempo': 'View timeline',
   'Videollamadas simples, en el navegador.': 'Simple video calls, in the browser.',
 
   // Inicio
