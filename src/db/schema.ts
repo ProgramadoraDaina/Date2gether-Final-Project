@@ -3,6 +3,7 @@ import {
   boolean,
   check,
   customType,
+  index,
   pgEnum,
   pgTable,
   primaryKey,
@@ -68,6 +69,8 @@ export const rooms = pgTable('rooms', {
   code: varchar('code', { length: 20 }).notNull().unique(),
   name: varchar('name', { length: 100 }).notNull(),
   isActive: boolean('is_active').notNull().default(true),
+  waitingRoomEnabled: boolean('waiting_room_enabled').notNull().default(false),
+  entryLocked: boolean('entry_locked').notNull().default(false),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   // Columna histórica de Chime conservada para no reescribir migraciones aplicadas.
   // LiveKit identifica las salas por su código y no utiliza esta columna.
@@ -106,6 +109,28 @@ export const roomMembers = pgTable(
     joinedAt: timestamp('joined_at').notNull().defaultNow(),
   },
   (table) => [primaryKey({ columns: [table.roomId, table.userId] })],
+);
+
+export const admissionStatusEnum = pgEnum('admission_status', [
+  'pending',
+  'admitted',
+  'rejected',
+  'cancelled',
+]);
+export const roomAdmissionRequests = pgTable(
+  'room_admission_requests',
+  {
+    id: uuid('id').primaryKey(),
+    roomId: uuid('room_id')
+      .notNull()
+      .references(() => rooms.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 60 }).notNull(),
+    status: admissionStatusEnum('status').notNull().default('pending'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    expiresAt: timestamp('expires_at').notNull(),
+  },
+  (table) => [index('room_admission_room_status_idx').on(table.roomId, table.status)],
 );
 
 // Historial de llamadas: una fila por cada vez que una cuenta registrada

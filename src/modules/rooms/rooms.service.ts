@@ -49,6 +49,15 @@ export class RoomsService {
 
   async joinRoom(code: string, userId: string): Promise<void> {
     const room = await this.getByCodeOrThrow(code);
+    if (!room.isActive) throw new ForbiddenException('La sala está cerrada');
+    if (room.waitingRoomEnabled || room.entryLocked) {
+      const [member] = await this.db
+        .select()
+        .from(roomMembers)
+        .where(and(eq(roomMembers.roomId, room.id), eq(roomMembers.userId, userId)))
+        .limit(1);
+      if (!member) throw new ForbiddenException('Necesitás ser admitido para unirte a esta sala');
+    }
     await this.db
       .insert(roomMembers)
       .values({ roomId: room.id, userId, role: 'participante' })

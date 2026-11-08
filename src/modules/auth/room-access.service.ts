@@ -21,7 +21,7 @@ export class RoomAccessService {
     private readonly config: ConfigService,
   ) {}
 
-  async create(roomCode: string, name: string, authorization?: string) {
+  async authenticateAccount(authorization?: string) {
     let userId: string | undefined;
     if (authorization) {
       const token = this.bearer(authorization);
@@ -37,6 +37,11 @@ export class RoomAccessService {
       }
       userId = account.sub;
     }
+    return userId;
+  }
+
+  async create(roomCode: string, name: string, authorization?: string) {
+    const userId = await this.authenticateAccount(authorization);
     const participant: RoomParticipant = {
       kind: 'room-participant',
       sub: randomUUID(),
@@ -44,12 +49,47 @@ export class RoomAccessService {
       name,
       ...(userId ? { userId } : {}),
     };
+    return this.issueParticipant(participant);
+  }
+
+  async issueParticipant(participant: RoomParticipant) {
     const token = await this.jwt.signAsync(participant, {
       secret: this.secret,
       audience: ROOM_AUDIENCE,
       expiresIn: '24h',
     });
     return { token, participant };
+  }
+
+  async createAdmissionTicket(roomCode: string, requestId: string) {
+    return this.jwt.signAsync(
+      { kind: 'room-admission', sub: requestId, roomCode },
+      {
+        secret: this.secret,
+        audience: 'date2gether:admission',
+        expiresIn: '24h',
+      },
+    );
+  }
+
+  async verifyAdmissionTicket(token: string, roomCode: string, requestId: string) {
+    try {
+      const payload = await this.jwt.verifyAsync<{ kind: string; sub: string; roomCode: string }>(
+        token,
+        {
+          secret: this.secret,
+          audience: 'date2gether:admission',
+        },
+      );
+      if (
+        payload.kind !== 'room-admission' ||
+        payload.sub !== requestId ||
+        payload.roomCode !== roomCode
+      )
+        throw new Error('Invalid admission ticket');
+    } catch {
+      throw new UnauthorizedException('La solicitud de ingreso es inválida o venció');
+    }
   }
 
   async verify(token: string): Promise<RoomParticipant> {
