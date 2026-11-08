@@ -1,5 +1,46 @@
 // Clave: string original en español. Valor: traducción al inglés.
 const en: Record<string, string> = {
+  'Necesitás ser admitido para unirte a esta sala': 'You must be admitted before joining this room',
+  // Moderación de ingreso
+  'Sala de espera': 'Waiting room',
+  'El anfitrión debe admitir tu ingreso.': 'The host needs to admit you.',
+  'El anfitrión rechazó tu solicitud.': 'The host declined your request.',
+  'La solicitud fue cancelada.': 'The request was cancelled.',
+  'La solicitud venció. Podés volver a solicitar el ingreso.':
+    'Your request expired. You can request access again.',
+  'Todavía no estás conectado al chat ni a la llamada.':
+    'You are not connected to the chat or call yet.',
+  'Volver al formulario': 'Back to the form',
+  'Revisar estado': 'Check status',
+  'Cancelar solicitud': 'Cancel request',
+  'Cancelando…': 'Cancelling…',
+  'Administrar ingresos': 'Manage access',
+  'Cargando solicitudes…': 'Loading requests…',
+  'Actualizar solicitudes': 'Refresh requests',
+  'Configuración de ingreso': 'Access settings',
+  'Activar sala de espera': 'Enable waiting room',
+  'Bloquear nuevos ingresos': 'Block new entries',
+  'Desactivar la espera admite las solicitudes pendientes cuando los ingresos están desbloqueados.':
+    'Turning off the waiting room admits pending requests when entry is unlocked.',
+  'Los cambios de ingreso no expulsan a quienes ya están dentro.':
+    'Changing access settings does not remove people who are already in the room.',
+  'Solicitudes pendientes': 'Pending requests',
+  'No hay solicitudes pendientes': 'No pending requests',
+  'Cuenta registrada': 'Registered account',
+  Admitir: 'Admit',
+  Rechazar: 'Decline',
+  'No se pudo consultar la solicitud. Reintentando…': 'Could not check your request. Retrying…',
+  'No se pudo cancelar. Reintentá la cancelación.': 'Could not cancel. Try cancelling again.',
+  'No se pudieron cargar las solicitudes': 'Could not load requests',
+  'No se pudo actualizar la admisión': 'Could not update access',
+  'La sala no permite nuevos ingresos': 'The room is not allowing new entries',
+  'Desbloqueá los ingresos antes de admitir': 'Unlock entry before admitting people',
+  'La solicitud ya fue resuelta': 'The request has already been resolved',
+  'La solicitud venció': 'The request expired',
+  'La solicitud no existe o venció': 'The request does not exist or has expired',
+  'La solicitud de ingreso es inválida o venció': 'The access request is invalid or has expired',
+  'No existe una sala con ese código': 'There is no room with that code',
+
   'Podés entrar con un enlace o código sin crear una cuenta.':
     'You can join with a link or code without creating an account.',
   'Entrar a la reunión': 'Join the meeting',
@@ -169,10 +210,12 @@ const en: Record<string, string> = {
   Usar: 'Use',
   Elegido: 'Selected',
   'No se pudieron cargar los sonidos': 'Could not load the sounds',
-  'No se pudieron cargar los sonidos. Intentá nuevamente.': 'Could not load the sounds. Please try again.',
+  'No se pudieron cargar los sonidos. Intentá nuevamente.':
+    'Could not load the sounds. Please try again.',
   'La búsqueda de sonidos no está configurada': 'Sound search is not configured',
   'Ese sonido de Freesound no está disponible': 'That Freesound sound is not available',
-  'No se pudo descargar el sonido. Intentá nuevamente.': 'Could not download the sound. Please try again.',
+  'No se pudo descargar el sonido. Intentá nuevamente.':
+    'Could not download the sound. Please try again.',
   'Subí un sonido o elegí uno de Freesound (solo uno de los dos)':
     'Upload a sound or pick one from Freesound (only one of them)',
   'Emoji común': 'Standard emoji',

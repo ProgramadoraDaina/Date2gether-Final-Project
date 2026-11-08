@@ -1,6 +1,14 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+} from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useParams } from 'next/navigation';
@@ -15,6 +23,9 @@ import { RoleTag } from '@/features/rooms/RoleTag';
 import roleTagStyles from '@/features/rooms/RoleTag.module.css';
 import { RoomSidebar } from '@/features/rooms/RoomSidebar';
 import { useResizablePanel } from '@/features/rooms/useResizablePanel';
+import { AdmissionControl } from '@/features/rooms/AdmissionControl';
+import { WaitingRoom } from '@/features/rooms/WaitingRoom';
+import { useAdmissionRequest } from '@/features/rooms/useAdmissionRequest';
 import { useRoomMembers } from '@/features/rooms/useRoomMembers';
 import { ApiError, requestRoomAccess, type RoomAccess, type RoomEmoji } from '@/lib/api';
 import { useCallSession } from '@/features/calls/useCallSession';
@@ -111,6 +122,13 @@ export default function RoomPage() {
     setName(localStorage.getItem(NAME_KEY) ?? '');
   }, []);
 
+  const acceptAccess = useCallback((roomAccess: RoomAccess) => {
+    localStorage.setItem(NAME_KEY, roomAccess.participant.name);
+    setName(roomAccess.participant.name);
+    setAccess(roomAccess);
+  }, []);
+  const admission = useAdmissionRequest(code, acceptAccess);
+
   async function handleJoin(e: FormEvent) {
     e.preventDefault();
     if (!name.trim() || joining) return;
@@ -118,8 +136,8 @@ export default function RoomPage() {
     setJoinError(null);
     try {
       const roomAccess = await requestRoomAccess(code, name.trim());
-      localStorage.setItem(NAME_KEY, roomAccess.participant.name);
-      setAccess(roomAccess);
+      if ('token' in roomAccess) acceptAccess(roomAccess);
+      else admission.start(roomAccess);
     } catch (error) {
       setJoinError(error instanceof ApiError ? error.message : t('No se pudo entrar a la sala'));
     } finally {
@@ -270,7 +288,9 @@ export default function RoomPage() {
   );
 
   if (!access) {
-    return <AppShell>{joinCard}</AppShell>;
+    return (
+      <AppShell>{admission.receipt ? <WaitingRoom admission={admission} /> : joinCard}</AppShell>
+    );
   }
 
   // A diferencia de antes, este estado de "conectando"/"error" NO tapa toda
@@ -479,6 +499,7 @@ export default function RoomPage() {
             </p>
           )}
 
+          {isCurrentUserAdmin && <AdmissionControl code={code} />}
           <div className={styles.meetingAndChat}>
             {callSession.session ? (
               <MeetingRoom call={callSession} roomCode={code} roomEmojis={emojis} />
