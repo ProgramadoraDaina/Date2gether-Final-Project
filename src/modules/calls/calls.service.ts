@@ -8,9 +8,11 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
+import { randomUUID } from 'node:crypto';
 import type { RoomParticipant } from '../auth/room-access.service';
 import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
 import {
+  callEvents,
   callHistory,
   callParticipantIdentities,
   roomMembers,
@@ -18,6 +20,7 @@ import {
   type RoomRole,
 } from '../../db/schema';
 import { RoomsService } from '../rooms/rooms.service';
+import type { ReportTrackStateDto } from './dto/report-track-state.dto';
 
 // Código estable para el rechazo del gate de anfitrión (D5, design.md): el
 // cliente se acopla a este código, no al texto del mensaje.
@@ -216,6 +219,64 @@ export class CallsService {
         message: NO_HOST_CONNECTED_MESSAGE,
         code: NO_HOST_CONNECTED_CODE,
       });
+    }
+  }
+
+  /**
+   * LiveKit no manda webhook de mute/unmute (solo `track_published`/
+   * `track_unpublished`, que tras la primera publicación dejan de dispararse:
+   * `setMicrophoneEnabled`/`setCameraEnabled` solo mutean el track ya
+   * publicado — ver design.md). Esto es lo único que puede completar esa
+   * foto: el propio cliente avisándole a NUESTRO backend, no a LiveKit.
+   *
+   * Se resuelve `livekitRoomSid` contra LiveKit en vivo (mismo patrón que
+   * `CallSessionCloseService.hasConnectedAdmin`) en vez de confiar en un sid
+   * mandado por el cliente: así `aggregate-session.ts` sigue agrupando todo
+   * por el mismo identificador autoritativo que ya usan los eventos de
+   * webhook, sin tener que confiar en lo que diga el participante.
+   *
+   * Best-effort a propósito: un mute/unmute jamás debe fallar ni demorar la
+   * llamada real por un problema de este reporte secundario.
+   */
+  async reportTrackState(
+    roomCode: string,
+    participant: RoomParticipant,
+    { source, enabled }: ReportTrackStateDto,
+  ): Promise<void> {
+    if (participant.roomCode !== roomCode) return;
+
+    const url = this.config.get<string>('LIVEKIT_URL');
+    const apiKey = this.config.get<string>('LIVEKIT_API_KEY');
+    const apiSecret = this.config.get<string>('LIVEKIT_API_SECRET');
+    if (!url || !apiKey || !apiSecret) return;
+    const apiUrl = this.config.get<string>('LIVEKIT_API_URL') || url.replace(/^ws/, 'http');
+    const client = new RoomServiceClient(apiUrl, apiKey, apiSecret);
+
+    try {
+      const [room] = await client.listRooms([roomCode]);
+      // La sala ya no existe en LiveKit (la llamada terminó justo ahora):
+      // no hay ninguna call_session abierta a la que agregar este evento.
+      if (!room?.sid) return;
+
+      await this.db
+        .insert(callEvents)
+        .values({
+          id: `CL_${randomUUID()}`,
+          livekitRoomSid: room.sid,
+          roomCode,
+          eventType: enabled ? 'track_unmuted' : 'track_muted',
+          livekitIdentity: participant.sub,
+          trackSource: source,
+          occurredAt: new Date(),
+          payload: { origin: 'client', source, enabled },
+        })
+        .onConflictDoNothing();
+    } catch (error) {
+      this.logger.warn(
+        `No se pudo registrar el estado de ${source} (${enabled ? 'unmute' : 'mute'}): ${
+          error instanceof Error ? error.message : 'motivo desconocido'
+        }`,
+      );
     }
   }
 

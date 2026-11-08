@@ -189,12 +189,21 @@ export function aggregateSession(
         }
         break;
       }
+      // `track_unmuted`/`track_muted` no vienen del webhook de LiveKit (ese
+      // nunca los manda): los reporta el propio cliente, porque
+      // setMicrophoneEnabled/setCameraEnabled solo mutean el track ya
+      // publicado después de la primera vez (ver CallsService.reportTrackState).
+      // Se tratan como el mismo abrir/cerrar que publish/unpublish porque,
+      // para esta línea de tiempo, "muteado" y "no publicado" significan lo
+      // mismo: la fuente está apagada.
       case 'track_published':
+      case 'track_unmuted':
         if (isTrackedSource(event.trackSource)) {
           openTrackByKey.set(trackKey(event.livekitIdentity, event.trackSource), event.occurredAt);
         }
         break;
       case 'track_unpublished':
+      case 'track_muted':
         if (isTrackedSource(event.trackSource)) {
           const key = trackKey(event.livekitIdentity, event.trackSource);
           const startedAt = openTrackByKey.get(key);

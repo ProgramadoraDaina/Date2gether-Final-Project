@@ -12,15 +12,60 @@ describe('aggregateSession', () => {
       { livekitIdentity: 'id-c', userId: null, displayName: 'Carla' },
     ];
     const events: SessionEvent[] = [
-      { eventType: 'participant_joined', livekitIdentity: 'id-a', trackSource: null, occurredAt: seconds(0) },
-      { eventType: 'participant_joined', livekitIdentity: 'id-b', trackSource: null, occurredAt: seconds(5) },
-      { eventType: 'participant_joined', livekitIdentity: 'id-c', trackSource: null, occurredAt: seconds(2) },
-      { eventType: 'track_published', livekitIdentity: 'id-a', trackSource: 'microphone', occurredAt: seconds(10) },
-      { eventType: 'track_published', livekitIdentity: 'id-b', trackSource: 'screen_share', occurredAt: seconds(20) },
-      { eventType: 'track_unpublished', livekitIdentity: 'id-b', trackSource: 'screen_share', occurredAt: seconds(200) },
-      { eventType: 'participant_left', livekitIdentity: 'id-c', trackSource: null, occurredAt: seconds(250) },
-      { eventType: 'participant_left', livekitIdentity: 'id-b', trackSource: null, occurredAt: seconds(280) },
-      { eventType: 'participant_left', livekitIdentity: 'id-a', trackSource: null, occurredAt: seconds(300) },
+      {
+        eventType: 'participant_joined',
+        livekitIdentity: 'id-a',
+        trackSource: null,
+        occurredAt: seconds(0),
+      },
+      {
+        eventType: 'participant_joined',
+        livekitIdentity: 'id-b',
+        trackSource: null,
+        occurredAt: seconds(5),
+      },
+      {
+        eventType: 'participant_joined',
+        livekitIdentity: 'id-c',
+        trackSource: null,
+        occurredAt: seconds(2),
+      },
+      {
+        eventType: 'track_published',
+        livekitIdentity: 'id-a',
+        trackSource: 'microphone',
+        occurredAt: seconds(10),
+      },
+      {
+        eventType: 'track_published',
+        livekitIdentity: 'id-b',
+        trackSource: 'screen_share',
+        occurredAt: seconds(20),
+      },
+      {
+        eventType: 'track_unpublished',
+        livekitIdentity: 'id-b',
+        trackSource: 'screen_share',
+        occurredAt: seconds(200),
+      },
+      {
+        eventType: 'participant_left',
+        livekitIdentity: 'id-c',
+        trackSource: null,
+        occurredAt: seconds(250),
+      },
+      {
+        eventType: 'participant_left',
+        livekitIdentity: 'id-b',
+        trackSource: null,
+        occurredAt: seconds(280),
+      },
+      {
+        eventType: 'participant_left',
+        livekitIdentity: 'id-a',
+        trackSource: null,
+        occurredAt: seconds(300),
+      },
     ];
 
     const summary = aggregateSession(events, identities, seconds(400));
@@ -73,10 +118,30 @@ describe('aggregateSession', () => {
       { livekitIdentity: 'id-c2', userId: null, displayName: 'Carla' },
     ];
     const events: SessionEvent[] = [
-      { eventType: 'participant_joined', livekitIdentity: 'id-c1', trackSource: null, occurredAt: seconds(0) },
-      { eventType: 'participant_left', livekitIdentity: 'id-c1', trackSource: null, occurredAt: seconds(50) },
-      { eventType: 'participant_joined', livekitIdentity: 'id-c2', trackSource: null, occurredAt: seconds(60) },
-      { eventType: 'participant_left', livekitIdentity: 'id-c2', trackSource: null, occurredAt: seconds(150) },
+      {
+        eventType: 'participant_joined',
+        livekitIdentity: 'id-c1',
+        trackSource: null,
+        occurredAt: seconds(0),
+      },
+      {
+        eventType: 'participant_left',
+        livekitIdentity: 'id-c1',
+        trackSource: null,
+        occurredAt: seconds(50),
+      },
+      {
+        eventType: 'participant_joined',
+        livekitIdentity: 'id-c2',
+        trackSource: null,
+        occurredAt: seconds(60),
+      },
+      {
+        eventType: 'participant_left',
+        livekitIdentity: 'id-c2',
+        trackSource: null,
+        occurredAt: seconds(150),
+      },
     ];
 
     const summary = aggregateSession(events, identities, seconds(400));
@@ -97,10 +162,30 @@ describe('aggregateSession', () => {
       { livekitIdentity: 'id-a2', userId: 'user-a', displayName: 'Ana' },
     ];
     const events: SessionEvent[] = [
-      { eventType: 'participant_joined', livekitIdentity: 'id-a1', trackSource: null, occurredAt: seconds(0) },
-      { eventType: 'participant_left', livekitIdentity: 'id-a1', trackSource: null, occurredAt: seconds(30) },
-      { eventType: 'participant_joined', livekitIdentity: 'id-a2', trackSource: null, occurredAt: seconds(40) },
-      { eventType: 'participant_left', livekitIdentity: 'id-a2', trackSource: null, occurredAt: seconds(100) },
+      {
+        eventType: 'participant_joined',
+        livekitIdentity: 'id-a1',
+        trackSource: null,
+        occurredAt: seconds(0),
+      },
+      {
+        eventType: 'participant_left',
+        livekitIdentity: 'id-a1',
+        trackSource: null,
+        occurredAt: seconds(30),
+      },
+      {
+        eventType: 'participant_joined',
+        livekitIdentity: 'id-a2',
+        trackSource: null,
+        occurredAt: seconds(40),
+      },
+      {
+        eventType: 'participant_left',
+        livekitIdentity: 'id-a2',
+        trackSource: null,
+        occurredAt: seconds(100),
+      },
     ];
 
     const summary = aggregateSession(events, identities, seconds(400));
@@ -115,8 +200,18 @@ describe('aggregateSession', () => {
       { livekitIdentity: 'id-a', userId: 'user-a', displayName: 'Ana' },
     ];
     const events: SessionEvent[] = [
-      { eventType: 'participant_joined', livekitIdentity: 'id-a', trackSource: null, occurredAt: seconds(0) },
-      { eventType: 'track_published', livekitIdentity: 'id-a', trackSource: 'microphone', occurredAt: seconds(10) },
+      {
+        eventType: 'participant_joined',
+        livekitIdentity: 'id-a',
+        trackSource: null,
+        occurredAt: seconds(0),
+      },
+      {
+        eventType: 'track_published',
+        livekitIdentity: 'id-a',
+        trackSource: 'microphone',
+        occurredAt: seconds(10),
+      },
       // Nunca llega track_unpublished ni participant_left: navegador colgado.
     ];
     const fallbackEndAt = seconds(400);
@@ -140,12 +235,42 @@ describe('aggregateSession', () => {
       { livekitIdentity: 'id-a', userId: 'user-a', displayName: 'Ana' },
     ];
     const events: SessionEvent[] = [
-      { eventType: 'participant_joined', livekitIdentity: 'id-a', trackSource: null, occurredAt: seconds(0) },
-      { eventType: 'track_published', livekitIdentity: 'id-a', trackSource: 'camera', occurredAt: seconds(10) },
-      { eventType: 'track_unpublished', livekitIdentity: 'id-a', trackSource: 'camera', occurredAt: seconds(60) },
-      { eventType: 'track_published', livekitIdentity: 'id-a', trackSource: 'camera', occurredAt: seconds(90) },
-      { eventType: 'track_unpublished', livekitIdentity: 'id-a', trackSource: 'camera', occurredAt: seconds(150) },
-      { eventType: 'participant_left', livekitIdentity: 'id-a', trackSource: null, occurredAt: seconds(200) },
+      {
+        eventType: 'participant_joined',
+        livekitIdentity: 'id-a',
+        trackSource: null,
+        occurredAt: seconds(0),
+      },
+      {
+        eventType: 'track_published',
+        livekitIdentity: 'id-a',
+        trackSource: 'camera',
+        occurredAt: seconds(10),
+      },
+      {
+        eventType: 'track_unpublished',
+        livekitIdentity: 'id-a',
+        trackSource: 'camera',
+        occurredAt: seconds(60),
+      },
+      {
+        eventType: 'track_published',
+        livekitIdentity: 'id-a',
+        trackSource: 'camera',
+        occurredAt: seconds(90),
+      },
+      {
+        eventType: 'track_unpublished',
+        livekitIdentity: 'id-a',
+        trackSource: 'camera',
+        occurredAt: seconds(150),
+      },
+      {
+        eventType: 'participant_left',
+        livekitIdentity: 'id-a',
+        trackSource: null,
+        occurredAt: seconds(200),
+      },
     ];
 
     const summary = aggregateSession(events, identities, seconds(400));
@@ -157,17 +282,101 @@ describe('aggregateSession', () => {
     ]);
   });
 
+  it('mutear y volver a desmutear el micrófono después de la primera publicación cierra y abre un segundo intervalo (no uno solo sin fin)', () => {
+    const identities: IdentityCorrelation[] = [
+      { livekitIdentity: 'id-a', userId: 'user-a', displayName: 'Ana' },
+    ];
+    const events: SessionEvent[] = [
+      {
+        eventType: 'participant_joined',
+        livekitIdentity: 'id-a',
+        trackSource: null,
+        occurredAt: seconds(0),
+      },
+      // Primera vez: LiveKit sí manda track_published.
+      {
+        eventType: 'track_published',
+        livekitIdentity: 'id-a',
+        trackSource: 'microphone',
+        occurredAt: seconds(5),
+      },
+      // De acá en más, mutear/desmutear nunca vuelve a publicar/despublicar
+      // (ver CallsService.reportTrackState): el propio cliente reporta
+      // track_muted/track_unmuted.
+      {
+        eventType: 'track_muted',
+        livekitIdentity: 'id-a',
+        trackSource: 'microphone',
+        occurredAt: seconds(20),
+      },
+      {
+        eventType: 'track_unmuted',
+        livekitIdentity: 'id-a',
+        trackSource: 'microphone',
+        occurredAt: seconds(50),
+      },
+      // El navegador se cierra sin mandar un último track_muted: el segundo
+      // intervalo se cierra por el mismo cierre implícito que el join
+      // (fallbackEndAt), no se queda abierto para siempre.
+      {
+        eventType: 'participant_left',
+        livekitIdentity: 'id-a',
+        trackSource: null,
+        occurredAt: seconds(100),
+      },
+    ];
+    const fallbackEndAt = seconds(400);
+
+    const summary = aggregateSession(events, identities, fallbackEndAt);
+
+    expect(summary[0].trackIntervals).toEqual([
+      { source: 'microphone', startedAt: seconds(5), endedAt: seconds(20) },
+      { source: 'microphone', startedAt: seconds(50), endedAt: fallbackEndAt },
+    ]);
+    expect(summary[0].spoke).toBe(true);
+  });
+
   it('cámara y micrófono abiertos a la vez generan intervalos independientes, cada uno con su propio cierre', () => {
     const identities: IdentityCorrelation[] = [
       { livekitIdentity: 'id-a', userId: 'user-a', displayName: 'Ana' },
     ];
     const events: SessionEvent[] = [
-      { eventType: 'participant_joined', livekitIdentity: 'id-a', trackSource: null, occurredAt: seconds(0) },
-      { eventType: 'track_published', livekitIdentity: 'id-a', trackSource: 'camera', occurredAt: seconds(5) },
-      { eventType: 'track_published', livekitIdentity: 'id-a', trackSource: 'microphone', occurredAt: seconds(8) },
-      { eventType: 'track_unpublished', livekitIdentity: 'id-a', trackSource: 'microphone', occurredAt: seconds(40) },
-      { eventType: 'track_unpublished', livekitIdentity: 'id-a', trackSource: 'camera', occurredAt: seconds(100) },
-      { eventType: 'participant_left', livekitIdentity: 'id-a', trackSource: null, occurredAt: seconds(150) },
+      {
+        eventType: 'participant_joined',
+        livekitIdentity: 'id-a',
+        trackSource: null,
+        occurredAt: seconds(0),
+      },
+      {
+        eventType: 'track_published',
+        livekitIdentity: 'id-a',
+        trackSource: 'camera',
+        occurredAt: seconds(5),
+      },
+      {
+        eventType: 'track_published',
+        livekitIdentity: 'id-a',
+        trackSource: 'microphone',
+        occurredAt: seconds(8),
+      },
+      {
+        eventType: 'track_unpublished',
+        livekitIdentity: 'id-a',
+        trackSource: 'microphone',
+        occurredAt: seconds(40),
+      },
+      {
+        eventType: 'track_unpublished',
+        livekitIdentity: 'id-a',
+        trackSource: 'camera',
+        occurredAt: seconds(100),
+      },
+      {
+        eventType: 'participant_left',
+        livekitIdentity: 'id-a',
+        trackSource: null,
+        occurredAt: seconds(150),
+      },
     ];
 
     const summary = aggregateSession(events, identities, seconds(400));
@@ -184,8 +393,18 @@ describe('aggregateSession', () => {
       { livekitIdentity: 'id-a', userId: 'user-a', displayName: 'Ana' },
     ];
     const events: SessionEvent[] = [
-      { eventType: 'participant_joined', livekitIdentity: 'id-a', trackSource: null, occurredAt: seconds(0) },
-      { eventType: 'track_published', livekitIdentity: 'id-a', trackSource: 'camera', occurredAt: seconds(10) },
+      {
+        eventType: 'participant_joined',
+        livekitIdentity: 'id-a',
+        trackSource: null,
+        occurredAt: seconds(0),
+      },
+      {
+        eventType: 'track_published',
+        livekitIdentity: 'id-a',
+        trackSource: 'camera',
+        occurredAt: seconds(10),
+      },
     ];
     const fallbackEndAt = seconds(400);
 
@@ -202,7 +421,12 @@ describe('aggregateSession', () => {
 
   it('ignora eventos de identity sin correlación conocida (defensivo) en lugar de tirar', () => {
     const events: SessionEvent[] = [
-      { eventType: 'participant_joined', livekitIdentity: 'id-huerfano', trackSource: null, occurredAt: seconds(0) },
+      {
+        eventType: 'participant_joined',
+        livekitIdentity: 'id-huerfano',
+        trackSource: null,
+        occurredAt: seconds(0),
+      },
     ];
     expect(() => aggregateSession(events, [], seconds(100))).not.toThrow();
     expect(aggregateSession(events, [], seconds(100))).toEqual([]);

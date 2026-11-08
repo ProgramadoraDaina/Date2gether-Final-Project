@@ -499,6 +499,7 @@ export default function RoomPage() {
               <MeetingRoom
                 call={callSession}
                 roomCode={code}
+                roomToken={access.token}
                 roomEmojis={emojis}
                 initialDevices={initialDevices}
               />

@@ -26,6 +26,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_CALL_DEVICES, type CallDevices } from './callDevices';
 import type { RoomEmoji } from '@/lib/api';
 import { useTranslation } from '../translation/useTranslation';
+import { reportTrackState } from '@/lib/calls';
 import type { CallSessionState } from './useCallSession';
 import styles from './MeetingRoom.module.css';
 import { ReactionOverlay } from './reactions/ReactionOverlay';
@@ -160,12 +161,21 @@ function HangUpButton() {
   );
 }
 
-function MicToggleButton({ setDeviceError }: { setDeviceError: (value: boolean) => void }) {
+interface ToggleButtonProps {
+  roomCode: string;
+  roomToken: string;
+  setDeviceError: (value: boolean) => void;
+}
+
+function MicToggleButton({ roomCode, roomToken, setDeviceError }: ToggleButtonProps) {
   const { t } = useTranslation();
   const { buttonProps, enabled } = useTrackToggle({
     source: Track.Source.Microphone,
     onDeviceError: () => setDeviceError(true),
-    onChange: () => setDeviceError(false),
+    onChange: (isEnabled) => {
+      setDeviceError(false);
+      void reportTrackState(roomCode, roomToken, 'microphone', isEnabled);
+    },
   });
   const label = enabled ? t('Desactivar micrófono') : t('Activar micrófono');
   return (
@@ -181,12 +191,15 @@ function MicToggleButton({ setDeviceError }: { setDeviceError: (value: boolean) 
   );
 }
 
-function CameraToggleButton({ setDeviceError }: { setDeviceError: (value: boolean) => void }) {
+function CameraToggleButton({ roomCode, roomToken, setDeviceError }: ToggleButtonProps) {
   const { t } = useTranslation();
   const { buttonProps, enabled } = useTrackToggle({
     source: Track.Source.Camera,
     onDeviceError: () => setDeviceError(true),
-    onChange: () => setDeviceError(false),
+    onChange: (isEnabled) => {
+      setDeviceError(false);
+      void reportTrackState(roomCode, roomToken, 'camera', isEnabled);
+    },
   });
   const label = enabled ? t('Desactivar cámara') : t('Activar cámara');
   return (
@@ -227,6 +240,7 @@ function ScreenShareToggleButton({ setDeviceError }: { setDeviceError: (value: b
 interface MeetingRoomProps {
   call: CallSessionState;
   roomCode: string;
+  roomToken: string;
   roomEmojis: RoomEmoji[];
   initialDevices?: CallDevices;
 }
@@ -262,6 +276,7 @@ function InitialCallDevices({
 
 function MeetingContent({
   roomCode,
+  roomToken,
   roomEmojis,
   initialDevices = DEFAULT_CALL_DEVICES,
 }: Omit<MeetingRoomProps, 'call'>) {
@@ -294,13 +309,17 @@ function MeetingContent({
       )}
       <div className={styles.controlsDock}>
         <div className={styles.controlsGroup}>
-          <MicToggleButton setDeviceError={setDeviceError} />
+          <MicToggleButton roomCode={roomCode} roomToken={roomToken} setDeviceError={setDeviceError} />
           <MediaDeviceMenu
             kind="audioinput"
             requestPermissions={false}
             aria-label={t('Elegir micrófono')}
           />
-          <CameraToggleButton setDeviceError={setDeviceError} />
+          <CameraToggleButton
+            roomCode={roomCode}
+            roomToken={roomToken}
+            setDeviceError={setDeviceError}
+          />
           <MediaDeviceMenu
             kind="videoinput"
             requestPermissions={false}
@@ -319,6 +338,7 @@ function MeetingContent({
 export default function MeetingRoom({
   call,
   roomCode,
+  roomToken,
   roomEmojis,
   initialDevices = DEFAULT_CALL_DEVICES,
 }: MeetingRoomProps) {
@@ -366,6 +386,7 @@ export default function MeetingRoom({
     >
       <MeetingContent
         roomCode={roomCode}
+        roomToken={roomToken}
         roomEmojis={roomEmojis}
         initialDevices={initialDevices}
       />

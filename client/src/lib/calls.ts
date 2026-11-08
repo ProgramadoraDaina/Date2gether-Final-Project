@@ -31,3 +31,30 @@ export async function startCall(
   }
   return res.json();
 }
+
+// LiveKit no manda webhook de mute/unmute: después de la primera publicación,
+// prender/apagar cámara o mic solo mutea el track ya publicado (ver
+// aggregate-session.ts). Esto es lo que completa esa foto para la línea de
+// tiempo — se llama "en el fondo" cada vez que cambia el estado real del
+// track, sin bloquear ni mostrarle un error a quien está en la llamada: es
+// un reporte secundario, no algo de lo que dependa poder hablar o verse.
+export async function reportTrackState(
+  roomCode: string,
+  roomToken: string,
+  source: 'camera' | 'microphone',
+  enabled: boolean,
+): Promise<void> {
+  try {
+    await fetch(`${API_URL}/calls/${encodeURIComponent(roomCode)}/track-state`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${roomToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ source, enabled }),
+    });
+  } catch {
+    // Best-effort: si falla, la llamada sigue — solo se pierde ese tramo de
+    // la línea de tiempo, nunca la videollamada en sí.
+  }
+}

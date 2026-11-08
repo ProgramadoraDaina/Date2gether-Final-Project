@@ -237,9 +237,9 @@ describe('CallsService: correlación de identidad', () => {
     rooms = {
       getByCodeOrThrow: jest.fn<RoomsService['getByCodeOrThrow']>().mockResolvedValue(room),
     };
-    jest.spyOn(RoomServiceClient.prototype, 'createRoom').mockResolvedValue(
-      {} as Awaited<ReturnType<RoomServiceClient['createRoom']>>,
-    );
+    jest
+      .spyOn(RoomServiceClient.prototype, 'createRoom')
+      .mockResolvedValue({} as Awaited<ReturnType<RoomServiceClient['createRoom']>>);
     // Ver el comentario equivalente en 'CallsService: LiveKit': estos tests
     // son sobre la correlación de identidad, no sobre el gate de admin en
     // sí, así que se asume un anfitrión ya conectado por defecto.
@@ -477,5 +477,92 @@ describe('CallsService: historial', () => {
     expect(db.where).toHaveBeenCalled();
     expect(db.orderBy).toHaveBeenCalled();
     expect(db.limit).toHaveBeenCalledWith(50);
+  });
+});
+
+describe('CallsService: reportTrackState (mute/unmute reportado por el cliente)', () => {
+  let rooms: { getByCodeOrThrow: jest.Mock<RoomsService['getByCodeOrThrow']> };
+  let service: CallsService;
+  let listRooms: jest.SpiedFunction<RoomServiceClient['listRooms']>;
+  let onConflictDoNothing: jest.Mock<() => Promise<void>>;
+  let insertValues: jest.Mock<
+    (values: unknown) => { onConflictDoNothing: typeof onConflictDoNothing }
+  >;
+  let insert: jest.Mock<(table: unknown) => { values: typeof insertValues }>;
+  let db: { insert: typeof insert };
+
+  beforeEach(() => {
+    rooms = {
+      getByCodeOrThrow: jest.fn<RoomsService['getByCodeOrThrow']>().mockResolvedValue(room),
+    };
+    listRooms = jest
+      .spyOn(RoomServiceClient.prototype, 'listRooms')
+      .mockResolvedValue([{ sid: 'RM_live_sid' }] as Awaited<
+        ReturnType<RoomServiceClient['listRooms']>
+      >);
+    onConflictDoNothing = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    insertValues = jest.fn().mockReturnValue({ onConflictDoNothing });
+    insert = jest.fn().mockReturnValue({ values: insertValues });
+    db = { insert };
+    service = new CallsService(
+      rooms as unknown as RoomsService,
+      new ConfigService(config),
+      db as unknown as DrizzleDb,
+    );
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('inserta un evento track_unmuted con la identity del pase y el sid real de LiveKit', async () => {
+    await service.reportTrackState(room.code, participant, { source: 'microphone', enabled: true });
+
+    expect(listRooms).toHaveBeenCalledWith([room.code]);
+    expect(insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        livekitRoomSid: 'RM_live_sid',
+        roomCode: room.code,
+        eventType: 'track_unmuted',
+        livekitIdentity: participant.sub,
+        trackSource: 'microphone',
+      }),
+    );
+  });
+
+  it('enabled: false inserta track_muted', async () => {
+    await service.reportTrackState(room.code, participant, { source: 'camera', enabled: false });
+
+    expect(insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'track_muted', trackSource: 'camera' }),
+    );
+  });
+
+  it('la sala ya no existe en LiveKit (la llamada ya terminó): no inserta nada, sin tirar', async () => {
+    listRooms.mockResolvedValue([]);
+
+    await expect(
+      service.reportTrackState(room.code, participant, { source: 'microphone', enabled: true }),
+    ).resolves.toBeUndefined();
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  it('LiveKit no responde: no tira, es un reporte secundario best-effort', async () => {
+    listRooms.mockRejectedValue(new Error('livekit unreachable'));
+
+    await expect(
+      service.reportTrackState(room.code, participant, { source: 'microphone', enabled: true }),
+    ).resolves.toBeUndefined();
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  it('el pase es de otra sala: rechaza en silencio, sin consultar LiveKit', async () => {
+    await service.reportTrackState('otra-sala', participant, {
+      source: 'microphone',
+      enabled: true,
+    });
+
+    expect(listRooms).not.toHaveBeenCalled();
+    expect(insert).not.toHaveBeenCalled();
   });
 });
