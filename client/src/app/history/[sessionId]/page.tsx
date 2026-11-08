@@ -93,7 +93,15 @@ export default function CallSessionTimelinePage() {
         <Link href="/history" className={styles.backLink}>
           {t('← Volver al historial')}
         </Link>
-        <h1>{timeline?.roomName ?? t('Línea de tiempo')}</h1>
+        <div className={styles.titleRow}>
+          <h1>{timeline?.roomName ?? t('Línea de tiempo')}</h1>
+          {timeline?.endedAt && (
+            <span className={styles.statusPill}>
+              <span className={styles.statusDot} />
+              {t('Finalizada')}
+            </span>
+          )}
+        </div>
 
         {loading && <p>{t('Cargando línea de tiempo…')}</p>}
         {error && (
@@ -105,7 +113,11 @@ export default function CallSessionTimelinePage() {
         {!loading && !error && timeline && (
           <>
             <p className={styles.sessionMeta}>{formatDate(timeline.startedAt)}</p>
-            <ParticipationTimeline participants={timeline.participants} />
+            <ParticipationTimeline
+              participants={timeline.participants}
+              startedAt={timeline.startedAt}
+              endedAt={timeline.endedAt}
+            />
           </>
         )}
       </div>

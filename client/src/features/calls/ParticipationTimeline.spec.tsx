@@ -26,10 +26,19 @@ function participant(
   };
 }
 
+const SESSION_STARTED_AT = '2026-01-05T10:00:00.000Z';
+const SESSION_ENDED_AT = '2026-01-05T10:30:00.000Z';
+
 describe('ParticipationTimeline', () => {
   it('muestra el mensaje vacío cuando no hay participantes', async () => {
     const { ParticipationTimeline } = await import('./ParticipationTimeline');
-    render(<ParticipationTimeline participants={[]} />);
+    render(
+      <ParticipationTimeline
+        participants={[]}
+        startedAt={SESSION_STARTED_AT}
+        endedAt={SESSION_ENDED_AT}
+      />,
+    );
     expect(
       screen.getByText('Esta sesión no tiene participantes registrados.'),
     ).toBeInTheDocument();
@@ -39,6 +48,8 @@ describe('ParticipationTimeline', () => {
     const { ParticipationTimeline } = await import('./ParticipationTimeline');
     render(
       <ParticipationTimeline
+        startedAt={SESSION_STARTED_AT}
+        endedAt={SESSION_ENDED_AT}
         participants={[
           participant({ displayName: 'Daina Gacha', totalSeconds: 125 }),
           participant({
@@ -60,6 +71,8 @@ describe('ParticipationTimeline', () => {
     const { ParticipationTimeline } = await import('./ParticipationTimeline');
     render(
       <ParticipationTimeline
+        startedAt={SESSION_STARTED_AT}
+        endedAt={SESSION_ENDED_AT}
         participants={[
           participant({
             participantKey: 'guest:alex',
@@ -75,34 +88,74 @@ describe('ParticipationTimeline', () => {
 
   it('muestra el chip "Habló" solo cuando el participante abrió el micrófono', async () => {
     const { ParticipationTimeline } = await import('./ParticipationTimeline');
-    render(
+    const { container } = render(
       <ParticipationTimeline
+        startedAt={SESSION_STARTED_AT}
+        endedAt={SESSION_ENDED_AT}
         participants={[
           participant({ participantKey: 'user-1', spoke: true }),
           participant({ participantKey: 'user-2', spoke: false }),
         ]}
       />,
     );
-    expect(screen.getAllByText('Habló')).toHaveLength(1);
+    expect(container.querySelectorAll('.chip')).toHaveLength(1);
   });
 
   it('muestra el chip "Compartió pantalla" solo cuando corresponde', async () => {
     const { ParticipationTimeline } = await import('./ParticipationTimeline');
-    render(
+    const { container } = render(
       <ParticipationTimeline
+        startedAt={SESSION_STARTED_AT}
+        endedAt={SESSION_ENDED_AT}
         participants={[
           participant({ participantKey: 'user-1', screenShared: true }),
           participant({ participantKey: 'user-2', screenShared: false }),
         ]}
       />,
     );
-    expect(screen.getAllByText('Compartió pantalla')).toHaveLength(1);
+    expect(container.querySelectorAll('.chip')).toHaveLength(1);
   });
 
-  it('no muestra ningún chip cuando el participante ni habló ni compartió pantalla', async () => {
+  it('no muestra ningún chip cuando el participante ni habló, ni compartió pantalla, ni se reconectó', async () => {
     const { ParticipationTimeline } = await import('./ParticipationTimeline');
-    render(<ParticipationTimeline participants={[participant()]} />);
-    expect(screen.queryByText('Habló')).not.toBeInTheDocument();
-    expect(screen.queryByText('Compartió pantalla')).not.toBeInTheDocument();
+    const { container } = render(
+      <ParticipationTimeline
+        startedAt={SESSION_STARTED_AT}
+        endedAt={SESSION_ENDED_AT}
+        participants={[participant()]}
+      />,
+    );
+    expect(container.querySelectorAll('.chip')).toHaveLength(0);
+  });
+
+  it('muestra cuántas veces se reconectó un participante', async () => {
+    const { ParticipationTimeline } = await import('./ParticipationTimeline');
+    render(
+      <ParticipationTimeline
+        startedAt={SESSION_STARTED_AT}
+        endedAt={SESSION_ENDED_AT}
+        participants={[participant({ rejoinCount: 2 })]}
+      />,
+    );
+    expect(screen.getByText('Se reconectó 2x')).toBeInTheDocument();
+  });
+
+  it('ubica la barra de presencia a mitad del eje cuando el participante entró a mitad de la sesión', async () => {
+    const { ParticipationTimeline } = await import('./ParticipationTimeline');
+    const { container } = render(
+      <ParticipationTimeline
+        startedAt={SESSION_STARTED_AT}
+        endedAt={SESSION_ENDED_AT}
+        participants={[
+          participant({
+            firstJoinedAt: '2026-01-05T10:15:00.000Z',
+            lastLeftAt: SESSION_ENDED_AT,
+          }),
+        ]}
+      />,
+    );
+    const bar = container.querySelector('.track > div') as HTMLElement;
+    expect(bar.style.left).toBe('50%');
+    expect(bar.style.width).toBe('50%');
   });
 });

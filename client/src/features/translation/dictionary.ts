@@ -300,6 +300,18 @@ const en: Record<string, string> = {
   'Todavía no hiciste ninguna llamada.': "You haven't made any calls yet.",
   'No se pudo obtener el historial': 'Could not fetch the history',
 
+  // Línea de tiempo de participación
+  'Esta sesión no tiene participantes registrados.': 'This session has no recorded participants.',
+  Entró: 'Joined',
+  Salió: 'Left',
+  Habló: 'Spoke',
+  'Compartió pantalla': 'Shared screen',
+  'Se reconectó': 'Reconnected',
+  'Duración total': 'Total duration',
+  '1 participante': '1 participant',
+  participantes: 'participants',
+  Finalizada: 'Ended',
+
   // Configuración
   Apariencia: 'Appearance',
   'Modo oscuro': 'Dark mode',
