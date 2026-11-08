@@ -56,6 +56,7 @@ describe('CallSessionTimelinePage', () => {
           spoke: true,
           screenShared: false,
           rejoinCount: 0,
+          trackIntervals: [],
           nameColor: 'pink',
         },
       ],

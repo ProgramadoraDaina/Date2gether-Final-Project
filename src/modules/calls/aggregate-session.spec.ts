@@ -135,6 +135,67 @@ describe('aggregateSession', () => {
     });
   });
 
+  it('registra varios intervalos reales de cámara con sus horas exactas (prender/apagar/prender)', () => {
+    const identities: IdentityCorrelation[] = [
+      { livekitIdentity: 'id-a', userId: 'user-a', displayName: 'Ana' },
+    ];
+    const events: SessionEvent[] = [
+      { eventType: 'participant_joined', livekitIdentity: 'id-a', trackSource: null, occurredAt: seconds(0) },
+      { eventType: 'track_published', livekitIdentity: 'id-a', trackSource: 'camera', occurredAt: seconds(10) },
+      { eventType: 'track_unpublished', livekitIdentity: 'id-a', trackSource: 'camera', occurredAt: seconds(60) },
+      { eventType: 'track_published', livekitIdentity: 'id-a', trackSource: 'camera', occurredAt: seconds(90) },
+      { eventType: 'track_unpublished', livekitIdentity: 'id-a', trackSource: 'camera', occurredAt: seconds(150) },
+      { eventType: 'participant_left', livekitIdentity: 'id-a', trackSource: null, occurredAt: seconds(200) },
+    ];
+
+    const summary = aggregateSession(events, identities, seconds(400));
+
+    expect(summary).toHaveLength(1);
+    expect(summary[0].trackIntervals).toEqual([
+      { source: 'camera', startedAt: seconds(10), endedAt: seconds(60) },
+      { source: 'camera', startedAt: seconds(90), endedAt: seconds(150) },
+    ]);
+  });
+
+  it('cámara y micrófono abiertos a la vez generan intervalos independientes, cada uno con su propio cierre', () => {
+    const identities: IdentityCorrelation[] = [
+      { livekitIdentity: 'id-a', userId: 'user-a', displayName: 'Ana' },
+    ];
+    const events: SessionEvent[] = [
+      { eventType: 'participant_joined', livekitIdentity: 'id-a', trackSource: null, occurredAt: seconds(0) },
+      { eventType: 'track_published', livekitIdentity: 'id-a', trackSource: 'camera', occurredAt: seconds(5) },
+      { eventType: 'track_published', livekitIdentity: 'id-a', trackSource: 'microphone', occurredAt: seconds(8) },
+      { eventType: 'track_unpublished', livekitIdentity: 'id-a', trackSource: 'microphone', occurredAt: seconds(40) },
+      { eventType: 'track_unpublished', livekitIdentity: 'id-a', trackSource: 'camera', occurredAt: seconds(100) },
+      { eventType: 'participant_left', livekitIdentity: 'id-a', trackSource: null, occurredAt: seconds(150) },
+    ];
+
+    const summary = aggregateSession(events, identities, seconds(400));
+
+    expect(summary[0].trackIntervals).toEqual([
+      { source: 'camera', startedAt: seconds(5), endedAt: seconds(100) },
+      { source: 'microphone', startedAt: seconds(8), endedAt: seconds(40) },
+    ]);
+    expect(summary[0].spoke).toBe(true);
+  });
+
+  it('cámara que queda prendida sin unpublish (navegador colgado) cierra con fallbackEndAt, igual que join', () => {
+    const identities: IdentityCorrelation[] = [
+      { livekitIdentity: 'id-a', userId: 'user-a', displayName: 'Ana' },
+    ];
+    const events: SessionEvent[] = [
+      { eventType: 'participant_joined', livekitIdentity: 'id-a', trackSource: null, occurredAt: seconds(0) },
+      { eventType: 'track_published', livekitIdentity: 'id-a', trackSource: 'camera', occurredAt: seconds(10) },
+    ];
+    const fallbackEndAt = seconds(400);
+
+    const summary = aggregateSession(events, identities, fallbackEndAt);
+
+    expect(summary[0].trackIntervals).toEqual([
+      { source: 'camera', startedAt: seconds(10), endedAt: fallbackEndAt },
+    ]);
+  });
+
   it('sesión sin eventos devuelve un resumen vacío', () => {
     expect(aggregateSession([], [], seconds(0))).toEqual([]);
   });

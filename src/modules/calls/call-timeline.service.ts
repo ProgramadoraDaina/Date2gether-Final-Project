@@ -39,6 +39,7 @@ const PARTICIPANT_SUMMARY_COLUMNS = {
   spoke: callSessionParticipants.spoke,
   screenShared: callSessionParticipants.screenShared,
   rejoinCount: callSessionParticipants.rejoinCount,
+  trackIntervals: callSessionParticipants.trackIntervals,
   nameColor: callSessionParticipants.nameColor,
 };
 

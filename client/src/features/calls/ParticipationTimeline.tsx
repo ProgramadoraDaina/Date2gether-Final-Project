@@ -1,4 +1,4 @@
-import type { CallSessionParticipantSummary } from '@/lib/api';
+import type { CallSessionParticipantSummary, TrackInterval, TrackIntervalSource } from '@/lib/api';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { NAME_COLOR_HEX, resolveNameColorId } from '@/lib/nameColors';
 import { InitialsAvatar } from './InitialsAvatar';
@@ -50,25 +50,38 @@ function buildAxisTicks(totalSeconds: number): number[] {
   return ticks;
 }
 
-// Mínimo de ancho visible: una entrada/salida casi instantánea (p. ej. alguien
-// que se cae apenas conectado) no debe desaparecer del todo de la barra.
-const MIN_BAR_WIDTH_PCT = 1.5;
-// Por debajo de este ancho no vale la pena intentar meter texto/íconos adentro
-// de la barra: `overflow: hidden` en `.bar` se encarga de recortar prolijo
-// cualquier caso intermedio en vez de calcular un umbral exacto por contenido.
-const MIN_WIDTH_FOR_LABEL_PCT = 12;
+// Mínimo de ancho visible: un intervalo casi instantáneo (p. ej. alguien que
+// prende y apaga la cámara en el mismo segundo) no debe desaparecer del todo.
+const MIN_SEGMENT_WIDTH_PCT = 1;
+// Por debajo de este ancho no vale la pena intentar meter texto adentro del
+// segmento: `overflow: hidden` recorta prolijo el caso intermedio en vez de
+// calcular un umbral exacto por contenido.
+const MIN_WIDTH_FOR_SEGMENT_LABEL_PCT = 10;
 
 function clampPct(value: number): number {
   return Math.min(100, Math.max(0, value));
 }
 
-// Paleta de estado para los tres eventos que sí podemos afirmar que pasaron
-// (aunque no sepamos cuándo exactamente): reutiliza los tokens de la app
-// donde existen, y solo define un ámbar propio para "se reconectó" porque
-// no hay un token de advertencia global.
-const SPOKE_COLOR = 'var(--color-success)';
+// Paleta de estado para lo que sí podemos afirmar con hora exacta (los tres
+// carriles de abajo) o al menos "pasó alguna vez" (reconexión): reutiliza
+// los tokens de la app donde existen, y solo define un ámbar propio para
+// "se reconectó" porque no hay un token de advertencia global.
+const CAMERA_COLOR = NAME_COLOR_HEX.teal;
+const MIC_COLOR = 'var(--color-success)';
 const SCREEN_SHARE_COLOR = 'var(--color-accent)';
 const REJOIN_COLOR = '#e9a23b';
+
+const LANES: Array<{ source: TrackIntervalSource; color: string; textColor?: string }> = [
+  { source: 'camera', color: CAMERA_COLOR },
+  { source: 'microphone', color: MIC_COLOR },
+  { source: 'screen_share', color: SCREEN_SHARE_COLOR, textColor: 'var(--color-accent-contrast)' },
+];
+
+const LANE_LABEL_KEY: Record<TrackIntervalSource, string> = {
+  camera: 'Cámara encendida',
+  microphone: 'Habló',
+  screen_share: 'Compartió pantalla',
+};
 
 export function ParticipationTimeline({
   participants,
@@ -100,11 +113,19 @@ export function ParticipationTimeline({
   const totalDurationSeconds = Math.round(totalDurationMs / 1000);
   const axisTicks = buildAxisTicks(totalDurationSeconds);
 
+  function pctFor(iso: string): number {
+    return clampPct(((new Date(iso).getTime() - sessionStartMs) / totalDurationMs) * 100);
+  }
+
   return (
     <div className={styles.wrapper}>
       <div className={styles.legend}>
         <span className={styles.legendItem}>
-          <span className={styles.legendDot} style={{ backgroundColor: SPOKE_COLOR }} />
+          <span className={styles.legendDot} style={{ backgroundColor: CAMERA_COLOR }} />
+          {t('Cámara')}
+        </span>
+        <span className={styles.legendItem}>
+          <span className={styles.legendDot} style={{ backgroundColor: MIC_COLOR }} />
           {t('Habló')}
         </span>
         <span className={styles.legendItem}>
@@ -137,15 +158,21 @@ export function ParticipationTimeline({
         <ul className={styles.list}>
           {participants.map((participant) => {
             const colorId = resolveNameColorId(participant.displayName, participant.nameColor);
-            const barColor = NAME_COLOR_HEX[colorId];
+            const presenceColor = NAME_COLOR_HEX[colorId];
             const joinMs = new Date(participant.firstJoinedAt).getTime();
             const leaveMs = participant.lastLeftAt
               ? new Date(participant.lastLeftAt).getTime()
               : sessionEndMs;
-            const leftPct = clampPct(((joinMs - sessionStartMs) / totalDurationMs) * 100);
-            const rightPct = clampPct(((leaveMs - sessionStartMs) / totalDurationMs) * 100);
-            const widthPct = Math.max(rightPct - leftPct, MIN_BAR_WIDTH_PCT);
-            const showLabel = widthPct >= MIN_WIDTH_FOR_LABEL_PCT;
+            const presenceLeftPct = clampPct(((joinMs - sessionStartMs) / totalDurationMs) * 100);
+            const presenceRightPct = clampPct(((leaveMs - sessionStartMs) / totalDurationMs) * 100);
+            const presenceWidthPct = Math.max(presenceRightPct - presenceLeftPct, MIN_SEGMENT_WIDTH_PCT);
+
+            const intervalsBySource = new Map<TrackIntervalSource, TrackInterval[]>();
+            for (const interval of participant.trackIntervals) {
+              const list = intervalsBySource.get(interval.source) ?? [];
+              list.push(interval);
+              intervalsBySource.set(interval.source, list);
+            }
 
             return (
               <li key={participant.participantKey} className={styles.entry}>
@@ -164,45 +191,64 @@ export function ParticipationTimeline({
                 </div>
 
                 <div className={styles.entryBody}>
-                  <div
-                    className={styles.track}
-                    title={`${t('Entró')}: ${formatTime(participant.firstJoinedAt)} · ${t('Salió')}: ${formatTime(participant.lastLeftAt)}`}
-                  >
+                  <div className={styles.track}>
                     <div
-                      className={styles.bar}
+                      className={styles.presenceBackdrop}
                       style={{
-                        left: `${leftPct}%`,
-                        width: `${widthPct}%`,
-                        borderColor: barColor,
-                        backgroundColor: `color-mix(in srgb, ${barColor} 35%, transparent)`,
+                        left: `${presenceLeftPct}%`,
+                        width: `${presenceWidthPct}%`,
+                        backgroundColor: `color-mix(in srgb, ${presenceColor} 18%, transparent)`,
                       }}
-                    >
-                      {showLabel && (
-                        <>
-                          <span className={styles.barLabel}>
-                            {formatDuration(participant.totalSeconds)}
-                          </span>
-                          {participant.spoke && (
-                            <span
-                              className={styles.barBadge}
-                              style={{ backgroundColor: SPOKE_COLOR }}
-                            >
-                              {t('Habló')}
-                            </span>
-                          )}
-                          {participant.screenShared && (
-                            <span
-                              className={styles.barBadge}
-                              style={{
-                                backgroundColor: SCREEN_SHARE_COLOR,
-                                color: 'var(--color-accent-contrast)',
-                              }}
-                            >
-                              {t('Compartió pantalla')}
-                            </span>
-                          )}
-                        </>
-                      )}
+                    />
+                    <div className={styles.lanes}>
+                      {LANES.map(({ source, color, textColor }) => (
+                        <div key={source} className={styles.lane}>
+                          {(intervalsBySource.get(source) ?? []).map((interval, index) => {
+                            const leftPct = pctFor(interval.startedAt);
+                            const rightPct = pctFor(interval.endedAt);
+                            const widthPct = Math.max(rightPct - leftPct, MIN_SEGMENT_WIDTH_PCT);
+                            const seconds = Math.max(
+                              0,
+                              Math.round(
+                                (new Date(interval.endedAt).getTime() -
+                                  new Date(interval.startedAt).getTime()) /
+                                  1000,
+                              ),
+                            );
+                            const label = t(LANE_LABEL_KEY[source]);
+
+                            return (
+                              <div
+                                key={index}
+                                className={styles.segmentWrap}
+                                style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+                                tabIndex={0}
+                              >
+                                <div
+                                  className={styles.segment}
+                                  style={{ backgroundColor: color, borderColor: color }}
+                                >
+                                  {widthPct >= MIN_WIDTH_FOR_SEGMENT_LABEL_PCT && (
+                                    <span
+                                      className={styles.segmentLabel}
+                                      style={{ color: textColor ?? '#fff' }}
+                                    >
+                                      {label}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className={styles.segmentTooltip}>
+                                  <strong>{label}</strong>
+                                  <span>
+                                    {participant.displayName} · {formatTime(interval.startedAt)}–
+                                    {formatTime(interval.endedAt)} ({formatDuration(seconds)})
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
                     </div>
                   </div>
 
@@ -219,12 +265,12 @@ export function ParticipationTimeline({
                   </div>
 
                   {/* Fuente confiable de spoke/screenShared/rejoin: a diferencia
-                      de la etiqueta dentro de la barra, no depende de que haya
-                      ancho suficiente para no recortarse. */}
+                      de los carriles de arriba, no depende de que haya ancho
+                      suficiente para no recortarse. */}
                   {(participant.spoke || participant.screenShared || participant.rejoinCount > 0) && (
                     <div className={styles.chips}>
                       {participant.spoke && (
-                        <span className={styles.chip} style={{ backgroundColor: SPOKE_COLOR }}>
+                        <span className={styles.chip} style={{ backgroundColor: MIC_COLOR }}>
                           {t('Habló')}
                         </span>
                       )}

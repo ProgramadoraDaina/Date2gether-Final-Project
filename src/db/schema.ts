@@ -319,6 +319,15 @@ export const callSessions = pgTable(
   ],
 );
 
+// Forma de almacenamiento de un intervalo (JSON ya serializado: fechas como
+// string ISO, no Date — a diferencia de `TrackInterval` en
+// aggregate-session.ts, que es la forma en memoria antes de insertar).
+export interface CallSessionTrackInterval {
+  source: 'camera' | 'microphone' | 'screen_share';
+  startedAt: string;
+  endedAt: string;
+}
+
 // Resumen materializado por participante, calculado una vez al recibir
 // room_finished (aggregateSession(), función pura — ver design.md). Reusa la
 // paleta de colores existente (nameColorEnum).
@@ -338,10 +347,22 @@ export const callSessionParticipants = pgTable(
     firstJoinedAt: timestamp('first_joined_at').notNull(),
     lastLeftAt: timestamp('last_left_at'),
     totalSeconds: integer('total_seconds').notNull().default(0),
-    // Micrófono publicado alguna vez.
+    // Micrófono publicado alguna vez. Redundante con trackIntervals (se
+    // puede derivar filtrando source === 'microphone'), pero se conserva
+    // como columna propia porque las vistas que solo necesitan "¿habló?"
+    // no deberían tener que parsear el jsonb para una pregunta booleana.
     spoke: boolean('spoke').notNull().default(false),
     screenShared: boolean('screen_shared').notNull().default(false),
     rejoinCount: smallint('rejoin_count').notNull().default(0),
+    // Intervalos reales de cámara/mic/pantalla (TrackInterval[] de
+    // aggregate-session.ts): cuándo se prendió y cuándo se apagó cada vez,
+    // no solo si pasó alguna vez. jsonb y no una tabla aparte porque es un
+    // resumen derivado de solo lectura (igual que el resto de esta fila),
+    // nunca se filtra por su contenido en SQL.
+    trackIntervals: jsonb('track_intervals')
+      .$type<CallSessionTrackInterval[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     nameColor: nameColorEnum('name_color'),
   },
   (table) => [

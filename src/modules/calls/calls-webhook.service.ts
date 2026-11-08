@@ -267,9 +267,19 @@ export class CallsWebhookService {
       const summaries = aggregateSession(sessionEvents, identities, endedAt);
       if (summaries.length === 0) return;
 
-      await tx
-        .insert(callSessionParticipants)
-        .values(summaries.map((summary) => ({ sessionId, ...summary })));
+      await tx.insert(callSessionParticipants).values(
+        summaries.map((summary) => ({
+          sessionId,
+          ...summary,
+          // jsonb no tiene el manejo especial de Date que sí tiene la columna
+          // `timestamp`: hay que serializar a ISO a mano antes de insertar.
+          trackIntervals: summary.trackIntervals.map((interval) => ({
+            source: interval.source,
+            startedAt: interval.startedAt.toISOString(),
+            endedAt: interval.endedAt.toISOString(),
+          })),
+        })),
+      );
     });
   }
 }

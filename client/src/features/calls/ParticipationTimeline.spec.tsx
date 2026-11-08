@@ -21,6 +21,7 @@ function participant(
     spoke: false,
     screenShared: false,
     rejoinCount: 0,
+    trackIntervals: [],
     nameColor: 'pink',
     ...overrides,
   };
@@ -157,5 +158,64 @@ describe('ParticipationTimeline', () => {
     const bar = container.querySelector('.track > div') as HTMLElement;
     expect(bar.style.left).toBe('50%');
     expect(bar.style.width).toBe('50%');
+  });
+
+  it('dibuja un intervalo real de cámara en su posición y ancho exactos', async () => {
+    const { ParticipationTimeline } = await import('./ParticipationTimeline');
+    const { container } = render(
+      <ParticipationTimeline
+        startedAt={SESSION_STARTED_AT}
+        endedAt={SESSION_ENDED_AT}
+        participants={[
+          participant({
+            trackIntervals: [
+              {
+                source: 'camera',
+                startedAt: '2026-01-05T10:15:00.000Z',
+                endedAt: '2026-01-05T10:30:00.000Z',
+              },
+            ],
+          }),
+        ]}
+      />,
+    );
+    const segmentWrap = container.querySelector('.segmentWrap') as HTMLElement;
+    expect(segmentWrap.style.left).toBe('50%');
+    expect(segmentWrap.style.width).toBe('50%');
+  });
+
+  it('el tooltip de un intervalo muestra a quién, cuándo y por cuánto tiempo', async () => {
+    const { ParticipationTimeline } = await import('./ParticipationTimeline');
+    render(
+      <ParticipationTimeline
+        startedAt={SESSION_STARTED_AT}
+        endedAt={SESSION_ENDED_AT}
+        participants={[
+          participant({
+            displayName: 'Martín',
+            trackIntervals: [
+              {
+                source: 'microphone',
+                startedAt: '2026-01-05T10:05:00.000Z',
+                endedAt: '2026-01-05T10:07:00.000Z',
+              },
+            ],
+          }),
+        ]}
+      />,
+    );
+    expect(screen.getByText(/Martín · .* \(2m 0s\)/)).toBeInTheDocument();
+  });
+
+  it('no dibuja ningún intervalo cuando trackIntervals está vacío', async () => {
+    const { ParticipationTimeline } = await import('./ParticipationTimeline');
+    const { container } = render(
+      <ParticipationTimeline
+        startedAt={SESSION_STARTED_AT}
+        endedAt={SESSION_ENDED_AT}
+        participants={[participant()]}
+      />,
+    );
+    expect(container.querySelectorAll('.segmentWrap')).toHaveLength(0);
   });
 });

@@ -134,6 +134,14 @@ export interface CallSessionSummary {
   participantCount: number;
 }
 
+export type TrackIntervalSource = 'camera' | 'microphone' | 'screen_share';
+
+export interface TrackInterval {
+  source: TrackIntervalSource;
+  startedAt: string;
+  endedAt: string;
+}
+
 export interface CallSessionParticipantSummary {
   participantKey: string;
   userId: string | null;
@@ -145,6 +153,7 @@ export interface CallSessionParticipantSummary {
   spoke: boolean;
   screenShared: boolean;
   rejoinCount: number;
+  trackIntervals: TrackInterval[];
   nameColor: string | null;
 }
 
