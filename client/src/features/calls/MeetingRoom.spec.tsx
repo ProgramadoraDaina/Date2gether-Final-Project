@@ -126,6 +126,29 @@ describe('MeetingRoom', () => {
     expect(micButton).toHaveAttribute('title', 'Desactivar micrófono');
     expect(cameraButton).toHaveAttribute('title', 'Desactivar cámara');
   });
+  it('la referencia de onChange que recibe useTrackToggle es estable entre renders (si no, reengancha el useEffect interno de la librería en cada render y reporta mute/unmute repetido sin que nadie haya tocado nada)', async () => {
+    const { useTrackToggle } = await import('@livekit/components-react');
+    const { Track } = await import('livekit-client');
+    const MeetingRoom = (await import('./MeetingRoom')).default;
+    const call = state();
+    const { rerender } = render(
+      <MeetingRoom call={call} roomCode="abc-defg-hij" roomToken="test-room-token" roomEmojis={[]} />,
+    );
+    const firstMicOnChange = jest
+      .mocked(useTrackToggle)
+      .mock.calls.find((args) => args[0].source === Track.Source.Microphone)?.[0].onChange;
+
+    // Forzar un segundo render con las mismas props (algo que pasa todo el
+    // tiempo en una llamada real: estado de conexión, nivel de audio, etc.).
+    rerender(
+      <MeetingRoom call={{ ...call }} roomCode="abc-defg-hij" roomToken="test-room-token" roomEmojis={[]} />,
+    );
+    const secondMicOnChange = jest
+      .mocked(useTrackToggle)
+      .mock.calls.findLast((args) => args[0].source === Track.Source.Microphone)?.[0].onChange;
+
+    expect(secondMicOnChange).toBe(firstMicOnChange);
+  });
   it('mutear/desmutear el micrófono o la cámara le avisa al backend propio (no a LiveKit, que no manda webhook de eso)', async () => {
     const { useTrackToggle } = await import('@livekit/components-react');
     const { reportTrackState } = await import('@/lib/calls');

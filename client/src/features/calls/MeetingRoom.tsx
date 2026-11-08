@@ -169,13 +169,23 @@ interface ToggleButtonProps {
 
 function MicToggleButton({ roomCode, roomToken, setDeviceError }: ToggleButtonProps) {
   const { t } = useTranslation();
-  const { buttonProps, enabled } = useTrackToggle({
-    source: Track.Source.Microphone,
-    onDeviceError: () => setDeviceError(true),
-    onChange: (isEnabled) => {
+  // useTrackToggle sincroniza `onChange` con un useEffect propio que depende
+  // de [enabled, onChange] (ver livekit-client/components-react): una
+  // función nueva en cada render reengancha ese efecto en cada render, no
+  // solo cuando `enabled` realmente cambia. Sin useCallback acá, un mic
+  // encendido 15s mandaba ~25 reportes de "desmuteado" repetidos — cada uno
+  // pisando el intervalo real como si fuera un prendido nuevo.
+  const onMicChange = useCallback(
+    (isEnabled: boolean) => {
       setDeviceError(false);
       void reportTrackState(roomCode, roomToken, 'microphone', isEnabled);
     },
+    [roomCode, roomToken, setDeviceError],
+  );
+  const { buttonProps, enabled } = useTrackToggle({
+    source: Track.Source.Microphone,
+    onDeviceError: () => setDeviceError(true),
+    onChange: onMicChange,
   });
   const label = enabled ? t('Desactivar micrófono') : t('Activar micrófono');
   return (
@@ -193,13 +203,18 @@ function MicToggleButton({ roomCode, roomToken, setDeviceError }: ToggleButtonPr
 
 function CameraToggleButton({ roomCode, roomToken, setDeviceError }: ToggleButtonProps) {
   const { t } = useTranslation();
-  const { buttonProps, enabled } = useTrackToggle({
-    source: Track.Source.Camera,
-    onDeviceError: () => setDeviceError(true),
-    onChange: (isEnabled) => {
+  // Mismo motivo que en MicToggleButton: onChange tiene que ser estable.
+  const onCameraChange = useCallback(
+    (isEnabled: boolean) => {
       setDeviceError(false);
       void reportTrackState(roomCode, roomToken, 'camera', isEnabled);
     },
+    [roomCode, roomToken, setDeviceError],
+  );
+  const { buttonProps, enabled } = useTrackToggle({
+    source: Track.Source.Camera,
+    onDeviceError: () => setDeviceError(true),
+    onChange: onCameraChange,
   });
   const label = enabled ? t('Desactivar cámara') : t('Activar cámara');
   return (
