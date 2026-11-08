@@ -13,6 +13,7 @@ Desde la raíz ejecutá `pnpm dev:client`, o desde `client/` ejecutá `pnpm dev`
 - Crear una reunión requiere una cuenta y una sesión válida. Su creador queda como administrador.
 - Cualquier persona con el enlace `/room/<código>` puede entrar sin cuenta, eligiendo y confirmando un nombre de 1 a 60 caracteres. También se acepta el código desde el inicio.
 - Abrir el enlace muestra primero el formulario de nombre; no conecta el chat ni solicita el micrófono automáticamente.
+- Si la sala tiene espera, se muestra el estado de la solicitud y se puede cancelar; el chat y la llamada se conectan únicamente después de que el servidor confirme la admisión. El administrador tiene controles para activar la espera, bloquear nuevos ingresos y admitir o rechazar.
 - La API entrega un pase de participante limitado a esa sala. Ese pase se usa para el socket y para Llamar; no reemplaza el JWT de una cuenta ni habilita permisos de administrador.
 - Dos personas pueden usar el mismo nombre: sus identificadores de participante son distintos.
 - Copiar enlace permite invitar a otra persona. Salir cierra el socket y la sesión de audio del navegador.
@@ -29,7 +30,7 @@ El desarrollo local utiliza `ws://localhost:7880` con el servicio LiveKit del Co
 
 La configuración privada está solo en el backend. `client/.env` contiene la URL pública de la API. No poner claves de LiveKit ni credenciales AWS allí. Las pruebas simulan los SDK; la aceptación final requiere dispositivos y redes reales.
 
-Quedan pendientes previsualización antes del ingreso, compartir pantalla, admisión y otras funciones detalladas en los requisitos.
+Quedan pendientes previsualización antes del ingreso, compartir pantalla, cupo de admisión al chat y otras funciones detalladas en los requisitos.
 
 ## Scripts
 
