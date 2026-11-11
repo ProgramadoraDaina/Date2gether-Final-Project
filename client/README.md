@@ -12,7 +12,7 @@ Desde la raíz ejecutá `pnpm dev:client`, o desde `client/` ejecutá `pnpm dev`
 
 - Crear una reunión requiere una cuenta y una sesión válida. Su creador queda como administrador.
 - Cualquier persona con el enlace `/room/<código>` puede entrar sin cuenta, eligiendo y confirmando un nombre de 1 a 60 caracteres. También se acepta el código desde el inicio.
-- Abrir el enlace muestra primero el formulario de nombre; no conecta el chat ni solicita el micrófono automáticamente.
+- Abrir el enlace muestra el lobby con nombre, selección de cámara/micrófono y controles para probarlos. Ambos medios empiezan apagados; solo se pide permiso al activarlos. La cámara tiene una vista previa local y el micrófono un medidor sin reproducción por los parlantes. El chat y los medios de la sala se conectan al confirmar el ingreso.
 - La API entrega un pase de participante limitado a esa sala. Ese pase se usa para el socket y para Llamar; no reemplaza el JWT de una cuenta ni habilita permisos de administrador.
 - Dos personas pueden usar el mismo nombre: sus identificadores de participante son distintos.
 - Copiar enlace permite invitar a otra persona. Salir cierra el socket y la sesión de audio del navegador.
@@ -21,7 +21,7 @@ La interfaz conserva ES/EN y tema claro/oscuro. Los usuarios registrados mantien
 
 ## Audio y video con LiveKit
 
-Al pulsar Llamar, el backend entrega `{ url, token, roomName, participantLimit }` a quien presenta el pase de esa sala. El cliente conecta con `LiveKitRoom`, muestra la grilla y reproduce audio remoto. Cámara y micrófono empiezan apagados; se activan y se eligen desde los controles. También se puede escuchar y usar el chat sin otorgar permisos de dispositivos. Al colgar o salir se liberan los tracks. Los nombres se toman de los tokens firmados; repetir un nombre no mezcla identidades.
+Al confirmar el ingreso desde el lobby, el backend entrega `{ url, token, roomName, participantLimit }` a quien presenta el pase de esa sala. El cliente conecta con `LiveKitRoom`, muestra la grilla y reproduce audio remoto. La llamada utiliza los dispositivos y estados elegidos en el lobby; también se pueden cambiar durante la llamada. Cambiar, apagar o abandonar la vista previa libera sus capturas, incluidas las respuestas tardías de permisos. Los permisos rechazados y dispositivos ausentes u ocupados muestran una explicación y permiten entrar con ese medio apagado. Si un dispositivo falla al conectar, la reunión continúa y se puede reintentar desde sus controles. También se puede escuchar y usar el chat sin otorgar permisos de dispositivos. Al colgar o salir se liberan los tracks. Los nombres se toman de los tokens firmados; repetir un nombre no mezcla identidades.
 
 El cupo predeterminado es de seis conexiones de medios. El backend prepara la sala y LiveKit aplica ese máximo; las claves privadas del servidor no llegan al navegador. Ya no se usa Chime SDK ni se necesita habilitar funciones avanzadas de AWS.
 
@@ -29,7 +29,7 @@ El desarrollo local utiliza `ws://localhost:7880` con el servicio LiveKit del Co
 
 La configuración privada está solo en el backend. `client/.env` contiene la URL pública de la API. No poner claves de LiveKit ni credenciales AWS allí. Las pruebas simulan los SDK; la aceptación final requiere dispositivos y redes reales.
 
-Quedan pendientes previsualización antes del ingreso, compartir pantalla, admisión y otras funciones detalladas en los requisitos.
+Quedan pendientes compartir pantalla, admisión y otras funciones detalladas en los requisitos.
 
 ## Scripts
 

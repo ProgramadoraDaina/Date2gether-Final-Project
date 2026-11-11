@@ -1,5 +1,36 @@
 // Clave: string original en español. Valor: traducción al inglés.
 const en: Record<string, string> = {
+  // Lobby previo a la llamada
+  'Prepará tu cámara y micrófono': 'Set up your camera and microphone',
+  'Vista previa de tu cámara': 'Your camera preview',
+  'Nivel del micrófono': 'Microphone level',
+  'Esta prueba es solo para vos. Nadie te ve ni te escucha hasta que entrás.':
+    'This preview is private. Nobody can see or hear you until you join.',
+  'Esperando permiso de cámara…': 'Waiting for camera permission…',
+  'Cámara apagada': 'Camera off',
+  'Micrófono apagado': 'Microphone off',
+  'Hablá para comprobar el nivel del micrófono.': 'Speak to check your microphone level.',
+  'Predeterminado del sistema': 'System default',
+  'Dispositivo no disponible': 'Device unavailable',
+  Cámara: 'Camera',
+  Micrófono: 'Microphone',
+  'Esperando permiso del navegador. Podés apagar el dispositivo para continuar.':
+    'Waiting for browser permission. You can turn the device off to continue.',
+  'El permiso fue rechazado. Revisá los permisos del navegador o entrá con el dispositivo apagado.':
+    'Permission was denied. Check your browser permissions or join with the device off.',
+  'No se encontró el dispositivo. Elegí otro o entrá con el dispositivo apagado.':
+    'Device not found. Choose another device or join with it off.',
+  'El dispositivo está ocupado o no se pudo iniciar. Cerrá otras aplicaciones e intentá otra vez.':
+    'The device is busy or could not start. Close other applications and try again.',
+  'No se pudo activar el dispositivo. Podés reintentar o entrar con el dispositivo apagado.':
+    'Could not enable the device. Try again or join with it off.',
+  'El dispositivo se desconectó. Elegí otro y volvé a activarlo.':
+    'The device was disconnected. Choose another device and enable it again.',
+  'Este navegador no permite probar dispositivos. Usá HTTPS o localhost; podés entrar sin cámara ni micrófono.':
+    'This browser cannot preview devices. Use HTTPS or localhost; you can join without a camera or microphone.',
+  'No se pudo obtener la lista de dispositivos. Podés probar el dispositivo predeterminado.':
+    'Could not list devices. You can try the system default device.',
+
   'Podés entrar con un enlace o código sin crear una cuenta.':
     'You can join with a link or code without creating an account.',
   'Entrar a la reunión': 'Join the meeting',
@@ -169,10 +200,12 @@ const en: Record<string, string> = {
   Usar: 'Use',
   Elegido: 'Selected',
   'No se pudieron cargar los sonidos': 'Could not load the sounds',
-  'No se pudieron cargar los sonidos. Intentá nuevamente.': 'Could not load the sounds. Please try again.',
+  'No se pudieron cargar los sonidos. Intentá nuevamente.':
+    'Could not load the sounds. Please try again.',
   'La búsqueda de sonidos no está configurada': 'Sound search is not configured',
   'Ese sonido de Freesound no está disponible': 'That Freesound sound is not available',
-  'No se pudo descargar el sonido. Intentá nuevamente.': 'Could not download the sound. Please try again.',
+  'No se pudo descargar el sonido. Intentá nuevamente.':
+    'Could not download the sound. Please try again.',
   'Subí un sonido o elegí uno de Freesound (solo uno de los dos)':
     'Upload a sound or pick one from Freesound (only one of them)',
   'Emoji común': 'Standard emoji',
