@@ -70,6 +70,7 @@ describe('RoomPage: elección de dispositivos en el lobby', () => {
     const { createRoomSocket } = await import('@/lib/socket');
     jest.mocked(createRoomSocket).mockReturnValue({
       on: jest.fn(),
+      off: jest.fn(),
       connect: jest.fn(),
       removeAllListeners: jest.fn(),
       disconnect: jest.fn(),
