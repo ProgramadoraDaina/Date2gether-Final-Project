@@ -246,6 +246,7 @@ describe('MeetingRoom', () => {
       <MeetingRoom
         call={state()}
         roomCode="abc"
+        roomToken="test-room-token"
         roomEmojis={[]}
         initialDevices={{
           cameraEnabled: true,
@@ -282,6 +283,7 @@ describe('MeetingRoom', () => {
       <MeetingRoom
         call={call}
         roomCode="abc"
+        roomToken="test-room-token"
         roomEmojis={[]}
         initialDevices={{
           cameraEnabled: true,

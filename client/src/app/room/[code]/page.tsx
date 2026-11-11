@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react';
+import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useParams } from 'next/navigation';
 import type { Socket } from 'socket.io-client';

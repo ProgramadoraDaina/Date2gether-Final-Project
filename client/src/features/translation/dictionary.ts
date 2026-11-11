@@ -305,7 +305,6 @@ const en: Record<string, string> = {
   Entró: 'Joined',
   Salió: 'Left',
   Habló: 'Spoke',
-  Cámara: 'Camera',
   'Cámara encendida': 'Camera on',
   'Compartió pantalla': 'Shared screen',
   'Se reconectó': 'Reconnected',
