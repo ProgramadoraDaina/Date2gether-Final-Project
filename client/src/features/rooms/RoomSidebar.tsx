@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react';
+import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from 'react';
 import { ThemeToggle } from '@/features/theme/ThemeToggle';
 import { LanguageToggle } from '@/features/translation/LanguageToggle';
 import { useTranslation } from '@/features/translation/useTranslation';
@@ -19,6 +19,10 @@ interface RoomSidebarProps {
   open: boolean;
   width: number;
   onResizeHandleMouseDown: (e: ReactMouseEvent) => void;
+  // undefined mientras el socket de la sala todavía no existe (ver RoomPage):
+  // sin él no hay con qué sincronizar la música, así que no hay nada para
+  // mostrar todavía.
+  musicPlayer?: ReactNode;
 }
 
 export function RoomSidebar({
@@ -29,6 +33,7 @@ export function RoomSidebar({
   open,
   width,
   onResizeHandleMouseDown,
+  musicPlayer,
 }: RoomSidebarProps) {
   const { t } = useTranslation();
 
@@ -52,9 +57,12 @@ export function RoomSidebar({
           {t('Emojis y sonidos')}
         </button>
 
-        <button type="button" className={`secondary ${styles.copyLink}`} onClick={onCopyLink}>
-          {t(copied ? 'Enlace copiado' : 'Copiar enlace')}
-        </button>
+        <div className={styles.bottomActions}>
+          {musicPlayer}
+          <button type="button" className={`secondary ${styles.copyLink}`} onClick={onCopyLink}>
+            {t(copied ? 'Enlace copiado' : 'Copiar enlace')}
+          </button>
+        </div>
         {/* Única salida de la sala cuando la llamada todavía está
             conectando o falló (MeetingRoom, con su botón de "Colgar", ni
             se monta en esos casos): sin esto, la única forma de volver al

@@ -255,6 +255,28 @@ const en: Record<string, string> = {
   'Mostrar chat': 'Show chat',
   'Ocultar chat': 'Hide chat',
 
+  // Música ambiental
+  Música: 'Music',
+  'Agregar música': 'Add music',
+  'Unirme a la música': 'Join the music',
+  'Pegá un link o ID de YouTube': 'Paste a YouTube link or video ID',
+  'Elegir canción': 'Set track',
+  Reproducir: 'Play',
+  Pausar: 'Pause',
+  Anterior: 'Previous',
+  Siguiente: 'Next',
+  'Sacar de la lista': 'Remove from queue',
+  'Avance de la canción': 'Track progress',
+  'El link o ID de YouTube no es válido': 'That YouTube link or ID is not valid',
+  'No se pudo reproducir ese video. Probá con otro link.':
+    'That video could not be played. Try another link.',
+  'No se pudo obtener la información de ese video. Probá con otro link.':
+    "Could not get that video's info. Try another link.",
+  'Silenciar música': 'Mute music',
+  'Activar sonido de la música': 'Unmute music',
+  'Volumen de la música': 'Music volume',
+  'Ver playlist': 'View playlist',
+
   // Tema
   'Cambiar a modo claro': 'Switch to light mode',
   'Cambiar a modo oscuro': 'Switch to dark mode',
