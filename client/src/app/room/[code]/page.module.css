@@ -1,8 +1,3 @@
-/* --- primitivos compartidos de formulario/tarjeta, reusados por la
-   tarjeta de "entrar con tu nombre" (pre-join) --- */
-.card {
-  composes: card from '../../../styles/form.module.css';
-}
 .error {
   composes: error from '../../../styles/form.module.css';
 }

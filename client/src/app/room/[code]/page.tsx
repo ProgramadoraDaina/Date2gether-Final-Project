@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react';
-import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useParams } from 'next/navigation';
 import type { Socket } from 'socket.io-client';
@@ -19,6 +18,8 @@ import { useResizablePanel } from '@/features/rooms/useResizablePanel';
 import { useRoomMembers } from '@/features/rooms/useRoomMembers';
 import { useRoomNotes } from '@/features/rooms/useRoomNotes';
 import { ApiError, requestRoomAccess, type RoomAccess, type RoomEmoji } from '@/lib/api';
+import { PreCallLobby } from '@/features/calls/PreCallLobby';
+import { DEFAULT_CALL_DEVICES, type CallDevices } from '@/features/calls/callDevices';
 import { useCallSession } from '@/features/calls/useCallSession';
 import { createRoomSocket } from '@/lib/socket';
 import { useTranslation } from '@/features/translation/useTranslation';
@@ -26,6 +27,10 @@ import { NAME_COLOR_HEX, isNameColorId } from '@/lib/nameColors';
 import styles from './page.module.css';
 
 const MeetingRoom = dynamic(() => import('@/features/calls/MeetingRoom'), { ssr: false });
+const AmbientMusicPlayer = dynamic(
+  () => import('@/features/calls/AmbientMusicPlayer').then((m) => m.AmbientMusicPlayer),
+  { ssr: false },
+);
 
 const NAME_KEY = 'date2gether:userName';
 
@@ -100,6 +105,12 @@ export default function RoomPage() {
   }[sharedNotes.status];
   const [chatOpen, setChatOpen] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Además del ref (que el resto del componente ya usaba para emitir desde
+  // handlers sin re-render), se guarda en estado para pasarlo como prop a
+  // MeetingRoom: mutar un ref no dispara un re-render, así que sin esto
+  // AmbientMusicPlayer podía quedarse con socket=null aunque el ref ya
+  // tuviera la conexión real.
+  const [roomSocket, setRoomSocket] = useState<Socket | null>(null);
   const sidebarResize = useResizablePanel({
     storageKey: 'date2gether:sidebarWidth',
     defaultWidth: 220,
@@ -118,6 +129,8 @@ export default function RoomPage() {
   const listRef = useRef<HTMLUListElement>(null);
   const draftInputRef = useRef<HTMLInputElement>(null);
   const callSession = useCallSession();
+  const { joinCall } = callSession;
+  const [initialDevices, setInitialDevices] = useState(DEFAULT_CALL_DEVICES);
   const [emojisOpen, setEmojisOpen] = useState(false);
   const { emojis, refetchEmojis } = useRoomEmojis(access ? code : undefined);
   const chatEmojis = useMemo(() => emojis.filter((e) => e.kind === 'emoji'), [emojis]);
@@ -143,14 +156,14 @@ export default function RoomPage() {
     setPersonalNotes(localStorage.getItem(key) ?? '');
   }, [access, code]);
 
-  async function handleJoin(e: FormEvent) {
-    e.preventDefault();
+  async function handleJoin(devices: CallDevices) {
     if (!name.trim() || joining) return;
     setJoining(true);
     setJoinError(null);
     try {
       const roomAccess = await requestRoomAccess(code, name.trim());
       localStorage.setItem(NAME_KEY, roomAccess.participant.name);
+      setInitialDevices(devices);
       setAccess(roomAccess);
     } catch (error) {
       setJoinError(error instanceof ApiError ? error.message : t('No se pudo entrar a la sala'));
@@ -159,23 +172,16 @@ export default function RoomPage() {
     }
   }
 
-  // Al estilo Google Meet: entrar a la sala ya significa estar en la llamada,
-  // sin un paso manual de "Llamar". Si el usuario corta manualmente, este
-  // efecto no debe reconectar: `access`/`code` no cambian después de un
-  // hangup, así que no se vuelve a disparar. `callSession` se omite a
-  // propósito de las dependencias: es estable (useCallback sin deps) y
-  // agregarla no cambia el comportamiento, solo confunde la intención.
-  // (oxlint no soporta suprimir esta regla con un comentario inline; el
-  // warning "missing dependency: callSession" que queda es esperado.)
+  // El lobby confirma nombre y dispositivos antes de conectar chat y medios.
   useEffect(() => {
-    if (!access) return;
-    callSession.joinCall(code, access.token);
-  }, [access, code]);
+    if (access) void joinCall(code, access.token);
+  }, [access, code, joinCall]);
 
   useEffect(() => {
     if (!code || !access) return;
     const socket = createRoomSocket(access.token);
     socketRef.current = socket;
+    setRoomSocket(socket);
 
     socket.on('connect', () => {
       socket.emit('joinRoom', { code });
@@ -232,6 +238,7 @@ export default function RoomPage() {
       socket.removeAllListeners();
       socket.disconnect();
       socketRef.current = null;
+      setRoomSocket(null);
     };
   }, [code, access, refetchMembers, refetchEmojis, t]);
 
@@ -275,44 +282,19 @@ export default function RoomPage() {
     }
   }
 
-  // Misma tarjeta para el estado "todavía sin acceso" y para el de "acceso
-  // concedido pero la llamada no está in-call": en este segundo caso se
-  // muestra como overlay de pantalla completa ARRIBA de la sala (ver el
-  // return final), no en vez de ella. La sala y <MeetingRoom> tienen que
-  // montarse ya (aunque quede tapada) porque es justamente ese montaje el
-  // que dispara la conexión a LiveKit y, con ella, el status 'in-call' que
-  // hace desaparecer este overlay. Si se la reemplaza en vez de tapar, el
-  // status nunca avanza de 'connecting' (no hay nada que la saque de ahí).
-  const joinCard = (
-    <div className={styles.card}>
-      <h1>{t('Entrar a la reunión')}</h1>
-      <p className="code">{code}</p>
-      <p>{t('Elegí cómo querés aparecer. No necesitás una cuenta.')}</p>
-      <form onSubmit={handleJoin}>
-        <label htmlFor="guest-name">{t('Tu nombre en la reunión')}</label>
-        <input
-          id="guest-name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          maxLength={60}
-          required
-          autoComplete="nickname"
-        />
-        <button type="submit" disabled={joining || !name.trim()}>
-          {joining ? t('Entrando…') : t('Entrar a la reunión')}
-        </button>
-      </form>
-      {joinError && (
-        <p className={styles.error} role="alert" data-testid="error-message">
-          {joinError}
-        </p>
-      )}
-      <Link href="/">{t('Volver al inicio')}</Link>
-    </div>
-  );
-
   if (!access) {
-    return <AppShell>{joinCard}</AppShell>;
+    return (
+      <AppShell>
+        <PreCallLobby
+          code={code}
+          name={name}
+          onNameChange={setName}
+          joining={joining}
+          error={joinError}
+          onJoin={handleJoin}
+        />
+      </AppShell>
+    );
   }
 
   // A diferencia de antes, este estado de "conectando"/"error" NO tapa toda
@@ -562,6 +544,9 @@ export default function RoomPage() {
           open={sidebarOpen}
           width={sidebarResize.width}
           onResizeHandleMouseDown={sidebarResize.handleMouseDown}
+          musicPlayer={
+            roomSocket && <AmbientMusicPlayer socket={roomSocket} isAdmin={isCurrentUserAdmin} />
+          }
         />
         <button
           type="button"
@@ -602,7 +587,12 @@ export default function RoomPage() {
 
           <div className={styles.meetingAndChat}>
             {callSession.session ? (
-              <MeetingRoom call={callSession} roomCode={code} roomEmojis={emojis} />
+              <MeetingRoom
+                call={callSession}
+                roomCode={code}
+                roomEmojis={emojis}
+                initialDevices={initialDevices}
+              />
             ) : (
               callLoadingPanel
             )}

@@ -1,0 +1,342 @@
+.ambientMusic {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* El target de montaje del IFrame Player necesita existir como elemento
+   visible al momento de crearse (requisito de la API de YouTube), pero el
+   audio es ambiental: no hace falta mostrar el video. */
+.hiddenPlayer {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Todo lo de música vive en una sola tarjeta (ver AmbientMusicPlayer.tsx):
+   antes el botón de unirse y el de agregar música quedaban sueltos en la
+   sidebar, sin ninguna relación visual entre sí. */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--color-chip-bg);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-card);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.joinButton,
+.toggleButton {
+  background: var(--color-surface);
+  color: var(--color-accent);
+  border: 1px solid var(--color-border);
+}
+
+.joinButton:hover,
+.toggleButton:hover {
+  border-color: var(--color-accent);
+}
+
+.adminControls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.toggleButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.chevron,
+.chevronOpen {
+  display: inline-flex;
+  transition: transform 150ms ease;
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 2px;
+}
+
+.trackForm {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.trackForm input {
+  flex: 1;
+}
+
+.nowPlaying {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seekRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* --seek-fill lo setea el componente por inline style (porcentaje de avance):
+   es el truco estándar para "rellenar" un <input type="range"> nativo, que
+   no tiene una pseudo-clase propia para la porción ya recorrida.
+
+   El tramo sin recorrer usa --color-surface, no --color-border: en el tema
+   oscuro --color-border y --color-chip-bg (el fondo de esta tarjeta) son el
+   mismo valor, así que la barra quedaba invisible contra la tarjeta. */
+.seekBar {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--color-accent) var(--seek-fill, 0%),
+    var(--color-surface) var(--seek-fill, 0%)
+  );
+  cursor: pointer;
+}
+
+.seekBar:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.seekBar::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  cursor: pointer;
+}
+
+.seekBar::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: none;
+  border-radius: 50%;
+  background: var(--color-accent);
+  cursor: pointer;
+}
+
+/* Firefox no respeta el background puesto directo en el input para el
+   track: necesita su propia pseudo-clase, a diferencia de Webkit. Mismo
+   --color-surface que arriba, por la misma razón (contraste contra la
+   tarjeta, no contra --color-border). */
+.seekBar::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-surface);
+}
+
+.volumeRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Mismo truco de --seek-fill que .seekBar, con su propia variable
+   (--volume-fill) porque conviven en la misma tarjeta. */
+.volumeBar {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--color-accent) var(--volume-fill, 100%),
+    var(--color-surface) var(--volume-fill, 100%)
+  );
+  cursor: pointer;
+}
+
+.volumeBar::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  cursor: pointer;
+}
+
+.volumeBar::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: none;
+  border-radius: 50%;
+  background: var(--color-accent);
+  cursor: pointer;
+}
+
+.volumeBar::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-surface);
+}
+
+.seekTime {
+  flex-shrink: 0;
+  width: 84px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.playbackButtons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+/* Mismo lenguaje visual que los íconos redondos de la barra de controles de
+   la llamada (ver .iconButton en MeetingRoom.module.css): refuerza que son
+   la misma familia de controles, aunque viven en la sidebar. */
+.iconButton {
+  composes: iconButton from './MeetingRoom.module.css';
+  width: 36px;
+  height: 36px;
+}
+
+/* Regla propia (no composes + modificador): la acción principal del
+   reproductor necesita ganarle a .iconButton con certeza, y dos clases
+   compuestas en el mismo elemento no garantizan ese orden de cascada. */
+.playButton {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: none;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  cursor: pointer;
+  padding: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.playButton:hover {
+  background: var(--color-accent-hover);
+}
+
+.playlist {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.track,
+.trackActive {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  font-size: 13px;
+  border-left: 2px solid transparent;
+}
+
+/* Clickeable: salta a esa canción (ver handleJumpToTrack). La que ya está
+   sonando (.trackActive) no lo es, no tiene sentido "saltar" a sí misma. */
+.track {
+  cursor: pointer;
+}
+
+.track:hover {
+  background: var(--color-surface);
+}
+
+/* La canción que está sonando se marca con una barra de acento a la
+   izquierda y el texto en el color de acento, como el resto de la UI. */
+.trackActive {
+  background: var(--color-surface);
+  color: var(--color-accent);
+  font-weight: 600;
+  border-left-color: var(--color-accent);
+}
+
+.trackIndex {
+  flex-shrink: 0;
+  width: 16px;
+  text-align: right;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.trackActive .trackIndex {
+  color: var(--color-accent);
+}
+
+.trackTitle {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.removeButton {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0;
+}
+
+.removeButton:hover {
+  color: var(--color-error);
+  background: var(--color-chip-bg);
+}
+
+.error {
+  color: var(--color-error, #c0392b);
+  font-size: 0.85rem;
+}

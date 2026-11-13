@@ -1,10 +1,20 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import type { CallSessionState } from './useCallSession';
 import { useLanguageStore } from '../translation/store';
 
 const mockPush = jest.fn();
+const mockEvents: Record<string, () => void> = {};
+const mockRoom = {
+  state: 'disconnected',
+  on: jest.fn(),
+  off: jest.fn(),
+  localParticipant: {
+    setMicrophoneEnabled: jest.fn<(enabled: boolean) => Promise<void>>(),
+    setCameraEnabled: jest.fn<(enabled: boolean) => Promise<void>>(),
+  },
+};
 
 jest.mock('@livekit/components-react', () => ({
   LiveKitRoom: jest.fn(({ children }: { children: ReactNode }) => <div>{children}</div>),
@@ -17,12 +27,15 @@ jest.mock('@livekit/components-react', () => ({
   useDisconnectButton: jest.fn(() => ({ buttonProps: { onClick: jest.fn() } })),
   useTrackToggle: jest.fn(),
   useTracks: jest.fn(() => []),
+  useRoomContext: () => mockRoom,
   useDataChannel: jest.fn(() => ({ send: jest.fn(), isSending: false, message: undefined })),
   useLocalParticipant: jest.fn(() => ({ localParticipant: { identity: 'local', name: 'Ana' } })),
   useMaybeTrackRefContext: jest.fn(() => undefined),
 }));
 jest.mock('livekit-client', () => ({
   DefaultReconnectPolicy: jest.fn(),
+  ConnectionState: { Connected: 'connected' },
+  RoomEvent: { Connected: 'connected' },
   DisconnectReason: { CLIENT_INITIATED: 1 },
   Track: { Source: { Camera: 'camera', Microphone: 'microphone' } },
   VideoPresets: { h360: { resolution: { width: 640, height: 360 } }, h90: {}, h180: {} },
@@ -46,9 +59,7 @@ function state(): CallSessionState {
     failed: jest.fn(),
   };
 }
-function defaultUseTrackToggle({
-  onDeviceError,
-}: { onDeviceError?: (error: Error) => void } = {}) {
+function defaultUseTrackToggle({ onDeviceError }: { onDeviceError?: (error: Error) => void } = {}) {
   return {
     toggle: jest.fn(),
     enabled: true,
@@ -62,6 +73,12 @@ function defaultUseTrackToggle({
 describe('MeetingRoom', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockRoom.state = 'disconnected';
+    mockRoom.on.mockImplementation((event, callback) => {
+      mockEvents[event as string] = callback as () => void;
+    });
+    mockRoom.localParticipant.setMicrophoneEnabled.mockResolvedValue();
+    mockRoom.localParticipant.setCameraEnabled.mockResolvedValue();
     useLanguageStore.setState({ language: 'es' });
     const { useTrackToggle } = await import('@livekit/components-react');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -142,5 +159,62 @@ describe('MeetingRoom', () => {
     act(() => props.onError?.(new Error('network')));
     expect(call.failed).toHaveBeenCalledTimes(1);
     expect(mockPush).toHaveBeenCalledTimes(1);
+  });
+  it('aplica los dispositivos elegidos solo en la primera conexión, sin reactivarlos al reconectar', async () => {
+    const { LiveKitRoom } = await import('@livekit/components-react');
+    const MeetingRoom = (await import('./MeetingRoom')).default;
+    render(
+      <MeetingRoom
+        call={state()}
+        roomCode="abc"
+        roomEmojis={[]}
+        initialDevices={{
+          cameraEnabled: true,
+          microphoneEnabled: true,
+          cameraId: 'usb-camera',
+          microphoneId: 'usb-mic',
+        }}
+      />,
+    );
+    const props = jest.mocked(LiveKitRoom).mock.calls[0][0];
+    expect(props.options).toMatchObject({
+      audioCaptureDefaults: { deviceId: 'usb-mic' },
+      videoCaptureDefaults: { deviceId: 'usb-camera' },
+    });
+    expect(mockRoom.localParticipant.setCameraEnabled).not.toHaveBeenCalled();
+    await act(async () => {
+      mockEvents.connected();
+    });
+    expect(mockRoom.localParticipant.setCameraEnabled).toHaveBeenCalledTimes(1);
+    expect(mockRoom.localParticipant.setMicrophoneEnabled).toHaveBeenCalledWith(true);
+    await act(async () => {
+      mockEvents.connected();
+    });
+    expect(mockRoom.localParticipant.setCameraEnabled).toHaveBeenCalledTimes(1);
+  });
+  it('si se revoca el permiso de cámara después del lobby, conserva la llamada y publica el micrófono', async () => {
+    mockRoom.state = 'connected';
+    mockRoom.localParticipant.setCameraEnabled.mockRejectedValueOnce(
+      new Error('permission revoked'),
+    );
+    const MeetingRoom = (await import('./MeetingRoom')).default;
+    const call = state();
+    render(
+      <MeetingRoom
+        call={call}
+        roomCode="abc"
+        roomEmojis={[]}
+        initialDevices={{
+          cameraEnabled: true,
+          microphoneEnabled: true,
+          cameraId: '',
+          microphoneId: '',
+        }}
+      />,
+    );
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Revisá los permisos'));
+    expect(mockRoom.localParticipant.setMicrophoneEnabled).toHaveBeenCalledWith(true);
+    expect(call.failed).not.toHaveBeenCalled();
+    expect(screen.getByText('Audio remoto')).toBeVisible();
   });
 });
