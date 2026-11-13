@@ -54,6 +54,7 @@ pnpm test:e2e:db:down
 ## Carpeta
 
 - `admission.spec.ts` — ingreso directo y con espera, permisos del administrador, aislamiento de credenciales, bloqueo, cancelación, vencimiento y decisiones simultáneas; recorre también admisión y rechazo entre dos navegadores.
+- `lobby.spec.ts` — vista previa de cámara, prueba de micrófono y apagado con dispositivos sintéticos de Chromium; comprueba también el diseño móvil y que no se conecte a la sala antes de entrar.
 - `auth.spec.ts` — registro, login, persistencia de sesión, logout.
 - `rooms.spec.ts` — crear sala, unirse con código, dos personas en la misma
   sala, código inexistente.

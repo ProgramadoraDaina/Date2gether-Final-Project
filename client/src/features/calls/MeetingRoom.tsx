@@ -8,10 +8,13 @@ import {
   RoomAudioRenderer,
   StartAudio,
   useDisconnectButton,
+  useRoomContext,
   useTracks,
   useTrackToggle,
 } from '@livekit/components-react';
 import {
+  ConnectionState,
+  RoomEvent,
   DefaultReconnectPolicy,
   DisconnectReason,
   Track,
@@ -19,9 +22,10 @@ import {
   type RoomOptions,
 } from 'livekit-client';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
-import { useTranslation } from '../translation/useTranslation';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { DEFAULT_CALL_DEVICES, type CallDevices } from './callDevices';
 import type { RoomEmoji } from '@/lib/api';
+import { useTranslation } from '../translation/useTranslation';
 import type { CallSessionState } from './useCallSession';
 import styles from './MeetingRoom.module.css';
 import { ReactionOverlay } from './reactions/ReactionOverlay';
@@ -47,10 +51,12 @@ const options: RoomOptions = {
   reconnectPolicy: new DefaultReconnectPolicy([0, 500]),
 };
 
-// Default de livekit-client: 15s por intento antes de darlo por fallido.
-// Combinado con el reconnectPolicy acotado de arriba, el peor caso (2
-// intentos) queda bien por debajo de un timeout de test típico.
-const connectOptions = { peerConnectionTimeout: 5000 };
+// Los tests e2e simulan LiveKit por completo (no hacen una conexión WebRTC
+// real, ver e2e/README.md), así que este valor no está acotado por ningún
+// timeout de test. 5s era insuficiente para la primera negociación ICE real
+// (ej. latencia extra del reenvío de puertos UDP de Docker Desktop en
+// Windows); se vuelve al default de livekit-client.
+const connectOptions = { peerConnectionTimeout: 15000 };
 
 function MicIcon({ muted }: { muted: boolean }) {
   return (
@@ -90,6 +96,28 @@ function CameraIcon({ off }: { off: boolean }) {
       <rect x="3" y="6" width="13" height="12" rx="2" />
       <path d="M16 10l5-3v10l-5-3" />
       {off && <line x1="2" y1="4" x2="22" y2="20" />}
+    </svg>
+  );
+}
+
+function ScreenShareIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="20"
+      height="20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="4" width="18" height="12" rx="2" />
+      <path d="M8 20h8" />
+      <path d="M12 16v4" />
+      <path d="M9 11l3-3 3 3" />
+      <path d="M12 8v4" />
     </svg>
   );
 }
@@ -174,20 +202,82 @@ function CameraToggleButton({ setDeviceError }: { setDeviceError: (value: boolea
   );
 }
 
+function ScreenShareToggleButton({ setDeviceError }: { setDeviceError: (value: boolean) => void }) {
+  const { t } = useTranslation();
+  const { buttonProps, enabled } = useTrackToggle({
+    source: Track.Source.ScreenShare,
+    captureOptions: { audio: true },
+    onDeviceError: () => setDeviceError(true),
+    onChange: () => setDeviceError(false),
+  });
+  const label = enabled ? t('Dejar de compartir pantalla') : t('Compartir pantalla');
+  return (
+    <button
+      {...buttonProps}
+      type="button"
+      className={`${styles.iconButton} ${enabled ? styles.iconButtonActive : ''}`}
+      title={label}
+      aria-label={label}
+    >
+      <ScreenShareIcon />
+    </button>
+  );
+}
+
 interface MeetingRoomProps {
   call: CallSessionState;
   roomCode: string;
   roomEmojis: RoomEmoji[];
+  initialDevices?: CallDevices;
 }
 
-function MeetingContent({ roomCode, roomEmojis }: Omit<MeetingRoomProps, 'call'>) {
+// Un permiso revocado después del lobby no debe hacer fallar la llamada.
+// Solo se aplica al conectar por primera vez; reconectar conserva los estados.
+function InitialCallDevices({
+  devices,
+  onDeviceError,
+}: {
+  devices: CallDevices;
+  onDeviceError(): void;
+}) {
+  const room = useRoomContext();
+  const appliedTo = useRef<typeof room | null>(null);
+  useEffect(() => {
+    const publish = () => {
+      if (appliedTo.current === room) return;
+      appliedTo.current = room;
+      if (devices.microphoneEnabled)
+        void room.localParticipant.setMicrophoneEnabled(true).catch(onDeviceError);
+      if (devices.cameraEnabled)
+        void room.localParticipant.setCameraEnabled(true).catch(onDeviceError);
+    };
+    room.on(RoomEvent.Connected, publish);
+    if (room.state === ConnectionState.Connected) publish();
+    return () => {
+      room.off(RoomEvent.Connected, publish);
+    };
+  }, [room, devices, onDeviceError]);
+  return null;
+}
+
+function MeetingContent({
+  roomCode,
+  roomEmojis,
+  initialDevices = DEFAULT_CALL_DEVICES,
+}: Omit<MeetingRoomProps, 'call'>) {
   const { t } = useTranslation();
   const [deviceError, setDeviceError] = useState(false);
-  const tracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], {
-    onlySubscribed: false,
-  });
+  const showDeviceError = useCallback(() => setDeviceError(true), []);
+  const tracks = useTracks(
+    [
+      { source: Track.Source.Camera, withPlaceholder: true },
+      { source: Track.Source.ScreenShare, withPlaceholder: false },
+    ],
+    { onlySubscribed: false },
+  );
   return (
     <ReactionsProvider roomCode={roomCode} roomEmojis={roomEmojis}>
+      <InitialCallDevices devices={initialDevices} onDeviceError={showDeviceError} />
       <RoomAudioRenderer />
       <StartAudio label={t('Activar sonido de la reunión')} />
       <ConnectionStateToast />
@@ -216,6 +306,7 @@ function MeetingContent({ roomCode, roomEmojis }: Omit<MeetingRoomProps, 'call'>
             requestPermissions={false}
             aria-label={t('Elegir cámara')}
           />
+          <ScreenShareToggleButton setDeviceError={setDeviceError} />
           <ReactionPicker buttonClassName={styles.iconButton} />
           <SoundboardPicker buttonClassName={styles.iconButton} />
         </div>
@@ -225,8 +316,24 @@ function MeetingContent({ roomCode, roomEmojis }: Omit<MeetingRoomProps, 'call'>
   );
 }
 
-export default function MeetingRoom({ call, roomCode, roomEmojis }: MeetingRoomProps) {
+export default function MeetingRoom({
+  call,
+  roomCode,
+  roomEmojis,
+  initialDevices = DEFAULT_CALL_DEVICES,
+}: MeetingRoomProps) {
   const router = useRouter();
+  const roomOptions = useMemo(
+    () => ({
+      ...options,
+      audioCaptureDefaults: { deviceId: initialDevices.microphoneId || undefined },
+      videoCaptureDefaults: {
+        ...options.videoCaptureDefaults,
+        deviceId: initialDevices.cameraId || undefined,
+      },
+    }),
+    [initialDevices.microphoneId, initialDevices.cameraId],
+  );
   if (!call.session) return null;
   return (
     <LiveKitRoom
@@ -235,7 +342,7 @@ export default function MeetingRoom({ call, roomCode, roomEmojis }: MeetingRoomP
       connect
       audio={false}
       video={false}
-      options={options}
+      options={roomOptions}
       connectOptions={connectOptions}
       onConnected={call.connected}
       onError={call.failed}
@@ -248,7 +355,11 @@ export default function MeetingRoom({ call, roomCode, roomEmojis }: MeetingRoomP
       data-lk-theme="default"
       className={styles.meetingRoom}
     >
-      <MeetingContent roomCode={roomCode} roomEmojis={roomEmojis} />
+      <MeetingContent
+        roomCode={roomCode}
+        roomEmojis={roomEmojis}
+        initialDevices={initialDevices}
+      />
     </LiveKitRoom>
   );
 }

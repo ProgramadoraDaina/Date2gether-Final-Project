@@ -40,6 +40,36 @@ const en: Record<string, string> = {
   'La solicitud no existe o venció': 'The request does not exist or has expired',
   'La solicitud de ingreso es inválida o venció': 'The access request is invalid or has expired',
   'No existe una sala con ese código': 'There is no room with that code',
+  // Lobby previo a la llamada
+  'Prepará tu cámara y micrófono': 'Set up your camera and microphone',
+  'Vista previa de tu cámara': 'Your camera preview',
+  'Nivel del micrófono': 'Microphone level',
+  'Esta prueba es solo para vos. Nadie te ve ni te escucha hasta que entrás.':
+    'This preview is private. Nobody can see or hear you until you join.',
+  'Esperando permiso de cámara…': 'Waiting for camera permission…',
+  'Cámara apagada': 'Camera off',
+  'Micrófono apagado': 'Microphone off',
+  'Hablá para comprobar el nivel del micrófono.': 'Speak to check your microphone level.',
+  'Predeterminado del sistema': 'System default',
+  'Dispositivo no disponible': 'Device unavailable',
+  Cámara: 'Camera',
+  Micrófono: 'Microphone',
+  'Esperando permiso del navegador. Podés apagar el dispositivo para continuar.':
+    'Waiting for browser permission. You can turn the device off to continue.',
+  'El permiso fue rechazado. Revisá los permisos del navegador o entrá con el dispositivo apagado.':
+    'Permission was denied. Check your browser permissions or join with the device off.',
+  'No se encontró el dispositivo. Elegí otro o entrá con el dispositivo apagado.':
+    'Device not found. Choose another device or join with it off.',
+  'El dispositivo está ocupado o no se pudo iniciar. Cerrá otras aplicaciones e intentá otra vez.':
+    'The device is busy or could not start. Close other applications and try again.',
+  'No se pudo activar el dispositivo. Podés reintentar o entrar con el dispositivo apagado.':
+    'Could not enable the device. Try again or join with it off.',
+  'El dispositivo se desconectó. Elegí otro y volvé a activarlo.':
+    'The device was disconnected. Choose another device and enable it again.',
+  'Este navegador no permite probar dispositivos. Usá HTTPS o localhost; podés entrar sin cámara ni micrófono.':
+    'This browser cannot preview devices. Use HTTPS or localhost; you can join without a camera or microphone.',
+  'No se pudo obtener la lista de dispositivos. Podés probar el dispositivo predeterminado.':
+    'Could not list devices. You can try the system default device.',
 
   'Podés entrar con un enlace o código sin crear una cuenta.':
     'You can join with a link or code without creating an account.',
@@ -264,6 +294,28 @@ const en: Record<string, string> = {
   Presentes: 'Attendees',
   'Mostrar chat': 'Show chat',
   'Ocultar chat': 'Hide chat',
+
+  // Música ambiental
+  Música: 'Music',
+  'Agregar música': 'Add music',
+  'Unirme a la música': 'Join the music',
+  'Pegá un link o ID de YouTube': 'Paste a YouTube link or video ID',
+  'Elegir canción': 'Set track',
+  Reproducir: 'Play',
+  Pausar: 'Pause',
+  Anterior: 'Previous',
+  Siguiente: 'Next',
+  'Sacar de la lista': 'Remove from queue',
+  'Avance de la canción': 'Track progress',
+  'El link o ID de YouTube no es válido': 'That YouTube link or ID is not valid',
+  'No se pudo reproducir ese video. Probá con otro link.':
+    'That video could not be played. Try another link.',
+  'No se pudo obtener la información de ese video. Probá con otro link.':
+    "Could not get that video's info. Try another link.",
+  'Silenciar música': 'Mute music',
+  'Activar sonido de la música': 'Unmute music',
+  'Volumen de la música': 'Music volume',
+  'Ver playlist': 'View playlist',
 
   // Tema
   'Cambiar a modo claro': 'Switch to light mode',
