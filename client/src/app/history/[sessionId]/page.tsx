@@ -4,50 +4,52 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { ApiError, getCallSessionTimeline, type CallSessionTimeline } from '@/lib/api';
-import { isLoggedIn } from '@/lib/auth';
+import { useSessionStatus } from '@/lib/useSessionStatus';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { AppShell } from '@/features/navigation/AppShell';
 import { ParticipationTimeline } from '@/features/calls/ParticipationTimeline';
 import styles from './page.module.css';
 
 export default function CallSessionTimelinePage() {
-  const { t, language } = useTranslation();
   const { sessionId } = useParams<{ sessionId: string }>();
-  const [loggedIn, setLoggedIn] = useState(false);
-  const [checking, setChecking] = useState(true);
+  const loggedIn = useSessionStatus();
+  return (
+    <SessionTimeline key={sessionId + ':' + loggedIn} sessionId={sessionId} loggedIn={loggedIn} />
+  );
+}
+
+function SessionTimeline({ sessionId, loggedIn }: { sessionId: string; loggedIn: boolean | null }) {
+  const { t, language } = useTranslation();
   const [timeline, setTimeline] = useState<CallSessionTimeline | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Corre al montar y si cambia `sessionId` (navegación entre dos sesiones
-  // sin desmontar la página); `t` se omite a propósito, mismo criterio que
-  // history/page.tsx.
+  // La clave del componente reinicia los datos al navegar entre sesiones.
+  // Los errores se traducen al mostrarlos, sin repetir consultas por idioma.
   useEffect(() => {
-    const alreadyLoggedIn = isLoggedIn();
-    setLoggedIn(alreadyLoggedIn);
-    setChecking(false);
-    if (!alreadyLoggedIn) return;
-
-    setLoading(true);
-    setNotFound(false);
-    setError(null);
+    if (!loggedIn) return;
+    let cancelled = false;
     getCallSessionTimeline(sessionId)
-      .then(setTimeline)
-      .catch((err) => {
-        // El backend devuelve 404 (no 403) tanto si la sesión no existe como
-        // si el solicitante no participó de ella (mismo criterio en ambos
-        // casos, ver design.md "Lectura y autorización"): se distingue por
-        // status, no por el texto del mensaje, para no mostrar un error
-        // genérico donde corresponde un mensaje claro.
+      .then((next) => {
+        if (!cancelled) setTimeline(next);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        // El 404 cubre tanto sesiones inexistentes como sesiones ajenas.
         if (err instanceof ApiError && err.status === 404) {
           setNotFound(true);
           return;
         }
-        setError(err instanceof ApiError ? err.message : t('No se pudo obtener la línea de tiempo'));
+        setError(err instanceof ApiError ? err.message : 'No se pudo obtener la línea de tiempo');
       })
-      .finally(() => setLoading(false));
-  }, [sessionId]);
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, loggedIn]);
 
   function formatDate(iso: string): string {
     const locale = language === 'en' ? 'en-US' : 'es-AR';
@@ -56,7 +58,7 @@ export default function CallSessionTimelinePage() {
     );
   }
 
-  if (checking) return null;
+  if (loggedIn === null) return null;
 
   if (!loggedIn) {
     return (
@@ -106,7 +108,7 @@ export default function CallSessionTimelinePage() {
         {loading && <p>{t('Cargando línea de tiempo…')}</p>}
         {error && (
           <p className={styles.error} role="alert">
-            {error}
+            {t(error)}
           </p>
         )}
 

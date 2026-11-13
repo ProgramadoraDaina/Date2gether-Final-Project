@@ -23,6 +23,7 @@ import { useCallSession } from '@/features/calls/useCallSession';
 import { createRoomSocket } from '@/lib/socket';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { NAME_COLOR_HEX, isNameColorId } from '@/lib/nameColors';
+import { useLocalStorageValue } from '@/lib/useLocalStorageValue';
 import styles from './page.module.css';
 
 const MeetingRoom = dynamic(() => import('@/features/calls/MeetingRoom'), { ssr: false });
@@ -63,7 +64,9 @@ function nameColorHex(nameColor?: string | null): string | undefined {
 export default function RoomPage() {
   const { t } = useTranslation();
   const { code } = useParams<{ code: string }>();
-  const [name, setName] = useState('');
+  const storedName = useLocalStorageValue(NAME_KEY) ?? '';
+  const [nameDraft, setName] = useState<string | null>(null);
+  const name = nameDraft ?? storedName;
   const [access, setAccess] = useState<RoomAccess | null>(null);
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
@@ -84,11 +87,8 @@ export default function RoomPage() {
   const [chatTab, setChatTab] = useState<'chat' | 'presentes'>('chat');
   const [chatOpen, setChatOpen] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  // Además del ref (que el resto del componente ya usaba para emitir desde
-  // handlers sin re-render), se guarda en estado para pasarlo como prop a
-  // MeetingRoom: mutar un ref no dispara un re-render, así que sin esto
-  // AmbientMusicPlayer podía quedarse con socket=null aunque el ref ya
-  // tuviera la conexión real.
+  // Se crea al confirmar el ingreso y se comparte con la música.
+  // El efecto se encarga de conectar y limpiar sus propios listeners.
   const [roomSocket, setRoomSocket] = useState<Socket | null>(null);
   const sidebarResize = useResizablePanel({
     storageKey: 'date2gether:sidebarWidth',
@@ -125,10 +125,6 @@ export default function RoomPage() {
     refetchMembers,
   } = useRoomMembers(access ? code : undefined);
 
-  useEffect(() => {
-    setName(localStorage.getItem(NAME_KEY) ?? '');
-  }, []);
-
   async function handleJoin(devices: CallDevices) {
     if (!name.trim() || joining) return;
     setJoining(true);
@@ -136,6 +132,7 @@ export default function RoomPage() {
     try {
       const roomAccess = await requestRoomAccess(code, name.trim());
       localStorage.setItem(NAME_KEY, roomAccess.participant.name);
+      setRoomSocket(createRoomSocket(roomAccess.token));
       setInitialDevices(devices);
       setAccess(roomAccess);
     } catch (error) {
@@ -151,59 +148,60 @@ export default function RoomPage() {
   }, [access, code, joinCall]);
 
   useEffect(() => {
-    if (!code || !access) return;
-    const socket = createRoomSocket(access.token);
+    if (!code || !roomSocket) return;
+    const socket = roomSocket;
     socketRef.current = socket;
-    setRoomSocket(socket);
 
-    socket.on('connect', () => {
-      socket.emit('joinRoom', { code });
-    });
-
-    socket.on('error', ({ message }: { message: string }) => {
-      setNotice({ text: message });
-    });
-    socket.on('exception', ({ message }: { message: string }) => setNotice({ text: message }));
-    socket.on('connect_error', () => setNotice({ text: t('No se pudo conectar a la sala') }));
-
-    socket.on('roomHistory', (history: ChatMessage[]) => setMessages(history));
-    socket.on('roomUsers', (list: RoomPresence[]) => setUsers(list));
-
-    socket.on('userJoined', (joined: RoomPresence) => {
-      setUsers((prev) =>
-        prev.some((u) => u.participantId === joined.participantId) ? prev : [...prev, joined],
-      );
-      setNotice({ event: 'joined', userName: joined.userName });
-    });
-
-    socket.on('userLeft', (left: RoomPresence) => {
-      setUsers((prev) => prev.filter((u) => u.participantId !== left.participantId));
-      setNotice({ event: 'left', userName: left.userName });
-    });
-
-    socket.on('newMessage', (message: ChatMessage) => {
-      setMessages((prev) => [...prev, message]);
-    });
-
-    // El REST de roles (useRoomMembers) no tiene su propio socket: cuando
-    // un admin cambia un rol, el backend avisa por este evento y acá se
-    // dispara el refetch para que se vea sin recargar la página.
-    socket.on('memberRoleChanged', () => {
-      refetchMembers();
-    });
-    socket.on('roomEmojisChanged', () => {
-      void refetchEmojis();
-    });
-
+    const handlers = {
+      connect: () => {
+        socket.emit('joinRoom', { code });
+      },
+      error: ({ message }: { message: string }) => {
+        setNotice({ text: message });
+      },
+      exception: ({ message }: { message: string }) => {
+        setNotice({ text: message });
+      },
+      connect_error: () => {
+        setNotice({ text: t('No se pudo conectar a la sala') });
+      },
+      roomHistory: (history: ChatMessage[]) => {
+        setMessages(history);
+      },
+      roomUsers: (list: RoomPresence[]) => {
+        setUsers(list);
+      },
+      userJoined: (joined: RoomPresence) => {
+        setUsers((prev) =>
+          prev.some((u) => u.participantId === joined.participantId) ? prev : [...prev, joined],
+        );
+        setNotice({ event: 'joined', userName: joined.userName });
+      },
+      userLeft: (left: RoomPresence) => {
+        setUsers((prev) => prev.filter((u) => u.participantId !== left.participantId));
+        setNotice({ event: 'left', userName: left.userName });
+      },
+      newMessage: (message: ChatMessage) => {
+        setMessages((prev) => [...prev, message]);
+      },
+      // Los roles y emojis se refrescan desde los eventos de esta conexión.
+      memberRoleChanged: () => {
+        refetchMembers();
+      },
+      roomEmojisChanged: () => {
+        void refetchEmojis();
+      },
+    };
+    for (const [event, handler] of Object.entries(handlers)) socket.on(event, handler);
     socket.connect();
 
     return () => {
-      socket.removeAllListeners();
+      // Cada consumidor retira sus propios listeners; la música comparte socket.
+      for (const [event, handler] of Object.entries(handlers)) socket.off(event, handler);
       socket.disconnect();
       socketRef.current = null;
-      setRoomSocket(null);
     };
-  }, [code, access, refetchMembers, refetchEmojis, t]);
+  }, [code, roomSocket, refetchMembers, refetchEmojis, t]);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });

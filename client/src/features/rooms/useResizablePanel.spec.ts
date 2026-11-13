@@ -15,7 +15,13 @@ describe('useResizablePanel', () => {
 
   it('arranca en defaultWidth cuando no hay nada guardado', () => {
     const { result } = renderHook(() =>
-      useResizablePanel({ storageKey: 'panel-a', defaultWidth: 300, min: 200, max: 400, edge: 'right' }),
+      useResizablePanel({
+        storageKey: 'panel-a',
+        defaultWidth: 300,
+        min: 200,
+        max: 400,
+        edge: 'right',
+      }),
     );
     expect(result.current.width).toBe(300);
   });
@@ -23,7 +29,13 @@ describe('useResizablePanel', () => {
   it('restaura el ancho guardado si está dentro del rango', () => {
     localStorage.setItem('panel-b', '350');
     const { result } = renderHook(() =>
-      useResizablePanel({ storageKey: 'panel-b', defaultWidth: 300, min: 200, max: 400, edge: 'right' }),
+      useResizablePanel({
+        storageKey: 'panel-b',
+        defaultWidth: 300,
+        min: 200,
+        max: 400,
+        edge: 'right',
+      }),
     );
     expect(result.current.width).toBe(350);
   });
@@ -31,14 +43,26 @@ describe('useResizablePanel', () => {
   it('ignora un valor guardado fuera de rango o no numérico', () => {
     localStorage.setItem('panel-c', '9999');
     const { result } = renderHook(() =>
-      useResizablePanel({ storageKey: 'panel-c', defaultWidth: 300, min: 200, max: 400, edge: 'right' }),
+      useResizablePanel({
+        storageKey: 'panel-c',
+        defaultWidth: 300,
+        min: 200,
+        max: 400,
+        edge: 'right',
+      }),
     );
     expect(result.current.width).toBe(300);
   });
 
   it('arrastrar actualiza el ancho, lo recorta al rango y lo persiste al soltar', () => {
     const { result } = renderHook(() =>
-      useResizablePanel({ storageKey: 'panel-d', defaultWidth: 300, min: 200, max: 400, edge: 'right' }),
+      useResizablePanel({
+        storageKey: 'panel-d',
+        defaultWidth: 300,
+        min: 200,
+        max: 400,
+        edge: 'right',
+      }),
     );
 
     act(() => {
@@ -67,7 +91,13 @@ describe('useResizablePanel', () => {
     const removeSpy = jest.spyOn(window, 'removeEventListener');
 
     const { result, unmount } = renderHook(() =>
-      useResizablePanel({ storageKey: 'panel-e', defaultWidth: 300, min: 200, max: 400, edge: 'left' }),
+      useResizablePanel({
+        storageKey: 'panel-e',
+        defaultWidth: 300,
+        min: 200,
+        max: 400,
+        edge: 'left',
+      }),
     );
 
     act(() => {
@@ -82,12 +112,54 @@ describe('useResizablePanel', () => {
     // colgados en `window` para siempre.
     unmount();
 
-    const moveListenersRemoved = removeSpy.mock.calls.filter(([type]) => type === 'mousemove').length;
+    const moveListenersRemoved = removeSpy.mock.calls.filter(
+      ([type]) => type === 'mousemove',
+    ).length;
     const upListenersRemoved = removeSpy.mock.calls.filter(([type]) => type === 'mouseup').length;
     expect(moveListenersRemoved).toBe(1);
     expect(upListenersRemoved).toBe(1);
 
     addSpy.mockRestore();
     removeSpy.mockRestore();
+  });
+
+  it('persiste el último movimiento aunque se suelte antes del siguiente render', () => {
+    const { result } = renderHook(() =>
+      useResizablePanel({
+        storageKey: 'panel-fast',
+        defaultWidth: 300,
+        min: 200,
+        max: 400,
+        edge: 'left',
+      }),
+    );
+    act(() => {
+      result.current.handleMouseDown(mouseDownEvent(100));
+    });
+    act(() => {
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 150 }));
+      window.dispatchEvent(new MouseEvent('mouseup'));
+    });
+    expect(result.current.width).toBe(350);
+    expect(localStorage.getItem('panel-fast')).toBe('350');
+  });
+
+  it('restaura el ancho de otra clave sin conservar el arrastre de la anterior', () => {
+    localStorage.setItem('panel-next', '375');
+    const { result, rerender } = renderHook(
+      ({ key }) =>
+        useResizablePanel({ storageKey: key, defaultWidth: 300, min: 200, max: 400, edge: 'left' }),
+      { initialProps: { key: 'panel-first' } },
+    );
+    act(() => {
+      result.current.handleMouseDown(mouseDownEvent(100));
+    });
+    act(() => {
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 120 }));
+      window.dispatchEvent(new MouseEvent('mouseup'));
+    });
+    expect(result.current.width).toBe(320);
+    rerender({ key: 'panel-next' });
+    expect(result.current.width).toBe(375);
   });
 });

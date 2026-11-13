@@ -257,6 +257,10 @@ export function AmbientMusicPlayer({ socket, isAdmin }: AmbientMusicPlayerProps)
     function onMusicState(state: MusicState) {
       pendingState.current = state;
       setMusicState(state);
+      setPosition(
+        state.positionSeconds +
+          (state.isPlaying ? Math.max(0, (Date.now() - state.updatedAt) / 1000) : 0),
+      );
       if (playerRef.current) {
         reconcilePlayerState(playerRef.current, loadedVideoId.current, state);
         loadedVideoId.current = currentTrack(state)?.videoId ?? null;
@@ -286,18 +290,13 @@ export function AmbientMusicPlayer({ socket, isAdmin }: AmbientMusicPlayerProps)
   // la barra muestra lo mismo que ve el resto de la sala, no lo que arrastra
   // el buffer local del admin.
   useEffect(() => {
-    if (!musicState) {
-      setPosition(0);
-      return;
-    }
+    if (!musicState?.isPlaying) return;
     function tick() {
       const elapsedSinceUpdate = musicState!.isPlaying
         ? Math.max(0, (Date.now() - musicState!.updatedAt) / 1000)
         : 0;
       setPosition(musicState!.positionSeconds + elapsedSinceUpdate);
     }
-    tick();
-    if (!musicState.isPlaying) return;
     const interval = setInterval(tick, 500);
     return () => clearInterval(interval);
   }, [musicState]);
@@ -345,10 +344,11 @@ export function AmbientMusicPlayer({ socket, isAdmin }: AmbientMusicPlayerProps)
     return playerReady.current;
   }, [t]);
 
-  const handleJoinMusic = useCallback(async () => {
-    await createPlayer();
-    playerRef.current?.unMute();
-    setJoined(true);
+  const handleJoinMusic = useCallback(() => {
+    return createPlayer().then(() => {
+      playerRef.current?.unMute();
+      setJoined(true);
+    });
   }, [createPlayer]);
 
   // El admin controla la música de la sala: pedirle que "se una" a su propia

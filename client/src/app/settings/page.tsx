@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { ApiError, updateNameColor } from '@/lib/api';
-import { getCurrentUser, isLoggedIn } from '@/lib/auth';
+import { getCurrentUser, type AuthUser } from '@/lib/auth';
+import { useSessionStatus } from '@/lib/useSessionStatus';
 import { NAME_COLOR_HEX, NAME_COLOR_IDS, type NameColorId } from '@/lib/nameColors';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { AppShell } from '@/features/navigation/AppShell';
@@ -25,28 +26,35 @@ const COLOR_LABELS: Record<NameColorId, string> = {
 
 export default function SettingsPage() {
   const { t } = useTranslation();
-  const [loggedIn, setLoggedIn] = useState(false);
-  const [checking, setChecking] = useState(true);
+  const sessionStatus = useSessionStatus();
+  const [user, setUser] = useState<AuthUser | null | undefined>(undefined);
+  const checking = sessionStatus === null || (sessionStatus && user === undefined);
+  const loggedIn = sessionStatus === true && user != null;
   const [selected, setSelected] = useState<NameColorId | null>(null);
   const [saving, setSaving] = useState<NameColorId | null>(null);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isLoggedIn()) {
-      setChecking(false);
-      return;
-    }
-
+    if (!sessionStatus) return;
+    let cancelled = false;
     getCurrentUser()
-      .then((user) => {
-        setLoggedIn(user !== null);
-        if (user?.nameColor && NAME_COLOR_IDS.includes(user.nameColor as NameColorId)) {
-          setSelected(user.nameColor as NameColorId);
-        }
+      .then((currentUser) => {
+        if (cancelled) return;
+        setUser(currentUser);
+        setSelected(
+          currentUser?.nameColor && NAME_COLOR_IDS.includes(currentUser.nameColor as NameColorId)
+            ? (currentUser.nameColor as NameColorId)
+            : null,
+        );
       })
-      .finally(() => setChecking(false));
-  }, []);
+      .catch(() => {
+        if (!cancelled) setUser(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionStatus]);
 
   async function handleSelect(id: NameColorId) {
     if (saving) return;
@@ -122,7 +130,14 @@ export default function SettingsPage() {
                 title={label}
               >
                 {isSelected && (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#fff"
+                    strokeWidth="3"
+                  >
                     <path d="M4 12l6 6L20 6" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 )}

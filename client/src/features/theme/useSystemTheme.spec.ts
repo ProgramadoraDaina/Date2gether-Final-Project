@@ -1,22 +1,24 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
 import { act, renderHook } from '@testing-library/react';
 import { useSystemTheme } from './useSystemTheme';
+import { createElement } from 'react';
+import { renderToString } from 'react-dom/server';
 
 function fakeMatchMedia(initialMatches: boolean) {
   const listeners: Array<(event: MediaQueryListEvent) => void> = [];
   const media = {
     matches: initialMatches,
-    addEventListener: jest.fn(
-      (_event: string, handler: (event: MediaQueryListEvent) => void) => {
-        listeners.push(handler);
-      },
-    ),
+    addEventListener: jest.fn((_event: string, handler: (event: MediaQueryListEvent) => void) => {
+      listeners.push(handler);
+    }),
     removeEventListener: jest.fn(),
   };
   return {
     media,
-    emitChange: (matches: boolean) =>
-      listeners.forEach((listener) => listener({ matches } as MediaQueryListEvent)),
+    emitChange: (matches: boolean) => {
+      media.matches = matches;
+      listeners.forEach((listener) => listener({ matches } as MediaQueryListEvent));
+    },
   };
 }
 
@@ -53,5 +55,14 @@ describe('useSystemTheme', () => {
     expect(window.matchMedia).toBeUndefined();
     const { result } = renderHook(() => useSystemTheme());
     expect(result.current).toBe('light');
+  });
+
+  it('mantiene el valor claro del servidor aunque el navegador esté en oscuro', () => {
+    const { media } = fakeMatchMedia(true);
+    window.matchMedia = jest.fn().mockReturnValue(media) as unknown as typeof window.matchMedia;
+    function Theme() {
+      return createElement('span', null, useSystemTheme());
+    }
+    expect(renderToString(createElement(Theme))).toBe('<span>light</span>');
   });
 });

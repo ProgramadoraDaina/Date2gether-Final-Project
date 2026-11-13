@@ -1,15 +1,20 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
+
+let mockSessionId = 'session-1';
+let mockLanguage: 'es' | 'en' = 'es';
 
 jest.mock('next/navigation', () => ({
-  useParams: () => ({ sessionId: 'session-1' }),
+  useParams: () => ({ sessionId: mockSessionId }),
   usePathname: () => '/history/session-1',
 }));
 jest.mock('@/features/translation/useTranslation', () => {
-  const t = (key: string) => key;
-  return { useTranslation: () => ({ t, language: 'es' }) };
+  const es = (key: string) => key;
+  const en = (key: string) =>
+    key === 'No se pudo obtener la línea de tiempo' ? 'Could not load timeline' : key;
+  return { useTranslation: () => ({ t: mockLanguage === 'en' ? en : es, language: mockLanguage }) };
 });
-jest.mock('@/lib/auth', () => ({ isLoggedIn: jest.fn() }));
+jest.mock('@/lib/auth', () => ({ isLoggedIn: jest.fn(), onAuthChange: () => () => {} }));
 jest.mock('@/lib/api', () => ({
   getCallSessionTimeline: jest.fn(),
   ApiError: class extends Error {
@@ -24,6 +29,8 @@ jest.mock('@/lib/api', () => ({
 describe('CallSessionTimelinePage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSessionId = 'session-1';
+    mockLanguage = 'es';
   });
 
   it('muestra el mensaje de inicio de sesión si no hay sesión', async () => {
@@ -90,5 +97,53 @@ describe('CallSessionTimelinePage', () => {
     const Page = (await import('./page')).default;
     render(<Page />);
     await screen.findByText('Error de servidor');
+  });
+
+  it('traduce el error al cambiar el idioma sin volver a consultar la sesión', async () => {
+    const { isLoggedIn } = await import('@/lib/auth');
+    const { getCallSessionTimeline } = await import('@/lib/api');
+    jest.mocked(isLoggedIn).mockReturnValue(true);
+    jest.mocked(getCallSessionTimeline).mockRejectedValue(new Error('offline'));
+    const Page = (await import('./page')).default;
+    const view = render(<Page />);
+    await screen.findByText('No se pudo obtener la línea de tiempo');
+    mockLanguage = 'en';
+    view.rerender(<Page />);
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not load timeline');
+    expect(getCallSessionTimeline).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignora la respuesta de la sesión anterior si se navega antes de terminar la consulta', async () => {
+    const { isLoggedIn } = await import('@/lib/auth');
+    const { getCallSessionTimeline } = await import('@/lib/api');
+    jest.mocked(isLoggedIn).mockReturnValue(true);
+    const timeline = (id: string) => ({
+      id,
+      roomCode: 'abc-defg-hij',
+      roomName: id,
+      startedAt: '2026-01-05T10:00:00.000Z',
+      endedAt: '2026-01-05T10:30:00.000Z',
+      participants: [],
+    });
+    let resolveFirst!: (value: ReturnType<typeof timeline>) => void;
+    jest
+      .mocked(getCallSessionTimeline)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockResolvedValueOnce(timeline('session-2'));
+    const Page = (await import('./page')).default;
+    const view = render(<Page />);
+    mockSessionId = 'session-2';
+    view.rerender(<Page />);
+    await screen.findByRole('heading', { name: 'session-2' });
+    await act(async () => {
+      resolveFirst(timeline('session-1'));
+    });
+    expect(screen.getByRole('heading', { name: 'session-2' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'session-1' })).not.toBeInTheDocument();
   });
 });

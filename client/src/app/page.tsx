@@ -4,7 +4,9 @@ import Link from 'next/link';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { ApiError, createRoom } from '@/lib/api';
-import { getCurrentUser, isLoggedIn, logout, onAuthChange, type AuthUser } from '@/lib/auth';
+import { getCurrentUser, isLoggedIn, logout, type AuthUser } from '@/lib/auth';
+import { useLocalStorageValue } from '@/lib/useLocalStorageValue';
+import { useSessionStatus } from '@/lib/useSessionStatus';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { AppShell } from '@/features/navigation/AppShell';
 import styles from './page.module.css';
@@ -14,42 +16,43 @@ const NAME_KEY = 'date2gether:userName';
 export default function HomePage() {
   const { t } = useTranslation();
   const router = useRouter();
-  const [name, setName] = useState('');
+  const storedName = useLocalStorageValue(NAME_KEY) ?? '';
+  const [nameDraft, setName] = useState<string | null>(null);
+  const name = nameDraft ?? storedName;
   const [joinCode, setJoinCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
-  // Arranca en false en server y cliente para no romper la hidratación.
-  const [loggedIn, setLoggedIn] = useState(false);
+  const sessionStatus = useSessionStatus();
   const [checkingSession, setCheckingSession] = useState(true);
+  const loggedIn = sessionStatus === true && (checkingSession || user !== null);
 
   useEffect(() => {
-    setName(localStorage.getItem(NAME_KEY) ?? '');
-    // Leer el token es síncrono: no hace falta esperar a /auth/me para habilitar el botón.
-    setLoggedIn(isLoggedIn());
-
+    let cancelled = false;
     getCurrentUser()
       .then((currentUser) => {
+        if (cancelled) return;
         setUser(currentUser);
-        setLoggedIn(currentUser !== null);
         if (currentUser) {
           setName(currentUser.name);
           localStorage.setItem(NAME_KEY, currentUser.name);
         }
       })
-      .finally(() => setCheckingSession(false));
+      .catch(() => {
+        if (!cancelled) setUser(null);
+      })
+      .finally(() => {
+        if (!cancelled) setCheckingSession(false);
+      });
 
-    return onAuthChange(() => {
-      const stillLoggedIn = isLoggedIn();
-      setLoggedIn(stillLoggedIn);
-      if (!stillLoggedIn) setUser(null);
-    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function handleLogout() {
     await logout();
     setUser(null);
-    setLoggedIn(false);
   }
 
   async function handleCreate(e: FormEvent) {
@@ -72,7 +75,6 @@ export default function HomePage() {
           : t('No se pudo crear la reunión. ¿Está corriendo el backend?'),
       );
       if (!isLoggedIn()) {
-        setLoggedIn(false);
         setUser(null);
       }
     } finally {
@@ -97,7 +99,7 @@ export default function HomePage() {
 
         {!checkingSession && (
           <div className={styles.authBar} data-testid="auth-bar">
-            {user ? (
+            {loggedIn && user ? (
               <>
                 <span>
                   {t('Conectado como')} <strong>{user.name}</strong>

@@ -7,6 +7,7 @@ import {
   useState,
   type MouseEvent as ReactMouseEvent,
 } from 'react';
+import { useLocalStorageValue } from '@/lib/useLocalStorageValue';
 
 interface UseResizablePanelOptions {
   // Clave de localStorage para recordar el ancho elegido entre sesiones.
@@ -33,12 +34,20 @@ export function useResizablePanel({
   max,
   edge,
 }: UseResizablePanelOptions): UseResizablePanelResult {
-  const [width, setWidth] = useState(defaultWidth);
+  const stored = useLocalStorageValue(storageKey);
+  const storedWidth = stored === null ? NaN : Number(stored);
+  const restoredWidth =
+    Number.isFinite(storedWidth) && storedWidth >= min && storedWidth <= max
+      ? storedWidth
+      : defaultWidth;
+  const [resized, setResized] = useState<{ key: string; width: number } | null>(null);
+  const width =
+    resized?.key === storageKey ? Math.min(max, Math.max(min, resized.width)) : restoredWidth;
   // "Ref espejo" del último `width`: hace falta leerlo de forma síncrona
   // dentro de los listeners nativos de mousemove/mouseup (que no deberían
   // depender del `width` capturado por closure en el momento del
-  // mousedown). Se sincroniza en un efecto, no mutando el ref durante el
-  // render (React no garantiza pureza ahí).
+  // mousedown). Se sincroniza en un efecto y en mousemove para persistir
+  // el último valor incluso si mouseup llega antes del siguiente render.
   const widthRef = useRef(defaultWidth);
   useEffect(() => {
     widthRef.current = width;
@@ -46,9 +55,10 @@ export function useResizablePanel({
 
   // Listeners activos del drag en curso (si hay uno). Permite limpiarlos si
   // el componente se desmonta a mitad de un arrastre, no solo en mouseup.
-  const activeDragRef = useRef<{ onMouseMove: (e: MouseEvent) => void; onMouseUp: () => void } | null>(
-    null,
-  );
+  const activeDragRef = useRef<{
+    onMouseMove: (e: MouseEvent) => void;
+    onMouseUp: () => void;
+  } | null>(null);
   useEffect(() => {
     return () => {
       if (!activeDragRef.current) return;
@@ -59,13 +69,6 @@ export function useResizablePanel({
       activeDragRef.current = null;
     };
   }, []);
-
-  useEffect(() => {
-    const stored = Number(localStorage.getItem(storageKey));
-    if (Number.isFinite(stored) && stored >= min && stored <= max) {
-      setWidth(stored);
-    }
-  }, [storageKey, min, max]);
 
   const handleMouseDown = useCallback(
     (e: ReactMouseEvent) => {
@@ -78,7 +81,9 @@ export function useResizablePanel({
       function onMouseMove(ev: MouseEvent) {
         const delta = ev.clientX - startX;
         const signedDelta = edge === 'left' ? delta : -delta;
-        setWidth(Math.min(max, Math.max(min, startWidth + signedDelta)));
+        const nextWidth = Math.min(max, Math.max(min, startWidth + signedDelta));
+        widthRef.current = nextWidth;
+        setResized({ key: storageKey, width: nextWidth });
       }
 
       function onMouseUp() {

@@ -6,7 +6,11 @@ jest.mock('@/features/translation/useTranslation', () => {
   const t = (key: string) => key;
   return { useTranslation: () => ({ t }) };
 });
-jest.mock('@/lib/auth', () => ({ isLoggedIn: jest.fn(), getCurrentUser: jest.fn() }));
+jest.mock('@/lib/auth', () => ({
+  isLoggedIn: jest.fn(),
+  onAuthChange: () => () => {},
+  getCurrentUser: jest.fn(),
+}));
 jest.mock('@/lib/api', () => ({
   updateNameColor: jest.fn(),
   ApiError: class extends Error {},

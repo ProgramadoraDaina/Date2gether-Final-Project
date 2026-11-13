@@ -75,7 +75,9 @@ describe('AmbientMusicPlayer', () => {
   let playerInstance: FakePlayerInstance;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let playerCtor: jest.Mock<(...args: any[]) => FakePlayerInstance>;
-  let capturedOptions: { events?: { onReady?: () => void; onError?: (e: { data: number }) => void } };
+  let capturedOptions: {
+    events?: { onReady?: () => void; onError?: (e: { data: number }) => void };
+  };
 
   beforeEach(() => {
     useLanguageStore.setState({ language: 'es' });
@@ -133,7 +135,9 @@ describe('AmbientMusicPlayer', () => {
   });
 
   it('si no se puede resolver el título (oEmbed falla), muestra un error y no manda musicAddTrack', async () => {
-    global.fetch = jest.fn(() => Promise.resolve({ ok: false } as Response)) as unknown as typeof fetch;
+    global.fetch = jest.fn(() =>
+      Promise.resolve({ ok: false } as Response),
+    ) as unknown as typeof fetch;
     const { AmbientMusicPlayer } = await import('./AmbientMusicPlayer');
     const socket = fakeSocket();
     render(<AmbientMusicPlayer socket={socket as never} isAdmin />);
@@ -492,7 +496,10 @@ describe('AmbientMusicPlayer', () => {
     fireEvent.change(slider, { target: { value: '40' } });
 
     expect(playerInstance.setVolume).toHaveBeenCalledWith(40);
-    expect(socket.emit).not.toHaveBeenCalledWith(expect.stringMatching(/volume/i), expect.anything());
+    expect(socket.emit).not.toHaveBeenCalledWith(
+      expect.stringMatching(/volume/i),
+      expect.anything(),
+    );
   });
 
   it('clickear el ícono de silenciar llama a mute(), cambia el ícono/label, y clickear de nuevo llama a unMute()', async () => {
@@ -548,5 +555,47 @@ describe('AmbientMusicPlayer', () => {
     expect(playerInstance.destroy).toHaveBeenCalled();
     expect(socket.off).toHaveBeenCalledWith('musicState', expect.any(Function));
     expect(socket.off).toHaveBeenCalledWith('error', expect.any(Function));
+  });
+
+  it('actualiza el avance al recibir estado, sigue el reloj y se detiene al pausar', async () => {
+    playerInstance.getDuration.mockReturnValue(180);
+    const { AmbientMusicPlayer } = await import('./AmbientMusicPlayer');
+    const socket = fakeSocket();
+    const { unmount } = render(<AmbientMusicPlayer socket={socket as never} isAdmin />);
+    await waitFor(() => expect(playerCtor).toHaveBeenCalledTimes(1));
+    act(() => capturedOptions.events?.onReady?.());
+    await screen.findByRole('slider', { name: 'Volumen de la música' });
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar música' }));
+    jest.useFakeTimers();
+    jest.setSystemTime(10000);
+    try {
+      act(() =>
+        socket.handlers.musicState(
+          musicState({
+            isPlaying: true,
+            positionSeconds: 10,
+            updatedAt: Date.now() - 3000,
+          }),
+        ),
+      );
+      const progress = screen.getByRole('slider', { name: 'Avance de la canción' });
+      expect(progress).toHaveValue('13');
+      act(() => jest.advanceTimersByTime(2000));
+      expect(progress).toHaveValue('15');
+      act(() =>
+        socket.handlers.musicState(
+          musicState({
+            isPlaying: false,
+            positionSeconds: 42,
+          }),
+        ),
+      );
+      expect(progress).toHaveValue('42');
+      act(() => jest.advanceTimersByTime(2000));
+      expect(progress).toHaveValue('42');
+    } finally {
+      unmount();
+      jest.useRealTimers();
+    }
   });
 });

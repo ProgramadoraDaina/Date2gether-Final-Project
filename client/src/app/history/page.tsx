@@ -9,54 +9,56 @@ import {
   type CallHistoryEntry,
   type CallSessionSummary,
 } from '@/lib/api';
-import { isLoggedIn } from '@/lib/auth';
+import { useSessionStatus } from '@/lib/useSessionStatus';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { AppShell } from '@/features/navigation/AppShell';
 import styles from './page.module.css';
 
 export default function HistoryPage() {
   const { t, language } = useTranslation();
-  const [loggedIn, setLoggedIn] = useState(false);
-  const [checking, setChecking] = useState(true);
+  const loggedIn = useSessionStatus();
   const [entries, setEntries] = useState<CallHistoryEntry[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sessions, setSessions] = useState<CallSessionSummary[]>([]);
-  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
   const [sessionsError, setSessionsError] = useState<string | null>(null);
 
-  // Corre solo al montar: `t` se omite a propósito de las dependencias para
-  // no repetir el fetch del historial cada vez que cambia el idioma.
+  // Se guarda el mensaje original y se traduce al renderizar, sin volver
+  // a consultar el historial cuando cambia el idioma.
   useEffect(() => {
-    const alreadyLoggedIn = isLoggedIn();
-    setLoggedIn(alreadyLoggedIn);
-    setChecking(false);
-    if (!alreadyLoggedIn) return;
-
-    setLoading(true);
+    if (!loggedIn) return;
+    let cancelled = false;
     getCallHistory()
-      .then(setEntries)
-      .catch((err) => {
-        setError(err instanceof ApiError ? err.message : t('No se pudo obtener el historial'));
-        if (!isLoggedIn()) setLoggedIn(false);
+      .then((next) => {
+        if (!cancelled) setEntries(next);
       })
-      .finally(() => setLoading(false));
-
-    // Sesiones materializadas por PR4/PR5: una lista aparte de `callHistory`
-    // (ver design.md "Lectura y autorización" — no se enriquece el historial
-    // existente, es un dato nuevo con su propia fuente).
-    setSessionsLoading(true);
+      .catch((err: unknown) => {
+        if (!cancelled)
+          setError(err instanceof ApiError ? err.message : 'No se pudo obtener el historial');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
     getCallSessions()
-      .then(setSessions)
-      .catch((err) => {
-        setSessionsError(
-          err instanceof ApiError
-            ? err.message
-            : t('No se pudieron obtener las sesiones de llamada'),
-        );
+      .then((next) => {
+        if (!cancelled) setSessions(next);
       })
-      .finally(() => setSessionsLoading(false));
-  }, []);
+      .catch((err: unknown) => {
+        if (!cancelled)
+          setSessionsError(
+            err instanceof ApiError
+              ? err.message
+              : 'No se pudieron obtener las sesiones de llamada',
+          );
+      })
+      .finally(() => {
+        if (!cancelled) setSessionsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [loggedIn]);
 
   function formatDate(iso: string): string {
     const locale = language === 'en' ? 'en-US' : 'es-AR';
@@ -66,7 +68,7 @@ export default function HistoryPage() {
     }).format(new Date(iso));
   }
 
-  if (checking) return null;
+  if (loggedIn === null) return null;
 
   if (!loggedIn) {
     return (
@@ -91,7 +93,7 @@ export default function HistoryPage() {
         {loading && <p>{t('Cargando historial…')}</p>}
         {error && (
           <p className={styles.error} role="alert">
-            {error}
+            {t(error)}
           </p>
         )}
 
@@ -120,7 +122,7 @@ export default function HistoryPage() {
         {sessionsLoading && <p>{t('Cargando sesiones…')}</p>}
         {sessionsError && (
           <p className={styles.error} role="alert">
-            {sessionsError}
+            {t(sessionsError)}
           </p>
         )}
 
