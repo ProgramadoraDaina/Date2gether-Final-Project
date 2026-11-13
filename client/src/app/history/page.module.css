@@ -53,3 +53,9 @@
   color: var(--color-text-muted);
   white-space: nowrap;
 }
+
+.sessionLink {
+  font-size: 13px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}

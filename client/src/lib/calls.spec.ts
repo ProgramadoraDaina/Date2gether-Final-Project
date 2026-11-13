@@ -30,4 +30,27 @@ describe('startCall', () => {
       'No se pudo iniciar la llamada',
     );
   });
+
+  it('mapea el código NO_HOST_CONNECTED a un mensaje propio del cliente, no al texto crudo del backend', async () => {
+    (global.fetch as jest.Mock<typeof fetch>).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ message: 'texto interno que no debe mostrarse', code: 'NO_HOST_CONNECTED' }),
+        { status: 403 },
+      ),
+    );
+    const { startCall } = await import('./calls');
+    await expect(startCall('abc-defg-hij', 'guest-room-token')).rejects.toThrow(
+      'Esperá a que se conecte un anfitrión para unirte a la llamada.',
+    );
+  });
+
+  it('si el rechazo no trae código, cae al mensaje crudo del backend', async () => {
+    (global.fetch as jest.Mock<typeof fetch>).mockResolvedValueOnce(
+      new Response(JSON.stringify({ message: 'La sala está cerrada' }), { status: 403 }),
+    );
+    const { startCall } = await import('./calls');
+    await expect(startCall('abc-defg-hij', 'guest-room-token')).rejects.toThrow(
+      'La sala está cerrada',
+    );
+  });
 });

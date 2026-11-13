@@ -1,0 +1,285 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legendDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.axis {
+  display: flex;
+  padding-left: 212px;
+  padding-bottom: 16px;
+}
+
+.axisTrack {
+  position: relative;
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}
+
+.axisTick {
+  position: absolute;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translateX(-50%);
+}
+
+.axisTick:first-child {
+  transform: translateX(0);
+  align-items: flex-start;
+}
+
+.axisTick:last-child {
+  transform: translateX(-100%);
+  align-items: flex-end;
+}
+
+.axisTickMark {
+  width: 1px;
+  height: 5px;
+  background: var(--color-border);
+}
+
+.axisTickLabel {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.panel {
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.entry {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-height: 92px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-border);
+  transition: background-color 0.15s;
+}
+
+.entry:last-child {
+  border-bottom: none;
+}
+
+.entry:hover {
+  background: var(--color-chip-bg);
+}
+
+.sidebar {
+  flex-shrink: 0;
+  width: 192px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.sidebarText {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.sidebarText strong {
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guestTag {
+  align-self: flex-start;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  background: var(--color-chip-bg);
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+
+.entryBody {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.entryTimes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+
+.track {
+  position: relative;
+  height: 64px;
+  padding: 4px;
+  background: var(--color-chip-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+}
+
+.presenceBackdrop {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  border-radius: 8px;
+  z-index: 0;
+}
+
+.lanes {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.lane {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.segmentWrap {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 6px;
+}
+
+.segmentWrap:focus {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.segment {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+  border-radius: 5px;
+  padding: 0 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: filter 0.15s;
+}
+
+.segmentWrap:hover .segment {
+  filter: brightness(1.1);
+}
+
+.segmentLabel {
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.segmentTooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: max-content;
+  max-width: 260px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  box-shadow: var(--shadow-card);
+  font-size: 12px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.12s;
+  z-index: 20;
+}
+
+.segmentWrap:hover .segmentTooltip,
+.segmentWrap:focus .segmentTooltip,
+.segmentWrap:focus-within .segmentTooltip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.segmentTooltip strong {
+  font-size: 12px;
+  color: var(--color-text);
+}
+
+.segmentTooltip span {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.summary {
+  margin: 0;
+  padding: 12px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-chip-bg);
+}

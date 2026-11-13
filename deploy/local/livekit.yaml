@@ -13,3 +13,7 @@ room:
   max_participants: 6
 logging:
   level: debug
+webhook:
+  api_key: devkey
+  urls:
+    - http://host.docker.internal:3001/calls/livekit/webhook

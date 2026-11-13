@@ -52,6 +52,15 @@
   background: var(--color-chip-bg);
 }
 
+/* Acciones del panel de cierre forzado (D5, design.md): "Ver línea de
+   tiempo" y "Volver a la sala" lado a lado, reusando el mismo botón pill. */
+.callEndedActions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 @keyframes callLoadingFadeIn {
   from {
     opacity: 0;

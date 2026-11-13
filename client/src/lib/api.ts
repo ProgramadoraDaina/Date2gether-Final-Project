@@ -40,7 +40,17 @@ export interface RoomMember {
 // Errores pensados para mostrarse tal cual al usuario (sesión vencida, validación
 // del backend, etc.). Un error que NO es ApiError es algo inesperado (red caída,
 // backend abajo): la UI lo distingue para no mostrar un mensaje crudo de fetch.
-export class ApiError extends Error {}
+// `status` es opcional: lo usan los puntos de llamada que necesitan distinguir
+// un caso puntual (p. ej. 404 de "sesión inexistente o ajena" en la línea de
+// tiempo de llamadas) sin acoplarse al texto del mensaje.
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number,
+  ) {
+    super(message);
+  }
+}
 
 function withAuth(token: string, init: RequestInit): RequestInit {
   return {
@@ -111,6 +121,74 @@ export async function getCallHistory(): Promise<CallHistoryEntry[]> {
   const res = await authFetch('/calls/history');
   if (!res.ok) {
     throw new ApiError(await extractErrorMessage(res, 'No se pudo obtener el historial'));
+  }
+  return res.json();
+}
+
+export interface CallSessionSummary {
+  id: string;
+  roomCode: string;
+  roomName: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  participantCount: number;
+}
+
+export type TrackIntervalSource = 'camera' | 'microphone' | 'screen_share';
+
+export interface TrackInterval {
+  source: TrackIntervalSource;
+  startedAt: string;
+  endedAt: string;
+}
+
+export interface CallSessionParticipantSummary {
+  participantKey: string;
+  userId: string | null;
+  displayName: string;
+  isGuest: boolean;
+  firstJoinedAt: string;
+  lastLeftAt: string | null;
+  totalSeconds: number;
+  spoke: boolean;
+  screenShared: boolean;
+  rejoinCount: number;
+  trackIntervals: TrackInterval[];
+  nameColor: string | null;
+}
+
+export interface CallSessionTimeline {
+  id: string;
+  roomCode: string;
+  roomName: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  participants: CallSessionParticipantSummary[];
+}
+
+// Solo las sesiones de llamada donde el solicitante participó (GET /calls/sessions).
+export async function getCallSessions(): Promise<CallSessionSummary[]> {
+  const res = await authFetch('/calls/sessions');
+  if (!res.ok) {
+    throw new ApiError(
+      await extractErrorMessage(res, 'No se pudieron obtener las sesiones de llamada'),
+      res.status,
+    );
+  }
+  return res.json();
+}
+
+// El backend devuelve 404 (no 403) tanto si la sesión no existe como si el
+// solicitante no participó de ella — misma rama en el servidor, a propósito,
+// para no filtrar si una sesión ajena existe. El status se propaga en el
+// ApiError para que la UI distinga ese caso de un error inesperado.
+export async function getCallSessionTimeline(sessionId: string): Promise<CallSessionTimeline> {
+  const res = await authFetch(`/calls/sessions/${encodeURIComponent(sessionId)}/timeline`);
+  if (!res.ok) {
+    throw new ApiError(
+      await extractErrorMessage(res, 'No se pudo obtener la línea de tiempo'),
+      res.status,
+    );
   }
   return res.json();
 }

@@ -6,6 +6,7 @@ const CHAIN_METHODS = [
   'limit',
   'orderBy',
   'innerJoin',
+  'leftJoin',
   'values',
   'set',
   'returning',
