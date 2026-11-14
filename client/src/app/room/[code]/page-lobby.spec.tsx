@@ -28,7 +28,19 @@ jest.mock('@/features/room-emojis/useRoomEmojis', () => {
   return { useRoomEmojis: () => state };
 });
 jest.mock('@/features/chat/ExpressionPicker', () => ({ ExpressionPicker: () => null }));
-jest.mock('@/lib/api', () => ({ requestRoomAccess: jest.fn(), ApiError: class extends Error {} }));
+jest.mock('@/lib/api', () => ({
+  requestRoomAccess: jest.fn(),
+  getRoomEmojis: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
+  getRoomNotes: jest.fn<() => Promise<unknown>>().mockResolvedValue({
+    roomId: 'room-1',
+    content: '',
+    revision: 0,
+    updatedAt: '2026-11-04T00:00:00Z',
+  }),
+  saveRoomNotes: jest.fn(),
+  RoomNotesConflictError: class extends Error {},
+  ApiError: class extends Error {},
+}));
 jest.mock('@/lib/socket', () => ({ createRoomSocket: jest.fn() }));
 const mockJoinCall = jest.fn();
 jest.mock('@/features/calls/useCallSession', () => ({

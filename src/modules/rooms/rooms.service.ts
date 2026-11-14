@@ -1,8 +1,14 @@
-import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
 import { generateRoomCode } from '../../common/generate-room-code';
 import { DRIZZLE, DrizzleDb } from '../../db/drizzle.module';
-import { roomMembers, rooms, users, type Room, type RoomRole } from '../../db/schema';
+import { roomMembers, roomNotes, rooms, users, type Room, type RoomRole } from '../../db/schema';
 import { RoomEventsService } from './room-events.service';
 
 export interface RoomMemberView {
@@ -99,5 +105,35 @@ export class RoomsService {
       .where(and(eq(roomMembers.roomId, room.id), eq(roomMembers.userId, targetUserId)));
 
     this.roomEvents.emitMemberRoleChanged({ roomCode: code });
+  }
+
+  async getRoomNotes(code: string) {
+    const room = await this.getByCodeOrThrow(code);
+    const [note] = await this.db
+      .select()
+      .from(roomNotes)
+      .where(eq(roomNotes.roomId, room.id))
+      .limit(1);
+    return note ?? { roomId: room.id, content: '', revision: 0, updatedAt: new Date() };
+  }
+
+  async saveRoomNotes(code: string, content: string, revision: number) {
+    const room = await this.getByCodeOrThrow(code);
+    // La revisión 0 representa una nota todavía inexistente. Tanto la
+    // creación como la actualización rechazan atómicamente copias antiguas.
+    const [note] =
+      revision === 0
+        ? await this.db
+            .insert(roomNotes)
+            .values({ roomId: room.id, content, revision: 1, updatedAt: new Date() })
+            .onConflictDoNothing()
+            .returning()
+        : await this.db
+            .update(roomNotes)
+            .set({ content, revision: revision + 1, updatedAt: new Date() })
+            .where(and(eq(roomNotes.roomId, room.id), eq(roomNotes.revision, revision)))
+            .returning();
+    if (!note) throw new ConflictException('Otra persona actualizó las notas de la sala');
+    return note;
   }
 }

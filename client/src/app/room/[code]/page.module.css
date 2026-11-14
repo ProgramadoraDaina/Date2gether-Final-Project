@@ -339,6 +339,63 @@
   margin-bottom: 0;
 }
 
+.notesPanel {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+
+.notesTabs {
+  display: flex;
+  gap: 8px;
+}
+
+.notesTabs button {
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.notesTabs button[aria-pressed='true'] {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.notesPanel textarea {
+  flex: 1;
+  min-height: 120px;
+  resize: none;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.notesPanel small {
+  color: var(--color-text-muted);
+}
+
+.notesConflict {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 50%;
+  overflow-y: auto;
+}
+
+.notesConflict textarea {
+  flex: none;
+  min-height: 80px;
+}
+
 .messageForm > button {
   width: auto;
 }
