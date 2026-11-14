@@ -26,6 +26,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_CALL_DEVICES, type CallDevices } from './callDevices';
 import type { RoomEmoji } from '@/lib/api';
 import { useTranslation } from '../translation/useTranslation';
+import { reportTrackState } from '@/lib/calls';
 import type { CallSessionState } from './useCallSession';
 import styles from './MeetingRoom.module.css';
 import { ReactionOverlay } from './reactions/ReactionOverlay';
@@ -160,12 +161,31 @@ function HangUpButton() {
   );
 }
 
-function MicToggleButton({ setDeviceError }: { setDeviceError: (value: boolean) => void }) {
+interface ToggleButtonProps {
+  roomCode: string;
+  roomToken: string;
+  setDeviceError: (value: boolean) => void;
+}
+
+function MicToggleButton({ roomCode, roomToken, setDeviceError }: ToggleButtonProps) {
   const { t } = useTranslation();
+  // useTrackToggle sincroniza `onChange` con un useEffect propio que depende
+  // de [enabled, onChange] (ver livekit-client/components-react): una
+  // función nueva en cada render reengancha ese efecto en cada render, no
+  // solo cuando `enabled` realmente cambia. Sin useCallback acá, un mic
+  // encendido 15s mandaba ~25 reportes de "desmuteado" repetidos — cada uno
+  // pisando el intervalo real como si fuera un prendido nuevo.
+  const onMicChange = useCallback(
+    (isEnabled: boolean) => {
+      setDeviceError(false);
+      void reportTrackState(roomCode, roomToken, 'microphone', isEnabled);
+    },
+    [roomCode, roomToken, setDeviceError],
+  );
   const { buttonProps, enabled } = useTrackToggle({
     source: Track.Source.Microphone,
     onDeviceError: () => setDeviceError(true),
-    onChange: () => setDeviceError(false),
+    onChange: onMicChange,
   });
   const label = enabled ? t('Desactivar micrófono') : t('Activar micrófono');
   return (
@@ -181,12 +201,20 @@ function MicToggleButton({ setDeviceError }: { setDeviceError: (value: boolean) 
   );
 }
 
-function CameraToggleButton({ setDeviceError }: { setDeviceError: (value: boolean) => void }) {
+function CameraToggleButton({ roomCode, roomToken, setDeviceError }: ToggleButtonProps) {
   const { t } = useTranslation();
+  // Mismo motivo que en MicToggleButton: onChange tiene que ser estable.
+  const onCameraChange = useCallback(
+    (isEnabled: boolean) => {
+      setDeviceError(false);
+      void reportTrackState(roomCode, roomToken, 'camera', isEnabled);
+    },
+    [roomCode, roomToken, setDeviceError],
+  );
   const { buttonProps, enabled } = useTrackToggle({
     source: Track.Source.Camera,
     onDeviceError: () => setDeviceError(true),
-    onChange: () => setDeviceError(false),
+    onChange: onCameraChange,
   });
   const label = enabled ? t('Desactivar cámara') : t('Activar cámara');
   return (
@@ -227,6 +255,7 @@ function ScreenShareToggleButton({ setDeviceError }: { setDeviceError: (value: b
 interface MeetingRoomProps {
   call: CallSessionState;
   roomCode: string;
+  roomToken: string;
   roomEmojis: RoomEmoji[];
   initialDevices?: CallDevices;
 }
@@ -262,6 +291,7 @@ function InitialCallDevices({
 
 function MeetingContent({
   roomCode,
+  roomToken,
   roomEmojis,
   initialDevices = DEFAULT_CALL_DEVICES,
 }: Omit<MeetingRoomProps, 'call'>) {
@@ -294,13 +324,17 @@ function MeetingContent({
       )}
       <div className={styles.controlsDock}>
         <div className={styles.controlsGroup}>
-          <MicToggleButton setDeviceError={setDeviceError} />
+          <MicToggleButton roomCode={roomCode} roomToken={roomToken} setDeviceError={setDeviceError} />
           <MediaDeviceMenu
             kind="audioinput"
             requestPermissions={false}
             aria-label={t('Elegir micrófono')}
           />
-          <CameraToggleButton setDeviceError={setDeviceError} />
+          <CameraToggleButton
+            roomCode={roomCode}
+            roomToken={roomToken}
+            setDeviceError={setDeviceError}
+          />
           <MediaDeviceMenu
             kind="videoinput"
             requestPermissions={false}
@@ -319,6 +353,7 @@ function MeetingContent({
 export default function MeetingRoom({
   call,
   roomCode,
+  roomToken,
   roomEmojis,
   initialDevices = DEFAULT_CALL_DEVICES,
 }: MeetingRoomProps) {
@@ -350,6 +385,15 @@ export default function MeetingRoom({
         if (reason === undefined || reason === DisconnectReason.CLIENT_INITIATED) {
           call.leaveCall();
           router.push('/');
+        } else if (
+          // Cierre forzado por el anfitrión (D5, design.md): LiveKit
+          // reporta ROOM_DELETED cuando se llamó a RoomService.DeleteRoom
+          // (nuestro cierre forzado) y ROOM_CLOSED cuando LiveKit cierra la
+          // sala por su cuenta. Ninguno de los dos es un error de red.
+          reason === DisconnectReason.ROOM_DELETED ||
+          reason === DisconnectReason.ROOM_CLOSED
+        ) {
+          call.endedByHost();
         } else call.failed(new Error('Disconnected'));
       }}
       data-lk-theme="default"
@@ -357,6 +401,7 @@ export default function MeetingRoom({
     >
       <MeetingContent
         roomCode={roomCode}
+        roomToken={roomToken}
         roomEmojis={roomEmojis}
         initialDevices={initialDevices}
       />
