@@ -26,6 +26,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_CALL_DEVICES, type CallDevices } from './callDevices';
 import type { RoomEmoji } from '@/lib/api';
 import { useTranslation } from '../translation/useTranslation';
+import { reportTrackState } from '@/lib/calls';
 import type { CallSessionState } from './useCallSession';
 import styles from './MeetingRoom.module.css';
 import { ReactionOverlay } from './reactions/ReactionOverlay';
@@ -100,6 +101,28 @@ function CameraIcon({ off }: { off: boolean }) {
   );
 }
 
+function ScreenShareIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="20"
+      height="20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="4" width="18" height="12" rx="2" />
+      <path d="M8 20h8" />
+      <path d="M12 16v4" />
+      <path d="M9 11l3-3 3 3" />
+      <path d="M12 8v4" />
+    </svg>
+  );
+}
+
 function HangUpIcon() {
   return (
     <svg
@@ -138,12 +161,31 @@ function HangUpButton() {
   );
 }
 
-function MicToggleButton({ setDeviceError }: { setDeviceError: (value: boolean) => void }) {
+interface ToggleButtonProps {
+  roomCode: string;
+  roomToken: string;
+  setDeviceError: (value: boolean) => void;
+}
+
+function MicToggleButton({ roomCode, roomToken, setDeviceError }: ToggleButtonProps) {
   const { t } = useTranslation();
+  // useTrackToggle sincroniza `onChange` con un useEffect propio que depende
+  // de [enabled, onChange] (ver livekit-client/components-react): una
+  // función nueva en cada render reengancha ese efecto en cada render, no
+  // solo cuando `enabled` realmente cambia. Sin useCallback acá, un mic
+  // encendido 15s mandaba ~25 reportes de "desmuteado" repetidos — cada uno
+  // pisando el intervalo real como si fuera un prendido nuevo.
+  const onMicChange = useCallback(
+    (isEnabled: boolean) => {
+      setDeviceError(false);
+      void reportTrackState(roomCode, roomToken, 'microphone', isEnabled);
+    },
+    [roomCode, roomToken, setDeviceError],
+  );
   const { buttonProps, enabled } = useTrackToggle({
     source: Track.Source.Microphone,
     onDeviceError: () => setDeviceError(true),
-    onChange: () => setDeviceError(false),
+    onChange: onMicChange,
   });
   const label = enabled ? t('Desactivar micrófono') : t('Activar micrófono');
   return (
@@ -159,12 +201,20 @@ function MicToggleButton({ setDeviceError }: { setDeviceError: (value: boolean) 
   );
 }
 
-function CameraToggleButton({ setDeviceError }: { setDeviceError: (value: boolean) => void }) {
+function CameraToggleButton({ roomCode, roomToken, setDeviceError }: ToggleButtonProps) {
   const { t } = useTranslation();
+  // Mismo motivo que en MicToggleButton: onChange tiene que ser estable.
+  const onCameraChange = useCallback(
+    (isEnabled: boolean) => {
+      setDeviceError(false);
+      void reportTrackState(roomCode, roomToken, 'camera', isEnabled);
+    },
+    [roomCode, roomToken, setDeviceError],
+  );
   const { buttonProps, enabled } = useTrackToggle({
     source: Track.Source.Camera,
     onDeviceError: () => setDeviceError(true),
-    onChange: () => setDeviceError(false),
+    onChange: onCameraChange,
   });
   const label = enabled ? t('Desactivar cámara') : t('Activar cámara');
   return (
@@ -180,9 +230,32 @@ function CameraToggleButton({ setDeviceError }: { setDeviceError: (value: boolea
   );
 }
 
+function ScreenShareToggleButton({ setDeviceError }: { setDeviceError: (value: boolean) => void }) {
+  const { t } = useTranslation();
+  const { buttonProps, enabled } = useTrackToggle({
+    source: Track.Source.ScreenShare,
+    captureOptions: { audio: true },
+    onDeviceError: () => setDeviceError(true),
+    onChange: () => setDeviceError(false),
+  });
+  const label = enabled ? t('Dejar de compartir pantalla') : t('Compartir pantalla');
+  return (
+    <button
+      {...buttonProps}
+      type="button"
+      className={`${styles.iconButton} ${enabled ? styles.iconButtonActive : ''}`}
+      title={label}
+      aria-label={label}
+    >
+      <ScreenShareIcon />
+    </button>
+  );
+}
+
 interface MeetingRoomProps {
   call: CallSessionState;
   roomCode: string;
+  roomToken: string;
   roomEmojis: RoomEmoji[];
   initialDevices?: CallDevices;
 }
@@ -218,15 +291,20 @@ function InitialCallDevices({
 
 function MeetingContent({
   roomCode,
+  roomToken,
   roomEmojis,
   initialDevices = DEFAULT_CALL_DEVICES,
 }: Omit<MeetingRoomProps, 'call'>) {
   const { t } = useTranslation();
   const [deviceError, setDeviceError] = useState(false);
   const showDeviceError = useCallback(() => setDeviceError(true), []);
-  const tracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], {
-    onlySubscribed: false,
-  });
+  const tracks = useTracks(
+    [
+      { source: Track.Source.Camera, withPlaceholder: true },
+      { source: Track.Source.ScreenShare, withPlaceholder: false },
+    ],
+    { onlySubscribed: false },
+  );
   return (
     <ReactionsProvider roomCode={roomCode} roomEmojis={roomEmojis}>
       <InitialCallDevices devices={initialDevices} onDeviceError={showDeviceError} />
@@ -246,18 +324,23 @@ function MeetingContent({
       )}
       <div className={styles.controlsDock}>
         <div className={styles.controlsGroup}>
-          <MicToggleButton setDeviceError={setDeviceError} />
+          <MicToggleButton roomCode={roomCode} roomToken={roomToken} setDeviceError={setDeviceError} />
           <MediaDeviceMenu
             kind="audioinput"
             requestPermissions={false}
             aria-label={t('Elegir micrófono')}
           />
-          <CameraToggleButton setDeviceError={setDeviceError} />
+          <CameraToggleButton
+            roomCode={roomCode}
+            roomToken={roomToken}
+            setDeviceError={setDeviceError}
+          />
           <MediaDeviceMenu
             kind="videoinput"
             requestPermissions={false}
             aria-label={t('Elegir cámara')}
           />
+          <ScreenShareToggleButton setDeviceError={setDeviceError} />
           <ReactionPicker buttonClassName={styles.iconButton} />
           <SoundboardPicker buttonClassName={styles.iconButton} />
         </div>
@@ -270,6 +353,7 @@ function MeetingContent({
 export default function MeetingRoom({
   call,
   roomCode,
+  roomToken,
   roomEmojis,
   initialDevices = DEFAULT_CALL_DEVICES,
 }: MeetingRoomProps) {
@@ -301,6 +385,15 @@ export default function MeetingRoom({
         if (reason === undefined || reason === DisconnectReason.CLIENT_INITIATED) {
           call.leaveCall();
           router.push('/');
+        } else if (
+          // Cierre forzado por el anfitrión (D5, design.md): LiveKit
+          // reporta ROOM_DELETED cuando se llamó a RoomService.DeleteRoom
+          // (nuestro cierre forzado) y ROOM_CLOSED cuando LiveKit cierra la
+          // sala por su cuenta. Ninguno de los dos es un error de red.
+          reason === DisconnectReason.ROOM_DELETED ||
+          reason === DisconnectReason.ROOM_CLOSED
+        ) {
+          call.endedByHost();
         } else call.failed(new Error('Disconnected'));
       }}
       data-lk-theme="default"
@@ -308,6 +401,7 @@ export default function MeetingRoom({
     >
       <MeetingContent
         roomCode={roomCode}
+        roomToken={roomToken}
         roomEmojis={roomEmojis}
         initialDevices={initialDevices}
       />

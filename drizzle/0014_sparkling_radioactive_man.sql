@@ -1,0 +1,1 @@
+ALTER TABLE "call_session_participants" ADD COLUMN "track_intervals" jsonb DEFAULT '[]'::jsonb NOT NULL;

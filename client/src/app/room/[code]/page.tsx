@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react';
+import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useParams } from 'next/navigation';
 import type { Socket } from 'socket.io-client';
@@ -74,6 +75,10 @@ export default function RoomPage() {
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // Dismiss manual del panel de cierre forzado (D5, design.md): "Volver a
+  // la sala" no reinicia la llamada (no hay flujo de reingreso en este PR),
+  // solo deja de mostrar el panel para que el usuario siga viendo el chat.
+  const [callEndedDismissed, setCallEndedDismissed] = useState(false);
   const [users, setUsers] = useState<RoomPresence[]>([]);
   const [mentionNames, setMentionNames] = useState<string[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -320,6 +325,32 @@ export default function RoomPage() {
           <p>{t('Cargando llamada…')}</p>
         </>
       )}
+    </div>
+  );
+
+  // Cierre forzado por el anfitrión (D5, design.md): estado terminal
+  // distinto de 'error' — la llamada no falló, terminó porque se desconectó
+  // el último administrador. "Ver línea de tiempo" lleva al listado general
+  // (todavía no hay un sessionId disponible del lado del cliente en este
+  // momento: la cabecera de sesión se materializa recién al recibir
+  // room_finished, de forma asíncrona). "Volver a la sala" solo descarta
+  // este panel; la sala y el chat siguen disponibles sin cambios (alcance
+  // exclusivo a la videollamada, spec host-gate/alcance-exclusivo).
+  const callEndedPanel = (
+    <div className={styles.callLoadingPanel} role="status" aria-live="polite">
+      <p>{t('La llamada terminó porque el anfitrión se desconectó.')}</p>
+      <div className={styles.callEndedActions}>
+        <Link href="/history" className={styles.callLoadingButton}>
+          {t('Ver línea de tiempo')}
+        </Link>
+        <button
+          type="button"
+          className={styles.callLoadingButton}
+          onClick={() => setCallEndedDismissed(true)}
+        >
+          {t('Volver a la sala')}
+        </button>
+      </div>
     </div>
   );
 
@@ -590,9 +621,12 @@ export default function RoomPage() {
               <MeetingRoom
                 call={callSession}
                 roomCode={code}
+                roomToken={access.token}
                 roomEmojis={emojis}
                 initialDevices={initialDevices}
               />
+            ) : callSession.status === 'ended' ? (
+              !callEndedDismissed && callEndedPanel
             ) : (
               callLoadingPanel
             )}
