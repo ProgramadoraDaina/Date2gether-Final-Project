@@ -32,6 +32,44 @@ export async function requestRoomAccess(
   return res.json();
 }
 
+export interface RoomNotes {
+  roomId: string;
+  content: string;
+  revision: number;
+  updatedAt: string;
+}
+
+export class RoomNotesConflictError extends Error {}
+
+export async function getRoomNotes(code: string, token: string): Promise<RoomNotes> {
+  const res = await fetch(`${API_URL}/rooms/${encodeURIComponent(code)}/notes`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok)
+    throw new ApiError(await extractErrorMessage(res, 'No se pudieron cargar las notas'));
+  return res.json();
+}
+
+export async function saveRoomNotes(
+  code: string,
+  token: string,
+  content: string,
+  revision: number,
+  keepalive = false,
+): Promise<RoomNotes> {
+  const res = await fetch(`${API_URL}/rooms/${encodeURIComponent(code)}/notes`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ content, revision }),
+    keepalive,
+  });
+  if (res.status === 409)
+    throw new RoomNotesConflictError('Otra persona actualizó las notas de la sala');
+  if (!res.ok)
+    throw new ApiError(await extractErrorMessage(res, 'No se pudieron guardar las notas'));
+  return res.json();
+}
+
 export type RoomRole = 'administrador' | 'colaborador' | 'participante';
 
 export interface RoomMember {

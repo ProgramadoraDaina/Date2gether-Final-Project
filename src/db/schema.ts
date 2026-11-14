@@ -95,6 +95,17 @@ export const messages = pgTable('messages', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
+// Bloc compartido de la sala. La clave única permite actualizarlo como un
+// documento único y evita exponer notas personales a otros participantes.
+export const roomNotes = pgTable('room_notes', {
+  roomId: uuid('room_id')
+    .primaryKey()
+    .references(() => rooms.id, { onDelete: 'cascade' }),
+  content: text('content').notNull().default(''),
+  revision: integer('revision').notNull().default(1),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
 // El rol es por sala: la misma persona puede ser admin en una y participante en otra.
 export const roomRoleEnum = pgEnum('room_role', ['administrador', 'colaborador', 'participante']);
 
@@ -216,10 +227,15 @@ export const usersRelations = relations(users, ({ many }) => ({
   callHistory: many(callHistory),
 }));
 
-export const roomsRelations = relations(rooms, ({ many }) => ({
+export const roomsRelations = relations(rooms, ({ many, one }) => ({
   messages: many(messages),
+  notes: one(roomNotes, { fields: [rooms.id], references: [roomNotes.roomId] }),
   members: many(roomMembers),
   callHistory: many(callHistory),
+}));
+
+export const roomNotesRelations = relations(roomNotes, ({ one }) => ({
+  room: one(rooms, { fields: [roomNotes.roomId], references: [rooms.id] }),
 }));
 
 export const messagesRelations = relations(messages, ({ one }) => ({
@@ -240,6 +256,7 @@ export type Room = typeof rooms.$inferSelect;
 export type NewRoom = typeof rooms.$inferInsert;
 export type Message = typeof messages.$inferSelect;
 export type NewMessage = typeof messages.$inferInsert;
+export type RoomNote = typeof roomNotes.$inferSelect;
 export type RoomMember = typeof roomMembers.$inferSelect;
 export type NewRoomMember = typeof roomMembers.$inferInsert;
 export type RoomRole = (typeof roomRoleEnum.enumValues)[number];

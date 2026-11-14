@@ -35,3 +35,10 @@
   font-size: 2.4em;
   line-height: 1.2;
 }
+
+.mention {
+  border-radius: 4px;
+  padding: 0 2px;
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  color: var(--color-accent);
+}
