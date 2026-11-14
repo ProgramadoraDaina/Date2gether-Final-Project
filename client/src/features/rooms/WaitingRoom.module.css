@@ -1,0 +1,9 @@
+.card {
+  composes: card from '../../styles/form.module.css';
+}
+.error {
+  composes: error from '../../styles/form.module.css';
+}
+.card button {
+  margin-bottom: 12px;
+}

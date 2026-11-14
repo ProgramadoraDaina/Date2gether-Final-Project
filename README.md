@@ -11,8 +11,20 @@ Las reglas de producto están en [docs/requirements.md](docs/requirements.md). E
 - El nombre visible no concede permisos. El servidor emite un pase de participante para esa sala, válido durante 24 horas. Sirve para chat y llamadas; no sirve para crear salas, consultar cuentas ni administrar roles. Cada participante recibe un identificador distinto aunque repita el nombre de otra persona.
 - Los usuarios registrados conservan los roles por sala: administrador, colaborador y participante. Los invitados no reciben permisos de administración.
 - Hay chat de texto persistente, presencia en tiempo real, interfaz ES/EN y tema claro/oscuro.
-- Antes de entrar hay un lobby para confirmar el nombre, seleccionar cámara y micrófono y probarlos con video local y un medidor de voz. Ambos empiezan apagados y solo se solicitan permisos al activarlos. Entrar conecta chat y llamada con LiveKit usando la elección confirmada; hay grilla de participantes y controles para cambiar los dispositivos durante la llamada. Las llamadas admiten seis personas por defecto. Compartir pantalla sigue pendiente.
-- El ingreso actual es directo con enlace y nombre. La sala de espera, el bloqueo de ingresos y el cupo de admisión al chat son funcionalidades pendientes; no se presentan como controles implementados.
+- Antes de entrar hay un lobby para confirmar el nombre, seleccionar cámara y micrófono y probarlos con video local y un medidor de voz. Ambos empiezan apagados y solo se solicitan permisos al activarlos. Una vez concedido el ingreso, se conectan chat y llamada con LiveKit usando la elección confirmada; hay grilla de participantes y controles para cambiar los dispositivos durante la llamada. Las llamadas admiten seis personas por defecto. También se puede compartir pantalla durante la llamada.
+- El ingreso es directo por defecto. El administrador puede activar la sala de espera, admitir o rechazar solicitudes y bloquear nuevos ingresos desde **Administrar ingresos**. Quien espera no recibe chat ni pases de llamada; el cupo de admisión al chat sigue pendiente.
+
+## Moderar el ingreso
+
+El administrador entra con su cuenta y abre **Administrar ingresos** desde la sala. Puede activar o desactivar la espera y bloquear nuevos ingresos. La espera empieza desactivada; el anfitrión no necesita admitirse a sí mismo. Los nombres visibles nunca conceden permisos de administrador.
+
+Con la espera activa, cada ingreso crea una solicitud propia, incluso si varias personas usan el mismo nombre. El administrador ve su nombre, si tiene cuenta y cuándo lo solicitó, y puede admitirla o rechazarla. La pantalla se actualiza automáticamente; el invitado consulta el resultado cada cinco segundos y puede cancelar. Un rechazo requiere una nueva acción de la persona para volver a solicitar acceso.
+
+La credencial de espera se limita a consultar o cancelar esa solicitud; no sirve para chat, llamadas ni acciones de cuenta. Se conserva en sessionStorage para recuperar la espera al recargar, y vence a las 24 horas. La configuración y las decisiones se guardan en PostgreSQL y sobreviven a un reinicio. La admisión usa el ID de la solicitud como identidad estable; volver a consultar el resultado no crea otra participación.
+
+Desactivar la espera admite las solicitudes pendientes cuando los ingresos están desbloqueados; no cambia rechazos o cancelaciones anteriores. Bloquear impide nuevas solicitudes y admisiones, sin retirar a quienes ya fueron admitidos. Si se desactiva la espera mientras está bloqueada, las solicitudes continúan pendientes hasta desbloquear. La capacidad de seis conexiones de LiveKit continúa separada del cupo de admisión al chat, que está pendiente.
+
+Aplicar la migración versionada con `pnpm db:migrate` antes de desplegar este cambio.
 
 ## Requisitos
 
@@ -100,7 +112,7 @@ Las credenciales reales de LiveKit, PostgreSQL y JWT del despliegue EC2 se gener
 
 En desarrollo local, PostgreSQL y LiveKit publican sus puertos solo en `127.0.0.1`. Si PostgreSQL ya estaba levantado con una configuración anterior, aplicar el cambio ejecutando `docker compose up -d postgres`; Docker recrea ese contenedor y conserva su volumen de datos. No ejecutar `docker compose down -v` salvo que se desee eliminar esos datos.
 
-Los códigos nuevos de las salas usan aleatoriedad criptográfica. Cualquier persona que posea el enlace puede solicitar acceso y leer el chat de esa sala; tratar el enlace como privado. El proyecto todavía no implementa sala de espera, expulsión ni revocación completa de invitaciones. Las sesiones de cuenta se guardan en `localStorage`, por lo que una inyección de scripts en el navegador podría exponerlas; se debe revisar esa decisión antes de usar la aplicación con datos reales.
+Los códigos nuevos de las salas usan aleatoriedad criptográfica. Cualquier persona que posea el enlace puede solicitar acceso. Con la espera desactivada ingresa directamente; con la espera activa debe ser admitida antes de leer el chat. Tratar el enlace como privado. El proyecto todavía no implementa expulsión ni revocación completa de invitaciones. Las sesiones de cuenta se guardan en `localStorage`, por lo que una inyección de scripts en el navegador podría exponerlas; se debe revisar esa decisión antes de usar la aplicación con datos reales.
 
 La auditoría de dependencias realizada el 27 de octubre de 2026 terminó sin vulnerabilidades conocidas en `pnpm audit` después de actualizar Next.js, body-parser, multer y herramientas de desarrollo. El resultado depende de la base de avisos en ese momento y no reemplaza una auditoría o prueba de penetración. También se revisaron los archivos versionables y las referencias Git locales buscando patrones habituales de claves, sin hallar coincidencias; esa búsqueda no garantiza detectar todos los formatos de secretos.
 
@@ -120,7 +132,18 @@ Los cambios de LiveKit y seguridad deben revisarse en el PR antes de desplegarlo
 | PATCH  | `/rooms/:code/members/:userId`                                   | Administrador de la sala                                           |
 | POST   | `/calls/:roomCode`                                               | Pase de participante de esa sala; devuelve `{ url, token, roomName, participantLimit }` |
 
-`POST /rooms/:code/access` devuelve `{ token, participant }`. El frontend conserva el pase en memoria durante la visita; abrir o recargar el enlace vuelve a pedir confirmación del nombre. Una reconexión automática del socket usa el mismo pase. El nombre anterior puede estar precargado, pero no se ingresa automáticamente.
+Con ingreso directo, `POST /rooms/:code/access` devuelve `{ token, participant }`. El frontend conserva el pase en memoria durante la visita; abrir o recargar el enlace vuelve a pedir confirmación del nombre. Una reconexión automática del socket usa el mismo pase. El nombre anterior puede estar precargado, pero no se ingresa automáticamente.
+
+Las rutas de admisión son:
+
+| Método | Ruta | Acceso |
+| --- | --- | --- |
+| GET / PATCH | `/rooms/:code/admission` | Sesión de cuenta y rol administrador de esa sala |
+| PATCH | `/rooms/:code/admission/:id` | Administrador; `{ decision: "admitted" \| "rejected" }` |
+| GET | `/rooms/:code/admission/:id/status` | Credencial de espera de esa solicitud |
+| POST | `/rooms/:code/admission/:id/cancel` | Credencial de espera de esa solicitud |
+
+Con espera, `POST /rooms/:code/access` devuelve `{ status: "pending", requestId, ticket }` en lugar del pase de participante. La consulta de estado devuelve `{ status: "admitted", access: { token, participant } }` solo después de la admisión. El resto de los estados son `pending`, `rejected`, `cancelled` o `expired`. Las decisiones sobre solicitudes ya resueltas no se sobrescriben; las solicitudes de otras salas no se pueden consultar ni resolver.
 
 El namespace Socket.io es `/rooms`, con `auth: { token }` usando el pase de sala. `joinRoom` recibe `{ code }`; el nombre, el identificador y la cuenta se obtienen del pase verificado. `sendMessage` recibe `{ content }` y `leaveRoom` no requiere payload. El servidor emite `roomHistory`, `roomUsers`, `userJoined`, `userLeft`, `newMessage` y `memberRoleChanged`. La presencia incluye `{ participantId, userName, userId? }`.
 
@@ -136,4 +159,4 @@ pnpm test:client --runInBand
 
 La [guía E2E](e2e/README.md) explica cómo probar los recorridos con una base separada. El [README del cliente](client/README.md) detalla el flujo del navegador y las [decisiones técnicas](docs/decisiones-tecnicas.md) registran la integración de esta rama.
 
-La entrega académica usa seis participantes por llamada. Siguen pendientes compartir pantalla, moderación de acceso, cupo del chat, cierre de salas de la aplicación, vencimiento del chat, adjuntos, stickers, grabación local, subtítulos y fondos, según los requisitos.
+La entrega académica usa seis participantes por llamada. Siguen pendientes expulsión, cupo del chat, cierre de salas de la aplicación, vencimiento del chat, adjuntos, stickers, grabación local, subtítulos y fondos, según los requisitos.

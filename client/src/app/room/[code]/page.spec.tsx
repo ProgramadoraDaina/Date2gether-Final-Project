@@ -22,6 +22,11 @@ jest.mock('@/features/rooms/useRoomMembers', () => ({
 }));
 jest.mock('@/lib/api', () => ({
   requestRoomAccess: jest.fn(),
+  getRoomAdmission: jest.fn<() => Promise<unknown>>().mockResolvedValue({
+    waitingRoomEnabled: false,
+    entryLocked: false,
+    requests: [],
+  }),
   getRoomEmojis: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
   getRoomNotes: jest.fn<() => Promise<unknown>>().mockResolvedValue({
     roomId: 'room-1',

@@ -68,4 +68,26 @@ describe('Acceso de invitados con enlace', () => {
     );
     await expect(access.verify(expired)).rejects.toThrow();
   });
+  it('un ticket de espera no habilita chat, llamadas ni acciones de cuenta y se limita a su solicitud', async () => {
+    const ticket = await access.createAdmissionTicket('abc-defg-hij', 'request-1');
+    await expect(
+      access.verifyAdmissionTicket(ticket, 'abc-defg-hij', 'request-1'),
+    ).resolves.toBeUndefined();
+    await expect(access.verify(ticket)).rejects.toThrow();
+    await expect(access.authenticateAccount('Bearer ' + ticket)).rejects.toThrow();
+    await expect(
+      access.verifyAdmissionTicket(ticket, 'xyz-abcd-efg', 'request-1'),
+    ).rejects.toThrow();
+    await expect(
+      access.verifyAdmissionTicket(ticket, 'abc-defg-hij', 'request-2'),
+    ).rejects.toThrow();
+    await expect(
+      new RoomAccessGuard(access).canActivate(
+        httpContext({
+          headers: { authorization: 'Bearer ' + ticket },
+          params: { roomCode: 'abc-defg-hij' },
+        }),
+      ),
+    ).rejects.toThrow();
+  });
 });

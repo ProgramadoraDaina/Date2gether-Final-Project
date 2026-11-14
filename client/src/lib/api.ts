@@ -16,7 +16,10 @@ export interface RoomAccess {
 }
 
 // El nombre se confirma antes de obtener acceso, tanto con cuenta como sin ella.
-export async function requestRoomAccess(code: string, name: string): Promise<RoomAccess> {
+export async function requestRoomAccess(
+  code: string,
+  name: string,
+): Promise<RoomAccess | WaitingRoomReceipt> {
   const path = `/rooms/${encodeURIComponent(code)}/access`;
   const init = { method: 'POST', body: JSON.stringify({ name }) };
   const res = getAccessToken()
@@ -289,7 +292,8 @@ export interface FreesoundSound {
 export async function searchFreesound(code: string, query: string): Promise<FreesoundSound[]> {
   const params = new URLSearchParams({ q: query });
   const res = await authFetch(`/rooms/${encodeURIComponent(code)}/emojis/sounds?${params}`);
-  if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudieron cargar los sonidos'));
+  if (!res.ok)
+    throw new ApiError(await extractErrorMessage(res, 'No se pudieron cargar los sonidos'));
   return res.json();
 }
 
@@ -320,7 +324,11 @@ export async function createRoomEmoji(code: string, form: FormData): Promise<Roo
   return res.json();
 }
 
-export async function updateRoomEmoji(code: string, id: string, form: FormData): Promise<RoomEmoji> {
+export async function updateRoomEmoji(
+  code: string,
+  id: string,
+  form: FormData,
+): Promise<RoomEmoji> {
   const res = await authFetch(`/rooms/${encodeURIComponent(code)}/emojis/${id}`, {
     method: 'PATCH',
     body: form,
@@ -334,4 +342,94 @@ export async function deleteRoomEmoji(code: string, id: string): Promise<void> {
     method: 'DELETE',
   });
   if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudo borrar el emoji'));
+}
+
+export interface WaitingRoomReceipt {
+  status: 'pending';
+  requestId: string;
+  ticket: string;
+}
+export type AdmissionStatus =
+  | { status: 'admitted'; access: RoomAccess }
+  | { status: 'pending' | 'rejected' | 'cancelled' | 'expired'; blocked?: boolean };
+export interface AdmissionManagement {
+  waitingRoomEnabled: boolean;
+  entryLocked: boolean;
+  requests: { id: string; name: string; registered: boolean; createdAt: string }[];
+}
+const admissionPath = (code: string) => '/rooms/' + encodeURIComponent(code) + '/admission';
+
+export async function getAdmissionStatus(
+  code: string,
+  receipt: WaitingRoomReceipt,
+  signal?: AbortSignal,
+): Promise<AdmissionStatus> {
+  const res = await fetch(
+    API_URL + admissionPath(code) + '/' + encodeURIComponent(receipt.requestId) + '/status',
+    {
+      headers: { Authorization: 'Bearer ' + receipt.ticket },
+      signal,
+    },
+  );
+  if (res.status === 401 || res.status === 404) return { status: 'expired' };
+  if (!res.ok)
+    throw new ApiError(
+      await extractErrorMessage(res, 'No se pudo consultar la solicitud. Reintentando…'),
+    );
+  return res.json();
+}
+
+export async function cancelAdmissionRequest(
+  code: string,
+  receipt: WaitingRoomReceipt,
+): Promise<void> {
+  const res = await fetch(
+    API_URL + admissionPath(code) + '/' + encodeURIComponent(receipt.requestId) + '/cancel',
+    {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + receipt.ticket },
+    },
+  );
+  if (res.status === 401 || res.status === 404) return;
+  if (!res.ok)
+    throw new ApiError(
+      await extractErrorMessage(res, 'No se pudo cancelar. Reintentá la cancelación.'),
+    );
+}
+
+export async function getRoomAdmission(
+  code: string,
+  signal?: AbortSignal,
+): Promise<AdmissionManagement> {
+  const res = await authFetch(admissionPath(code), { signal });
+  if (!res.ok)
+    throw new ApiError(await extractErrorMessage(res, 'No se pudieron cargar las solicitudes'));
+  return res.json();
+}
+
+export async function updateRoomAdmission(
+  code: string,
+  settings: Partial<Pick<AdmissionManagement, 'waitingRoomEnabled' | 'entryLocked'>>,
+) {
+  const res = await authFetch(admissionPath(code), {
+    method: 'PATCH',
+    body: JSON.stringify(settings),
+  });
+  if (!res.ok)
+    throw new ApiError(await extractErrorMessage(res, 'No se pudo actualizar la admisión'));
+  return res.json();
+}
+
+export async function decideAdmission(
+  code: string,
+  requestId: string,
+  decision: 'admitted' | 'rejected',
+) {
+  const res = await authFetch(admissionPath(code) + '/' + encodeURIComponent(requestId), {
+    method: 'PATCH',
+    body: JSON.stringify({ decision }),
+  });
+  if (!res.ok)
+    throw new ApiError(await extractErrorMessage(res, 'No se pudo actualizar la admisión'));
+  return res.json();
 }

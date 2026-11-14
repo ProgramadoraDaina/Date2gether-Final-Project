@@ -11,6 +11,8 @@ const room: Room = {
   code: 'abc-defg-hij',
   name: 'Reunión de Daina',
   isActive: true,
+  waitingRoomEnabled: false,
+  entryLocked: false,
   createdAt: new Date(),
   chimeMeetingId: null,
 };
