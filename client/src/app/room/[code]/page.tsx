@@ -36,6 +36,10 @@ import { PreCallLobby } from '@/features/calls/PreCallLobby';
 import { DEFAULT_CALL_DEVICES, type CallDevices } from '@/features/calls/callDevices';
 import { useCallSession } from '@/features/calls/useCallSession';
 import { HangUpButton } from '@/features/calls/HangUpButton';
+import { EventTicker } from '@/features/calls/roomEvents/EventTicker';
+import { RoomEventButton } from '@/features/calls/roomEvents/RoomEventButton';
+import { RouletteWheel } from '@/features/calls/roomEvents/RouletteWheel';
+import { useRoomEvents } from '@/features/calls/roomEvents/useRoomEvents';
 import { createRoomSocket } from '@/lib/socket';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { NAME_COLOR_HEX, isNameColorId } from '@/lib/nameColors';
@@ -176,6 +180,14 @@ export default function RoomPage() {
   // puede mencionar "a todos los colaboradores" sin tipear cada nombre.
   const mentionSuggestions = useMemo(
     () => [...users, ...ROLE_MENTION_KEYWORDS.map((role) => ({ participantId: `role:${role}`, userName: role }))],
+    [users],
+  );
+  // Misma vara que RoomEmojisDialog (canManage): armar un evento es moderación
+  // liviana de la sala, no exclusiva del admin.
+  const canManageEvents = currentUserRole === 'administrador' || currentUserRole === 'colaborador';
+  const roomEvents = useRoomEvents(roomSocket);
+  const eventParticipants = useMemo(
+    () => users.map(({ participantId, userName }) => ({ participantId, userName })),
     [users],
   );
   useEffect(() => {
@@ -346,7 +358,7 @@ export default function RoomPage() {
     return (
       <AppShell>
         {admission.receipt ? (
-          <WaitingRoom admission={admission} />
+          <WaitingRoom code={code} admission={admission} />
         ) : (
           <PreCallLobby
             code={code}
@@ -755,6 +767,23 @@ export default function RoomPage() {
                 <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
               </svg>
             </button>
+            <div className={styles.eventButtonWrap}>
+              <RoomEventButton
+                canManage={canManageEvents}
+                participants={eventParticipants}
+                onStartRoulette={roomEvents.startRoulette}
+              />
+            </div>
+            {roomEvents.spin && (
+              <RouletteWheel
+                key={roomEvents.spin.startedAt}
+                state={roomEvents.spin}
+                onDone={roomEvents.dismissSpin}
+              />
+            )}
+            {roomEvents.settled && !roomEvents.spin && (
+              <EventTicker state={roomEvents.settled} onClose={roomEvents.clearSettled} />
+            )}
             {callSession.session ? (
               // En llamada: el chat queda "acoplado" con ancho fijo y puede
               // colapsarse. Siempre se monta (no se condiciona con chatOpen),
