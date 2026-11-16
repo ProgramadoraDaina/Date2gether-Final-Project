@@ -28,6 +28,23 @@ describe('createRoom', () => {
       },
     });
   });
+
+  it('envía isPermanent y slots cuando se pasan', async () => {
+    const fakeRoom = { id: 'room-1', code: 'abc-defg-hij', name: 'Sala permanente' };
+    const fetchMock = global.fetch as jest.Mock<typeof fetch>;
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(fakeRoom), { status: 201 }));
+
+    const { createRoom } = await import('./api');
+    const slots = [{ dayOfWeek: 2, timeOfDay: '07:00', timezone: 'UTC' }];
+    await createRoom('Sala permanente', { isPermanent: true, slots });
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(JSON.parse(init!.body as string)).toEqual({
+      name: 'Sala permanente',
+      isPermanent: true,
+      slots,
+    });
+  });
 });
 
 describe('notas compartidas', () => {
