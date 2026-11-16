@@ -1,13 +1,13 @@
 .wrapper {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 18px;
+  gap: var(--space-5);
   font-size: 13px;
   font-weight: 600;
   color: var(--color-text);
@@ -16,20 +16,31 @@
 .legendItem {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
-.legendDot {
-  width: 10px;
-  height: 10px;
+/* Reemplaza el puntito de color: ahora cada ítem de la leyenda lleva el
+   mismo ícono que su carril, para que la identidad no dependa solo del
+   color (daltonismo, o simplemente recordar "¿cuál era naranja?"). */
+.legendIcon {
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
 }
 
 .axis {
   display: flex;
-  padding-left: 212px;
-  padding-bottom: 16px;
+  /* 212px = ancho de .sidebar (192) + su gap (20); +34px = columna de
+     .laneIcons (22) + el gap que la separa de .timelineArea (8) + el
+     padding propio de .track (4) — si alguno de esos cambia, este número
+     se desalinea con el eje de arriba. */
+  padding-left: 246px;
+  padding-bottom: var(--space-4);
 }
 
 .axisTrack {
@@ -65,17 +76,20 @@
 }
 
 .axisTickLabel {
-  margin-top: 4px;
+  margin-top: var(--space-1);
   font-size: 11px;
   color: var(--color-text-muted);
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
+/* Sin overflow:hidden (recortaba el globo del tooltip apenas asomaba por
+   arriba del panel, sobre todo en la primera fila): las esquinas redondeadas
+   de arriba/abajo las ponen .entry:first-child/:last-child en su lugar. */
 .panel {
   border: 1px solid var(--color-border);
-  border-radius: 16px;
-  overflow: hidden;
-  box-shadow: var(--shadow-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
 }
 
 .list {
@@ -87,21 +101,36 @@
 }
 
 .entry {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: var(--space-5);
   min-height: 92px;
-  padding: 16px 20px;
+  padding: var(--space-4) var(--space-5);
   border-bottom: 1px solid var(--color-border);
   transition: background-color 0.15s;
 }
 
+.entry:first-child {
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
 .entry:last-child {
   border-bottom: none;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
 
 .entry:hover {
   background: var(--color-chip-bg);
+}
+
+/* Sube toda la fila por encima de sus vecinas: sin esto, el globo del
+   tooltip (que asoma hacia arriba, fuera de la caja de su propia fila)
+   queda tapado por la fila de arriba, que es posterior en el flujo normal
+   y por lo tanto pinta después si ninguna de las dos tiene z-index propio. */
+.entry:hover,
+.entry:focus-within {
+  z-index: 5;
 }
 
 .sidebar {
@@ -109,7 +138,7 @@
   width: 192px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   min-width: 0;
 }
 
@@ -132,54 +161,86 @@
   font-size: 11px;
   color: var(--color-text-muted);
   background: var(--color-chip-bg);
-  padding: 1px 6px;
-  border-radius: 6px;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-sm);
 }
 
 .entryBody {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
 }
 
 .entryTimes {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: var(--space-2);
   font-size: 12px;
   color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
 .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
   font-weight: 600;
   color: #fff;
-  padding: 3px 9px;
+  padding: 3px 9px 3px 7px;
   border-radius: 999px;
 }
 
 .track {
-  position: relative;
-  height: 64px;
-  padding: 4px;
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+  height: 76px;
+  padding: var(--space-1);
   background: var(--color-chip-bg);
   border: 1px solid var(--color-border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
+}
+
+/* Columna fija, fuera del área mapeada a porcentaje (.timelineArea): un
+   ícono por carril, alineado 1 a 1 con sus franjas porque usa el mismo
+   gap y la misma proporción flex que .lanes. */
+.laneIcons {
+  flex-shrink: 0;
+  width: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.laneIcon {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+}
+
+.timelineArea {
+  position: relative;
+  flex: 1;
+  min-width: 0;
 }
 
 .presenceBackdrop {
   position: absolute;
-  top: 4px;
-  bottom: 4px;
-  border-radius: 8px;
+  top: 0;
+  bottom: 0;
+  border-radius: var(--radius-md);
   z-index: 0;
 }
 
@@ -213,24 +274,13 @@
 .segment {
   width: 100%;
   height: 100%;
-  display: flex;
-  align-items: center;
-  overflow: hidden;
-  white-space: nowrap;
-  border-radius: 5px;
-  padding: 0 6px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
   transition: filter 0.15s;
 }
 
 .segmentWrap:hover .segment {
   filter: brightness(1.1);
-}
-
-.segmentLabel {
-  font-size: 10px;
-  font-weight: 700;
-  white-space: nowrap;
 }
 
 .segmentTooltip {
@@ -245,9 +295,9 @@
   max-width: 260px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 10px;
-  padding: 8px 12px;
-  box-shadow: var(--shadow-card);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  box-shadow: var(--shadow-md);
   font-size: 12px;
   opacity: 0;
   visibility: hidden;
@@ -272,14 +322,16 @@
   font-size: 11px;
   color: var(--color-text-muted);
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .summary {
   margin: 0;
-  padding: 12px 20px;
+  padding: var(--space-3) var(--space-5);
   font-size: 13px;
   font-weight: 600;
   color: var(--color-text-muted);
   border-top: 1px solid var(--color-border);
   background: var(--color-chip-bg);
+  font-variant-numeric: tabular-nums;
 }
