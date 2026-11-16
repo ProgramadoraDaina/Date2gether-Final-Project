@@ -27,3 +27,9 @@
 .error {
   composes: error from '../styles/form.module.css';
 }
+.permanentToggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}

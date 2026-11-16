@@ -3,10 +3,11 @@
 import Link from 'next/link';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { ApiError, createRoom } from '@/lib/api';
+import { ApiError, createRoom, type CreateScheduleSlot } from '@/lib/api';
 import { getCurrentUser, isLoggedIn, logout, onAuthChange, type AuthUser } from '@/lib/auth';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { AppShell } from '@/features/navigation/AppShell';
+import { ScheduleSlotEditor } from '@/features/rooms/ScheduleSlotEditor';
 import styles from './page.module.css';
 
 const NAME_KEY = 'date2gether:userName';
@@ -16,6 +17,8 @@ export default function HomePage() {
   const router = useRouter();
   const [name, setName] = useState('');
   const [joinCode, setJoinCode] = useState('');
+  const [isPermanent, setIsPermanent] = useState(false);
+  const [slots, setSlots] = useState<CreateScheduleSlot[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -63,7 +66,10 @@ export default function HomePage() {
     setLoading(true);
     setError(null);
     try {
-      const room = await createRoom(`Reunión de ${name.trim()}`);
+      const room = await createRoom(`Reunión de ${name.trim()}`, {
+        isPermanent,
+        slots: isPermanent ? slots : undefined,
+      });
       router.push(`/room/${encodeURIComponent(room.code)}`);
     } catch (err) {
       setError(
@@ -125,6 +131,15 @@ export default function HomePage() {
             maxLength={60}
             required
           />
+          <label className={styles.permanentToggle}>
+            <input
+              type="checkbox"
+              checked={isPermanent}
+              onChange={(event) => setIsPermanent(event.target.checked)}
+            />
+            {t('Sala permanente (enlace fijo, con sala de espera siempre activa)')}
+          </label>
+          {isPermanent && <ScheduleSlotEditor slots={slots} onChange={setSlots} />}
           <button type="submit" disabled={loading || !loggedIn}>
             {loading ? t('Creando…') : t('Crear reunión')}
           </button>
