@@ -7,12 +7,13 @@ export interface Room {
   code: string;
   name: string;
   isActive: boolean;
+  isPermanent: boolean;
   createdAt: string;
 }
 
 export interface RoomAccess {
   token: string;
-  participant: { sub: string; roomCode: string; name: string; userId?: string };
+  participant: { sub: string; roomId: string; roomCode: string; name: string; userId?: string };
 }
 
 // El nombre se confirma antes de obtener acceso, tanto con cuenta como sin ella.
@@ -67,6 +68,18 @@ export async function saveRoomNotes(
     throw new RoomNotesConflictError('Otra persona actualizó las notas de la sala');
   if (!res.ok)
     throw new ApiError(await extractErrorMessage(res, 'No se pudieron guardar las notas'));
+  return res.json();
+}
+
+// Para ver desde el historial, no desde una sala en vivo: no hace falta un
+// token de acceso de sala (ya venció), el JWT de cuenta alcanza porque el
+// backend valida ahí mismo que el usuario tenga historial en esa sala.
+// Por roomId, no por roomCode (D4-C): el código puede haber sido reciclado
+// a otra sala distinta desde que se guardó esta fila de historial.
+export async function getRoomNotesFromHistory(roomId: string): Promise<RoomNotes> {
+  const res = await authFetch(`/calls/history/${encodeURIComponent(roomId)}/notes`);
+  if (!res.ok)
+    throw new ApiError(await extractErrorMessage(res, 'No se pudieron cargar las notas'));
   return res.json();
 }
 
@@ -125,8 +138,14 @@ export interface CreateScheduleSlot {
   timezone: string;
 }
 
-export async function createRoom(name: string): Promise<Room> {
-  const res = await authFetch('/rooms', { method: 'POST', body: JSON.stringify({ name }) });
+export async function createRoom(
+  name: string,
+  options?: { isPermanent?: boolean; slots?: CreateScheduleSlot[] },
+): Promise<Room> {
+  const res = await authFetch('/rooms', {
+    method: 'POST',
+    body: JSON.stringify({ name, ...options }),
+  });
   if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudo crear la reunión'));
   return res.json();
 }
@@ -158,9 +177,11 @@ export async function updateMemberRole(
 }
 
 export interface CallHistoryEntry {
+  roomId: string;
   roomCode: string;
   roomName: string;
   startedAt: string;
+  sessionId: string | null;
 }
 
 // Solo cuentas: no hay historial para invitados (no hay endpoint para ellos).
@@ -361,7 +382,18 @@ export type AdmissionStatus =
 export interface AdmissionManagement {
   waitingRoomEnabled: boolean;
   entryLocked: boolean;
-  requests: { id: string; name: string; registered: boolean; createdAt: string }[];
+  // Necesario para OCULTAR (no solo deshabilitar) el toggle de sala de
+  // espera: la spec prohíbe que el admin pueda intentar desactivarla.
+  isPermanent: boolean;
+  requests: {
+    id: string;
+    name: string;
+    registered: boolean;
+    createdAt: string;
+    // D5: solicitud sin TTL (sala permanente) creada hace más de 24h -- señal
+    // de solo lectura para la lista del admin, no afecta si es decidible.
+    stale: boolean;
+  }[];
 }
 const admissionPath = (code: string) => '/rooms/' + encodeURIComponent(code) + '/admission';
 
@@ -438,4 +470,49 @@ export async function decideAdmission(
   if (!res.ok)
     throw new ApiError(await extractErrorMessage(res, 'No se pudo actualizar la admisión'));
   return res.json();
+}
+
+const schedulePath = (code: string) => '/rooms/' + encodeURIComponent(code) + '/schedule';
+
+// Público, como la sala de espera: la respuesta nunca lleva la timezone del
+// owner, solo el instante UTC ya resuelto por el servidor (design.md D6).
+export async function getNextScheduleOccurrence(
+  code: string,
+): Promise<{ nextOccurrenceAt: string | null }> {
+  const res = await fetch(`${API_URL}${schedulePath(code)}/next`);
+  if (!res.ok)
+    throw new ApiError(await extractErrorMessage(res, 'No se pudo consultar el horario'));
+  return res.json();
+}
+
+export interface ScheduleSlot extends CreateScheduleSlot {
+  id: string;
+  roomId: string;
+  createdAt: string;
+}
+
+// Admin-only: a diferencia de /next, esta sí incluye la timezone.
+export async function getScheduleSlots(code: string): Promise<ScheduleSlot[]> {
+  const res = await authFetch(`${schedulePath(code)}/slots`);
+  if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudo cargar el horario'));
+  return res.json();
+}
+
+export async function createScheduleSlot(
+  code: string,
+  slot: CreateScheduleSlot,
+): Promise<ScheduleSlot> {
+  const res = await authFetch(`${schedulePath(code)}/slots`, {
+    method: 'POST',
+    body: JSON.stringify(slot),
+  });
+  if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudo agregar el horario'));
+  return res.json();
+}
+
+export async function deleteScheduleSlot(code: string, slotId: string): Promise<void> {
+  const res = await authFetch(`${schedulePath(code)}/slots/${encodeURIComponent(slotId)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudo borrar el horario'));
 }

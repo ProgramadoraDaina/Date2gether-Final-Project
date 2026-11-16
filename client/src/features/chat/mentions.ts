@@ -24,6 +24,30 @@ export function splitMentions(text: string, names: readonly string[]): MentionSe
   return segments;
 }
 
+// Mencionar un rol pega a todos los que lo tienen (como @role en Discord),
+// no a una sola persona. 'invitados' no es un RoomRole del backend (los
+// invitados no tienen fila en room_members): es una categoría propia del
+// chat para pegarles a todos los que no tienen cuenta en la sala.
+export const ROLE_MENTION_KEYWORDS = [
+  'administrador',
+  'colaborador',
+  'participante',
+  'invitados',
+] as const;
+
+export interface MentionIdentity {
+  name: string;
+  // Rol de cuenta (coincide con RoomRole) y/o 'invitados' si es invitado.
+  // Vacío si todavía no se resolvió (ej. antes de que cargue el rol).
+  roleKeywords: readonly string[];
+}
+
+export function isSelfMentioned(text: string, identity: MentionIdentity): boolean {
+  const names = [identity.name, ...identity.roleKeywords].filter((value) => value.trim());
+  if (!names.length) return false;
+  return splitMentions(text, names).some((segment) => segment.mention);
+}
+
 export function getMentionQuery(value: string, caret: number) {
   const match = value.slice(0, caret).match(/(?:^|\s)@([^\s@]*)$/u);
   if (!match) return null;

@@ -59,20 +59,20 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: var(--space-3);
   width: fit-content;
   max-width: calc(100% - 24px);
-  margin: -28px auto 12px;
-  padding: 10px 16px;
+  margin: -28px auto var(--space-3);
+  padding: var(--space-3) var(--space-4);
   border-radius: 999px;
   background: var(--color-surface);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-md);
 }
 
 .controlsGroup {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 /* Selector de micrófono/cámara de LiveKit: trae padding de píldora y su flecha
@@ -118,6 +118,44 @@
 }
 
 .hangUpButton:hover {
+  filter: brightness(0.9);
+}
+
+.confirmDialog {
+  width: min(360px, calc(100% - 32px));
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow-md);
+}
+
+.confirmDialog::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.confirmDialog p {
+  margin: 0 0 var(--space-5);
+  font-size: 15px;
+  text-align: center;
+}
+
+.confirmActions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.confirmActions button {
+  flex: 1;
+}
+
+.confirmDangerButton {
+  background: var(--color-error);
+  color: var(--color-bg);
+}
+
+.confirmDangerButton:hover {
   filter: brightness(0.9);
 }
 

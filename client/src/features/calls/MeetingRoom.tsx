@@ -1,13 +1,19 @@
 'use client';
 
 import {
+  CarouselLayout,
   ConnectionStateToast,
+  FocusLayoutContainer,
   GridLayout,
+  LayoutContextProvider,
   LiveKitRoom,
   MediaDeviceMenu,
   RoomAudioRenderer,
   StartAudio,
+  TrackRefContext,
+  useCreateLayoutContext,
   useDisconnectButton,
+  usePinnedTracks,
   useRoomContext,
   useTracks,
   useTrackToggle,
@@ -24,6 +30,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_CALL_DEVICES, type CallDevices } from './callDevices';
+import { HangUpButton } from './HangUpButton';
 import type { RoomEmoji } from '@/lib/api';
 import { useTranslation } from '../translation/useTranslation';
 import { reportTrackState } from '@/lib/calls';
@@ -123,42 +130,13 @@ function ScreenShareIcon() {
   );
 }
 
-function HangUpIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="20"
-      height="20"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      {/* Auricular de "llamar" rotado 135° (convención de colgar), achicado para no recortar las puntas. */}
-      <g transform="translate(12 12) rotate(135) scale(0.78) translate(-12 -12)">
-        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
-      </g>
-    </svg>
-  );
-}
-
-function HangUpButton() {
-  const { t } = useTranslation();
+// Dentro de la llamada ya conectada, "colgar" significa desconectar de
+// LiveKit. La pantalla de conectando/error (RoomPage) reusa el mismo
+// HangUpButton con un onConfirm distinto (ver comentario ahí) — el diálogo
+// de confirmación es compartido, ver HangUpButton.tsx.
+function ConnectedHangUpButton() {
   const { buttonProps } = useDisconnectButton({});
-  const label = t('Colgar');
-  return (
-    <button
-      {...buttonProps}
-      type="button"
-      className={styles.hangUpButton}
-      title={label}
-      aria-label={label}
-    >
-      <HangUpIcon />
-    </button>
-  );
+  return <HangUpButton onConfirm={buttonProps.onClick} />;
 }
 
 interface ToggleButtonProps {
@@ -305,16 +283,45 @@ function MeetingContent({
     ],
     { onlySubscribed: false },
   );
+  // Clickear el botón de foco de un .tileWrap (ver ReactionTile) pinea ese
+  // trackRef acá. Mientras haya uno pineado, la grilla pareja se
+  // reemplaza por foco + carrusel (a lo Zoom/Meet); sin nada pineado,
+  // vuelve a la grilla normal. El contexto se crea y se provee una sola
+  // vez, no por cada tile — así todos los tiles leen el mismo pin.
+  const layoutContext = useCreateLayoutContext();
+  const pinnedTracks = usePinnedTracks(layoutContext);
+  const focusTrack = pinnedTracks[0];
+  const carouselTracks = focusTrack
+    ? tracks.filter(
+        (track) =>
+          !(
+            track.participant.identity === focusTrack.participant.identity &&
+            track.source === focusTrack.source
+          ),
+      )
+    : tracks;
   return (
     <ReactionsProvider roomCode={roomCode} roomEmojis={roomEmojis}>
-      <InitialCallDevices devices={initialDevices} onDeviceError={showDeviceError} />
-      <RoomAudioRenderer />
-      <StartAudio label={t('Activar sonido de la reunión')} />
-      <ConnectionStateToast />
-      <GridLayout tracks={tracks} className={styles.meetingGrid}>
-        <ReactionTile />
-      </GridLayout>
-      <ReactionOverlay />
+      <LayoutContextProvider value={layoutContext}>
+        <InitialCallDevices devices={initialDevices} onDeviceError={showDeviceError} />
+        <RoomAudioRenderer />
+        <StartAudio label={t('Activar sonido de la reunión')} />
+        <ConnectionStateToast />
+        {focusTrack ? (
+          <FocusLayoutContainer className={styles.meetingGrid}>
+            <CarouselLayout tracks={carouselTracks}>
+              <ReactionTile />
+            </CarouselLayout>
+            <TrackRefContext.Provider value={focusTrack}>
+              <ReactionTile />
+            </TrackRefContext.Provider>
+          </FocusLayoutContainer>
+        ) : (
+          <GridLayout tracks={tracks} className={styles.meetingGrid}>
+            <ReactionTile />
+          </GridLayout>
+        )}
+        <ReactionOverlay />
       {deviceError && (
         <p className={styles.error} role="alert">
           {t(
@@ -344,8 +351,9 @@ function MeetingContent({
           <ReactionPicker buttonClassName={styles.iconButton} />
           <SoundboardPicker buttonClassName={styles.iconButton} />
         </div>
-        <HangUpButton />
+        <ConnectedHangUpButton />
       </div>
+      </LayoutContextProvider>
     </ReactionsProvider>
   );
 }
