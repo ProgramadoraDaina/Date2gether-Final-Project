@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 jest.mock('next/navigation', () => ({
   useParams: () => ({ code: 'abc-defg-hij' }),
   usePathname: () => '/room/abc-defg-hij',
+  useRouter: () => ({ push: jest.fn() }),
 }));
 jest.mock('@/features/translation/useTranslation', () => {
   const t = (key: string) => key;
@@ -35,6 +36,9 @@ jest.mock('@/lib/api', () => ({
     updatedAt: '2026-11-04T00:00:00Z',
   }),
   saveRoomNotes: jest.fn(),
+  getNextScheduleOccurrence: jest
+    .fn<() => Promise<unknown>>()
+    .mockResolvedValue({ nextOccurrenceAt: null }),
   RoomNotesConflictError: class extends Error {},
   ApiError: class extends Error {},
 }));
@@ -116,7 +120,7 @@ describe('RoomPage: enlace de invitado', () => {
     const { createRoomSocket } = await import('@/lib/socket');
     (requestRoomAccess as jest.Mock<typeof requestRoomAccess>).mockResolvedValue({
       token: 'guest-token',
-      participant: { sub: 'guest-1', name: 'Alex', roomCode: 'abc-defg-hij' },
+      participant: { sub: 'guest-1', roomId: 'room-1', name: 'Alex', roomCode: 'abc-defg-hij' },
     });
     const callbacks: Record<string, (...args: unknown[]) => void> = {};
     const fake = {
@@ -126,6 +130,7 @@ describe('RoomPage: enlace de invitado', () => {
       connect: jest.fn(() => callbacks.connect?.()),
       emit: jest.fn(),
       disconnect: jest.fn(),
+      off: jest.fn(),
       removeAllListeners: jest.fn(),
     };
     (createRoomSocket as jest.Mock<typeof createRoomSocket>).mockReturnValue(fake as never);
@@ -146,7 +151,7 @@ describe('RoomPage: enlace de invitado', () => {
     const { createRoomSocket } = await import('@/lib/socket');
     (requestRoomAccess as jest.Mock<typeof requestRoomAccess>).mockResolvedValue({
       token: 'guest-token',
-      participant: { sub: 'guest-1', name: 'Alex', roomCode: 'abc-defg-hij' },
+      participant: { sub: 'guest-1', roomId: 'room-1', name: 'Alex', roomCode: 'abc-defg-hij' },
     });
     const callbacks: Record<string, (...args: unknown[]) => void> = {};
     const fake = {
@@ -156,6 +161,7 @@ describe('RoomPage: enlace de invitado', () => {
       connect: jest.fn(() => callbacks.connect?.()),
       emit: jest.fn(),
       disconnect: jest.fn(),
+      off: jest.fn(),
       removeAllListeners: jest.fn(),
     };
     (createRoomSocket as jest.Mock<typeof createRoomSocket>).mockReturnValue(fake as never);
@@ -191,7 +197,7 @@ describe('RoomPage: enlace de invitado', () => {
     const { createRoomSocket } = await import('@/lib/socket');
     (requestRoomAccess as jest.Mock<typeof requestRoomAccess>).mockResolvedValue({
       token: 'guest-token',
-      participant: { sub: 'guest-1', name: 'Alex', roomCode: 'abc-defg-hij' },
+      participant: { sub: 'guest-1', roomId: 'room-1', name: 'Alex', roomCode: 'abc-defg-hij' },
     });
     const callbacks: Record<string, (...args: unknown[]) => void> = {};
     const fake = {
@@ -201,6 +207,7 @@ describe('RoomPage: enlace de invitado', () => {
       connect: jest.fn(() => callbacks.connect?.()),
       emit: jest.fn(),
       disconnect: jest.fn(),
+      off: jest.fn(),
       removeAllListeners: jest.fn(),
     };
     (createRoomSocket as jest.Mock<typeof createRoomSocket>).mockReturnValue(fake as never);
@@ -227,7 +234,7 @@ describe('RoomPage: enlace de invitado', () => {
     const { createRoomSocket } = await import('@/lib/socket');
     (requestRoomAccess as jest.Mock<typeof requestRoomAccess>).mockResolvedValue({
       token: 'guest-token',
-      participant: { sub: 'guest-1', name: 'Alex', roomCode: 'abc-defg-hij' },
+      participant: { sub: 'guest-1', roomId: 'room-1', name: 'Alex', roomCode: 'abc-defg-hij' },
     });
     const callbacks: Record<string, (...args: unknown[]) => void> = {};
     const fake = {
@@ -237,6 +244,7 @@ describe('RoomPage: enlace de invitado', () => {
       connect: jest.fn(() => callbacks.connect?.()),
       emit: jest.fn(),
       disconnect: jest.fn(),
+      off: jest.fn(),
       removeAllListeners: jest.fn(),
     };
     (createRoomSocket as jest.Mock<typeof createRoomSocket>).mockReturnValue(fake as never);
@@ -271,13 +279,14 @@ describe('RoomPage: enlace de invitado', () => {
     const { createRoomSocket } = await import('@/lib/socket');
     (requestRoomAccess as jest.Mock<typeof requestRoomAccess>).mockResolvedValue({
       token: 'guest-token',
-      participant: { sub: 'guest-1', name: 'Alex', roomCode: 'abc-defg-hij' },
+      participant: { sub: 'guest-1', roomId: 'room-1', name: 'Alex', roomCode: 'abc-defg-hij' },
     });
     const fake = {
       on: jest.fn(),
       connect: jest.fn(),
       emit: jest.fn(),
       disconnect: jest.fn(),
+      off: jest.fn(),
       removeAllListeners: jest.fn(),
     };
     (createRoomSocket as jest.Mock<typeof createRoomSocket>).mockReturnValue(fake as never);
@@ -304,35 +313,37 @@ describe('RoomPage: transición de carga antes de entrar a la llamada', () => {
     mockRoomMembersState.isCurrentUserAdmin = false;
   });
 
-  it('mientras la llamada conecta (todavía sin session), el chat ya es usable y el video muestra "Cargando llamada…"', async () => {
+  it('mientras la llamada conecta (todavía no llegó a in-call), tapa toda la sala con una pantalla de carga completa', async () => {
     mockStatus = 'connecting';
     const { requestRoomAccess } = await import('@/lib/api');
     const { createRoomSocket } = await import('@/lib/socket');
     (requestRoomAccess as jest.Mock<typeof requestRoomAccess>).mockResolvedValue({
       token: 'guest-token',
-      participant: { sub: 'guest-1', name: 'Alex', roomCode: 'abc-defg-hij' },
+      participant: { sub: 'guest-1', roomId: 'room-1', name: 'Alex', roomCode: 'abc-defg-hij' },
     });
     (createRoomSocket as jest.Mock<typeof createRoomSocket>).mockReturnValue({
       on: jest.fn(),
       connect: jest.fn(),
       emit: jest.fn(),
       disconnect: jest.fn(),
+      off: jest.fn(),
       removeAllListeners: jest.fn(),
     } as never);
     const Page = (await import('./page')).default;
-    render(<Page />);
+    const { container } = render(<Page />);
     fireEvent.change(screen.getByLabelText('Tu nombre en la reunión'), {
       target: { value: 'Alex' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Entrar a la reunión' }));
     await waitFor(() => expect(mockJoinCall).toHaveBeenCalledTimes(1));
 
-    // El panel de "Cargando llamada…" ocupa el lugar del video nomás; no
-    // bloquea el resto de la sala (antes era un overlay de pantalla
-    // completa que tapaba todo, incluido el chat).
+    // Hasta que la llamada llegue a 'in-call' por primera vez, la sala
+    // completa (sidebar, chat) queda tapada por .enteringScreen: antes el
+    // chat quedaba usable desde este momento, pero ahora la transición debe
+    // verse como una sola carga continua hasta que todo esté listo.
     expect(screen.getByText('Cargando llamada…')).toBeInTheDocument();
     expect(screen.queryByLabelText('Tu nombre en la reunión')).not.toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Escribí un mensaje...')).toBeInTheDocument();
+    expect(container.querySelector('.enteringScreen')).not.toBeNull();
   });
 
   it('si falla la conexión, muestra el error y permite reintentar con el mismo código y token', async () => {
@@ -342,13 +353,14 @@ describe('RoomPage: transición de carga antes de entrar a la llamada', () => {
     const { createRoomSocket } = await import('@/lib/socket');
     (requestRoomAccess as jest.Mock<typeof requestRoomAccess>).mockResolvedValue({
       token: 'guest-token',
-      participant: { sub: 'guest-1', name: 'Alex', roomCode: 'abc-defg-hij' },
+      participant: { sub: 'guest-1', roomId: 'room-1', name: 'Alex', roomCode: 'abc-defg-hij' },
     });
     (createRoomSocket as jest.Mock<typeof createRoomSocket>).mockReturnValue({
       on: jest.fn(),
       connect: jest.fn(),
       emit: jest.fn(),
       disconnect: jest.fn(),
+      off: jest.fn(),
       removeAllListeners: jest.fn(),
     } as never);
     const Page = (await import('./page')).default;
@@ -370,20 +382,36 @@ describe('RoomPage: transición de carga antes de entrar a la llamada', () => {
   });
 
   it('cuando el anfitrión se desconecta y LiveKit fuerza el cierre, muestra el panel terminal con link a la línea de tiempo y botón para volver a la sala (D5, design.md)', async () => {
-    mockStatus = 'ended';
+    // 'ended' solo puede pasar después de haber estado 'in-call' (ver D5):
+    // simula esa secuencia real en vez de arrancar directo en 'ended', así
+    // la pantalla de carga completa (que solo tapa la entrada inicial) ya
+    // quedó atrás y este panel se prueba donde realmente vive, dentro de la
+    // sala ya revelada.
+    mockStatus = 'in-call';
+    mockSession = {
+      url: 'wss://media.example.test',
+      token: 'token',
+      roomName: 'abc-defg-hij',
+      participantLimit: 6,
+    };
     const { requestRoomAccess } = await import('@/lib/api');
     const { createRoomSocket } = await import('@/lib/socket');
     (requestRoomAccess as jest.Mock<typeof requestRoomAccess>).mockResolvedValue({
       token: 'guest-token',
-      participant: { sub: 'guest-1', name: 'Alex', roomCode: 'abc-defg-hij' },
+      participant: { sub: 'guest-1', roomId: 'room-1', name: 'Alex', roomCode: 'abc-defg-hij' },
     });
-    (createRoomSocket as jest.Mock<typeof createRoomSocket>).mockReturnValue({
-      on: jest.fn(),
-      connect: jest.fn(),
+    const callbacks: Record<string, (...args: unknown[]) => void> = {};
+    const fake = {
+      on: jest.fn((event: string, cb: (...args: unknown[]) => void) => {
+        callbacks[event] = cb;
+      }),
+      connect: jest.fn(() => callbacks.connect?.()),
       emit: jest.fn(),
       disconnect: jest.fn(),
+      off: jest.fn(),
       removeAllListeners: jest.fn(),
-    } as never);
+    };
+    (createRoomSocket as jest.Mock<typeof createRoomSocket>).mockReturnValue(fake as never);
     const Page = (await import('./page')).default;
     render(<Page />);
     fireEvent.change(screen.getByLabelText('Tu nombre en la reunión'), {
@@ -391,6 +419,21 @@ describe('RoomPage: transición de carga antes de entrar a la llamada', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Entrar a la reunión' }));
     await waitFor(() => expect(mockJoinCall).toHaveBeenCalledTimes(1));
+    // next/dynamic (ssr:false) resuelve el chunk de forma asíncrona incluso
+    // con el módulo mockeado: hace falta esperarlo.
+    await screen.findByText('Video de la llamada');
+
+    // El anfitrión se desconecta ahora que ya estábamos adentro.
+    mockStatus = 'ended';
+    mockSession = null;
+    act(() =>
+      callbacks.newMessage?.({
+        id: 'm1',
+        authorName: 'Otra persona',
+        content: 'hola',
+        createdAt: new Date().toISOString(),
+      }),
+    );
 
     expect(
       screen.getByText('La llamada terminó porque el anfitrión se desconectó.'),
@@ -414,7 +457,7 @@ describe('RoomPage: transición de carga antes de entrar a la llamada', () => {
     const { createRoomSocket } = await import('@/lib/socket');
     (requestRoomAccess as jest.Mock<typeof requestRoomAccess>).mockResolvedValue({
       token: 'guest-token',
-      participant: { sub: 'guest-1', name: 'Alex', roomCode: 'abc-defg-hij' },
+      participant: { sub: 'guest-1', roomId: 'room-1', name: 'Alex', roomCode: 'abc-defg-hij' },
     });
     const callbacks: Record<string, (...args: unknown[]) => void> = {};
     const fake = {
@@ -424,6 +467,7 @@ describe('RoomPage: transición de carga antes de entrar a la llamada', () => {
       connect: jest.fn(() => callbacks.connect?.()),
       emit: jest.fn(),
       disconnect: jest.fn(),
+      off: jest.fn(),
       removeAllListeners: jest.fn(),
     };
     (createRoomSocket as jest.Mock<typeof createRoomSocket>).mockReturnValue(fake as never);
@@ -463,6 +507,55 @@ describe('RoomPage: transición de carga antes de entrar a la llamada', () => {
     // llega demasiado pronto.
     await screen.findByText('Video de la llamada');
   });
+
+  it('cuando ya hay credenciales pero LiveKit todavía no confirmó la conexión, monta el video oculto detrás del spinner en vez de mostrarlo a medio conectar', async () => {
+    mockStatus = 'connecting';
+    const { requestRoomAccess } = await import('@/lib/api');
+    const { createRoomSocket } = await import('@/lib/socket');
+    (requestRoomAccess as jest.Mock<typeof requestRoomAccess>).mockResolvedValue({
+      token: 'guest-token',
+      participant: { sub: 'guest-1', roomId: 'room-1', name: 'Alex', roomCode: 'abc-defg-hij' },
+    });
+    (createRoomSocket as jest.Mock<typeof createRoomSocket>).mockReturnValue({
+      on: jest.fn(),
+      connect: jest.fn(),
+      emit: jest.fn(),
+      disconnect: jest.fn(),
+      off: jest.fn(),
+      removeAllListeners: jest.fn(),
+    } as never);
+    const Page = (await import('./page')).default;
+    const { container, rerender } = render(<Page />);
+    fireEvent.change(screen.getByLabelText('Tu nombre en la reunión'), {
+      target: { value: 'Alex' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar a la reunión' }));
+    await waitFor(() => expect(mockJoinCall).toHaveBeenCalledTimes(1));
+
+    // En la app real, startCall (REST) suele resolver bastante antes de que
+    // LiveKit confirme la conexión WebRTC: hay una ventana con session ya
+    // seteada y status todavía 'connecting'. MeetingRoom necesita estar
+    // montado en ese momento (onConnected es lo que dispara 'in-call'), pero
+    // no debe verse: antes esto hacía que la pantalla saltara del spinner a
+    // la grilla de video todavía conectando.
+    mockSession = {
+      url: 'wss://media.example.test',
+      token: 'token',
+      roomName: 'abc-defg-hij',
+      participantLimit: 6,
+    };
+    rerender(<Page />);
+
+    expect(screen.getByText('Cargando llamada…')).toBeInTheDocument();
+    await screen.findByText('Video de la llamada');
+    expect(container.querySelector('[data-hidden="true"]')).not.toBeNull();
+
+    mockStatus = 'in-call';
+    rerender(<Page />);
+
+    expect(screen.queryByText('Cargando llamada…')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-hidden="true"]')).toBeNull();
+  });
 });
 
 describe('RoomPage: notas y menciones', () => {
@@ -479,7 +572,7 @@ describe('RoomPage: notas y menciones', () => {
     const { createRoomSocket } = await import('@/lib/socket');
     (requestRoomAccess as jest.Mock<typeof requestRoomAccess>).mockResolvedValue({
       token: 'guest-token',
-      participant: { sub: 'guest-1', name: 'Alex', roomCode: 'abc-defg-hij' },
+      participant: { sub: 'guest-1', roomId: 'room-1', name: 'Alex', roomCode: 'abc-defg-hij' },
     });
     const callbacks: Record<string, (...args: unknown[]) => void> = {};
     const socket = {
@@ -489,6 +582,7 @@ describe('RoomPage: notas y menciones', () => {
       connect: jest.fn(() => callbacks.connect?.()),
       emit: jest.fn(),
       disconnect: jest.fn(),
+      off: jest.fn(),
       removeAllListeners: jest.fn(),
     };
     (createRoomSocket as jest.Mock<typeof createRoomSocket>).mockReturnValue(socket as never);
