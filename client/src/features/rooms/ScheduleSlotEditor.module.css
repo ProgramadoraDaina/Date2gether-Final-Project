@@ -1,0 +1,15 @@
+.editor {
+  border: 1px solid var(--border-color, #ccc);
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 12px;
+}
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+.error {
+  composes: error from '../../styles/form.module.css';
+}
