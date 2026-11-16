@@ -129,6 +129,41 @@
   height: 100%;
 }
 
+/* Esquina opuesta a .tileBadge (top-left): visible solo al pasar el mouse
+   sobre el tile, para no competir visualmente con la cara de la persona.
+   focus-visible lo muestra igual por teclado. */
+.focusToggle {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.tileWrap:hover .focusToggle,
+.focusToggle:focus-visible {
+  opacity: 1;
+}
+
+.focusToggleActive {
+  opacity: 1;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  border-color: var(--color-accent);
+}
+
 .tileBadge {
   position: absolute;
   top: 12px;

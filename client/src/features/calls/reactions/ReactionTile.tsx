@@ -1,23 +1,62 @@
 'use client';
 
-import { ParticipantTile, useMaybeTrackRefContext } from '@livekit/components-react';
+import {
+  ParticipantTile,
+  useMaybeLayoutContext,
+  useMaybeTrackRefContext,
+  usePinnedTracks,
+} from '@livekit/components-react';
 import type { CSSProperties } from 'react';
+import { useTranslation } from '../../translation/useTranslation';
 import { customReactionKey } from './reactions';
 import { ReactionGlyph } from './ReactionGlyph';
+import { FocusIcon } from './FocusIcon';
 import { useReactions } from './useReactions';
 import styles from './Reactions.module.css';
 
-// GridLayout clona este componente por cada participante y le da su TrackRef por contexto.
+// GridLayout/CarouselLayout clonan este componente por cada participante y
+// le dan su TrackRef por contexto (ver MeetingRoom.tsx: el tile en foco usa
+// el mismo mecanismo, pero con un TrackRefContext.Provider propio en vez de
+// uno de la grilla).
 export function ReactionTile() {
+  const { t } = useTranslation();
   const trackRef = useMaybeTrackRefContext();
+  const layoutContext = useMaybeLayoutContext();
+  const pinnedTracks = usePinnedTracks(layoutContext);
   const { reactions, stickers } = useReactions();
   const identity = trackRef?.participant.identity;
   const latest = identity ? reactions.findLast((r) => r.identity === identity) : undefined;
   const sticker = identity ? stickers[identity] : undefined;
+  const focused = pinnedTracks[0];
+  const isFocused = !!(
+    trackRef &&
+    focused &&
+    focused.participant.identity === trackRef.participant.identity &&
+    focused.source === trackRef.source
+  );
+
+  function toggleFocus() {
+    if (!trackRef || !layoutContext?.pin.dispatch) return;
+    layoutContext.pin.dispatch(
+      isFocused ? { msg: 'clear_pin' } : { msg: 'set_pin', trackReference: trackRef },
+    );
+  }
 
   return (
     <div className={styles.tileWrap}>
       <ParticipantTile />
+      {trackRef && (
+        <button
+          type="button"
+          className={`${styles.focusToggle} ${isFocused ? styles.focusToggleActive : ''}`}
+          onClick={toggleFocus}
+          title={t(isFocused ? 'Quitar de foco' : 'Poner en foco')}
+          aria-label={t(isFocused ? 'Quitar de foco' : 'Poner en foco')}
+          aria-pressed={isFocused}
+        >
+          <FocusIcon />
+        </button>
+      )}
       {latest && (
         <span key={latest.id} className={styles.tileBadge} aria-hidden="true">
           <ReactionGlyph reactionKey={latest.key} />
