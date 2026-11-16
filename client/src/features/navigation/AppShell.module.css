@@ -26,4 +26,10 @@
     margin: -8px;
     width: calc(100% + 16px);
   }
+
+  /* AppNav pasa a ser una barra fija abajo en mobile (ver AppNav.module.css):
+     sin este padding, el contenido queda tapado detrás de esa barra. */
+  .content {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom));
+  }
 }
