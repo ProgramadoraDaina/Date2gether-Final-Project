@@ -31,6 +31,15 @@ jest.mock('@livekit/components-react', () => ({
   useDataChannel: jest.fn(() => ({ send: jest.fn(), isSending: false, message: undefined })),
   useLocalParticipant: jest.fn(() => ({ localParticipant: { identity: 'local', name: 'Ana' } })),
   useMaybeTrackRefContext: jest.fn(() => undefined),
+  useMaybeLayoutContext: jest.fn(() => undefined),
+  // [] (sin nada pineado) para que el branch por defecto siga siendo
+  // GridLayout en estos tests, igual que antes de la vista de foco.
+  useCreateLayoutContext: jest.fn(() => ({ pin: { dispatch: jest.fn() }, widget: {} })),
+  usePinnedTracks: jest.fn(() => []),
+  LayoutContextProvider: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  FocusLayoutContainer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  CarouselLayout: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  TrackRefContext: { Provider: ({ children }: { children: ReactNode }) => <div>{children}</div> },
 }));
 jest.mock('livekit-client', () => ({
   DefaultReconnectPolicy: jest.fn(),

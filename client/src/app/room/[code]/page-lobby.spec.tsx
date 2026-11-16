@@ -5,6 +5,7 @@ import type { AdmissionStatus, RoomAccess } from '@/lib/api';
 jest.mock('next/navigation', () => ({
   useParams: () => ({ code: 'abc-defg-hij' }),
   usePathname: () => '/room/abc-defg-hij',
+  useRouter: () => ({ push: jest.fn() }),
 }));
 jest.mock('@/features/translation/useTranslation', () => {
   const t = (key: string) => key;
@@ -41,6 +42,9 @@ jest.mock('@/lib/api', () => ({
     updatedAt: '2026-11-04T00:00:00Z',
   }),
   saveRoomNotes: jest.fn(),
+  getNextScheduleOccurrence: jest
+    .fn<() => Promise<unknown>>()
+    .mockResolvedValue({ nextOccurrenceAt: null }),
   RoomNotesConflictError: class extends Error {},
   ApiError: class extends Error {},
 }));
@@ -83,7 +87,7 @@ describe('RoomPage: elección de dispositivos en el lobby', () => {
       const { requestRoomAccess, getAdmissionStatus } = await import('@/lib/api');
       const access: RoomAccess = {
         token: 'room-token',
-        participant: { sub: 'guest', name: 'Ana', roomCode: 'abc-defg-hij' },
+        participant: { sub: 'guest', roomId: 'room-1', name: 'Ana', roomCode: 'abc-defg-hij' },
       };
       const receipt = { status: 'pending' as const, requestId: 'request-1', ticket: 'wait-ticket' };
       let admit!: (result: AdmissionStatus) => void;

@@ -23,6 +23,17 @@ interface RoomSidebarProps {
   // sin él no hay con qué sincronizar la música, así que no hay nada para
   // mostrar todavía.
   musicPlayer?: ReactNode;
+  // Solo llega con contenido cuando quien mira es admin (ver RoomPage):
+  // AdmissionControl ya trae su propio botón + dialog, así que acá entra
+  // como un nodo más de bottomActions, igual que musicPlayer.
+  admissionControl?: ReactNode;
+  // true mientras hay algún intento de llamada en curso (conectando, en
+  // llamada, o reintentando tras un error): esos tres estados ya tienen su
+  // propio botón "Colgar" con confirmación (ver HangUpButton.tsx, usado
+  // tanto en MeetingRoom como en el callLoadingPanel de RoomPage). Mostrar
+  // "Salir" al mismo tiempo era la confusión reportada: dos botones para
+  // "irme", uno pregunta y el otro no.
+  inCall: boolean;
 }
 
 export function RoomSidebar({
@@ -34,6 +45,8 @@ export function RoomSidebar({
   width,
   onResizeHandleMouseDown,
   musicPlayer,
+  admissionControl,
+  inCall,
 }: RoomSidebarProps) {
   const { t } = useTranslation();
 
@@ -45,7 +58,8 @@ export function RoomSidebar({
     >
       <div className={styles.sidebar} style={{ width }}>
         <div className={styles.brand}>
-          <strong>Date2gether</strong> <span className={styles.code}>{code}</span>
+          <strong className={styles.brandName}>Date2gether</strong>
+          <span className={styles.code}>{code}</span>
         </div>
 
         <div className={styles.toggles}>
@@ -53,12 +67,12 @@ export function RoomSidebar({
           <LanguageToggle />
         </div>
 
-        <button type="button" className={`secondary ${styles.emojisButton}`} onClick={onOpenEmojis}>
-          {t('Emojis y sonidos')}
-        </button>
-
         <div className={styles.bottomActions}>
           {musicPlayer}
+          {admissionControl}
+          <button type="button" className={`secondary ${styles.emojisButton}`} onClick={onOpenEmojis}>
+            {t('Emojis y sonidos')}
+          </button>
           <button type="button" className={`secondary ${styles.copyLink}`} onClick={onCopyLink}>
             {t(copied ? 'Enlace copiado' : 'Copiar enlace')}
           </button>
@@ -66,10 +80,14 @@ export function RoomSidebar({
         {/* Única salida de la sala cuando la llamada todavía está
             conectando o falló (MeetingRoom, con su botón de "Colgar", ni
             se monta en esos casos): sin esto, la única forma de volver al
-            inicio era el botón de atrás del navegador. */}
-        <Link href="/" className={styles.leaveLink}>
-          {t('Salir')}
-        </Link>
+            inicio era el botón de atrás del navegador. Con la llamada ya
+            activa se oculta: "Colgar" (con su confirmación) pasa a ser la
+            única salida, en vez de convivir con esta que sale sin preguntar. */}
+        {!inCall && (
+          <Link href="/" className={styles.leaveLink}>
+            {t('Salir')}
+          </Link>
+        )}
       </div>
       <div
         className={styles.resizeHandle}

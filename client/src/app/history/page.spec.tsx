@@ -9,7 +9,6 @@ jest.mock('@/features/translation/useTranslation', () => {
 jest.mock('@/lib/auth', () => ({ isLoggedIn: jest.fn() }));
 jest.mock('@/lib/api', () => ({
   getCallHistory: jest.fn(),
-  getCallSessions: jest.fn(),
   ApiError: class extends Error {},
 }));
 
@@ -30,64 +29,76 @@ describe('HistoryPage', () => {
     );
   });
 
-  it('muestra las entradas del historial cuando hay sesión', async () => {
+  it('muestra las entradas del historial cuando hay sesión, sin botón al gráfico si no hay sesión materializada', async () => {
     const { isLoggedIn } = await import('@/lib/auth');
-    const { getCallHistory, getCallSessions } = await import('@/lib/api');
+    const { getCallHistory } = await import('@/lib/api');
     (isLoggedIn as jest.Mock<typeof isLoggedIn>).mockReturnValue(true);
     (getCallHistory as jest.Mock<typeof getCallHistory>).mockResolvedValue([
-      { roomCode: 'abc-defg-hij', roomName: 'Reunión de Daina', startedAt: '2026-01-05T10:00:00.000Z' },
+      {
+        roomId: 'room-1',
+        roomCode: 'abc-defg-hij',
+        roomName: 'Reunión de Daina',
+        startedAt: '2026-01-05T10:00:00.000Z',
+        sessionId: null,
+      },
     ]);
-    (getCallSessions as jest.Mock<typeof getCallSessions>).mockResolvedValue([]);
     const HistoryPage = (await import('./page')).default;
     render(<HistoryPage />);
     await screen.findByText('Reunión de Daina');
     expect(screen.getByText('abc-defg-hij')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'Ver gráfico de interacción' }),
+    ).not.toBeInTheDocument();
   });
 
   it('muestra el estado vacío cuando no hay llamadas', async () => {
     const { isLoggedIn } = await import('@/lib/auth');
-    const { getCallHistory, getCallSessions } = await import('@/lib/api');
+    const { getCallHistory } = await import('@/lib/api');
     (isLoggedIn as jest.Mock<typeof isLoggedIn>).mockReturnValue(true);
     (getCallHistory as jest.Mock<typeof getCallHistory>).mockResolvedValue([]);
-    (getCallSessions as jest.Mock<typeof getCallSessions>).mockResolvedValue([]);
     const HistoryPage = (await import('./page')).default;
     render(<HistoryPage />);
     await screen.findByText('Todavía no hiciste ninguna llamada.');
   });
 
-  it('muestra la sección de sesiones de llamada con un link a la línea de tiempo de cada una', async () => {
+  it('muestra el botón "Ver gráfico de interacción" en la fila de un intento que sí se materializó en una sesión', async () => {
     const { isLoggedIn } = await import('@/lib/auth');
-    const { getCallHistory, getCallSessions } = await import('@/lib/api');
+    const { getCallHistory } = await import('@/lib/api');
     (isLoggedIn as jest.Mock<typeof isLoggedIn>).mockReturnValue(true);
-    (getCallHistory as jest.Mock<typeof getCallHistory>).mockResolvedValue([]);
-    (getCallSessions as jest.Mock<typeof getCallSessions>).mockResolvedValue([
+    (getCallHistory as jest.Mock<typeof getCallHistory>).mockResolvedValue([
       {
-        id: 'session-1',
+        roomId: 'room-1',
         roomCode: 'abc-defg-hij',
         roomName: 'Reunión de Daina',
         startedAt: '2026-01-05T10:00:00.000Z',
-        endedAt: '2026-01-05T10:30:00.000Z',
-        participantCount: 3,
+        sessionId: 'session-1',
       },
     ]);
     const HistoryPage = (await import('./page')).default;
     render(<HistoryPage />);
-    await screen.findByText('Sesiones de llamada');
-    expect(screen.getAllByText('Reunión de Daina')).toHaveLength(1);
-    expect(screen.getByRole('link', { name: 'Ver línea de tiempo' })).toHaveAttribute(
-      'href',
-      '/history/session-1',
-    );
+    expect(
+      await screen.findByRole('link', { name: 'Ver gráfico de interacción' }),
+    ).toHaveAttribute('href', '/history/session-1');
   });
 
-  it('muestra el estado vacío de sesiones de llamada cuando no hay ninguna', async () => {
+  it('[5.9] el botón "Obtener notas" enlaza por roomId, con roomCode como query param', async () => {
     const { isLoggedIn } = await import('@/lib/auth');
-    const { getCallHistory, getCallSessions } = await import('@/lib/api');
+    const { getCallHistory } = await import('@/lib/api');
     (isLoggedIn as jest.Mock<typeof isLoggedIn>).mockReturnValue(true);
-    (getCallHistory as jest.Mock<typeof getCallHistory>).mockResolvedValue([]);
-    (getCallSessions as jest.Mock<typeof getCallSessions>).mockResolvedValue([]);
+    (getCallHistory as jest.Mock<typeof getCallHistory>).mockResolvedValue([
+      {
+        roomId: 'room-1',
+        roomCode: 'abc-defg-hij',
+        roomName: 'Reunión de Daina',
+        startedAt: '2026-01-05T10:00:00.000Z',
+        sessionId: null,
+      },
+    ]);
     const HistoryPage = (await import('./page')).default;
     render(<HistoryPage />);
-    await screen.findByText('Todavía no participaste de ninguna sesión de llamada.');
+    expect(await screen.findByRole('link', { name: 'Obtener notas' })).toHaveAttribute(
+      'href',
+      '/history/notes/room-1?code=abc-defg-hij',
+    );
   });
 });

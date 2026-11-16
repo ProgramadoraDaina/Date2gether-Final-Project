@@ -107,8 +107,8 @@ export default function HomePage() {
                 </button>
               </>
             ) : (
-              <span>
-                <Link href="/login">{t('Iniciar sesión')}</Link> ·{' '}
+              <span className={styles.authLinks}>
+                <Link href="/login">{t('Iniciar sesión')}</Link>
                 <Link href="/register">{t('Crear cuenta')}</Link>
               </span>
             )}

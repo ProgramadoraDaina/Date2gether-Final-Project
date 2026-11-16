@@ -155,7 +155,7 @@ describe('ParticipationTimeline', () => {
         ]}
       />,
     );
-    const bar = container.querySelector('.track > div') as HTMLElement;
+    const bar = container.querySelector('.timelineArea > div') as HTMLElement;
     expect(bar.style.left).toBe('50%');
     expect(bar.style.width).toBe('50%');
   });

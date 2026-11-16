@@ -1,11 +1,16 @@
 .card {
   composes: card from '../styles/form.module.css';
+  max-width: 400px;
+  padding: 40px;
 }
 .subtitle {
   composes: subtitle from '../styles/form.module.css';
 }
 .authBar {
   composes: authBar from '../styles/form.module.css';
+}
+.authLinks {
+  composes: authLinks from '../styles/form.module.css';
 }
 .linkButton {
   composes: linkButton from '../styles/form.module.css';

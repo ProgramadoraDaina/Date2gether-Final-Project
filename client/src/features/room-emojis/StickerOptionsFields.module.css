@@ -5,6 +5,7 @@
   margin-bottom: 8px;
   padding: 8px;
   border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
 }
 
 .label {
@@ -23,11 +24,10 @@
   width: auto;
   padding: 4px 10px;
   border: 1px solid var(--color-border);
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--color-text-muted);
-  font-family: ui-monospace, monospace;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .option:hover,
@@ -50,6 +50,7 @@
   margin-bottom: 4px;
   padding: 2px;
   border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
 }
 
 .position {

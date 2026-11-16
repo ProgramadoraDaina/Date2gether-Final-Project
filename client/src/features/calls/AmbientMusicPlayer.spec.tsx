@@ -412,7 +412,8 @@ describe('AmbientMusicPlayer', () => {
     act(() => capturedOptions.events?.onReady?.());
     await waitFor(() => expect(playerInstance.unMute).toHaveBeenCalled());
 
-    expect(screen.getByText('0:45 / 3:00')).toBeInTheDocument();
+    expect(screen.getByText('0:45')).toBeInTheDocument();
+    expect(screen.getByText('3:00')).toBeInTheDocument();
   });
 
   it('arrastrar la barra de avance y soltarla manda musicSeek con la posición elegida, sin llamar a seekTo desde la UI', async () => {

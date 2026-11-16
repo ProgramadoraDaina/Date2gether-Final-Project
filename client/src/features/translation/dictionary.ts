@@ -108,6 +108,10 @@ const en: Record<string, string> = {
   'Conectando...': 'Connecting...',
   'Cargando llamada…': 'Loading call…',
   Colgar: 'Hang up',
+  'Poner en foco': 'Spotlight',
+  'Quitar de foco': 'Remove spotlight',
+  '¿Estás seguro de que querés salir de la llamada?': 'Are you sure you want to leave the call?',
+  'Salir de la llamada': 'Leave the call',
   'Elegir micrófono': 'Choose microphone',
   'Elegir cámara': 'Choose camera',
   'Activar sonido de la reunión': 'Enable meeting audio',
@@ -144,6 +148,7 @@ const en: Record<string, string> = {
     'The call ended because the host disconnected.',
   'Volver a la sala': 'Back to the room',
   'Ver línea de tiempo': 'View timeline',
+  'Ver gráfico de interacción': 'View interaction chart',
   'Videollamadas simples, en el navegador.': 'Simple video calls, in the browser.',
 
   // Inicio
@@ -343,6 +348,7 @@ const en: Record<string, string> = {
   'Activar sonido de la música': 'Unmute music',
   'Volumen de la música': 'Music volume',
   'Ver playlist': 'View playlist',
+  Pista: 'Track',
 
   // Tema
   'Cambiar a modo claro': 'Switch to light mode',
@@ -361,6 +367,17 @@ const en: Record<string, string> = {
   'Todavía no hiciste ninguna llamada.': "You haven't made any calls yet.",
   'No se pudo obtener el historial': 'Could not fetch the history',
 
+  // Notas desde el historial
+  'Obtener notas': 'Get notes',
+  'Necesitás iniciar sesión para ver estas notas.': 'You need to log in to see these notes.',
+  'No encontramos historial en esta sala, o no participaste de ella.':
+    'We could not find history for this room, or you did not take part in it.',
+  'Cargando notas…': 'Loading notes…',
+  'No se pudieron cargar las notas': 'Could not load the notes',
+  'No escribiste notas personales en este dispositivo para esta sala.':
+    'You have not written personal notes on this device for this room.',
+  'Esta sala no tiene notas compartidas.': 'This room has no shared notes.',
+
   // Línea de tiempo de participación
   'Esta sesión no tiene participantes registrados.': 'This session has no recorded participants.',
   Entró: 'Joined',
@@ -377,6 +394,8 @@ const en: Record<string, string> = {
   // Configuración
   Apariencia: 'Appearance',
   'Modo oscuro': 'Dark mode',
+  Notificaciones: 'Notifications',
+  'Sonido al mencionarte': 'Sound when you are mentioned',
   'Necesitás iniciar sesión para elegir el color de tu nombre.':
     'You need to log in to choose your name color.',
   'Elegí el color de tu nombre': 'Choose your name color',
@@ -390,6 +409,14 @@ const en: Record<string, string> = {
   Naranja: 'Orange',
   Verde: 'Green',
   Rosa: 'Pink',
+  // Eventos de sala (ruleta)
+  'Hacer evento': 'Start an event',
+  Ruleta: 'Roulette',
+  'Seleccionar todos': 'Select all',
+  'Vaciar selección': 'Clear selection',
+  'Todavía no hay nadie más en la sala.': 'There is no one else in the room yet.',
+  'Girar ruleta': 'Spin the wheel',
+  'ganó la ruleta': 'won the roulette',
 };
 
 export default en;
