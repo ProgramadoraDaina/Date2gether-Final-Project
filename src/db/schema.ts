@@ -13,6 +13,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
@@ -66,18 +67,35 @@ export type NewUser = typeof users.$inferInsert;
 export type RefreshToken = typeof refreshTokens.$inferSelect;
 export type NewRefreshToken = typeof refreshTokens.$inferInsert;
 
-export const rooms = pgTable('rooms', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  code: varchar('code', { length: 20 }).notNull().unique(),
-  name: varchar('name', { length: 100 }).notNull(),
-  isActive: boolean('is_active').notNull().default(true),
-  waitingRoomEnabled: boolean('waiting_room_enabled').notNull().default(false),
-  entryLocked: boolean('entry_locked').notNull().default(false),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  // Columna histórica de Chime conservada para no reescribir migraciones aplicadas.
-  // LiveKit identifica las salas por su código y no utiliza esta columna.
-  chimeMeetingId: varchar('chime_meeting_id', { length: 64 }),
-});
+export const rooms = pgTable(
+  'rooms',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    code: varchar('code', { length: 20 }).notNull(), // .unique() removed — see rooms_code_code_pool_unique
+    name: varchar('name', { length: 100 }).notNull(),
+    isActive: boolean('is_active').notNull().default(true),
+    // Declared at creation and immutable. Permanent rooms never expire and never recycle their code.
+    isPermanent: boolean('is_permanent').notNull().default(false),
+    // Drives the rolling 24h window for non-permanent rooms. Touched on "entry".
+    lastEnteredAt: timestamp('last_entered_at').notNull().defaultNow(),
+    // Code-pool marker, not a joinability source of truth. NULL = this room holds its code.
+    retiredAt: timestamp('retired_at'),
+    waitingRoomEnabled: boolean('waiting_room_enabled').notNull().default(false),
+    entryLocked: boolean('entry_locked').notNull().default(false),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    // Columna histórica de Chime conservada para no reescribir migraciones aplicadas.
+    // LiveKit identifica las salas por su código y no utiliza esta columna.
+    chimeMeetingId: varchar('chime_meeting_id', { length: 64 }),
+  },
+  (table) => [
+    uniqueIndex('rooms_code_code_pool_unique')
+      .on(table.code)
+      .where(sql`${table.retiredAt} is null`),
+    index('rooms_retirement_sweep_idx')
+      .on(table.lastEnteredAt)
+      .where(sql`${table.retiredAt} is null and ${table.isPermanent} = false`),
+  ],
+);
 
 export const MESSAGE_KINDS = ['text', 'gif'] as const;
 
@@ -141,10 +159,49 @@ export const roomAdmissionRequests = pgTable(
     name: varchar('name', { length: 60 }).notNull(),
     status: admissionStatusEnum('status').notNull().default('pending'),
     createdAt: timestamp('created_at').notNull().defaultNow(),
-    expiresAt: timestamp('expires_at').notNull(),
+    // NULL means "no TTL" (permanent-room requests) — never a far-future sentinel.
+    expiresAt: timestamp('expires_at'),
   },
   (table) => [index('room_admission_room_status_idx').on(table.roomId, table.status)],
 );
+
+export const roomScheduleSlots = pgTable(
+  'room_schedule_slots',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    roomId: uuid('room_id')
+      .notNull()
+      .references(() => rooms.id, { onDelete: 'cascade' }),
+    // 0 = Sunday … 6 = Saturday — same convention as JS Date#getDay().
+    dayOfWeek: smallint('day_of_week').notNull(),
+    // 'HH:MM', 24h wall-clock in `timezone`.
+    timeOfDay: varchar('time_of_day', { length: 5 }).notNull(),
+    // IANA zone name, never a numeric offset.
+    timezone: varchar('timezone', { length: 64 }).notNull(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('room_schedule_slots_room_id_idx').on(table.roomId),
+    unique('room_schedule_slots_room_day_time_tz_unique').on(
+      table.roomId,
+      table.dayOfWeek,
+      table.timeOfDay,
+      table.timezone,
+    ),
+    check('room_schedule_slots_day_of_week_valid', sql`${table.dayOfWeek} between 0 and 6`),
+    check(
+      'room_schedule_slots_time_of_day_valid',
+      sql`${table.timeOfDay} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'`,
+    ),
+  ],
+);
+
+export const roomScheduleSlotsRelations = relations(roomScheduleSlots, ({ one }) => ({
+  room: one(rooms, { fields: [roomScheduleSlots.roomId], references: [rooms.id] }),
+}));
+
+export type RoomScheduleSlot = typeof roomScheduleSlots.$inferSelect;
+export type NewRoomScheduleSlot = typeof roomScheduleSlots.$inferInsert;
 
 // Historial de llamadas: una fila por cada vez que una cuenta registrada
 // se une exitosamente a una sala. Los invitados sin cuenta no generan fila.
@@ -232,6 +289,7 @@ export const roomsRelations = relations(rooms, ({ many, one }) => ({
   notes: one(roomNotes, { fields: [rooms.id], references: [roomNotes.roomId] }),
   members: many(roomMembers),
   callHistory: many(callHistory),
+  scheduleSlots: many(roomScheduleSlots),
 }));
 
 export const roomNotesRelations = relations(roomNotes, ({ one }) => ({
