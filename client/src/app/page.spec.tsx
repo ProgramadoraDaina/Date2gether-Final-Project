@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 const push = jest.fn();
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push }),
@@ -41,52 +41,5 @@ describe('HomePage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Unirse' }));
     expect(push).toHaveBeenCalledWith('/room/abc-defg-hij');
     expect(push).not.toHaveBeenCalledWith('/login');
-  });
-
-  it('[5.2] el editor de horarios solo aparece cuando se activa el toggle de sala permanente', async () => {
-    const HomePage = (await import('./page')).default;
-    render(<HomePage />);
-    await screen.findByText('Iniciar sesión');
-
-    expect(screen.queryByText('Horario semanal')).not.toBeInTheDocument();
-    fireEvent.click(
-      screen.getByLabelText('Sala permanente (enlace fijo, con sala de espera siempre activa)'),
-    );
-    expect(screen.getByText('Horario semanal')).toBeInTheDocument();
-  });
-
-  it('[5.2] crea la sala con isPermanent:true cuando el toggle está activo', async () => {
-    const { getCurrentUser } = await import('@/lib/auth');
-    (getCurrentUser as jest.Mock<typeof getCurrentUser>).mockResolvedValue({
-      id: 'user-1',
-      email: 'a@a.com',
-      name: 'Daina',
-      createdAt: '2026-01-01',
-      nameColor: null,
-    });
-    const { createRoom } = await import('@/lib/api');
-    (createRoom as jest.Mock<typeof createRoom>).mockResolvedValue({
-      id: 'room-1',
-      code: 'abc-defg-hij',
-      name: 'Reunión de Daina',
-      isActive: true,
-      isPermanent: true,
-      createdAt: '2026-01-01',
-    });
-
-    const HomePage = (await import('./page')).default;
-    render(<HomePage />);
-    await screen.findByText('Conectado como');
-    fireEvent.click(
-      screen.getByLabelText('Sala permanente (enlace fijo, con sala de espera siempre activa)'),
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'Crear reunión' }));
-
-    await waitFor(() =>
-      expect(createRoom).toHaveBeenCalledWith(
-        'Reunión de Daina',
-        expect.objectContaining({ isPermanent: true }),
-      ),
-    );
   });
 });

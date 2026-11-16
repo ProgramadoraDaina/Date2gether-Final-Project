@@ -1,30 +1,11 @@
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
-import { getNextScheduleOccurrence } from '@/lib/api';
 import { useTranslation } from '../translation/useTranslation';
-import { NextOccurrence } from './NextOccurrence';
 import type { useAdmissionRequest } from './useAdmissionRequest';
 import styles from './WaitingRoom.module.css';
 
-export function WaitingRoom({
-  code,
-  admission,
-}: {
-  code: string;
-  admission: ReturnType<typeof useAdmissionRequest>;
-}) {
+export function WaitingRoom({ admission }: { admission: ReturnType<typeof useAdmissionRequest> }) {
   const { t } = useTranslation();
   const terminal = admission.status !== 'pending';
-  const [nextOccurrenceAt, setNextOccurrenceAt] = useState<string | null>(null);
-
-  // D6: informational only -- never gates admission, and the response has
-  // no field that could carry the owner's timezone (public endpoint, same
-  // as the rest of the waiting-room flow).
-  useEffect(() => {
-    getNextScheduleOccurrence(code)
-      .then((result) => setNextOccurrenceAt(result.nextOccurrenceAt))
-      .catch(() => setNextOccurrenceAt(null));
-  }, [code]);
   const message = {
     pending: 'El anfitrión debe admitir tu ingreso.',
     rejected: 'El anfitrión rechazó tu solicitud.',
@@ -36,7 +17,6 @@ export function WaitingRoom({
       <h1 id="waiting-title">{t('Sala de espera')}</h1>
       <p role="status">{t(message)}</p>
       <p>{t('Todavía no estás conectado al chat ni a la llamada.')}</p>
-      <NextOccurrence nextOccurrenceAt={nextOccurrenceAt} />
       {admission.error && (
         <p className={styles.error} role="alert">
           {t(admission.error)}
