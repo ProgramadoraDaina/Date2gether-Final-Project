@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { isMentionSoundEnabled, setMentionSoundEnabled } from '@/features/chat/mentionPreferences';
 import { ApiError, updateNameColor } from '@/lib/api';
 import { getCurrentUser, isLoggedIn } from '@/lib/auth';
 import { NAME_COLOR_HEX, NAME_COLOR_IDS, type NameColorId } from '@/lib/nameColors';
@@ -31,6 +32,19 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState<NameColorId | null>(null);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Arranca en true (default de isMentionSoundEnabled) para no parpadear
+  // "apagado" en el primer render; se corrige al leer localStorage post-mount.
+  const [mentionSoundEnabled, setMentionSoundEnabledState] = useState(true);
+
+  useEffect(() => {
+    setMentionSoundEnabledState(isMentionSoundEnabled());
+  }, []);
+
+  function handleToggleMentionSound() {
+    const next = !mentionSoundEnabled;
+    setMentionSoundEnabledState(next);
+    setMentionSoundEnabled(next);
+  }
 
   useEffect(() => {
     if (!isLoggedIn()) {
@@ -80,9 +94,23 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          <div className={styles.section}>
+            <p className={styles.subtitle}>{t('Notificaciones')}</p>
+            <div className={styles.sectionRow}>
+              <span>{t('Sonido al mencionarte')}</span>
+              <input
+                type="checkbox"
+                checked={mentionSoundEnabled}
+                onChange={handleToggleMentionSound}
+                aria-label={t('Sonido al mencionarte')}
+                data-testid="mention-sound-toggle"
+              />
+            </div>
+          </div>
+
           <p>{t('Necesitás iniciar sesión para elegir el color de tu nombre.')}</p>
-          <p>
-            <Link href="/login">{t('Iniciar sesión')}</Link> ·{' '}
+          <p className={styles.authLinks}>
+            <Link href="/login">{t('Iniciar sesión')}</Link>
             <Link href="/register">{t('Crear cuenta')}</Link>
           </p>
         </div>
@@ -100,6 +128,20 @@ export default function SettingsPage() {
           <div className={styles.sectionRow}>
             <span>{t('Modo oscuro')}</span>
             <ThemeToggle />
+          </div>
+        </div>
+
+        <div className={styles.section}>
+          <p className={styles.subtitle}>{t('Notificaciones')}</p>
+          <div className={styles.sectionRow}>
+            <span>{t('Sonido al mencionarte')}</span>
+            <input
+              type="checkbox"
+              checked={mentionSoundEnabled}
+              onChange={handleToggleMentionSound}
+              aria-label={t('Sonido al mencionarte')}
+              data-testid="mention-sound-toggle"
+            />
           </div>
         </div>
 
