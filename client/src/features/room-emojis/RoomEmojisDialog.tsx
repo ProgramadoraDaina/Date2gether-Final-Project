@@ -21,7 +21,7 @@ import styles from './RoomEmojisDialog.module.css';
 const MAX_EMOJIS = 50;
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const MAX_SOUND_BYTES = 512 * 1024;
-const MAX_SOUND_SECONDS = 5;
+const MAX_SOUND_SECONDS = 10;
 const NAME_PATTERN = /^[a-z0-9_]{2,32}$/;
 const DEFAULT_STICKER: StickerOptions = {
   duration: 10,
@@ -167,7 +167,7 @@ export function RoomEmojisDialog({
       }
       const seconds = await soundDuration(fileSound).catch(() => Number.NaN);
       if (!(seconds <= MAX_SOUND_SECONDS)) {
-        setError(t('El audio no puede durar más de 5 segundos'));
+        setError(t('El audio no puede durar más de 10 segundos'));
         return;
       }
     }

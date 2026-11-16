@@ -4,7 +4,7 @@ import sharp from 'sharp';
 
 export const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
 export const MAX_SOUND_BYTES = 512 * 1024;
-export const MAX_SOUND_SECONDS = 5;
+export const MAX_SOUND_SECONDS = 10;
 export const EMOJI_SIZE_PX = 128;
 
 const IMAGE_FORMATS = new Set(['png', 'jpeg', 'webp', 'gif']);

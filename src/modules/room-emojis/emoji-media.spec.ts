@@ -56,8 +56,8 @@ describe('validateEmojiSound', () => {
     expect(result.mime).toBe('audio/wav');
   });
 
-  it('rechaza un audio de más de 5 segundos', async () => {
-    await expect(validateEmojiSound(wavOfSeconds(6))).rejects.toThrow('más de 5 segundos');
+  it('rechaza un audio de más de 10 segundos', async () => {
+    await expect(validateEmojiSound(wavOfSeconds(11))).rejects.toThrow('más de 10 segundos');
   });
 
   it('rechaza un audio de más de 512 KB', async () => {
