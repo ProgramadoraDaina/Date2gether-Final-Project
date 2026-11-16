@@ -31,3 +31,20 @@ Object.assign(globalThis, { fetch, Headers, Request, Response });
 
 // jsdom no implementa Element.scrollTo (no hay layout real que scrollear).
 Element.prototype.scrollTo = jest.fn();
+
+// jsdom 26 no implementa <dialog>.showModal()/close() (ver HangUpButton,
+// RoomEmojisDialog, AdmissionControl, RoomEventButton): sin esto, cualquier
+// test que realmente abra uno de esos diálogos explota con "showModal is not
+// a function" en vez de ejercitar el componente. El polyfill solo refleja el
+// atributo `open` y dispara el evento 'close' que esos componentes ya
+// escuchan (onClose) — no simula backdrop, inert ni foco, que acá no hace falta.
+if (!HTMLDialogElement.prototype.showModal) {
+  HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+    this.setAttribute('open', '');
+  };
+  HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+    const wasOpen = this.hasAttribute('open');
+    this.removeAttribute('open');
+    if (wasOpen) this.dispatchEvent(new Event('close'));
+  };
+}
