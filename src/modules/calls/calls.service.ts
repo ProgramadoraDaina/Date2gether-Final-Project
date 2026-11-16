@@ -15,10 +15,13 @@ import {
   callEvents,
   callHistory,
   callParticipantIdentities,
+  callSessionParticipants,
+  callSessions,
   roomMembers,
   rooms,
   type RoomRole,
 } from '../../db/schema';
+import { RoomResolverService } from '../rooms/room-resolver.service';
 import { RoomsService } from '../rooms/rooms.service';
 import type { ReportTrackStateDto } from './dto/report-track-state.dto';
 
@@ -30,9 +33,13 @@ const NO_HOST_CONNECTED_MESSAGE = 'Esperá a que se conecte un anfitrión para u
 const HISTORY_LIMIT = 50;
 
 export interface CallHistoryEntry {
+  roomId: string;
+  // Etiqueta de visualización únicamente: la ruta y la autorización dejaron
+  // de usar el código (D4-C) -- roomId es la clave real.
   roomCode: string;
   roomName: string;
   startedAt: Date;
+  sessionId: string | null;
 }
 
 @Injectable()
@@ -43,13 +50,18 @@ export class CallsService {
     private readonly roomsService: RoomsService,
     private readonly config: ConfigService,
     @Inject(DRIZZLE) private readonly db: DrizzleDb,
+    private readonly resolver: RoomResolverService,
   ) {}
 
   async join(roomCode: string, participant: RoomParticipant) {
-    if (participant.roomCode !== roomCode)
-      throw new ForbiddenException('El acceso pertenece a otra sala');
+    // D4: el binding es por roomId, resuelto DESPUÉS de buscar la sala real
+    // -- el código puede haber sido reciclado a otra sala, así que comparar
+    // contra el string ya no prueba nada. getByCodeOrThrow ya rechaza
+    // (403/404) una sala cerrada, retirada o vencida; no hace falta
+    // repetir ese chequeo acá.
     const room = await this.roomsService.getByCodeOrThrow(roomCode);
-    if (!room.isActive) throw new ForbiddenException('La sala está cerrada');
+    if (participant.roomId !== room.id)
+      throw new ForbiddenException('El acceso pertenece a otra sala');
 
     const url = this.config.get<string>('LIVEKIT_URL');
     const apiKey = this.config.get<string>('LIVEKIT_API_KEY');
@@ -149,6 +161,9 @@ export class CallsService {
         });
     }
 
+    // D5: "entrada" -- unirse a la llamada en sí (el tercer y último sitio).
+    await this.resolver.touchEntry(room.id);
+
     return {
       url,
       token: await access.toJwt(),
@@ -243,6 +258,11 @@ export class CallsService {
     participant: RoomParticipant,
     { source, enabled }: ReportTrackStateDto,
   ): Promise<void> {
+    // Comparación barata por código, deliberadamente NO autoritativa (D4,
+    // mismo criterio que WsJwtAuthGuard): RoomAccessGuard ya hizo el
+    // binding real por roomId antes de llegar acá. No se resuelve la sala
+    // de nuevo para este chequeo secundario -- sería una consulta extra en
+    // un reporte best-effort que, por diseño, nunca debe demorar la llamada.
     if (participant.roomCode !== roomCode) return;
 
     const url = this.config.get<string>('LIVEKIT_URL');
@@ -281,8 +301,9 @@ export class CallsService {
   }
 
   async listHistory(userId: string): Promise<CallHistoryEntry[]> {
-    return this.db
+    const rows = await this.db
       .select({
+        roomId: callHistory.roomId,
         roomCode: rooms.code,
         roomName: rooms.name,
         startedAt: callHistory.startedAt,
@@ -292,5 +313,64 @@ export class CallsService {
       .where(eq(callHistory.userId, userId))
       .orderBy(desc(callHistory.startedAt))
       .limit(HISTORY_LIMIT);
+
+    if (rows.length === 0) return [];
+
+    // Sin FK entre call_history y call_sessions: se correlaciona acá por
+    // sala + cercanía temporal. firstJoinedAt (cuándo ESTE usuario se
+    // conectó de verdad) es más preciso que el startedAt de la sala
+    // entera, que puede ser antes si otra persona entró primero.
+    const participantSessions = await this.db
+      .select({
+        sessionId: callSessionParticipants.sessionId,
+        firstJoinedAt: callSessionParticipants.firstJoinedAt,
+        roomId: callSessions.roomId,
+      })
+      .from(callSessionParticipants)
+      .innerJoin(callSessions, eq(callSessionParticipants.sessionId, callSessions.id))
+      .where(eq(callSessionParticipants.userId, userId));
+
+    // Cada intento se empareja con la sesión cuyo primer join de este
+    // usuario ocurrió más cerca DESPUÉS de ese intento (pedir el token de
+    // LiveKit siempre precede a la conexión real). Ventana generosa: no
+    // debería tardar minutos en conectar si conecta.
+    const MATCH_WINDOW_MS = 5 * 60 * 1000;
+    return rows.map((row) => {
+      let bestSessionId: string | null = null;
+      let bestDelta = Infinity;
+      for (const candidate of participantSessions) {
+        if (candidate.roomId !== row.roomId) continue;
+        const delta = candidate.firstJoinedAt.getTime() - row.startedAt.getTime();
+        if (delta >= 0 && delta <= MATCH_WINDOW_MS && delta < bestDelta) {
+          bestDelta = delta;
+          bestSessionId = candidate.sessionId;
+        }
+      }
+      return {
+        roomId: row.roomId,
+        roomCode: row.roomCode,
+        roomName: row.roomName,
+        startedAt: row.startedAt,
+        sessionId: bestSessionId,
+      };
+    });
+  }
+
+  // Ver las notas de sala desde el historial no requiere un token de acceso
+  // de sala en vivo (eso ya venció); en cambio, haber estado en call_history
+  // para esta sala es la prueba de pertenencia con la cuenta ya autenticada.
+  //
+  // D4-C: un solo identificador autoriza Y recupera. No hay join a `rooms`,
+  // no hay código: estructuralmente imposible que la autorización y la
+  // recuperación de datos se resuelvan por caminos distintos (la
+  // vulnerabilidad original dependía exactamente de eso, ver design.md).
+  async getRoomNotesForHistory(userId: string, roomId: string) {
+    const [visit] = await this.db
+      .select({ roomId: callHistory.roomId })
+      .from(callHistory)
+      .where(and(eq(callHistory.userId, userId), eq(callHistory.roomId, roomId)))
+      .limit(1);
+    if (!visit) throw new ForbiddenException('No tenés historial en esta sala');
+    return this.roomsService.getRoomNotesById(roomId);
   }
 }

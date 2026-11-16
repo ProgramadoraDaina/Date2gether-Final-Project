@@ -1,4 +1,10 @@
-import { BadRequestException, Inject, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import {
@@ -13,7 +19,6 @@ import {
   callParticipantIdentities,
   callSessionParticipants,
   callSessions,
-  rooms,
 } from '../../db/schema';
 import { aggregateSession, type SessionEvent } from './aggregate-session';
 import { CallSessionCloseService } from './call-session-close.service';
@@ -157,10 +162,14 @@ export class CallsWebhookService {
   // punto de enganche que Fase 6 pide. room_started/participant_joined/
   // track_* quedan vacíos a propósito — nada en Fase 5/6 de este cambio los
   // necesita.
-  private onRoomStarted(_event: WebhookEvent): void {}
-  private onParticipantJoined(_event: WebhookEvent): void {}
-  private onTrackPublished(_event: WebhookEvent): void {}
-  private onTrackUnpublished(_event: WebhookEvent): void {}
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  private onRoomStarted(event: WebhookEvent): void {}
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  private onParticipantJoined(event: WebhookEvent): void {}
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  private onTrackPublished(event: WebhookEvent): void {}
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  private onTrackUnpublished(event: WebhookEvent): void {}
 
   /**
    * Cierre forzado idempotente (Fase 6, design.md D3/D4): si el identity que
@@ -225,13 +234,31 @@ export class CallsWebhookService {
         sessionEvents[0]?.occurredAt ?? endedAt,
       );
 
-      const [room] = roomCode
-        ? await tx.select({ id: rooms.id }).from(rooms).where(eq(rooms.code, roomCode)).limit(1)
+      // D4-D: roomId se resuelve desde call_participant_identities (el
+      // identificador autoritativo que CallsService.join() ya escribió),
+      // nunca desde una búsqueda por rooms.code -- un room_finished tardío
+      // tras un code reciclado atribuiría la sesión a la sala NUEVA.
+      // roomId queda en null cuando ningún identity es conocido (la columna
+      // ya es nullable).
+      const identityKeys = [
+        ...new Set(sessionEvents.map((e) => e.livekitIdentity).filter((id): id is string => !!id)),
+      ];
+      const identities = identityKeys.length
+        ? await tx
+            .select({
+              livekitIdentity: callParticipantIdentities.livekitIdentity,
+              userId: callParticipantIdentities.userId,
+              displayName: callParticipantIdentities.displayName,
+              roomId: callParticipantIdentities.roomId,
+            })
+            .from(callParticipantIdentities)
+            .where(inArray(callParticipantIdentities.livekitIdentity, identityKeys))
         : [];
+      const roomId = identities[0]?.roomId ?? null;
 
       await tx
         .insert(callSessions)
-        .values({ livekitRoomSid, roomId: room?.id ?? null, roomCode, startedAt })
+        .values({ livekitRoomSid, roomId, roomCode, startedAt })
         .onConflictDoNothing();
 
       const claimed = await tx
@@ -247,22 +274,6 @@ export class CallsWebhookService {
         return;
       }
       const sessionId = claimed[0].id;
-
-      const identityKeys = [
-        ...new Set(
-          sessionEvents.map((e) => e.livekitIdentity).filter((id): id is string => !!id),
-        ),
-      ];
-      const identities = identityKeys.length
-        ? await tx
-            .select({
-              livekitIdentity: callParticipantIdentities.livekitIdentity,
-              userId: callParticipantIdentities.userId,
-              displayName: callParticipantIdentities.displayName,
-            })
-            .from(callParticipantIdentities)
-            .where(inArray(callParticipantIdentities.livekitIdentity, identityKeys))
-        : [];
 
       const summaries = aggregateSession(sessionEvents, identities, endedAt);
       if (summaries.length === 0) return;
