@@ -191,6 +191,16 @@ function VolumeIcon() {
   );
 }
 
+function EqualizerBars() {
+  return (
+    <span className={styles.equalizer} aria-hidden="true">
+      <span />
+      <span />
+      <span />
+    </span>
+  );
+}
+
 function VolumeMutedIcon() {
   return (
     <svg
@@ -460,7 +470,7 @@ export function AmbientMusicPlayer({ socket, isAdmin }: AmbientMusicPlayerProps)
           <div className={styles.volumeRow}>
             <button
               type="button"
-              className={styles.iconButton}
+              className={styles.transportButton}
               onClick={handleToggleMute}
               title={muted ? t('Activar sonido de la música') : t('Silenciar música')}
               aria-label={muted ? t('Activar sonido de la música') : t('Silenciar música')}
@@ -477,6 +487,76 @@ export function AmbientMusicPlayer({ socket, isAdmin }: AmbientMusicPlayerProps)
               onChange={handleVolumeChange}
               aria-label={t('Volumen de la música')}
             />
+          </div>
+        )}
+        {isAdmin && current && musicState && (
+          <div className={styles.nowPlayingBlock}>
+            <div className={styles.trackArt}>
+              {musicState.isPlaying ? <EqualizerBars /> : <MusicNoteIcon />}
+            </div>
+            <div className={styles.trackMeta}>
+              <p className={styles.trackTitleMain} title={current.title}>
+                {current.title}
+              </p>
+              <p className={styles.trackSubtitle}>
+                {t('Pista')} {musicState.currentIndex + 1}/{musicState.tracks.length}
+              </p>
+            </div>
+          </div>
+        )}
+        {isAdmin && current && (
+          <div className={styles.seekRow}>
+            <span className={styles.timeLabel}>{formatTime(displayPosition)}</span>
+            <input
+              type="range"
+              className={styles.seekBar}
+              style={{ '--seek-fill': `${seekPercent}%` } as CSSProperties}
+              min={0}
+              max={duration > 0 ? duration : 0}
+              step={1}
+              value={displayPosition}
+              disabled={duration <= 0}
+              onChange={handleSeekChange}
+              onPointerUp={commitSeek}
+              onMouseUp={commitSeek}
+              onTouchEnd={commitSeek}
+              onBlur={commitSeek}
+              aria-label={t('Avance de la canción')}
+            />
+            <span className={styles.timeLabel}>{formatTime(duration)}</span>
+          </div>
+        )}
+        {isAdmin && musicState && musicState.tracks.length > 0 && (
+          <div className={styles.playbackButtons}>
+            <button
+              type="button"
+              className={styles.transportButton}
+              onClick={handlePrevious}
+              disabled={musicState.currentIndex <= 0}
+              title={t('Anterior')}
+              aria-label={t('Anterior')}
+            >
+              <PreviousIcon />
+            </button>
+            <button
+              type="button"
+              className={styles.playButton}
+              onClick={handleTogglePlay}
+              title={musicState.isPlaying ? t('Pausar') : t('Reproducir')}
+              aria-label={musicState.isPlaying ? t('Pausar') : t('Reproducir')}
+            >
+              {musicState.isPlaying ? <PauseIcon /> : <PlayIcon />}
+            </button>
+            <button
+              type="button"
+              className={styles.transportButton}
+              onClick={handleNext}
+              disabled={musicState.currentIndex >= musicState.tracks.length - 1}
+              title={t('Siguiente')}
+              aria-label={t('Siguiente')}
+            >
+              <NextIcon />
+            </button>
           </div>
         )}
         {isAdmin && (
@@ -512,65 +592,6 @@ export function AmbientMusicPlayer({ socket, isAdmin }: AmbientMusicPlayerProps)
                 </form>
                 {musicState && musicState.tracks.length > 0 && (
                   <>
-                    {current && (
-                      <p className={styles.nowPlaying} title={current.title}>
-                        {current.title}
-                      </p>
-                    )}
-                    {current && (
-                      <div className={styles.seekRow}>
-                        <input
-                          type="range"
-                          className={styles.seekBar}
-                          style={{ '--seek-fill': `${seekPercent}%` } as CSSProperties}
-                          min={0}
-                          max={duration > 0 ? duration : 0}
-                          step={1}
-                          value={displayPosition}
-                          disabled={duration <= 0}
-                          onChange={handleSeekChange}
-                          onPointerUp={commitSeek}
-                          onMouseUp={commitSeek}
-                          onTouchEnd={commitSeek}
-                          onBlur={commitSeek}
-                          aria-label={t('Avance de la canción')}
-                        />
-                        <span className={styles.seekTime}>
-                          {formatTime(displayPosition)} / {formatTime(duration)}
-                        </span>
-                      </div>
-                    )}
-                    <div className={styles.playbackButtons}>
-                      <button
-                        type="button"
-                        className={styles.iconButton}
-                        onClick={handlePrevious}
-                        disabled={musicState.currentIndex <= 0}
-                        title={t('Anterior')}
-                        aria-label={t('Anterior')}
-                      >
-                        <PreviousIcon />
-                      </button>
-                      <button
-                        type="button"
-                        className={styles.playButton}
-                        onClick={handleTogglePlay}
-                        title={musicState.isPlaying ? t('Pausar') : t('Reproducir')}
-                        aria-label={musicState.isPlaying ? t('Pausar') : t('Reproducir')}
-                      >
-                        {musicState.isPlaying ? <PauseIcon /> : <PlayIcon />}
-                      </button>
-                      <button
-                        type="button"
-                        className={styles.iconButton}
-                        onClick={handleNext}
-                        disabled={musicState.currentIndex >= musicState.tracks.length - 1}
-                        title={t('Siguiente')}
-                        aria-label={t('Siguiente')}
-                      >
-                        <NextIcon />
-                      </button>
-                    </div>
                     <button
                       type="button"
                       className={styles.toggleButton}

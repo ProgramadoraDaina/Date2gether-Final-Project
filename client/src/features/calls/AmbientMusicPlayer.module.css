@@ -21,12 +21,12 @@
 .card {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 14px;
-  border-radius: 14px;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
   background: var(--color-chip-bg);
   border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-sm);
 }
 
 .cardHeader {
@@ -90,20 +90,107 @@
   flex: 1;
 }
 
-.nowPlaying {
+/* Mini "now playing" a la Spotify: una tile cuadrada (equalizador en vez de
+   carátula, no tenemos arte de YouTube) + título/posición en la playlist. */
+.nowPlayingBlock {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.trackArt {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-accent) 16%, var(--color-surface));
+  color: var(--color-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Barras animadas mientras suena, mismo lugar donde iría una carátula.
+   prefers-reduced-motion las deja quietas a media altura en vez de animar. */
+.equalizer {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 16px;
+}
+
+.equalizer span {
+  width: 3px;
+  background: var(--color-accent);
+  border-radius: 1px;
+  animation: equalize 0.9s ease-in-out infinite;
+}
+
+.equalizer span:nth-child(1) {
+  animation-delay: -0.6s;
+}
+
+.equalizer span:nth-child(2) {
+  animation-delay: -0.3s;
+}
+
+@keyframes equalize {
+  0%,
+  100% {
+    height: 4px;
+  }
+  50% {
+    height: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .equalizer span {
+    animation: none;
+    height: 10px;
+  }
+}
+
+.trackMeta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trackTitleMain {
   margin: 0;
   font-size: 14px;
   font-weight: 600;
-  text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.trackSubtitle {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .seekRow {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.timeLabel {
+  flex-shrink: 0;
+  min-width: 32px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.timeLabel:last-child {
+  text-align: right;
 }
 
 /* --seek-fill lo setea el componente por inline style (porcentaje de avance):
@@ -115,6 +202,13 @@
    mismo valor, así que la barra quedaba invisible contra la tarjeta. */
 .seekBar {
   flex: 1;
+  /* El <input> global (globals.css) le da padding/borde/margin a todo input
+     de texto; un range necesita arrancar en cero o el navegador lo infla a
+     la altura de ese padding en vez de a los 4px que pide .seekBar (pasaba
+     lo mismo en .volumeBar, ver su comentario). */
+  padding: 0;
+  margin: 0;
+  border: none;
   -webkit-appearance: none;
   appearance: none;
   height: 4px;
@@ -164,21 +258,30 @@
 .volumeRow {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
-/* Mismo truco de --seek-fill que .seekBar, con su propia variable
-   (--volume-fill) porque conviven en la misma tarjeta. */
+/* A la YouTube: el slider de volumen no estira todo el ancho de la tarjeta
+   como el de avance, es un control corto junto al ícono de parlante. El
+   thumb se achica a 0 en reposo y solo aparece al pasar el mouse o tocar,
+   igual que en el player nativo de YouTube. */
 .volumeBar {
-  flex: 1;
+  width: 72px;
+  flex-shrink: 0;
+  /* Mismo problema que .seekBar: sin este reset, el <input> global le mete
+     10px de padding + borde + margin-bottom, y el navegador infla la caja a
+     ~22px en vez de los 3px que pide esta regla. */
+  padding: 0;
+  margin: 0;
+  border: none;
   -webkit-appearance: none;
   appearance: none;
-  height: 4px;
+  height: 3px;
   border-radius: 2px;
   background: linear-gradient(
     to right,
     var(--color-accent) var(--volume-fill, 100%),
-    var(--color-surface) var(--volume-fill, 100%)
+    var(--color-border) var(--volume-fill, 100%)
   );
   cursor: pointer;
 }
@@ -186,47 +289,86 @@
 .volumeBar::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 12px;
-  height: 12px;
+  width: 0;
+  height: 0;
   border-radius: 50%;
   background: var(--color-accent);
   cursor: pointer;
+  transition: width 0.12s ease, height 0.12s ease;
+}
+
+.volumeBar:hover::-webkit-slider-thumb,
+.volumeBar:focus-visible::-webkit-slider-thumb,
+.volumeBar:active::-webkit-slider-thumb {
+  width: 10px;
+  height: 10px;
 }
 
 .volumeBar::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
+  width: 0;
+  height: 0;
   border: none;
   border-radius: 50%;
   background: var(--color-accent);
   cursor: pointer;
+  transition: width 0.12s ease, height 0.12s ease;
+}
+
+.volumeBar:hover::-moz-range-thumb,
+.volumeBar:focus-visible::-moz-range-thumb,
+.volumeBar:active::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
 }
 
 .volumeBar::-moz-range-track {
-  height: 4px;
+  height: 3px;
   border-radius: 2px;
-  background: var(--color-surface);
-}
-
-.seekTime {
-  flex-shrink: 0;
-  width: 84px;
-  text-align: right;
-  font-size: 12px;
-  color: var(--color-text-muted);
-  font-variant-numeric: tabular-nums;
+  background: var(--color-border);
 }
 
 .playbackButtons {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 14px;
+  gap: 18px;
 }
 
-/* Mismo lenguaje visual que los íconos redondos de la barra de controles de
-   la llamada (ver .iconButton en MeetingRoom.module.css): refuerza que son
-   la misma familia de controles, aunque viven en la sidebar. */
+/* Transporte a la Spotify: sin chip ni borde, solo el ícono. Únicamente el
+   play/pause (.playButton) se destaca con relleno; anterior/siguiente y el
+   mute vuelven a flat así no compiten por atención. */
+.transportButton {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s ease, transform 0.1s ease;
+}
+
+.transportButton:hover {
+  color: var(--color-text);
+}
+
+.transportButton:active {
+  transform: scale(0.92);
+}
+
+.transportButton:disabled {
+  color: var(--color-disabled);
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* El botón de "+" para agregar canciones no es parte del transporte: sigue
+   con el lenguaje de chip redondo que comparte con la barra de llamada. */
 .iconButton {
   composes: iconButton from './MeetingRoom.module.css';
   width: 36px;
@@ -249,7 +391,7 @@
   color: var(--color-accent-contrast);
   cursor: pointer;
   padding: 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--shadow-md);
 }
 
 .playButton:hover {
