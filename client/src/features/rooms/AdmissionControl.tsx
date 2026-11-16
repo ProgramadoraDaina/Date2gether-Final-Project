@@ -124,18 +124,24 @@ export function AdmissionControl({ code }: { code: string }) {
           <>
             <fieldset disabled={busy}>
               <legend>{t('Configuración de ingreso')}</legend>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={data.waitingRoomEnabled}
-                  onChange={(event) => {
-                    const checked = event.currentTarget.checked;
-                    setData({ ...data, waitingRoomEnabled: checked });
-                    void mutate(() => updateRoomAdmission(code, { waitingRoomEnabled: checked }));
-                  }}
-                />
-                {t('Activar sala de espera')}
-              </label>
+              {data.isPermanent ? (
+                <p>{t('Esta sala es permanente: la sala de espera está siempre activa.')}</p>
+              ) : (
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={data.waitingRoomEnabled}
+                    onChange={(event) => {
+                      const checked = event.currentTarget.checked;
+                      setData({ ...data, waitingRoomEnabled: checked });
+                      void mutate(() =>
+                        updateRoomAdmission(code, { waitingRoomEnabled: checked }),
+                      );
+                    }}
+                  />
+                  {t('Activar sala de espera')}
+                </label>
+              )}
               <label>
                 <input
                   type="checkbox"
@@ -167,6 +173,9 @@ export function AdmissionControl({ code }: { code: string }) {
                   <time dateTime={request.createdAt}>
                     {new Date(request.createdAt).toLocaleTimeString()}
                   </time>
+                  {request.stale && (
+                    <span className={styles.stale}>{t('Esperando hace más de 24h')}</span>
+                  )}
                   <div className={styles.actions}>
                     <button
                       type="button"

@@ -13,7 +13,7 @@ jest.mock('@/lib/api', () => ({
 const receipt = { status: 'pending' as const, requestId: 'request-1', ticket: 'wait-ticket' };
 const granted: RoomAccess = {
   token: 'participant-token',
-  participant: { sub: 'request-1', roomCode: 'abc', name: 'Ana' },
+  participant: { sub: 'request-1', roomId: 'room-1', roomCode: 'abc', name: 'Ana' },
 };
 const admitted = jest.fn<(access: RoomAccess) => void>();
 beforeEach(async () => {
@@ -88,6 +88,28 @@ describe('useAdmissionRequest', () => {
     await act(async () => {});
     expect(getAdmissionStatus).toHaveBeenCalledWith('abc', receipt, expect.any(AbortSignal));
     expect(hook.result.current.receipt).toEqual(receipt);
+    expect(admitted).not.toHaveBeenCalled();
+  });
+  it('[5.7] una sala permanente sigue pending 25h después del inicio, nunca expired (D7: el ticket vive 365d)', async () => {
+    // Salta el reloj del sistema en un solo paso en vez de avanzar los
+    // timers falsos minuto a minuto -- avanzar 25h de timers reales
+    // dispararía ~18000 ciclos del polling cada 5s. El hook no tiene
+    // ninguna lógica propia basada en el tiempo transcurrido: 'expired'
+    // solo puede venir de la respuesta del servidor (getAdmissionStatus),
+    // así que un único poll ya prueba el invariante.
+    jest.mocked(getAdmissionStatus).mockResolvedValue({ status: 'pending' });
+    const hook = renderHook(() => useAdmissionRequest('abc', admitted));
+    await act(async () => {
+      hook.result.current.start(receipt);
+    });
+    jest.setSystemTime(Date.now() + 25 * 60 * 60 * 1000);
+
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(5000);
+    });
+
+    expect(hook.result.current.status).toBe('pending');
+    expect(hook.result.current.status).not.toBe('expired');
     expect(admitted).not.toHaveBeenCalled();
   });
   it('un error de red conserva la solicitud y se recupera al volver a consultar', async () => {
