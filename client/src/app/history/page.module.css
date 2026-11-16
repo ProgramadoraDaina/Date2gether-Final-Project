@@ -1,35 +1,43 @@
+/* 720px (no 560px): cada fila ahora puede llevar nombre + chip de código +
+   fecha + el botón "Ver gráfico de interacción" — a 560px se amontonaban. */
 .card {
   composes: card from '../../styles/form.module.css';
-  max-width: 560px;
+  max-width: 720px;
+  padding: 40px;
 }
 
 .error {
   composes: error from '../../styles/form.module.css';
 }
 
+.authLinks {
+  composes: authLinks from '../../styles/form.module.css';
+}
+
 .list {
   list-style: none;
-  margin: 16px 0 0;
+  margin: var(--space-4) 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .entry {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: 10px var(--space-3);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .entryMain {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
 }
 
@@ -43,8 +51,16 @@
   font-family: monospace;
   font-size: 12px;
   background: var(--color-chip-bg);
-  padding: 2px 8px;
-  border-radius: 6px;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.entryMeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
   flex-shrink: 0;
 }
 
@@ -52,10 +68,25 @@
   font-size: 13px;
   color: var(--color-text-muted);
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
+/* Botón pill chico, mismo lenguaje que .callLoadingButton en
+   room/[code]/page.module.css pero más compacto: acá vive adentro de una
+   fila de lista densa, no solo en un panel centrado. */
 .sessionLink {
-  font-size: 13px;
-  white-space: nowrap;
+  width: auto;
   flex-shrink: 0;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-accent);
+}
+
+.sessionLink:hover {
+  background: var(--color-chip-bg);
 }

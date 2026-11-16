@@ -64,8 +64,8 @@ export default function CallSessionTimelinePage() {
         <div className={styles.card}>
           <h1>{t('Línea de tiempo')}</h1>
           <p>{t('Necesitás iniciar sesión para ver esta línea de tiempo.')}</p>
-          <p>
-            <Link href="/login">{t('Iniciar sesión')}</Link> ·{' '}
+          <p className={styles.authLinks}>
+            <Link href="/login">{t('Iniciar sesión')}</Link>
             <Link href="/register">{t('Crear cuenta')}</Link>
           </p>
         </div>
