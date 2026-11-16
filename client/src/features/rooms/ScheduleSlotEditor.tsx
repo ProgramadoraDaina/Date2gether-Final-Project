@@ -50,11 +50,13 @@ export function ScheduleSlotEditor({ slots, onChange }: ScheduleSlotEditorProps)
   return (
     <fieldset className={styles.editor}>
       <legend>{t('Horario semanal')}</legend>
-      {slots.length === 0 && <p>{t('Todavía no agregaste ningún horario.')}</p>}
-      <ul>
+      {slots.length === 0 && <p className={styles.empty}>{t('Todavía no agregaste ningún horario.')}</p>}
+      <ul className={styles.list}>
         {slots.map((slot, index) => (
-          <li key={`${slot.dayOfWeek}-${slot.timeOfDay}-${slot.timezone}`}>
-            {t(DAY_LABELS[slot.dayOfWeek])} {slot.timeOfDay} ({slot.timezone})
+          <li key={`${slot.dayOfWeek}-${slot.timeOfDay}-${slot.timezone}`} className={styles.slot}>
+            <span>
+              {t(DAY_LABELS[slot.dayOfWeek])} {slot.timeOfDay} ({slot.timezone})
+            </span>
             <button
               type="button"
               aria-label={t('Quitar horario')}

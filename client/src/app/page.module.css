@@ -29,7 +29,25 @@
 }
 .permanentToggle {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin: var(--space-2) 0 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-chip-bg);
+  color: var(--color-text);
+  font-size: 13px;
+  line-height: 1.45;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+.permanentToggle:hover {
+  border-color: var(--color-accent);
+}
+.permanentToggle input[type='checkbox'] {
+  width: auto;
+  flex-shrink: 0;
+  margin: 2px 0 0;
+  accent-color: var(--color-accent);
 }
