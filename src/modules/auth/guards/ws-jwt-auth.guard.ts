@@ -14,6 +14,11 @@ export class WsJwtAuthGuard implements CanActivate {
     if (!token) throw new WsException('Elegí tu nombre antes de entrar');
     try {
       const participant = await this.access.verify(token);
+      // Comparación barata, deliberadamente NO autoritativa (D4): roomCode
+      // puede haber sido reciclado a otra sala. El chequeo autoritativo por
+      // roomId vive en ChatGateway.handleJoinRoom vía assertBound -- el
+      // único handler con un código resolvable; el resto ya opera sobre
+      // connectedUsers, que lleva roomId.
       if (data?.code && participant.roomCode !== data.code) throw new Error('Otra sala');
       const socketData = client.data as { participant?: RoomParticipant };
       socketData.participant = participant;
