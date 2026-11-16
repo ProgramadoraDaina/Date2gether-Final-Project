@@ -110,6 +110,9 @@ test('la API valida el nombre y limita el pase a participación en su sala', asy
   ).toBe(401);
   expect((await request.get(`${API_URL}/rooms/${code}/members`, { headers })).status()).toBe(401);
   // El guard rechaza antes de contactar AWS: esta suite no crea reuniones Chime.
-  expect((await request.post(`${API_URL}/calls/xyz-abcd-efg`, { headers })).status()).toBe(403);
+  // 404, no 403: el resolver busca el código antes de chequear el binding, y
+  // un código inexistente debe ser indistinguible de uno retirado (D1/D4 en
+  // design.md de permanent-scheduled-rooms).
+  expect((await request.post(`${API_URL}/calls/xyz-abcd-efg`, { headers })).status()).toBe(404);
   expect((await request.post(`${API_URL}/calls/${code}`)).status()).toBe(401);
 });

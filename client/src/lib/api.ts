@@ -119,6 +119,12 @@ async function authFetch(path: string, init: RequestInit = {}): Promise<Response
   return fetch(`${API_URL}${path}`, withAuth(refreshedToken, init));
 }
 
+export interface CreateScheduleSlot {
+  dayOfWeek: number;
+  timeOfDay: string;
+  timezone: string;
+}
+
 export async function createRoom(name: string): Promise<Room> {
   const res = await authFetch('/rooms', { method: 'POST', body: JSON.stringify({ name }) });
   if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudo crear la reunión'));

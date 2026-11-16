@@ -390,6 +390,14 @@ const en: Record<string, string> = {
   Naranja: 'Orange',
   Verde: 'Green',
   Rosa: 'Pink',
+  // Eventos de sala (ruleta)
+  'Hacer evento': 'Start an event',
+  Ruleta: 'Roulette',
+  'Seleccionar todos': 'Select all',
+  'Vaciar selección': 'Clear selection',
+  'Todavía no hay nadie más en la sala.': 'There is no one else in the room yet.',
+  'Girar ruleta': 'Spin the wheel',
+  'ganó la ruleta': 'won the roulette',
 };
 
 export default en;

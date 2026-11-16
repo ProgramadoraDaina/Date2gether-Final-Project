@@ -97,7 +97,11 @@ test('solo el administrador de esa sala puede moderar y cada ticket consulta sol
   expect(
     (await decide(request, room.code, other.adminToken, pending.requestId, 'admitted')).status(),
   ).toBe(403);
-  expect((await status(request, other.code, pending)).status()).toBe(401);
+  // 404, no 401: la sala se resuelve y la solicitud se busca ANTES de
+  // verificar el ticket (D4 en design.md de permanent-scheduled-rooms) --
+  // el requestId de `pending` nunca existió en `other`, así que el lookup
+  // falla antes de llegar a comparar el ticket.
+  expect((await status(request, other.code, pending)).status()).toBe(404);
   expect((await status(request, room.code, { ...pending, ticket: second.ticket })).status()).toBe(
     401,
   );
