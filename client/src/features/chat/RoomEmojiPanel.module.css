@@ -26,7 +26,7 @@
   min-width: 0;
   padding: 8px 4px;
   border: 1px solid transparent;
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--color-text);
 }
@@ -48,8 +48,7 @@
   max-width: 100%;
   overflow: hidden;
   color: var(--color-text-muted);
-  font-family: ui-monospace, monospace;
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1.25;
   text-align: center;
   overflow-wrap: anywhere;
