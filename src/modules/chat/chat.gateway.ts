@@ -15,6 +15,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { RoomEventsService } from '../rooms/room-events.service';
+import { RoomResolverService } from '../rooms/room-resolver.service';
 import { RoomsService } from '../rooms/rooms.service';
 import { ChatService } from './chat.service';
 import { JoinRoomDto } from './dto/join-room.dto';
@@ -22,6 +23,13 @@ import { MusicAddTrackDto } from './dto/music-add-track.dto';
 import { MusicPositionDto } from './dto/music-position.dto';
 import { MusicTrackIndexDto } from './dto/music-track-index.dto';
 import { SendMessageDto } from './dto/send-message.dto';
+import { StartRoomEventDto, type RoomEventType } from './dto/start-room-event.dto';
+
+// "Hasta la próxima ruleta o evento" (lo que llegue primero: el próximo
+// startRoomEvent pisa este estado igual) además de un techo fijo en el
+// tiempo, para que el cartel de resultado no quede pegado para siempre en
+// una sala inactiva.
+const ROOM_EVENT_TTL_MS = 15 * 60 * 1000;
 
 // Solo GIFs servidos por GIPHY: evita que se inyecten imágenes de cualquier dominio.
 function isGiphyUrl(url: string): boolean {
@@ -87,6 +95,14 @@ interface MusicState {
   updatedAt: number;
 }
 
+interface RoomEventState {
+  type: RoomEventType;
+  participants: RoomUser[];
+  winner: RoomUser;
+  startedAt: number;
+  expiresAt: number;
+}
+
 @WebSocketGateway({
   namespace: '/rooms',
   cors: { origin: process.env.CORS_ORIGIN ?? '*' },
@@ -98,12 +114,14 @@ export class ChatGateway implements OnGatewayDisconnect {
 
   private readonly connectedUsers = new Map<string, ConnectedUser>();
   private readonly musicStateByRoom = new Map<string, MusicState>();
+  private readonly eventStateByRoom = new Map<string, RoomEventState>();
 
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleDb,
     private readonly roomsService: RoomsService,
     private readonly chatService: ChatService,
     private readonly roomEvents: RoomEventsService,
+    private readonly resolver: RoomResolverService,
   ) {
     this.roomEvents.onMemberRoleChanged(({ roomCode }) => {
       this.server.to(roomCode).emit('memberRoleChanged');
@@ -116,15 +134,23 @@ export class ChatGateway implements OnGatewayDisconnect {
   @UseGuards(WsJwtAuthGuard)
   @SubscribeMessage('joinRoom')
   async handleJoinRoom(@ConnectedSocket() client: Socket, @MessageBody() dto: JoinRoomDto) {
-    const room = await this.roomsService.findByCode(dto.code);
-    if (!room) {
-      client.emit('error', { message: `No existe una sala con el código "${dto.code}"` });
+    // Categoría E (D4): único handler con un código resolvable -- los otros
+    // 10 @SubscribeMessage ya operan sobre connectedUsers, que lleva roomId.
+    // Es un handler de Socket.io: se emite el evento 'error' existente en
+    // vez de dejar que la excepción (404/403) se propague como throw.
+    let room: Awaited<ReturnType<RoomResolverService['resolveJoinable']>>;
+    try {
+      room = await this.resolver.resolveJoinable(dto.code);
+    } catch (error) {
+      client.emit('error', { message: error instanceof Error ? error.message : 'Error' });
       return;
     }
 
     const { participant } = client.data as { participant: RoomParticipant };
-    if (!room.isActive) {
-      client.emit('error', { message: 'La sala está cerrada' });
+    try {
+      this.resolver.assertBound(participant, room);
+    } catch (error) {
+      client.emit('error', { message: error instanceof Error ? error.message : 'Error' });
       return;
     }
     if (this.connectedUsers.has(client.id)) this.removeClient(client);
@@ -150,6 +176,14 @@ export class ChatGateway implements OnGatewayDisconnect {
     // nadie eligió nada todavía no tiene sentido mandar un estado vacío.
     const musicState = this.musicStateByRoom.get(dto.code);
     if (musicState) client.emit('musicState', musicState);
+
+    // Mismo criterio que musicState: solo se sincroniza si todavía está
+    // vigente (ver ROOM_EVENT_TTL_MS). A diferencia de 'eventStarted' (que
+    // se emite en vivo a toda la sala cuando alguien gira la ruleta), este
+    // 'eventState' nunca dispara la animación de la ruleta en el cliente que
+    // recién se une: solo le muestra el cartel de resultado si ya corresponde.
+    const eventState = this.eventStateByRoom.get(dto.code);
+    if (eventState && eventState.expiresAt > Date.now()) client.emit('eventState', eventState);
 
     client.to(dto.code).emit('userJoined', presence);
   }
@@ -325,6 +359,43 @@ export class ChatGateway implements OnGatewayDisconnect {
     }));
   }
 
+  @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage('startRoomEvent')
+  async handleStartRoomEvent(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() dto: StartRoomEventDto,
+  ) {
+    const user = await this.requireEventModerator(client);
+    if (!user) return;
+
+    // No se confía en la lista que manda el cliente más que para filtrar:
+    // el nombre y la propia pertenencia a la sala salen de connectedUsers,
+    // autoritativo del lado del servidor (ver comentario en el DTO). Si
+    // alguien se fue entre que se armó la selección y se giró, queda afuera.
+    const roster = this.getUsersInRoom(user.roomCode);
+    const participants = roster.filter((candidate) =>
+      dto.participantIds.includes(candidate.participantId),
+    );
+    if (participants.length === 0) {
+      client.emit('error', {
+        message: 'Nadie de la lista elegida sigue en la sala',
+      });
+      return;
+    }
+
+    const winner = participants[Math.floor(Math.random() * participants.length)];
+    const now = Date.now();
+    const state: RoomEventState = {
+      type: dto.type,
+      participants,
+      winner,
+      startedAt: now,
+      expiresAt: now + ROOM_EVENT_TTL_MS,
+    };
+    this.eventStateByRoom.set(user.roomCode, state);
+    this.server.to(user.roomCode).emit('eventStarted', state);
+  }
+
   handleDisconnect(client: Socket) {
     this.removeClient(client);
   }
@@ -341,11 +412,37 @@ export class ChatGateway implements OnGatewayDisconnect {
       userId: user.userId,
     });
 
-    // Los códigos de sala son efímeros: sin esto el mapa de música crecería
-    // sin límite a medida que se van creando y vaciando salas nuevas.
+    // Los códigos de sala son efímeros: sin esto los mapas de música/eventos
+    // crecerían sin límite a medida que se van creando y vaciando salas nuevas.
     if (this.getUsersInRoom(user.roomCode).length === 0) {
       this.musicStateByRoom.delete(user.roomCode);
+      this.eventStateByRoom.delete(user.roomCode);
     }
+  }
+
+  // Igual que requireMusicAdmin, pero admite también a 'colaborador': a
+  // diferencia de la música (un solo admin la controla), armar un evento es
+  // una acción de moderación más liviana, la misma vara que ya se usa para
+  // gestionar los emojis de la sala (ver RoomEmojisDialog del lado del
+  // cliente, canManage = administrador || colaborador).
+  private async requireEventModerator(client: Socket): Promise<ConnectedUser | undefined> {
+    const user = this.connectedUsers.get(client.id);
+    if (!user) {
+      client.emit('error', { message: 'Tenés que unirte a una sala antes de armar un evento' });
+      return undefined;
+    }
+    if (!user.userId) {
+      client.emit('error', { message: 'Necesitás una cuenta para armar un evento en la sala' });
+      return undefined;
+    }
+    const role = await this.roomsService.getMemberRole(user.roomCode, user.userId);
+    if (role !== 'administrador' && role !== 'colaborador') {
+      client.emit('error', {
+        message: 'Solo un administrador o colaborador de la sala puede armar un evento',
+      });
+      return undefined;
+    }
+    return user;
   }
 
   // Devuelve al usuario conectado si es administrador de la sala; si no,

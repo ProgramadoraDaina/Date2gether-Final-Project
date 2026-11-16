@@ -1,8 +1,10 @@
 import { describe, expect, it, jest } from '@jest/globals';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import type { DrizzleDb } from '../../db/drizzle.module';
 import { WsJwtAuthGuard } from '../auth/guards/ws-jwt-auth.guard';
 import type { RoomParticipant } from '../auth/room-access.service';
 import type { RoomEventsService } from '../rooms/room-events.service';
+import type { RoomResolverService } from '../rooms/room-resolver.service';
 import type { RoomsService } from '../rooms/rooms.service';
 import type { ChatService } from './chat.service';
 import { ChatGateway } from './chat.gateway';
@@ -29,9 +31,22 @@ describe('ChatGateway', () => {
 
     const room = { id: 'room-1', code: 'abc-defg-hij', isActive: true };
     const roomsService = {
-      findByCode: jest.fn<RoomsService['findByCode']>().mockResolvedValue(room as never),
       getMemberRole: getMemberRole ?? jest.fn<RoomsService['getMemberRole']>(),
     } as unknown as RoomsService;
+    // resolveJoinable/assertBound replican la lógica real (D4, Categoría E):
+    // 404 si el código no resuelve (chain().resolveJoinable configurable por
+    // test), 403 si el roomId del participante no coincide con el de la sala.
+    const resolveJoinable = jest
+      .fn<RoomResolverService['resolveJoinable']>()
+      .mockResolvedValue(room as never);
+    const assertBound = jest
+      .fn<RoomResolverService['assertBound']>()
+      .mockImplementation((participant, resolvedRoom) => {
+        if (participant.roomId !== resolvedRoom.id) {
+          throw new ForbiddenException('El acceso pertenece a otra sala');
+        }
+      });
+    const resolver = { resolveJoinable, assertBound } as unknown as RoomResolverService;
     const createMessage = jest.fn<ChatService['createMessage']>();
     const chatService = {
       getHistory: jest.fn<ChatService['getHistory']>().mockResolvedValue([]),
@@ -42,11 +57,22 @@ describe('ChatGateway', () => {
       onRoomEmojisChanged: jest.fn(),
     } as unknown as RoomEventsService;
 
-    const gateway = new ChatGateway(db, roomsService, chatService, roomEvents);
+    const gateway = new ChatGateway(db, roomsService, chatService, roomEvents, resolver);
     const serverEmit = jest.fn();
     const serverTo = jest.fn().mockReturnValue({ emit: serverEmit });
     gateway.server = { to: serverTo } as unknown as ChatGateway['server'];
-    return { gateway, db, select, createMessage, chatService, roomsService, serverTo, serverEmit };
+    return {
+      gateway,
+      db,
+      select,
+      createMessage,
+      chatService,
+      roomsService,
+      resolveJoinable,
+      assertBound,
+      serverTo,
+      serverEmit,
+    };
   }
 
   function createSocket(participant: RoomParticipant, id = 'socket-1') {
@@ -62,10 +88,61 @@ describe('ChatGateway', () => {
     };
   }
 
+  describe('handleJoinRoom (Categoría E, D4: resolver.resolveJoinable + assertBound)', () => {
+    it('código retirado/vencido/inexistente: emite el evento error existente, no lanza', async () => {
+      const { gateway, resolveJoinable } = createGateway();
+      resolveJoinable.mockRejectedValueOnce(
+        new NotFoundException('No existe una sala con el código "abc-defg-hij"'),
+      );
+      const participant: RoomParticipant = {
+        kind: 'room-participant',
+        sub: 'participant-x',
+        roomId: 'room-1',
+        roomCode: 'abc-defg-hij',
+        name: 'Deb',
+      };
+      const client = createSocket(participant);
+
+      await gateway.handleJoinRoom(client as never, { code: 'abc-defg-hij' });
+
+      expect(client.emit).toHaveBeenCalledWith('error', {
+        message: 'No existe una sala con el código "abc-defg-hij"',
+      });
+      expect(client.join).not.toHaveBeenCalled();
+    });
+
+    it('[Flujo 2, design.md] token de R1 presentado contra R2 tras reciclar el código: assertBound rechaza, emite error en vez de unir', async () => {
+      const { gateway, resolveJoinable } = createGateway();
+      // El código "abc-defg-hij" ahora resuelve a R2 (id distinto); el
+      // participante sigue siendo el de R1.
+      resolveJoinable.mockResolvedValueOnce({
+        id: 'room-2-recycled',
+        code: 'abc-defg-hij',
+        isActive: true,
+      } as never);
+      const participant: RoomParticipant = {
+        kind: 'room-participant',
+        sub: 'participant-y',
+        roomId: 'room-1',
+        roomCode: 'abc-defg-hij',
+        name: 'Edu',
+      };
+      const client = createSocket(participant);
+
+      await gateway.handleJoinRoom(client as never, { code: 'abc-defg-hij' });
+
+      expect(client.emit).toHaveBeenCalledWith('error', {
+        message: 'El acceso pertenece a otra sala',
+      });
+      expect(client.join).not.toHaveBeenCalled();
+    });
+  });
+
   it('incluye el nameColor guardado en la presencia de una cuenta registrada', async () => {
     const { gateway } = createGateway({ nameColor: 'teal' });
     const participant: RoomParticipant = {
       kind: 'room-participant',
+      roomId: 'room-1',
       sub: 'participant-1',
       roomCode: 'abc-defg-hij',
       name: 'Ana',
@@ -87,6 +164,7 @@ describe('ChatGateway', () => {
     const { gateway, select } = createGateway();
     const participant: RoomParticipant = {
       kind: 'room-participant',
+      roomId: 'room-1',
       sub: 'participant-2',
       roomCode: 'abc-defg-hij',
       name: 'Beto',
@@ -108,6 +186,7 @@ describe('ChatGateway', () => {
     const { gateway, createMessage } = createGateway();
     const participant: RoomParticipant = {
       kind: 'room-participant',
+      roomId: 'room-1',
       sub: 'participant-3',
       roomCode: 'abc-defg-hij',
       name: 'Caro',
@@ -127,6 +206,7 @@ describe('ChatGateway', () => {
   describe('música ambiental', () => {
     const admin: RoomParticipant = {
       kind: 'room-participant',
+      roomId: 'room-1',
       sub: 'participant-admin',
       roomCode: 'abc-defg-hij',
       name: 'Ana',
@@ -134,6 +214,7 @@ describe('ChatGateway', () => {
     };
     const guest: RoomParticipant = {
       kind: 'room-participant',
+      roomId: 'room-1',
       sub: 'participant-guest',
       roomCode: 'abc-defg-hij',
       name: 'Invitado',
@@ -465,6 +546,155 @@ describe('ChatGateway', () => {
       const { client } = await joinedGuest();
 
       expect(client.emit).not.toHaveBeenCalledWith('musicState', expect.anything());
+    });
+  });
+
+  describe('evento de sala (ruleta)', () => {
+    const admin: RoomParticipant = {
+      kind: 'room-participant',
+      roomId: 'room-1',
+      sub: 'participant-admin',
+      roomCode: 'abc-defg-hij',
+      name: 'Ana',
+      userId: 'user-admin',
+    };
+    const collaborator: RoomParticipant = {
+      kind: 'room-participant',
+      roomId: 'room-1',
+      sub: 'participant-collab',
+      roomCode: 'abc-defg-hij',
+      name: 'Caro',
+      userId: 'user-collab',
+    };
+    const guest: RoomParticipant = {
+      kind: 'room-participant',
+      roomId: 'room-1',
+      sub: 'participant-guest',
+      roomCode: 'abc-defg-hij',
+      name: 'Invitado',
+    };
+
+    async function joinedAs(
+      participant: RoomParticipant,
+      role: 'administrador' | 'colaborador' | 'participante',
+      socketId = 'socket-1',
+    ) {
+      const getMemberRole = jest.fn<RoomsService['getMemberRole']>().mockResolvedValue(role);
+      const setup = createGateway(undefined, getMemberRole);
+      const client = createSocket(participant, socketId);
+      await setup.gateway.handleJoinRoom(client as never, { code: 'abc-defg-hij' });
+      return { ...setup, client };
+    }
+
+    it('rechaza startRoomEvent de un participante sin rol de moderación', async () => {
+      const { gateway, client, serverEmit } = await joinedAs(admin, 'participante');
+
+      await gateway.handleStartRoomEvent(client as never, {
+        type: 'roulette',
+        participantIds: ['participant-admin'],
+      });
+
+      expect(client.emit).toHaveBeenCalledWith('error', {
+        message: 'Solo un administrador o colaborador de la sala puede armar un evento',
+      });
+      expect(serverEmit).not.toHaveBeenCalled();
+    });
+
+    it('rechaza startRoomEvent de un invitado sin cuenta, aunque esté en la sala', async () => {
+      const setup = createGateway();
+      const client = createSocket(guest);
+      await setup.gateway.handleJoinRoom(client as never, { code: 'abc-defg-hij' });
+
+      await setup.gateway.handleStartRoomEvent(client as never, {
+        type: 'roulette',
+        participantIds: ['participant-guest'],
+      });
+
+      expect(client.emit).toHaveBeenCalledWith('error', {
+        message: 'Necesitás una cuenta para armar un evento en la sala',
+      });
+      expect(setup.serverEmit).not.toHaveBeenCalled();
+    });
+
+    it('un colaborador puede iniciar una ruleta y se difunde a toda la sala con un ganador de la lista pedida', async () => {
+      const { gateway, client, serverTo, serverEmit } = await joinedAs(collaborator, 'colaborador');
+      const guestClient = createSocket(guest, 'socket-guest');
+      await gateway.handleJoinRoom(guestClient as never, { code: 'abc-defg-hij' });
+
+      await gateway.handleStartRoomEvent(client as never, {
+        type: 'roulette',
+        participantIds: ['participant-collab', 'participant-guest'],
+      });
+
+      expect(serverTo).toHaveBeenCalledWith('abc-defg-hij');
+      expect(serverEmit).toHaveBeenCalledWith(
+        'eventStarted',
+        expect.objectContaining({
+          type: 'roulette',
+          participants: [
+            {
+              participantId: 'participant-collab',
+              userName: 'Caro',
+              userId: 'user-collab',
+              nameColor: undefined,
+            },
+            {
+              participantId: 'participant-guest',
+              userName: 'Invitado',
+              userId: undefined,
+              nameColor: undefined,
+            },
+          ],
+        }),
+      );
+      const [, state] = serverEmit.mock.calls[0] as [string, { winner: { participantId: string } }];
+      expect(['participant-collab', 'participant-guest']).toContain(state.winner.participantId);
+    });
+
+    it('filtra participantIds de gente que ya no está en la sala; si no queda nadie, error y no difunde', async () => {
+      const { gateway, client, serverEmit } = await joinedAs(admin, 'administrador');
+
+      await gateway.handleStartRoomEvent(client as never, {
+        type: 'roulette',
+        participantIds: ['alguien-que-ya-se-fue'],
+      });
+
+      expect(client.emit).toHaveBeenCalledWith('error', {
+        message: 'Nadie de la lista elegida sigue en la sala',
+      });
+      expect(serverEmit).not.toHaveBeenCalled();
+    });
+
+    it('a quien se une mientras el resultado sigue vigente, se le manda el eventState (sin animar)', async () => {
+      const { gateway, client } = await joinedAs(admin, 'administrador');
+      await gateway.handleStartRoomEvent(client as never, {
+        type: 'roulette',
+        participantIds: ['participant-admin'],
+      });
+
+      const lateClient = createSocket(guest, 'socket-guest');
+      await gateway.handleJoinRoom(lateClient as never, { code: 'abc-defg-hij' });
+
+      expect(lateClient.emit).toHaveBeenCalledWith(
+        'eventState',
+        expect.objectContaining({ type: 'roulette' }),
+      );
+    });
+
+    it('no manda eventState a quien se une si el resultado ya venció (15 minutos)', async () => {
+      const { gateway, client } = await joinedAs(admin, 'administrador');
+      await gateway.handleStartRoomEvent(client as never, {
+        type: 'roulette',
+        participantIds: ['participant-admin'],
+      });
+
+      const realNow = Date.now;
+      jest.spyOn(Date, 'now').mockImplementation(() => realNow() + 15 * 60 * 1000 + 1);
+      const lateClient = createSocket(guest, 'socket-guest');
+      await gateway.handleJoinRoom(lateClient as never, { code: 'abc-defg-hij' });
+      jest.restoreAllMocks();
+
+      expect(lateClient.emit).not.toHaveBeenCalledWith('eventState', expect.anything());
     });
   });
 });

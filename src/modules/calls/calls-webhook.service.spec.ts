@@ -9,7 +9,6 @@ import {
   callParticipantIdentities,
   callSessionParticipants,
   callSessions,
-  rooms,
 } from '../../db/schema';
 import { chain } from '../../test-support/fake-drizzle';
 import type { CallSessionCloseService } from './call-session-close.service';
@@ -59,7 +58,7 @@ function createDbMock() {
   // no revienta.
   const transaction = jest
     .fn<(cb: (tx: unknown) => unknown) => Promise<unknown>>()
-    .mockImplementation(async (cb) =>
+    .mockImplementation((cb) =>
       cb({
         select: jest.fn().mockReturnValue(chain([])),
         insert: jest.fn().mockReturnValue(chain(undefined)),
@@ -78,13 +77,16 @@ function createMaterializationTxMock(opts: {
     trackSource: string | null;
     occurredAt: Date;
   }>;
-  identities?: Array<{ livekitIdentity: string; userId: string | null; displayName: string }>;
-  room?: { id: string } | null;
+  identities?: Array<{
+    livekitIdentity: string;
+    userId: string | null;
+    displayName: string;
+    roomId?: string | null;
+  }>;
   claimed?: { id: string }[];
 }) {
   const sessionEvents = opts.sessionEvents ?? [];
   const identities = opts.identities ?? [];
-  const room = opts.room === undefined ? { id: 'room-1' } : opts.room;
   const claimed = opts.claimed ?? [{ id: 'session-1' }];
 
   const participantsInsertValues = jest
@@ -106,7 +108,6 @@ function createMaterializationTxMock(opts: {
     from: jest.fn().mockImplementation((table: unknown) => {
       if (table === callEvents) return chain(sessionEvents);
       if (table === callParticipantIdentities) return chain(identities);
-      if (table === rooms) return chain(room ? [room] : []);
       return chain([]);
     }),
   }));
@@ -157,9 +158,7 @@ describe('CallsWebhookService', () => {
   });
 
   it('rechaza con 400 sin tocar la base ni la verificación de firma si falta rawBody', async () => {
-    await expect(service.handle(undefined, 'any-sig')).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(service.handle(undefined, 'any-sig')).rejects.toBeInstanceOf(BadRequestException);
     expect(receive).not.toHaveBeenCalled();
     expect(db.insert).not.toHaveBeenCalled();
   });
@@ -236,9 +235,7 @@ describe('CallsWebhookService', () => {
 
     await service.handle(Buffer.from('{}'), 'valid-sig');
 
-    expect(db.values).toHaveBeenCalledWith(
-      expect.objectContaining({ trackSource: 'microphone' }),
-    );
+    expect(db.values).toHaveBeenCalledWith(expect.objectContaining({ trackSource: 'microphone' }));
   });
 
   it('dos sesiones de LiveKit distintas (mismo roomCode, distinto room.sid) guardan su propio livekit_room_sid sin mezclarse', async () => {
@@ -301,7 +298,7 @@ describe('CallsWebhookService: materialización en room_finished', () => {
     ];
     const identities = [{ livekitIdentity: 'id-a', userId: 'user-a', displayName: 'Ana' }];
     const tx = createMaterializationTxMock({ sessionEvents, identities });
-    db.transaction.mockImplementation(async (cb: (tx: unknown) => unknown) => cb(tx));
+    db.transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(tx));
     receive.mockResolvedValue(buildEvent({ event: 'room_finished' }));
 
     await service.handle(Buffer.from('{}'), 'valid-sig');
@@ -324,7 +321,7 @@ describe('CallsWebhookService: materialización en room_finished', () => {
 
   it('room_finished cancela cualquier cierre forzado agendado para ese sid (Flujo 2, design.md)', async () => {
     const tx = createMaterializationTxMock({});
-    db.transaction.mockImplementation(async (cb: (tx: unknown) => unknown) => cb(tx));
+    db.transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(tx));
     receive.mockResolvedValue(
       buildEvent({ event: 'room_finished', room: { sid: 'RM_session-A', name: 'abc-defg-hij' } }),
     );
@@ -336,13 +333,54 @@ describe('CallsWebhookService: materialización en room_finished', () => {
 
   it('reentrega de room_finished (compare-and-set sin filas afectadas) no duplica el resumen (spec timeline/resiliencia-parcial)', async () => {
     const tx = createMaterializationTxMock({ claimed: [] });
-    db.transaction.mockImplementation(async (cb: (tx: unknown) => unknown) => cb(tx));
+    db.transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(tx));
     receive.mockResolvedValue(buildEvent({ event: 'room_finished' }));
 
     await service.handle(Buffer.from('{}'), 'valid-sig');
 
     expect(tx.updateWhere).toHaveBeenCalled();
     expect(tx.participantsInsertValues).not.toHaveBeenCalled();
+  });
+
+  it('resuelve callSessions.roomId desde call_participant_identities, no desde una búsqueda por rooms.code (D4-D)', async () => {
+    const sessionEvents = [
+      {
+        eventType: 'participant_joined',
+        livekitIdentity: 'id-a',
+        trackSource: null,
+        occurredAt: new Date('2026-11-06T10:00:00Z'),
+      },
+    ];
+    const identities = [
+      { livekitIdentity: 'id-a', userId: 'user-a', displayName: 'Ana', roomId: 'room-real' },
+    ];
+    const tx = createMaterializationTxMock({ sessionEvents, identities });
+    db.transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(tx));
+    receive.mockResolvedValue(buildEvent({ event: 'room_finished' }));
+
+    await service.handle(Buffer.from('{}'), 'valid-sig');
+
+    expect(tx.sessionInsertValues).toHaveBeenCalledWith(
+      expect.objectContaining({ roomId: 'room-real' }),
+    );
+  });
+
+  it('cuando ningún identity conocido correlaciona, callSessions.roomId queda en null (columna ya nullable)', async () => {
+    const sessionEvents = [
+      {
+        eventType: 'participant_joined',
+        livekitIdentity: 'id-desconocido',
+        trackSource: null,
+        occurredAt: new Date('2026-11-06T10:00:00Z'),
+      },
+    ];
+    const tx = createMaterializationTxMock({ sessionEvents, identities: [] });
+    db.transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(tx));
+    receive.mockResolvedValue(buildEvent({ event: 'room_finished' }));
+
+    await service.handle(Buffer.from('{}'), 'valid-sig');
+
+    expect(tx.sessionInsertValues).toHaveBeenCalledWith(expect.objectContaining({ roomId: null }));
   });
 
   it('regresión: materializar la sesión no toca call_history (spec timeline/independencia-callHistory)', async () => {
@@ -362,7 +400,7 @@ describe('CallsWebhookService: materialización en room_finished', () => {
     ];
     const identities = [{ livekitIdentity: 'id-a', userId: 'user-a', displayName: 'Ana' }];
     const tx = createMaterializationTxMock({ sessionEvents, identities });
-    db.transaction.mockImplementation(async (cb: (tx: unknown) => unknown) => cb(tx));
+    db.transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(tx));
     receive.mockResolvedValue(buildEvent({ event: 'room_finished' }));
 
     await service.handle(Buffer.from('{}'), 'valid-sig');

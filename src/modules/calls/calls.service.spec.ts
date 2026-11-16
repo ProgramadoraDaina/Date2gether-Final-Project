@@ -3,18 +3,25 @@ import { ConfigService } from '@nestjs/config';
 import { ForbiddenException, ServiceUnavailableException } from '@nestjs/common';
 import { RoomServiceClient, TokenVerifier, type ParticipantInfo } from 'livekit-server-sdk';
 import type { DrizzleDb } from '../../db/drizzle.module';
-import { callParticipantIdentities, roomMembers, type Room } from '../../db/schema';
+import {
+  callParticipantIdentities,
+  callSessionParticipants,
+  roomMembers,
+  type Room,
+} from '../../db/schema';
 import type { RoomParticipant } from '../auth/room-access.service';
+import type { RoomResolverService } from '../rooms/room-resolver.service';
 import { RoomsService } from '../rooms/rooms.service';
 import { CallsService } from './calls.service';
 
 const participant: RoomParticipant = {
   kind: 'room-participant',
   sub: 'guest-1',
+  roomId: 'room-1',
   roomCode: 'abc-defg-hij',
   name: 'Ana',
 };
-const room = { id: 'room-1', code: participant.roomCode, isActive: true } as Room;
+const room = { id: participant.roomId, code: participant.roomCode, isActive: true } as Room;
 const secret = 'test-secret-at-least-32-characters-long';
 const config = {
   LIVEKIT_URL: 'wss://media.example.com',
@@ -43,14 +50,36 @@ function createDbMock() {
   );
 
   // select(...).from(callHistory).innerJoin(rooms, ...).where(...).orderBy(...).limit(...)
-  // — cadena de listHistory(), sin cambios por este PR.
+  // — primera mitad de listHistory(): ahora selecciona roomId también.
   const limit = jest
-    .fn<(n: number) => Promise<{ roomCode: string; roomName: string; startedAt: Date }[]>>()
+    .fn<
+      (
+        n: number,
+      ) => Promise<{ roomId: string; roomCode: string; roomName: string; startedAt: Date }[]>
+    >()
     .mockResolvedValue([]);
   const orderBy = jest.fn().mockReturnValue({ limit });
-  const historyWhere = jest.fn().mockReturnValue({ orderBy });
+  const historyWhere = jest.fn().mockReturnValue({ orderBy, limit });
   const innerJoin = jest.fn().mockReturnValue({ where: historyWhere });
-  const historyFrom = jest.fn().mockReturnValue({ innerJoin });
+  // getRoomNotesForHistory() post-fix (D4-C): select({roomId}).from(callHistory)
+  // .where(...).limit(1) -- SIN join a rooms, un solo identificador.
+  const notesLimit = jest.fn<() => Promise<{ roomId: string }[]>>().mockResolvedValue([]);
+  const notesWhere = jest.fn().mockReturnValue({ limit: notesLimit });
+  const historyFrom = jest.fn().mockReturnValue({ innerJoin, where: notesWhere });
+
+  // select(...).from(callSessionParticipants).innerJoin(callSessions, ...).where(...)
+  // — segunda mitad de listHistory(): candidatos de sesión materializada
+  // para correlacionar por sala + cercanía temporal. Sin .orderBy/.limit,
+  // a diferencia de la cadena de arriba.
+  const participantSessionsWhere = jest
+    .fn<() => Promise<{ sessionId: string; firstJoinedAt: Date; roomId: string | null }[]>>()
+    .mockResolvedValue([]);
+  const participantSessionsInnerJoin = jest
+    .fn()
+    .mockReturnValue({ where: participantSessionsWhere });
+  const participantSessionsFrom = jest
+    .fn()
+    .mockReturnValue({ innerJoin: participantSessionsInnerJoin });
 
   // select({role}).from(roomMembers).where(...).limit(1) — resolveLocalRole().
   // Default: ninguna fila (invitado, o cuenta sin rol admin/colaborador
@@ -74,6 +103,7 @@ function createDbMock() {
   const from = jest.fn((table: unknown) => {
     if (table === roomMembers) return roleFrom();
     if (table === callParticipantIdentities) return adminFrom();
+    if (table === callSessionParticipants) return participantSessionsFrom();
     return historyFrom();
   });
   const select = jest.fn().mockReturnValue({ from });
@@ -86,15 +116,19 @@ function createDbMock() {
     from,
     innerJoin,
     where: historyWhere,
+    notesWhere,
+    notesLimit,
     orderBy,
     limit,
     roleLimit,
     adminLimit,
+    participantSessionsWhere,
   };
 }
 
 describe('CallsService: LiveKit', () => {
   let rooms: { getByCodeOrThrow: jest.Mock<RoomsService['getByCodeOrThrow']> };
+  let resolver: { touchEntry: ReturnType<typeof jest.fn> };
   let createRoom: jest.SpiedFunction<RoomServiceClient['createRoom']>;
   let db: ReturnType<typeof createDbMock>;
   let service: CallsService;
@@ -102,6 +136,7 @@ describe('CallsService: LiveKit', () => {
     rooms = {
       getByCodeOrThrow: jest.fn<RoomsService['getByCodeOrThrow']>().mockResolvedValue(room),
     };
+    resolver = { touchEntry: jest.fn().mockResolvedValue(undefined) };
     createRoom = jest
       .spyOn(RoomServiceClient.prototype, 'createRoom')
       .mockResolvedValue({} as Awaited<ReturnType<RoomServiceClient['createRoom']>>);
@@ -118,6 +153,7 @@ describe('CallsService: LiveKit', () => {
       rooms as unknown as RoomsService,
       new ConfigService(config),
       db as unknown as DrizzleDb,
+      resolver as unknown as RoomResolverService,
     );
   });
   afterEach(() => {
@@ -142,6 +178,11 @@ describe('CallsService: LiveKit', () => {
     expect(JSON.stringify(session)).not.toContain('http://localhost:7880');
   });
 
+  it('[D5 2.19] join() marca la entrada (touchEntry) -- es uno de los tres sitios de "entrada"', async () => {
+    await service.join(room.code, participant);
+    expect(resolver.touchEntry).toHaveBeenCalledWith(room.id);
+  });
+
   it('configura el cupo en LiveKit y el cierre por inactividad', async () => {
     await service.join(room.code, participant);
     expect(createRoom).toHaveBeenCalledWith({
@@ -164,15 +205,27 @@ describe('CallsService: LiveKit', () => {
     );
   });
 
-  it('rechaza un pase emitido para otra sala, sin llegar a contactar a LiveKit', async () => {
+  it('rechaza un pase emitido para otra sala, sin llegar a contactar a LiveKit (D4: por roomId, el código puede reciclarse)', async () => {
+    rooms.getByCodeOrThrow.mockResolvedValue({ ...room, id: 'room-2', code: 'other-room' });
     await expect(service.join('other-room', participant)).rejects.toBeInstanceOf(
       ForbiddenException,
     );
     expect(createRoom).not.toHaveBeenCalled();
   });
 
-  it('rechaza una sala cerrada antes de contactar LiveKit', async () => {
-    rooms.getByCodeOrThrow.mockResolvedValue({ ...room, isActive: false });
+  it('[Flujo 2, design.md] un token de R1 presentado contra R2 tras reciclar el código se rechaza por roomId, no por coincidencia de código', async () => {
+    // El código "abc-defg-hij" ahora resuelve a R2 (id distinto): el token
+    // del participante sigue siendo el de R1. La coincidencia de CÓDIGO ya
+    // no prueba nada -- solo el roomId importa.
+    rooms.getByCodeOrThrow.mockResolvedValue({ ...room, id: 'room-2-recycled' });
+    await expect(service.join(room.code, participant)).rejects.toThrow(
+      'El acceso pertenece a otra sala',
+    );
+    expect(createRoom).not.toHaveBeenCalled();
+  });
+
+  it('rechaza una sala cerrada antes de contactar LiveKit (el 403 ahora lo lanza RoomsService/el resolver, no join())', async () => {
+    rooms.getByCodeOrThrow.mockRejectedValue(new ForbiddenException('La sala está cerrada'));
     await expect(service.join(room.code, participant)).rejects.toThrow('La sala está cerrada');
     expect(createRoom).not.toHaveBeenCalled();
   });
@@ -182,6 +235,7 @@ describe('CallsService: LiveKit', () => {
       rooms as unknown as RoomsService,
       new ConfigService({}),
       db as unknown as DrizzleDb,
+      resolver as unknown as RoomResolverService,
     );
     await expect(service.join(room.code, participant)).rejects.toThrow(
       'Las llamadas todavía no están configuradas',
@@ -194,6 +248,7 @@ describe('CallsService: LiveKit', () => {
       rooms as unknown as RoomsService,
       new ConfigService({ ...config, MAX_ROOM_PARTICIPANTS: '0' }),
       db as unknown as DrizzleDb,
+      resolver as unknown as RoomResolverService,
     );
     await expect(service.join(room.code, participant)).rejects.toBeInstanceOf(
       ServiceUnavailableException,
@@ -231,12 +286,14 @@ describe('CallsService: LiveKit', () => {
 
 describe('CallsService: correlación de identidad', () => {
   let rooms: { getByCodeOrThrow: jest.Mock<RoomsService['getByCodeOrThrow']> };
+  let resolver: { touchEntry: ReturnType<typeof jest.fn> };
   let db: ReturnType<typeof createDbMock>;
   let service: CallsService;
   beforeEach(() => {
     rooms = {
       getByCodeOrThrow: jest.fn<RoomsService['getByCodeOrThrow']>().mockResolvedValue(room),
     };
+    resolver = { touchEntry: jest.fn().mockResolvedValue(undefined) };
     jest
       .spyOn(RoomServiceClient.prototype, 'createRoom')
       .mockResolvedValue({} as Awaited<ReturnType<RoomServiceClient['createRoom']>>);
@@ -251,6 +308,7 @@ describe('CallsService: correlación de identidad', () => {
       rooms as unknown as RoomsService,
       new ConfigService(config),
       db as unknown as DrizzleDb,
+      resolver as unknown as RoomResolverService,
     );
   });
   afterEach(() => {
@@ -347,6 +405,7 @@ describe('CallsService: correlación de identidad', () => {
 
 describe('CallsService: gate de administrador (host-gate)', () => {
   let rooms: { getByCodeOrThrow: jest.Mock<RoomsService['getByCodeOrThrow']> };
+  let resolver: { touchEntry: ReturnType<typeof jest.fn> };
   let db: ReturnType<typeof createDbMock>;
   let service: CallsService;
   let listParticipants: jest.SpiedFunction<RoomServiceClient['listParticipants']>;
@@ -355,6 +414,7 @@ describe('CallsService: gate de administrador (host-gate)', () => {
     rooms = {
       getByCodeOrThrow: jest.fn<RoomsService['getByCodeOrThrow']>().mockResolvedValue(room),
     };
+    resolver = { touchEntry: jest.fn().mockResolvedValue(undefined) };
     jest
       .spyOn(RoomServiceClient.prototype, 'createRoom')
       .mockResolvedValue({} as Awaited<ReturnType<RoomServiceClient['createRoom']>>);
@@ -364,6 +424,7 @@ describe('CallsService: gate de administrador (host-gate)', () => {
       rooms as unknown as RoomsService,
       new ConfigService(config),
       db as unknown as DrizzleDb,
+      resolver as unknown as RoomResolverService,
     );
   });
   afterEach(() => {
@@ -448,40 +509,154 @@ describe('CallsService: gate de administrador (host-gate)', () => {
 });
 
 describe('CallsService: historial', () => {
-  let rooms: { getByCodeOrThrow: jest.Mock<RoomsService['getByCodeOrThrow']> };
+  let rooms: {
+    getByCodeOrThrow: jest.Mock<RoomsService['getByCodeOrThrow']>;
+    getRoomNotesById: jest.Mock<RoomsService['getRoomNotesById']>;
+  };
+  let resolver: { touchEntry: ReturnType<typeof jest.fn> };
   let db: ReturnType<typeof createDbMock>;
   let service: CallsService;
 
   beforeEach(() => {
     rooms = {
       getByCodeOrThrow: jest.fn<RoomsService['getByCodeOrThrow']>().mockResolvedValue(room),
+      getRoomNotesById: jest.fn<RoomsService['getRoomNotesById']>(),
     };
+    resolver = { touchEntry: jest.fn().mockResolvedValue(undefined) };
     db = createDbMock();
     service = new CallsService(
       rooms as unknown as RoomsService,
       new ConfigService(config),
       db as unknown as DrizzleDb,
+      resolver as unknown as RoomResolverService,
     );
+  });
+
+  describe('getRoomNotesForHistory (D4-C: un solo identificador autoriza y recupera)', () => {
+    it('devuelve las notas de la sala por roomId, sin resolver ni volver a resolver un código', async () => {
+      db.notesLimit.mockResolvedValue([{ roomId: 'room-1' }]);
+      const notes = { roomId: 'room-1', content: 'hola', revision: 2, updatedAt: new Date() };
+      rooms.getRoomNotesById.mockResolvedValue(notes);
+
+      const result = await service.getRoomNotesForHistory('user-1', 'room-1');
+
+      expect(result).toBe(notes);
+      // Estructuralmente imposible de romper: no hay innerJoin a `rooms` ni
+      // una segunda resolución de código -- la vulnerabilidad original
+      // (calls.service.ts:344-353 con rooms.code) ya no puede reaparecer
+      // porque getRoomNotesById toma el roomId ya autorizado, no un código.
+      expect(db.innerJoin).not.toHaveBeenCalled();
+      expect(rooms.getRoomNotesById).toHaveBeenCalledWith('room-1');
+    });
+
+    it('rechaza si el usuario nunca estuvo en esa sala (por roomId)', async () => {
+      db.notesLimit.mockResolvedValue([]);
+
+      await expect(service.getRoomNotesForHistory('user-1', 'room-1')).rejects.toThrow(
+        'No tenés historial en esta sala',
+      );
+      expect(rooms.getRoomNotesById).not.toHaveBeenCalled();
+    });
   });
 
   it('lista el historial del usuario más reciente primero, limitado y con roomCode/roomName', async () => {
     const rows = [
-      { roomCode: 'abc-defg-hij', roomName: 'Reunión 1', startedAt: new Date('2026-01-02') },
-      { roomCode: 'xyz-uvwt-rst', roomName: 'Reunión 2', startedAt: new Date('2026-01-01') },
+      {
+        roomId: 'room-1',
+        roomCode: 'abc-defg-hij',
+        roomName: 'Reunión 1',
+        startedAt: new Date('2026-01-02'),
+      },
+      {
+        roomId: 'room-2',
+        roomCode: 'xyz-uvwt-rst',
+        roomName: 'Reunión 2',
+        startedAt: new Date('2026-01-01'),
+      },
     ];
     db.limit.mockResolvedValue(rows);
 
     const result = await service.listHistory('user-1');
 
-    expect(result).toEqual(rows);
+    // Sin sesiones materializadas que correlacionar (mock por defecto: []),
+    // cada intento queda con sessionId: null. roomId pasa a exponerse (ruta
+    // de notas de historial D4-C): ya se seleccionaba internamente, ahora
+    // simplemente se devuelve.
+    expect(result).toEqual(
+      rows.map(({ roomId, roomCode, roomName, startedAt }) => ({
+        roomId,
+        roomCode,
+        roomName,
+        startedAt,
+        sessionId: null,
+      })),
+    );
     expect(db.where).toHaveBeenCalled();
     expect(db.orderBy).toHaveBeenCalled();
     expect(db.limit).toHaveBeenCalledWith(50);
+  });
+
+  it('correlaciona un intento con la sesión materializada cuyo primer join del usuario cae dentro de la ventana', async () => {
+    db.limit.mockResolvedValue([
+      {
+        roomId: 'room-1',
+        roomCode: 'abc-defg-hij',
+        roomName: 'Reunión 1',
+        startedAt: new Date('2026-01-05T10:00:00.000Z'),
+      },
+    ]);
+    db.participantSessionsWhere.mockResolvedValue([
+      {
+        sessionId: 'sess-1',
+        firstJoinedAt: new Date('2026-01-05T10:00:30.000Z'),
+        roomId: 'room-1',
+      },
+    ]);
+
+    const result = await service.listHistory('user-1');
+
+    expect(result[0].sessionId).toBe('sess-1');
+  });
+
+  it('no correlaciona cuando la sala no coincide, el join fue antes del intento, o quedó fuera de la ventana de 5 minutos', async () => {
+    db.limit.mockResolvedValue([
+      {
+        roomId: 'room-1',
+        roomCode: 'abc-defg-hij',
+        roomName: 'Reunión 1',
+        startedAt: new Date('2026-01-05T10:00:00.000Z'),
+      },
+    ]);
+    db.participantSessionsWhere.mockResolvedValue([
+      // Sala distinta.
+      {
+        sessionId: 'sess-wrong-room',
+        firstJoinedAt: new Date('2026-01-05T10:00:30.000Z'),
+        roomId: 'room-2',
+      },
+      // Join anterior al intento (delta negativo).
+      {
+        sessionId: 'sess-before',
+        firstJoinedAt: new Date('2026-01-05T09:59:00.000Z'),
+        roomId: 'room-1',
+      },
+      // Fuera de la ventana de 5 minutos.
+      {
+        sessionId: 'sess-too-late',
+        firstJoinedAt: new Date('2026-01-05T10:06:00.000Z'),
+        roomId: 'room-1',
+      },
+    ]);
+
+    const result = await service.listHistory('user-1');
+
+    expect(result[0].sessionId).toBeNull();
   });
 });
 
 describe('CallsService: reportTrackState (mute/unmute reportado por el cliente)', () => {
   let rooms: { getByCodeOrThrow: jest.Mock<RoomsService['getByCodeOrThrow']> };
+  let resolver: { touchEntry: ReturnType<typeof jest.fn> };
   let service: CallsService;
   let listRooms: jest.SpiedFunction<RoomServiceClient['listRooms']>;
   let onConflictDoNothing: jest.Mock<() => Promise<void>>;
@@ -495,6 +670,7 @@ describe('CallsService: reportTrackState (mute/unmute reportado por el cliente)'
     rooms = {
       getByCodeOrThrow: jest.fn<RoomsService['getByCodeOrThrow']>().mockResolvedValue(room),
     };
+    resolver = { touchEntry: jest.fn().mockResolvedValue(undefined) };
     listRooms = jest
       .spyOn(RoomServiceClient.prototype, 'listRooms')
       .mockResolvedValue([{ sid: 'RM_live_sid' }] as Awaited<
@@ -508,6 +684,7 @@ describe('CallsService: reportTrackState (mute/unmute reportado por el cliente)'
       rooms as unknown as RoomsService,
       new ConfigService(config),
       db as unknown as DrizzleDb,
+      resolver as unknown as RoomResolverService,
     );
   });
 

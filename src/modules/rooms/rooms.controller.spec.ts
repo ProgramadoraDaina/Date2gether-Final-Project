@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { Test } from '@nestjs/testing';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RoomAccessGuard } from '../auth/guards/room-access.guard';
 import { RoomsController } from './rooms.controller';
 import { RoomAccessService } from '../auth/room-access.service';
 import { RoomsService } from './rooms.service';
@@ -27,6 +28,8 @@ describe('RoomsController', () => {
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
+      .overrideGuard(RoomAccessGuard)
+      .useValue({ canActivate: () => true })
       .compile();
 
     controller = module.get(RoomsController);
@@ -49,7 +52,26 @@ describe('RoomsController', () => {
     );
 
     expect(result).toEqual(fakeRoom);
-    expect(roomsService.createRoom).toHaveBeenCalledWith('Reunión de Daina', 'owner-123');
+    expect(roomsService.createRoom).toHaveBeenCalledWith('Reunión de Daina', 'owner-123', {
+      isPermanent: undefined,
+      slots: undefined,
+    });
+  });
+
+  it('reenvía isPermanent y slots del DTO al RoomsService', async () => {
+    const fakeRoom = { id: 'room-1', code: 'abc-defg-hij', name: 'Sala permanente' };
+    roomsService.createRoom.mockResolvedValue(fakeRoom);
+    const slots = [{ dayOfWeek: 2, timeOfDay: '07:00', timezone: 'UTC' }];
+
+    await controller.create(
+      { name: 'Sala permanente', isPermanent: true, slots },
+      { sub: 'owner-123', email: 'a@example.test' },
+    );
+
+    expect(roomsService.createRoom).toHaveBeenCalledWith('Sala permanente', 'owner-123', {
+      isPermanent: true,
+      slots,
+    });
   });
 
   it('delega la búsqueda de la sala al RoomsService con el código', async () => {

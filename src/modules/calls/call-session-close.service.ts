@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { RoomServiceClient } from 'livekit-server-sdk';
 import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
-import { callEvents, callParticipantIdentities, callSessions, rooms } from '../../db/schema';
+import { callEvents, callParticipantIdentities, callSessions } from '../../db/schema';
 
 // Ventana de gracia (D3, design.md): 15s. No es un sleep ciego antes de
 // cerrar: es una RE-VERIFICACIÓN agendada. Un admin que se reconecta vuelve
@@ -168,7 +168,7 @@ export class CallSessionCloseService {
    */
   private async ensureSessionRow(livekitRoomSid: string, roomCode: string): Promise<void> {
     const events = await this.db
-      .select({ occurredAt: callEvents.occurredAt })
+      .select({ occurredAt: callEvents.occurredAt, livekitIdentity: callEvents.livekitIdentity })
       .from(callEvents)
       .where(eq(callEvents.livekitRoomSid, livekitRoomSid));
     const startedAt = events.reduce<Date>(
@@ -176,13 +176,25 @@ export class CallSessionCloseService {
       events[0]?.occurredAt ?? new Date(),
     );
 
-    const [room] = roomCode
-      ? await this.db.select({ id: rooms.id }).from(rooms).where(eq(rooms.code, roomCode)).limit(1)
+    // D4-D: roomId se resuelve desde call_participant_identities, igual que
+    // CallsWebhookService.onRoomFinished -- nunca desde una búsqueda por
+    // rooms.code (un room_finished tardío tras un code reciclado atribuiría
+    // la sesión a la sala NUEVA). roomId queda en null cuando ningún
+    // identity de este sid es conocido.
+    const identityKeys = [
+      ...new Set(events.map((e) => e.livekitIdentity).filter((id): id is string => !!id)),
+    ];
+    const identities = identityKeys.length
+      ? await this.db
+          .select({ roomId: callParticipantIdentities.roomId })
+          .from(callParticipantIdentities)
+          .where(inArray(callParticipantIdentities.livekitIdentity, identityKeys))
       : [];
+    const roomId = identities[0]?.roomId ?? null;
 
     await this.db
       .insert(callSessions)
-      .values({ livekitRoomSid, roomId: room?.id ?? null, roomCode, startedAt })
+      .values({ livekitRoomSid, roomId, roomCode, startedAt })
       .onConflictDoNothing();
   }
 }

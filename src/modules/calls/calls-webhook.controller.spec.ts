@@ -9,9 +9,7 @@ describe('CallsWebhookController', () => {
     const webhookService = {
       handle: jest.fn<CallsWebhookService['handle']>().mockResolvedValue(undefined),
     };
-    const controller = new CallsWebhookController(
-      webhookService as unknown as CallsWebhookService,
-    );
+    const controller = new CallsWebhookController(webhookService as unknown as CallsWebhookService);
     const req = {
       rawBody: Buffer.from('{"event":"room_started"}'),
       headers: { authorization: 'signed-jwt' },

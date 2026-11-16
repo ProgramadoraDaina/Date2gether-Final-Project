@@ -7,6 +7,9 @@ import type { AccessTokenPayload } from './auth.types';
 export interface RoomParticipant {
   kind: 'room-participant';
   sub: string;
+  // La identidad estable (D4). roomCode es una etiqueta de conveniencia:
+  // puede reciclarse a otra sala, roomId nunca.
+  roomId: string;
   roomCode: string;
   name: string;
   userId?: string;
@@ -40,11 +43,12 @@ export class RoomAccessService {
     return userId;
   }
 
-  async create(roomCode: string, name: string, authorization?: string) {
+  async create(roomId: string, roomCode: string, name: string, authorization?: string) {
     const userId = await this.authenticateAccount(authorization);
     const participant: RoomParticipant = {
       kind: 'room-participant',
       sub: randomUUID(),
+      roomId,
       roomCode,
       name,
       ...(userId ? { userId } : {}),
@@ -61,20 +65,23 @@ export class RoomAccessService {
     return { token, participant };
   }
 
-  async createAdmissionTicket(roomCode: string, requestId: string) {
+  // D7: el ticket de una sala permanente vive 365d -- sin esto, el DB-side
+  // expiresAt=NULL no basta: a hora 24 el JWT mismo vencería y el cliente
+  // mapearía el 401 a "la solicitud venció" aunque la fila siga pending.
+  async createAdmissionTicket(roomId: string, requestId: string, opts?: { permanent?: boolean }) {
     return this.jwt.signAsync(
-      { kind: 'room-admission', sub: requestId, roomCode },
+      { kind: 'room-admission', sub: requestId, roomId },
       {
         secret: this.secret,
         audience: 'date2gether:admission',
-        expiresIn: '24h',
+        expiresIn: opts?.permanent ? '365d' : '24h',
       },
     );
   }
 
-  async verifyAdmissionTicket(token: string, roomCode: string, requestId: string) {
+  async verifyAdmissionTicket(token: string, roomId: string, requestId: string) {
     try {
-      const payload = await this.jwt.verifyAsync<{ kind: string; sub: string; roomCode: string }>(
+      const payload = await this.jwt.verifyAsync<{ kind: string; sub: string; roomId: string }>(
         token,
         {
           secret: this.secret,
@@ -84,7 +91,7 @@ export class RoomAccessService {
       if (
         payload.kind !== 'room-admission' ||
         payload.sub !== requestId ||
-        payload.roomCode !== roomCode
+        payload.roomId !== roomId
       )
         throw new Error('Invalid admission ticket');
     } catch {
@@ -98,9 +105,12 @@ export class RoomAccessService {
         secret: this.secret,
         audience: ROOM_AUDIENCE,
       });
+      // D4: un token sin roomId (firmado antes de este cambio) se rechaza,
+      // deliberadamente, sin camino dual que lo acepte -- ver design.md.
       if (
         participant.kind !== 'room-participant' ||
         !participant.sub ||
+        !participant.roomId ||
         !participant.roomCode ||
         !participant.name?.trim()
       )

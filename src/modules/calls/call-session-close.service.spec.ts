@@ -3,7 +3,7 @@ import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RoomServiceClient, type ParticipantInfo } from 'livekit-server-sdk';
 import type { DrizzleDb } from '../../db/drizzle.module';
-import { callEvents, callSessions, rooms } from '../../db/schema';
+import { callEvents, callSessions } from '../../db/schema';
 import { chain } from '../../test-support/fake-drizzle';
 import { CallSessionCloseService } from './call-session-close.service';
 
@@ -16,16 +16,17 @@ const config = {
 
 function createDbMock() {
   // select(...).from(table).where(...).limit(1) — enrutado por tabla, mismo
-  // patrón que calls-webhook.service.spec.ts. Tres usos posibles: (a)
-  // callParticipantIdentities en hasConnectedAdmin() — default sin fila (sin
-  // admin conectado); (b) callEvents en ensureSessionRow() — default sin
-  // eventos (startedAt cae al fallback new Date()); (c) rooms en
-  // ensureSessionRow() — default sin sala (roomId queda null).
+  // patrón que calls-webhook.service.spec.ts. Dos usos posibles: (a)
+  // callEvents en ensureSessionRow() — default sin eventos (startedAt cae al
+  // fallback new Date()); (b) callParticipantIdentities, compartida por
+  // hasConnectedAdmin() (sin fila = sin admin conectado) y por
+  // ensureSessionRow() (sin fila = roomId queda null, D4-D) — default sin
+  // fila en ambos casos.
   const select = jest.fn().mockImplementation(() => ({
     from: jest.fn().mockImplementation((table: unknown) => {
-      if (table === callEvents) return chain([] as { occurredAt: Date }[]);
-      if (table === rooms) return chain([] as { id: string }[]);
-      return chain([] as { id: string }[]); // callParticipantIdentities
+      if (table === callEvents)
+        return chain([] as { occurredAt: Date; livekitIdentity: string | null }[]);
+      return chain([] as { id: string; roomId: string | null }[]); // callParticipantIdentities
     }),
   }));
 
@@ -158,6 +159,26 @@ describe('CallSessionCloseService', () => {
 
     expect(db.insert).toHaveBeenCalledWith(callSessions);
     expect(deleteRoom).toHaveBeenCalledWith('abc-defg-hij');
+  });
+
+  it('ensureSessionRow resuelve roomId desde call_participant_identities, no desde una búsqueda por rooms.code (D4-D)', async () => {
+    listParticipants.mockResolvedValue([]); // sin admin conectado en ambos chequeos: fuerza el cierre
+    await service.onAdminLeft('RM_session-A', 'abc-defg-hij');
+
+    // Dentro de claimAndClose -> ensureSessionRow: primero callEvents (para
+    // derivar identityKeys y startedAt), después call_participant_identities
+    // (para resolver roomId). hasConnectedAdmin no llega a tocar la base
+    // porque listParticipants ya devuelve [] (corta antes del select).
+    db.select
+      .mockReturnValueOnce(
+        chain([{ occurredAt: new Date('2026-11-06T10:00:00Z'), livekitIdentity: 'id-a' }]),
+      )
+      .mockReturnValueOnce(chain([{ roomId: 'room-real' }]));
+
+    await jest.advanceTimersByTimeAsync(15_000);
+    await flushMicrotasks();
+
+    expect(db.insertValues).toHaveBeenCalledWith(expect.objectContaining({ roomId: 'room-real' }));
   });
 
   it('idempotencia real de la capa 2: dos reclamos sobre el mismo sid solo producen un deleteRoom, nunca un error visible', async () => {

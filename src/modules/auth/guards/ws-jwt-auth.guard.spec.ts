@@ -22,7 +22,7 @@ function context(token?: string, code = 'abc-defg-hij') {
 
 describe('WsJwtAuthGuard', () => {
   it('permite un invitado con nombre y conserva la identidad verificada', async () => {
-    const issued = await access.create('abc-defg-hij', 'Invitado');
+    const issued = await access.create('room-1', 'abc-defg-hij', 'Invitado');
     const { client, ctx } = context(issued.token);
     await expect(guard.canActivate(ctx)).resolves.toBe(true);
     expect(client.data).toMatchObject({ participant: issued.participant });
@@ -30,7 +30,7 @@ describe('WsJwtAuthGuard', () => {
   it('rechaza sockets sin pase, con pase inválido o de otra sala', async () => {
     await expect(guard.canActivate(context().ctx)).rejects.toThrow();
     await expect(guard.canActivate(context('invalid').ctx)).rejects.toThrow();
-    const issued = await access.create('abc-defg-hij', 'Invitado');
+    const issued = await access.create('room-1', 'abc-defg-hij', 'Invitado');
     await expect(guard.canActivate(context(issued.token, 'xyz-abcd-efg').ctx)).rejects.toThrow();
   });
 });
