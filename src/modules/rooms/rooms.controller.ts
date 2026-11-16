@@ -38,7 +38,10 @@ export class RoomsController {
   @UseGuards(JwtAuthGuard)
   @Post()
   create(@Body() dto: CreateRoomDto, @CurrentUser() user: AccessTokenPayload) {
-    return this.roomsService.createRoom(dto.name, user.sub);
+    return this.roomsService.createRoom(dto.name, user.sub, {
+      isPermanent: dto.isPermanent,
+      slots: dto.slots,
+    });
   }
 
   @Get(':code')

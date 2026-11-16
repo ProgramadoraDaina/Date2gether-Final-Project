@@ -15,7 +15,11 @@ describe('RoomsService: revisión de notas', () => {
   beforeEach(() => {
     // El proxy ejecuta los constructores SQL reales de Drizzle sin conectar a una BD.
     query = jest.fn<RemoteCallback>().mockResolvedValue({ rows: [] });
-    service = new RoomsService(drizzle(query) as unknown as DrizzleDb, new RoomEventsService());
+    service = new RoomsService(
+      drizzle(query) as unknown as DrizzleDb,
+      new RoomEventsService(),
+      {} as never,
+    );
     jest.spyOn(service, 'getByCodeOrThrow').mockResolvedValue(room);
   });
 
