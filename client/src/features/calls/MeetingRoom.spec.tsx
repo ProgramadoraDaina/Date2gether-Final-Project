@@ -91,8 +91,14 @@ describe('MeetingRoom', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     mockRoom.state = 'disconnected';
+    // Como un EventEmitter real: varios componentes pueden escuchar el mismo evento.
+    for (const key of Object.keys(mockEvents)) delete mockEvents[key];
     mockRoom.on.mockImplementation((event, callback) => {
-      mockEvents[event as string] = callback as () => void;
+      const previous = mockEvents[event as string];
+      mockEvents[event as string] = () => {
+        previous?.();
+        (callback as () => void)();
+      };
     });
     mockRoom.localParticipant.setMicrophoneEnabled.mockResolvedValue();
     mockRoom.localParticipant.setCameraEnabled.mockResolvedValue();

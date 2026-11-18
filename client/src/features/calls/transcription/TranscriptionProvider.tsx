@@ -1,6 +1,7 @@
 'use client';
 
 import { useDataChannel, useLocalParticipant, useRoomContext } from '@livekit/components-react';
+import { RoomEvent } from 'livekit-client';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { saveTranscriptLine } from '@/lib/transcripts';
 import { useTranslation } from '../../translation/useTranslation';
@@ -62,12 +63,18 @@ export function TranscriptionProvider({
 
   useEffect(() => {
     let active = true;
-    room
-      .getSid()
-      .then((sid) => active && setCallSid(sid))
-      .catch(() => undefined);
+    // getSid() devuelve '' si la sala todavía no conectó: se vuelve a pedir al conectar.
+    const loadSid = () => {
+      room
+        .getSid()
+        .then((sid) => active && sid && setCallSid(sid))
+        .catch(() => undefined);
+    };
+    loadSid();
+    room.on(RoomEvent.Connected, loadSid);
     return () => {
       active = false;
+      room.off(RoomEvent.Connected, loadSid);
     };
   }, [room]);
 

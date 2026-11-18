@@ -12,6 +12,21 @@ const mockSend = jest.fn(() => Promise.resolve());
 let dataHandler: DataHandler | undefined;
 let micEnabled = true;
 
+// Igual que livekit-client: getSid() devuelve '' mientras la sala no conectó.
+const mockRoom = {
+  state: 'connected',
+  listeners: new Map<string, () => void>(),
+  getSid() {
+    return Promise.resolve(this.state === 'disconnected' ? '' : 'RM_call1');
+  },
+  on(event: string, listener: () => void) {
+    this.listeners.set(event, listener);
+  },
+  off(event: string) {
+    this.listeners.delete(event);
+  },
+};
+
 jest.mock('@livekit/components-react', () => ({
   useDataChannel: jest.fn((_topic: string, onMessage: DataHandler) => {
     dataHandler = onMessage;
@@ -21,7 +36,7 @@ jest.mock('@livekit/components-react', () => ({
     localParticipant: { identity: 'ana-id', name: 'Ana' },
     isMicrophoneEnabled: micEnabled,
   })),
-  useRoomContext: jest.fn(() => ({ getSid: () => Promise.resolve('RM_call1') })),
+  useRoomContext: jest.fn(() => mockRoom),
 }));
 
 class FakeRecognition {
@@ -74,6 +89,8 @@ describe('Subtítulos en vivo', () => {
     jest.clearAllMocks();
     FakeRecognition.instances = [];
     micEnabled = true;
+    mockRoom.state = 'connected';
+    mockRoom.listeners.clear();
     mockFetch.mockResolvedValue(new Response(null, { status: 201 }));
     global.fetch = mockFetch;
     useLanguageStore.setState({ language: 'es' });
@@ -136,6 +153,28 @@ describe('Subtítulos en vivo', () => {
     expect(JSON.parse(String(init?.body))).toEqual({
       callSid: 'RM_call1',
       content: 'Hola a todos',
+    });
+  });
+
+  it('si la sala todavía no conectó al montar, pide el sid cuando conecta y guarda igual', async () => {
+    mockRoom.state = 'disconnected';
+    await renderCaptions();
+    fireEvent.click(screen.getByRole('button', { name: 'Activar subtítulos' }));
+    await act(async () => {});
+    expect(onTranscriptAvailable).not.toHaveBeenCalled();
+
+    mockRoom.state = 'connected';
+    await act(async () => mockRoom.listeners.get('connected')?.());
+    await waitFor(() => expect(onTranscriptAvailable).toHaveBeenCalledWith('RM_call1'));
+
+    jest.useFakeTimers();
+    act(() => FakeRecognition.instances[0].say('Ahora sí se guarda', true));
+    act(() => jest.advanceTimersByTime(PHRASE_PAUSE_MS));
+    jest.useRealTimers();
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(mockFetch.mock.calls[0][1]?.body))).toEqual({
+      callSid: 'RM_call1',
+      content: 'Ahora sí se guarda',
     });
   });
 
