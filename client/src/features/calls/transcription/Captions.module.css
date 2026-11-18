@@ -1,0 +1,69 @@
+.captions {
+  --caption-font-size: 1.125rem;
+  --caption-max-lines: 3;
+  position: absolute;
+  left: 50%;
+  bottom: 96px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: min(760px, calc(100% - 32px));
+  transform: translateX(-50%);
+  pointer-events: none;
+  font-family: inherit;
+}
+
+.captions[data-size='small'] {
+  --caption-font-size: 0.9375rem;
+}
+
+.captions[data-size='large'] {
+  --caption-font-size: 1.5rem;
+}
+
+/* Negro translúcido con texto blanco: la convención de subtítulos se lee igual sobre cualquier video. */
+.line,
+.error {
+  margin: 0;
+  padding: 2px 8px;
+  border-radius: 2px;
+  background: rgb(0 0 0 / 0.6);
+  color: #fff;
+  font-size: var(--caption-font-size);
+  font-weight: 400;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.line {
+  display: flex;
+  align-items: flex-end;
+  text-align: left;
+}
+
+/* Muestra solo las últimas líneas: lo viejo desborda hacia arriba y se oculta (el acta guarda todo). */
+.text {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  max-height: calc(var(--caption-max-lines) * 1.35em);
+  overflow: hidden;
+}
+
+/* Violeta saturado fijo: el fondo de los subtítulos es siempre negro, en tema claro y oscuro. */
+.speaker {
+  flex-shrink: 0;
+  margin-right: 8px;
+  color: #bf5af2;
+  font-weight: 700;
+}
+
+.interim {
+  opacity: 0.85;
+}
+
+.error {
+  font-size: 0.875rem;
+}

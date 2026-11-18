@@ -41,6 +41,10 @@ import { ReactionPicker } from './reactions/ReactionPicker';
 import { SoundboardPicker } from './reactions/SoundboardPicker';
 import { ReactionsProvider } from './reactions/ReactionsProvider';
 import { ReactionTile } from './reactions/ReactionTile';
+import { CallSettingsButton } from './settings/CallSettings';
+import { useCallSettingsStore } from './settings/store';
+import { CaptionsButton, CaptionsOverlay } from './transcription/Captions';
+import { TranscriptionProvider } from './transcription/TranscriptionProvider';
 
 const options: RoomOptions = {
   adaptiveStream: true,
@@ -165,10 +169,15 @@ function MicToggleButton({ roomCode, roomToken, setDeviceError }: ToggleButtonPr
     onDeviceError: () => setDeviceError(true),
     onChange: onMicChange,
   });
+  const remember = useCallSettingsStore((state) => state.setDeviceEnabled);
   const label = enabled ? t('Desactivar micrófono') : t('Activar micrófono');
   return (
     <button
       {...buttonProps}
+      onClick={(event) => {
+        buttonProps.onClick?.(event);
+        remember('microphone', !enabled);
+      }}
       type="button"
       className={`${styles.iconButton} ${enabled ? styles.iconButtonActive : ''}`}
       title={label}
@@ -194,10 +203,15 @@ function CameraToggleButton({ roomCode, roomToken, setDeviceError }: ToggleButto
     onDeviceError: () => setDeviceError(true),
     onChange: onCameraChange,
   });
+  const remember = useCallSettingsStore((state) => state.setDeviceEnabled);
   const label = enabled ? t('Desactivar cámara') : t('Activar cámara');
   return (
     <button
       {...buttonProps}
+      onClick={(event) => {
+        buttonProps.onClick?.(event);
+        remember('camera', !enabled);
+      }}
       type="button"
       className={`${styles.iconButton} ${enabled ? styles.iconButtonActive : ''}`}
       title={label}
@@ -236,6 +250,9 @@ interface MeetingRoomProps {
   roomToken: string;
   roomEmojis: RoomEmoji[];
   initialDevices?: CallDevices;
+  onTranscriptAvailable?: (callSid: string) => void;
+  // Reemplaza la vuelta al inicio al colgar (por ejemplo, para mostrar el acta).
+  onHangUp?: () => void;
 }
 
 // Un permiso revocado después del lobby no debe hacer fallar la llamada.
@@ -272,7 +289,8 @@ function MeetingContent({
   roomToken,
   roomEmojis,
   initialDevices = DEFAULT_CALL_DEVICES,
-}: Omit<MeetingRoomProps, 'call'>) {
+  onTranscriptAvailable,
+}: Omit<MeetingRoomProps, 'call' | 'onHangUp'>) {
   const { t } = useTranslation();
   const [deviceError, setDeviceError] = useState(false);
   const showDeviceError = useCallback(() => setDeviceError(true), []);
@@ -302,62 +320,74 @@ function MeetingContent({
     : tracks;
   return (
     <ReactionsProvider roomCode={roomCode} roomEmojis={roomEmojis}>
-      <LayoutContextProvider value={layoutContext}>
-        <InitialCallDevices devices={initialDevices} onDeviceError={showDeviceError} />
-        <RoomAudioRenderer />
-        <StartAudio label={t('Activar sonido de la reunión')} />
-        <ConnectionStateToast />
-        {focusTrack ? (
-          <FocusLayoutContainer className={styles.meetingGrid}>
-            <CarouselLayout tracks={carouselTracks}>
+      <TranscriptionProvider
+        roomCode={roomCode}
+        roomToken={roomToken}
+        onTranscriptAvailable={onTranscriptAvailable}
+      >
+        <LayoutContextProvider value={layoutContext}>
+          <InitialCallDevices devices={initialDevices} onDeviceError={showDeviceError} />
+          <RoomAudioRenderer />
+          <StartAudio label={t('Activar sonido de la reunión')} />
+          <ConnectionStateToast />
+          {focusTrack ? (
+            <FocusLayoutContainer className={styles.meetingGrid}>
+              <CarouselLayout tracks={carouselTracks}>
+                <ReactionTile canFocus={tracks.length > 1} />
+              </CarouselLayout>
+              <TrackRefContext.Provider value={focusTrack}>
+                <ReactionTile canFocus={tracks.length > 1} />
+              </TrackRefContext.Provider>
+            </FocusLayoutContainer>
+          ) : (
+            <GridLayout tracks={tracks} className={styles.meetingGrid}>
               <ReactionTile canFocus={tracks.length > 1} />
-            </CarouselLayout>
-            <TrackRefContext.Provider value={focusTrack}>
-              <ReactionTile canFocus={tracks.length > 1} />
-            </TrackRefContext.Provider>
-          </FocusLayoutContainer>
-        ) : (
-          <GridLayout tracks={tracks} className={styles.meetingGrid}>
-            <ReactionTile canFocus={tracks.length > 1} />
-          </GridLayout>
-        )}
-        <ReactionOverlay />
-        {deviceError && (
-          <p className={styles.error} role="alert">
-            {t(
-              'No se pudo activar el dispositivo. Revisá los permisos del navegador; podés continuar en la llamada.',
-            )}
-          </p>
-        )}
-        <div className={styles.controlsDock}>
-          <div className={styles.controlsGroup}>
-            <MicToggleButton
-              roomCode={roomCode}
-              roomToken={roomToken}
-              setDeviceError={setDeviceError}
-            />
-            <MediaDeviceMenu
-              kind="audioinput"
-              requestPermissions={false}
-              aria-label={t('Elegir micrófono')}
-            />
-            <CameraToggleButton
-              roomCode={roomCode}
-              roomToken={roomToken}
-              setDeviceError={setDeviceError}
-            />
-            <MediaDeviceMenu
-              kind="videoinput"
-              requestPermissions={false}
-              aria-label={t('Elegir cámara')}
-            />
-            <ScreenShareToggleButton setDeviceError={setDeviceError} />
-            <ReactionPicker buttonClassName={styles.iconButton} />
-            <SoundboardPicker buttonClassName={styles.iconButton} />
+            </GridLayout>
+          )}
+          <ReactionOverlay />
+          <CaptionsOverlay />
+          {deviceError && (
+            <p className={styles.error} role="alert">
+              {t(
+                'No se pudo activar el dispositivo. Revisá los permisos del navegador; podés continuar en la llamada.',
+              )}
+            </p>
+          )}
+          <div className={styles.controlsDock}>
+            <div className={styles.controlsGroup}>
+              <MicToggleButton
+                roomCode={roomCode}
+                roomToken={roomToken}
+                setDeviceError={setDeviceError}
+              />
+              <MediaDeviceMenu
+                kind="audioinput"
+                requestPermissions={false}
+                aria-label={t('Elegir micrófono')}
+              />
+              <CameraToggleButton
+                roomCode={roomCode}
+                roomToken={roomToken}
+                setDeviceError={setDeviceError}
+              />
+              <MediaDeviceMenu
+                kind="videoinput"
+                requestPermissions={false}
+                aria-label={t('Elegir cámara')}
+              />
+              <ScreenShareToggleButton setDeviceError={setDeviceError} />
+              <ReactionPicker buttonClassName={styles.iconButton} />
+              <SoundboardPicker buttonClassName={styles.iconButton} />
+              <CaptionsButton
+                buttonClassName={styles.iconButton}
+                activeClassName={styles.iconButtonActive}
+              />
+            </div>
+            <CallSettingsButton buttonClassName={styles.iconButton} />
+            <ConnectedHangUpButton />
           </div>
-          <ConnectedHangUpButton />
-        </div>
-      </LayoutContextProvider>
+        </LayoutContextProvider>
+      </TranscriptionProvider>
     </ReactionsProvider>
   );
 }
@@ -368,6 +398,8 @@ export default function MeetingRoom({
   roomToken,
   roomEmojis,
   initialDevices = DEFAULT_CALL_DEVICES,
+  onTranscriptAvailable,
+  onHangUp,
 }: MeetingRoomProps) {
   const router = useRouter();
   const roomOptions = useMemo(
@@ -396,7 +428,8 @@ export default function MeetingRoom({
       onDisconnected={(reason) => {
         if (reason === undefined || reason === DisconnectReason.CLIENT_INITIATED) {
           call.leaveCall();
-          router.push('/');
+          if (onHangUp) onHangUp();
+          else router.push('/');
         } else if (
           // Cierre forzado por el anfitrión (D5, design.md): LiveKit
           // reporta ROOM_DELETED cuando se llamó a RoomService.DeleteRoom
@@ -416,6 +449,7 @@ export default function MeetingRoom({
         roomToken={roomToken}
         roomEmojis={roomEmojis}
         initialDevices={initialDevices}
+        onTranscriptAvailable={onTranscriptAvailable}
       />
     </LiveKitRoom>
   );

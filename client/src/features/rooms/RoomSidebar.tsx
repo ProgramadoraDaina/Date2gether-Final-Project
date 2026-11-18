@@ -12,6 +12,8 @@ interface RoomSidebarProps {
   copied: boolean;
   onCopyLink: () => void;
   onOpenEmojis: () => void;
+  // Solo existe cuando hay una transcripción de la llamada para mostrar.
+  onOpenTranscript?: () => void;
   // Controlan el colapso animado y el ancho elegido con el handle de resize
   // (ver useResizablePanel en RoomPage). El wrapper externo anima `width`
   // entre 0 y `width`; el contenido interno mantiene `width` fijo para no
@@ -41,6 +43,7 @@ export function RoomSidebar({
   copied,
   onCopyLink,
   onOpenEmojis,
+  onOpenTranscript,
   open,
   width,
   onResizeHandleMouseDown,
@@ -70,9 +73,22 @@ export function RoomSidebar({
         <div className={styles.bottomActions}>
           {musicPlayer}
           {admissionControl}
-          <button type="button" className={`secondary ${styles.emojisButton}`} onClick={onOpenEmojis}>
+          <button
+            type="button"
+            className={`secondary ${styles.emojisButton}`}
+            onClick={onOpenEmojis}
+          >
             {t('Emojis y sonidos')}
           </button>
+          {onOpenTranscript && (
+            <button
+              type="button"
+              className={`secondary ${styles.emojisButton}`}
+              onClick={onOpenTranscript}
+            >
+              {t('Ver transcripción')}
+            </button>
+          )}
           <button type="button" className={`secondary ${styles.copyLink}`} onClick={onCopyLink}>
             {t(copied ? 'Enlace copiado' : 'Copiar enlace')}
           </button>

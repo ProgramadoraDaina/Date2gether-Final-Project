@@ -116,6 +116,40 @@ const en: Record<string, string> = {
   'Elegir micrófono': 'Choose microphone',
   'Elegir cámara': 'Choose camera',
   'Activar sonido de la reunión': 'Enable meeting audio',
+  'Activar subtítulos': 'Turn on captions',
+  'Desactivar subtítulos': 'Turn off captions',
+  'Ajustes de la llamada': 'Call settings',
+  'Tamaño de los subtítulos': 'Caption size',
+  Chica: 'Small',
+  Mediana: 'Medium',
+  'Tu navegador no tiene subtítulos en vivo. Probá con Chrome o Edge.':
+    'Your browser does not support live captions. Try Chrome or Edge.',
+  'El navegador no dio permiso para transcribir tu micrófono.':
+    'The browser did not allow transcribing your microphone.',
+  'Se cortó la conexión con el servicio de subtítulos del navegador.':
+    "The connection to the browser's captions service was lost.",
+  'Los subtítulos dejaron de funcionar. Probá desactivarlos y activarlos de nuevo.':
+    'Captions stopped working. Try turning them off and on again.',
+  'No se pudieron guardar tus últimas frases en la transcripción.':
+    'Your latest phrases could not be saved to the transcript.',
+  'Ver transcripción': 'View transcript',
+  'Descargar TXT': 'Download TXT',
+  'Ver en el historial': 'View in history',
+  'Necesitás iniciar sesión para ver esta transcripción.':
+    'You need to log in to see this transcript.',
+  'Buscando la llamada en tu historial…': 'Looking for the call in your history…',
+  'Todavía no está en tu historial: aparece cuando la llamada termina para todas las personas.':
+    'It is not in your history yet: it appears when the call ends for everyone.',
+  Transcripción: 'Transcript',
+  'Esta llamada no tiene transcripción.': 'This call has no transcript.',
+  'Descargar PDF': 'Download PDF',
+  'No se pudo generar el PDF': 'Could not generate the PDF',
+  'Transcripción de la llamada': 'Call transcript',
+  frases: 'phrases',
+  'Cargando transcripción…': 'Loading transcript…',
+  'No se pudo cargar la transcripción': 'Could not load the transcript',
+  'Todavía no hay frases. Activá los subtítulos y hablá con el micrófono prendido.':
+    'No phrases yet. Turn on captions and speak with your microphone on.',
   'Las llamadas todavía no están configuradas': 'Calls are not configured yet',
   'El servidor de llamadas no está disponible. Intentá nuevamente.':
     'The call server is unavailable. Please try again.',

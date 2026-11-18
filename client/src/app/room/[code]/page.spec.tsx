@@ -364,7 +364,7 @@ describe('RoomPage: transición de carga antes de entrar a la llamada', () => {
       removeAllListeners: jest.fn(),
     } as never);
     const Page = (await import('./page')).default;
-    render(<Page />);
+    const { container } = render(<Page />);
     fireEvent.change(screen.getByLabelText('Tu nombre en la reunión'), {
       target: { value: 'Alex' },
     });
@@ -376,6 +376,12 @@ describe('RoomPage: transición de carga antes de entrar a la llamada', () => {
         'No se pudo conectar a la llamada. La sala puede estar llena o sin conexión.',
       ),
     ).toBeInTheDocument();
+
+    // Si la llamada nunca llega a conectar, el overlay de entrada no debe
+    // quedar tapando el resto de la sala para siempre: el chat y el resto de
+    // la sala tienen que seguir usables aunque la llamada haya fallado.
+    expect(container.querySelector('.enteringScreen')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Presentes', exact: true })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
     expect(mockJoinCall).toHaveBeenCalledWith('abc-defg-hij', 'guest-token');

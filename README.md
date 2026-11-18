@@ -12,6 +12,7 @@ Las reglas de producto están en [docs/requirements.md](docs/requirements.md). E
 - Los usuarios registrados conservan los roles por sala: administrador, colaborador y participante. Los invitados no reciben permisos de administración.
 - Hay chat de texto persistente, presencia en tiempo real, interfaz ES/EN y tema claro/oscuro.
 - Antes de entrar hay un lobby para confirmar el nombre, seleccionar cámara y micrófono y probarlos con video local y un medidor de voz. Ambos empiezan apagados y solo se solicitan permisos al activarlos. Una vez concedido el ingreso, se conectan chat y llamada con LiveKit usando la elección confirmada; hay grilla de participantes y controles para cambiar los dispositivos durante la llamada. Las llamadas admiten seis personas por defecto. También se puede compartir pantalla durante la llamada.
+- El botón **CC** de la llamada activa los subtítulos en vivo con la Web Speech API del navegador (solo Chrome y Edge). Cada persona transcribe únicamente su propio micrófono, y solo mientras lo tiene prendido; el texto viaja a los demás por el data channel de LiveKit (topic `transcript`). Las frases finales se guardan en `transcript_lines`, asociadas al sid de la llamada de LiveKit. **Ver transcripción**, en el panel lateral, muestra el acta de esa llamada, y al colgar se abre sola. El botón de ajustes, a la izquierda de colgar, permite elegir el tamaño de los subtítulos y lo recuerda para las próximas llamadas. En Chrome, el audio de los subtítulos pasa por los servidores de Google.
 - El ingreso es directo por defecto. El administrador puede activar la sala de espera, admitir o rechazar solicitudes y bloquear nuevos ingresos desde **Administrar ingresos**. Quien espera no recibe chat ni pases de llamada; el cupo de admisión al chat sigue pendiente.
 
 ## Moderar el ingreso
@@ -120,28 +121,32 @@ Los cambios de LiveKit y seguridad deben revisarse en el PR antes de desplegarlo
 
 ## API y Socket.io
 
-| Método | Ruta                                                             | Acceso                                                             |
-| ------ | ---------------------------------------------------------------- | ------------------------------------------------------------------ |
-| POST   | `/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout` | Gestión de cuentas y sesión                                        |
-| GET    | `/auth/me`                                                       | JWT de cuenta                                                      |
-| POST   | `/rooms`                                                         | JWT de cuenta; registra al administrador                           |
-| GET    | `/rooms/:code`                                                   | Consulta mediante código                                           |
-| POST   | `/rooms/:code/access`                                            | Enlace/código y `{ "name": "Ana" }`; JWT de cuenta opcional        |
-| POST   | `/rooms/:code/join`                                              | JWT de cuenta; membresía registrada                                |
-| GET    | `/rooms/:code/members`                                           | Cuenta miembro de la sala                                          |
-| PATCH  | `/rooms/:code/members/:userId`                                   | Administrador de la sala                                           |
+| Método | Ruta                                                             | Acceso                                                                                  |
+| ------ | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| POST   | `/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout` | Gestión de cuentas y sesión                                                             |
+| GET    | `/auth/me`                                                       | JWT de cuenta                                                                           |
+| POST   | `/rooms`                                                         | JWT de cuenta; registra al administrador                                                |
+| GET    | `/rooms/:code`                                                   | Consulta mediante código                                                                |
+| POST   | `/rooms/:code/access`                                            | Enlace/código y `{ "name": "Ana" }`; JWT de cuenta opcional                             |
+| POST   | `/rooms/:code/join`                                              | JWT de cuenta; membresía registrada                                                     |
+| GET    | `/rooms/:code/members`                                           | Cuenta miembro de la sala                                                               |
+| PATCH  | `/rooms/:code/members/:userId`                                   | Administrador de la sala                                                                |
 | POST   | `/calls/:roomCode`                                               | Pase de participante de esa sala; devuelve `{ url, token, roomName, participantLimit }` |
+| POST   | `/transcripts/:roomCode`                                         | Pase de participante; `{ callSid, content }`. El nombre sale del pase                   |
+| GET    | `/transcripts/:roomCode?callSid=`                                | Pase de participante; acta de esa llamada en orden                                      |
+| GET    | `/calls/sessions/:sessionId/transcript`                          | Cuenta registrada que participó (404 si no); acta de esa sesión del historial           |
+| GET    | `/calls/sessions/by-sid/:livekitRoomSid`                         | Cuenta registrada que participó (404 si no); devuelve `{ id }` de la sesión             |
 
 Con ingreso directo, `POST /rooms/:code/access` devuelve `{ token, participant }`. El frontend conserva el pase en memoria durante la visita; abrir o recargar el enlace vuelve a pedir confirmación del nombre. Una reconexión automática del socket usa el mismo pase. El nombre anterior puede estar precargado, pero no se ingresa automáticamente.
 
 Las rutas de admisión son:
 
-| Método | Ruta | Acceso |
-| --- | --- | --- |
-| GET / PATCH | `/rooms/:code/admission` | Sesión de cuenta y rol administrador de esa sala |
-| PATCH | `/rooms/:code/admission/:id` | Administrador; `{ decision: "admitted" \| "rejected" }` |
-| GET | `/rooms/:code/admission/:id/status` | Credencial de espera de esa solicitud |
-| POST | `/rooms/:code/admission/:id/cancel` | Credencial de espera de esa solicitud |
+| Método      | Ruta                                | Acceso                                                  |
+| ----------- | ----------------------------------- | ------------------------------------------------------- |
+| GET / PATCH | `/rooms/:code/admission`            | Sesión de cuenta y rol administrador de esa sala        |
+| PATCH       | `/rooms/:code/admission/:id`        | Administrador; `{ decision: "admitted" \| "rejected" }` |
+| GET         | `/rooms/:code/admission/:id/status` | Credencial de espera de esa solicitud                   |
+| POST        | `/rooms/:code/admission/:id/cancel` | Credencial de espera de esa solicitud                   |
 
 Con espera, `POST /rooms/:code/access` devuelve `{ status: "pending", requestId, ticket }` en lugar del pase de participante. La consulta de estado devuelve `{ status: "admitted", access: { token, participant } }` solo después de la admisión. El resto de los estados son `pending`, `rejected`, `cancelled` o `expired`. Las decisiones sobre solicitudes ya resueltas no se sobrescriben; las solicitudes de otras salas no se pueden consultar ni resolver.
 

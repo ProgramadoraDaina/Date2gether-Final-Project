@@ -11,6 +11,7 @@ import { ChatModule } from './modules/chat/chat.module';
 import { GifsModule } from './modules/gifs/gifs.module';
 import { RoomEmojisModule } from './modules/room-emojis/room-emojis.module';
 import { RoomsModule } from './modules/rooms/rooms.module';
+import { TranscriptsModule } from './modules/transcripts/transcripts.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { RoomsModule } from './modules/rooms/rooms.module';
     CallsModule,
     GifsModule,
     RoomEmojisModule,
+    TranscriptsModule,
   ],
   controllers: [AppController],
   providers: [{ provide: APP_GUARD, useClass: HttpOnlyThrottlerGuard }],
