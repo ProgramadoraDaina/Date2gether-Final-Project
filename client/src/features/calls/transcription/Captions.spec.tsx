@@ -174,14 +174,59 @@ describe('Subtítulos en vivo', () => {
   });
 
   it('si Chrome corta por silencio, vuelve a escuchar; si se niega el permiso, avisa', async () => {
+    jest.useFakeTimers();
     await renderCaptions();
     fireEvent.click(screen.getByRole('button', { name: 'Activar subtítulos' }));
     const recognition = FakeRecognition.instances[0];
     act(() => recognition.onend?.());
+    act(() => jest.runOnlyPendingTimers());
     expect(recognition.start).toHaveBeenCalledTimes(2);
     act(() => recognition.onerror?.({ error: 'not-allowed' }));
     act(() => recognition.onend?.());
+    act(() => jest.runOnlyPendingTimers());
     expect(recognition.start).toHaveBeenCalledTimes(2);
     expect(screen.getByRole('alert')).toHaveTextContent('no dio permiso');
+    jest.useRealTimers();
+  });
+
+  it('si reiniciar falla o la red se corta un momento, sigue intentando sin cortar los subtítulos', async () => {
+    jest.useFakeTimers();
+    await renderCaptions();
+    fireEvent.click(screen.getByRole('button', { name: 'Activar subtítulos' }));
+    const recognition = FakeRecognition.instances[0];
+
+    recognition.start.mockImplementationOnce(() => {
+      throw new Error('InvalidStateError');
+    });
+    act(() => recognition.onend?.());
+    act(() => jest.runOnlyPendingTimers());
+    act(() => jest.runOnlyPendingTimers());
+    expect(recognition.start).toHaveBeenCalledTimes(3);
+
+    act(() => recognition.onerror?.({ error: 'network' }));
+    act(() => recognition.onend?.());
+    act(() => jest.runOnlyPendingTimers());
+    expect(recognition.start).toHaveBeenCalledTimes(4);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    act(() => recognition.say('Sigo acá', true));
+    expect(screen.getByText('Sigo acá')).toBeInTheDocument();
+
+    for (let i = 0; i < 4; i++) {
+      act(() => recognition.onerror?.({ error: 'network' }));
+      act(() => recognition.onend?.());
+      act(() => jest.runOnlyPendingTimers());
+    }
+    expect(screen.getByRole('alert')).toHaveTextContent('Se cortó la conexión');
+    jest.useRealTimers();
+  });
+
+  it('el tamaño de letra elegido en los ajustes de la llamada se aplica a los subtítulos', async () => {
+    const { useCallSettingsStore } = await import('../settings/store');
+    act(() => useCallSettingsStore.setState({ captionSize: 'large' }));
+    await renderCaptions();
+    fireEvent.click(screen.getByRole('button', { name: 'Activar subtítulos' }));
+    act(() => FakeRecognition.instances[0].say('Hola', true));
+    expect(screen.getByText('Hola').closest('[data-size]')).toHaveAttribute('data-size', 'large');
+    act(() => useCallSettingsStore.setState({ captionSize: 'medium' }));
   });
 });

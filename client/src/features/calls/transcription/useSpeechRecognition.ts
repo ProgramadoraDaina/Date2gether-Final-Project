@@ -22,7 +22,10 @@ interface Recognition {
 }
 type RecognitionConstructor = new () => Recognition;
 
-export type SpeechRecognitionError = 'not-allowed' | 'network' | 'unknown';
+const RESTART_DELAY_MS = 250;
+const MAX_NETWORK_RETRIES = 3;
+
+export type SpeechRecognitionError ='not-allowed' | 'network' | 'unknown';
 
 export interface SpeechResult {
   text: string;
@@ -66,11 +69,14 @@ export function useSpeechRecognition({ enabled, lang, onResult }: Options) {
     const Ctor = getRecognitionConstructor();
     if (!enabled || !Ctor) return;
     let stopped = false;
+    let networkFailures = 0;
+    let restartTimer: ReturnType<typeof setTimeout> | undefined;
     const recognition = new Ctor();
     recognition.lang = lang;
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.onresult = (event) => {
+      networkFailures = 0;
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         const text = result[0].transcript.trim();
@@ -80,16 +86,27 @@ export function useSpeechRecognition({ enabled, lang, onResult }: Options) {
     recognition.onerror = ({ error: code }) => {
       // 'no-speech' y 'aborted' son normales: silencio largo o un stop() propio.
       if (code === 'no-speech' || code === 'aborted') return;
+      if (code === 'network' && ++networkFailures <= MAX_NETWORK_RETRIES) return;
       stopped = true;
       setError(code === 'not-allowed' || code === 'network' ? code : 'unknown');
     };
-    // Chrome corta el reconocimiento tras un rato de silencio aunque sea continuo: se reinicia.
-    recognition.onend = () => {
-      if (!stopped) recognition.start();
+    const start = () => {
+      if (stopped) return;
+      try {
+        recognition.start();
+      } catch {
+        // Chrome tira InvalidStateError si todavía no terminó de cerrar la sesión anterior.
+        restartTimer = setTimeout(start, RESTART_DELAY_MS);
+      }
     };
-    recognition.start();
+    // Chrome corta el reconocimiento tras un rato aunque sea continuo: se reinicia.
+    recognition.onend = () => {
+      restartTimer = setTimeout(start, RESTART_DELAY_MS);
+    };
+    start();
     return () => {
       stopped = true;
+      clearTimeout(restartTimer);
       recognition.onend = null;
       recognition.abort();
       setError(null);

@@ -29,6 +29,7 @@ import { ReactionPicker } from './reactions/ReactionPicker';
 import { SoundboardPicker } from './reactions/SoundboardPicker';
 import { ReactionsProvider } from './reactions/ReactionsProvider';
 import { ReactionTile } from './reactions/ReactionTile';
+import { CallSettingsButton } from './settings/CallSettings';
 import { CaptionsButton, CaptionsOverlay } from './transcription/Captions';
 import { TranscriptionProvider } from './transcription/TranscriptionProvider';
 
@@ -240,6 +241,7 @@ function MeetingContent({
               activeClassName={styles.iconButtonActive}
             />
           </div>
+          <CallSettingsButton buttonClassName={styles.iconButton} />
           <HangUpButton />
         </div>
       </TranscriptionProvider>

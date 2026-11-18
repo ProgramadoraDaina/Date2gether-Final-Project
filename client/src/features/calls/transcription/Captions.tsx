@@ -1,6 +1,7 @@
 'use client';
 
 import { useTranslation } from '../../translation/useTranslation';
+import { useCallSettingsStore } from '../settings/store';
 import type { SpeechRecognitionError } from './useSpeechRecognition';
 import { useTranscription } from './useTranscription';
 import styles from './Captions.module.css';
@@ -63,9 +64,10 @@ export function CaptionsButton({
 export function CaptionsOverlay() {
   const { t } = useTranslation();
   const { enabled, captions, error, saveFailed } = useTranscription();
+  const captionSize = useCallSettingsStore((state) => state.captionSize);
   if (!enabled) return null;
   return (
-    <div className={styles.captions} aria-live="polite">
+    <div className={styles.captions} data-size={captionSize} aria-live="polite">
       {error && (
         <p className={styles.error} role="alert">
           {t(ERROR_MESSAGES[error])}

@@ -1,41 +1,51 @@
 .captions {
+  --caption-font-size: 1.125rem;
   position: absolute;
   left: 50%;
   bottom: 96px;
   z-index: 2;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  width: min(720px, calc(100% - 32px));
+  align-items: center;
+  gap: 2px;
+  width: min(760px, calc(100% - 32px));
   transform: translateX(-50%);
   pointer-events: none;
+  font-family: inherit;
+}
+
+.captions[data-size='small'] {
+  --caption-font-size: 0.9375rem;
+}
+
+.captions[data-size='large'] {
+  --caption-font-size: 1.5rem;
 }
 
 /* Negro translúcido con texto blanco: la convención de subtítulos se lee igual sobre cualquier video. */
 .line,
 .error {
   margin: 0;
-  padding: 6px 10px;
+  padding: 2px 8px;
   border-radius: 2px;
-  background: rgb(0 0 0 / 0.75);
+  background: rgb(0 0 0 / 0.6);
   color: #fff;
-  font-size: 1rem;
-  line-height: 1.4;
+  font-size: var(--caption-font-size);
+  font-weight: 400;
+  line-height: 1.35;
+  text-align: center;
 }
 
 .speaker {
-  margin-right: 8px;
-  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  opacity: 0.75;
+  margin-right: 6px;
+  font-size: 0.8em;
+  opacity: 0.6;
 }
 
 .interim {
-  opacity: 0.8;
+  opacity: 0.85;
 }
 
 .error {
-  font-size: 0.9rem;
+  font-size: 0.875rem;
 }
