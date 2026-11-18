@@ -133,6 +133,12 @@ const en: Record<string, string> = {
     'Your latest phrases could not be saved to the transcript.',
   'Ver transcripción': 'View transcript',
   'Descargar TXT': 'Download TXT',
+  'Ver en el historial': 'View in history',
+  'Necesitás iniciar sesión para ver esta transcripción.':
+    'You need to log in to see this transcript.',
+  'Buscando la llamada en tu historial…': 'Looking for the call in your history…',
+  'Todavía no está en tu historial: aparece cuando la llamada termina para todas las personas.':
+    'It is not in your history yet: it appears when the call ends for everyone.',
   Transcripción: 'Transcript',
   'Esta llamada no tiene transcripción.': 'This call has no transcript.',
   'Descargar PDF': 'Download PDF',

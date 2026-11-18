@@ -4,6 +4,8 @@ import { useLanguageStore } from '../../translation/store';
 import { TranscriptDialog } from './TranscriptDialog';
 
 const mockFetch = jest.fn<typeof fetch>();
+// Misma clave que usa lib/auth para guardar la sesión.
+const ACCESS_TOKEN_KEY = 'date2gether:accessToken';
 
 function renderDialog(callEnded = false) {
   render(
@@ -22,6 +24,7 @@ describe('TranscriptDialog', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     useLanguageStore.setState({ language: 'es' });
+    localStorage.clear();
     global.fetch = mockFetch;
     // jsdom no implementa showModal.
     HTMLDialogElement.prototype.showModal = jest.fn(function (this: HTMLDialogElement) {
@@ -62,6 +65,23 @@ describe('TranscriptDialog', () => {
     renderDialog(true);
     expect(await screen.findByText(/Todavía no hay frases/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Volver al inicio' })).toHaveAttribute('href', '/');
+  });
+
+  it('con cuenta, al terminar la llamada ofrece el link al acta en el historial', async () => {
+    localStorage.setItem(ACCESS_TOKEN_KEY, 'access-token');
+    mockFetch.mockResolvedValue(Response.json([]));
+    renderDialog(true);
+    expect(await screen.findByRole('link', { name: 'Ver en el historial' })).toHaveAttribute(
+      'href',
+      '/history/call/RM_call1',
+    );
+  });
+
+  it('sin cuenta no ofrece el link al historial', async () => {
+    mockFetch.mockResolvedValue(Response.json([]));
+    renderDialog(true);
+    await screen.findByText(/Todavía no hay frases/);
+    expect(screen.queryByRole('link', { name: 'Ver en el historial' })).not.toBeInTheDocument();
   });
 
   it('si el backend falla muestra el error', async () => {

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
+import { isLoggedIn } from '@/lib/auth';
 import { getTranscript, type TranscriptEntry } from '@/lib/transcripts';
 import { useTranslation } from '../../translation/useTranslation';
 import { TranscriptExport } from './TranscriptExport';
@@ -98,9 +99,19 @@ export function TranscriptDialog({
         <div className={styles.footer}>
           {hasLines && <TranscriptExport roomCode={roomCode} lines={state.lines} />}
           {callEnded && (
-            <Link href="/" className={styles.homeLink}>
-              {t('Volver al inicio')}
-            </Link>
+            <div className={styles.endLinks}>
+              {isLoggedIn() && (
+                <Link
+                  href={`/history/call/${encodeURIComponent(callSid)}`}
+                  className={styles.homeLink}
+                >
+                  {t('Ver en el historial')}
+                </Link>
+              )}
+              <Link href="/" className={styles.homeLink}>
+                {t('Volver al inicio')}
+              </Link>
+            </div>
           )}
         </div>
       )}

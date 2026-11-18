@@ -105,8 +105,13 @@
   padding: 6px 12px;
 }
 
-.homeLink {
+.endLinks {
+  display: flex;
+  gap: 16px;
   margin-left: auto;
+}
+
+.homeLink {
   color: var(--color-accent);
 }
 
