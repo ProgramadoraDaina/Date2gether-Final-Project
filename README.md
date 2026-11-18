@@ -134,6 +134,8 @@ Los cambios de LiveKit y seguridad deben revisarse en el PR antes de desplegarlo
 | POST   | `/calls/:roomCode`                                               | Pase de participante de esa sala; devuelve `{ url, token, roomName, participantLimit }` |
 | POST   | `/transcripts/:roomCode`                                         | Pase de participante; `{ callSid, content }`. El nombre sale del pase                   |
 | GET    | `/transcripts/:roomCode?callSid=`                                | Pase de participante; acta de esa llamada en orden                                      |
+| GET    | `/calls/sessions/:sessionId/transcript`                          | Cuenta registrada que participó (404 si no); acta de esa sesión del historial           |
+| GET    | `/calls/sessions/by-sid/:livekitRoomSid`                         | Cuenta registrada que participó (404 si no); devuelve `{ id }` de la sesión             |
 
 Con ingreso directo, `POST /rooms/:code/access` devuelve `{ token, participant }`. El frontend conserva el pase en memoria durante la visita; abrir o recargar el enlace vuelve a pedir confirmación del nombre. Una reconexión automática del socket usa el mismo pase. El nombre anterior puede estar precargado, pero no se ingresa automáticamente.
 
