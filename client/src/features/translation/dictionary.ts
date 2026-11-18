@@ -16,7 +16,8 @@ const en: Record<string, string> = {
   'Cancelando…': 'Cancelling…',
   'Administrar ingresos': 'Manage access',
   'Cargando solicitudes…': 'Loading requests…',
-  'Actualizar solicitudes': 'Refresh requests',
+  'Aceptá o rechazá a quienes piden entrar y elegí cómo se ingresa a la sala. Las solicitudes se actualizan solas.':
+    'Accept or decline people asking to join and choose how people enter the room. Requests update automatically.',
   'Configuración de ingreso': 'Access settings',
   'Activar sala de espera': 'Enable waiting room',
   'Bloquear nuevos ingresos': 'Block new entries',

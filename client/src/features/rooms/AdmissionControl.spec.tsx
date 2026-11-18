@@ -23,6 +23,9 @@ function baseAdmission(overrides: Partial<AdmissionManagement> = {}): AdmissionM
   };
 }
 
+const ADMISSION_HELP =
+  'Aceptá o rechazá a quienes piden entrar y elegí cómo se ingresa a la sala. Las solicitudes se actualizan solas.';
+
 async function openDialog() {
   fireEvent.click(screen.getByRole('button', { name: /Administrar ingresos/ }));
   // Espera a que la carga inicial resuelva -- la leyenda del fieldset solo
@@ -54,6 +57,22 @@ describe('AdmissionControl', () => {
     expect(
       screen.getByText('Esta sala es permanente: la sala de espera está siempre activa.'),
     ).toBeInTheDocument();
+  });
+
+  it('explica qué hace el botón y no ofrece actualizar a mano (se actualiza solo)', async () => {
+    const { getRoomAdmission } = await import('@/lib/api');
+    jest.mocked(getRoomAdmission).mockResolvedValue(baseAdmission());
+    const { AdmissionControl } = await import('./AdmissionControl');
+
+    render(<AdmissionControl code="abc-defg-hij" />);
+    const trigger = screen.getByRole('button', { name: /Administrar ingresos/ });
+    expect(trigger).toHaveAttribute('title', ADMISSION_HELP);
+    await openDialog();
+
+    expect(screen.getByText(ADMISSION_HELP)).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Actualizar solicitudes' }),
+    ).not.toBeInTheDocument();
   });
 
   it('una sala no permanente muestra el toggle de sala de espera', async () => {

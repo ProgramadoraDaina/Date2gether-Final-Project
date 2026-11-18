@@ -9,6 +9,9 @@ import {
 import { useTranslation } from '../translation/useTranslation';
 import styles from './AdmissionControl.module.css';
 
+const ADMISSION_HELP =
+  'Aceptá o rechazá a quienes piden entrar y elegí cómo se ingresa a la sala. Las solicitudes se actualizan solas.';
+
 export function AdmissionControl({ code }: { code: string }) {
   const { t } = useTranslation();
   const [data, setData] = useState<AdmissionManagement | null>(null);
@@ -90,7 +93,12 @@ export function AdmissionControl({ code }: { code: string }) {
 
   return (
     <div className={styles.control}>
-      <button type="button" aria-haspopup="dialog" onClick={() => setOpen(true)}>
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        title={t(ADMISSION_HELP)}
+        onClick={() => setOpen(true)}
+      >
         {t('Administrar ingresos')} <span aria-live="polite">({data?.requests.length ?? 0})</span>
       </button>
       {error && !open && <p role="alert">{t(error)}</p>}
@@ -105,21 +113,13 @@ export function AdmissionControl({ code }: { code: string }) {
           {t('Cerrar')}
         </button>
         <h2 id="admission-title">{t('Administrar ingresos')}</h2>
+        <p className={styles.help}>{t(ADMISSION_HELP)}</p>
         {!data && !error && <p role="status">{t('Cargando solicitudes…')}</p>}
         {error && (
           <p role="alert" className={styles.error}>
             {t(error)}
           </p>
         )}
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => {
-            void refresh();
-          }}
-        >
-          {t('Actualizar solicitudes')}
-        </button>
         {data && (
           <>
             <fieldset disabled={busy}>
@@ -134,9 +134,7 @@ export function AdmissionControl({ code }: { code: string }) {
                     onChange={(event) => {
                       const checked = event.currentTarget.checked;
                       setData({ ...data, waitingRoomEnabled: checked });
-                      void mutate(() =>
-                        updateRoomAdmission(code, { waitingRoomEnabled: checked }),
-                      );
+                      void mutate(() => updateRoomAdmission(code, { waitingRoomEnabled: checked }));
                     }}
                   />
                   {t('Activar sala de espera')}

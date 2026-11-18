@@ -66,3 +66,9 @@
   font-size: 13px;
   font-weight: 600;
 }
+
+.help {
+  margin: 0 0 var(--space-3);
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
