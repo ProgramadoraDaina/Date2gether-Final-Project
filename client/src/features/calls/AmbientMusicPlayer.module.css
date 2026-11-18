@@ -86,8 +86,17 @@
   align-items: center;
 }
 
+.trackField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
 .trackForm input {
   flex: 1;
+  min-width: 0;
+  margin: 0;
 }
 
 /* Mini "now playing" a la Spotify: una tile cuadrada (equalizador en vez de
@@ -266,8 +275,9 @@
    thumb se achica a 0 en reposo y solo aparece al pasar el mouse o tocar,
    igual que en el player nativo de YouTube. */
 .volumeBar {
-  width: 72px;
-  flex-shrink: 0;
+  flex: 1 1 72px;
+  min-width: 48px;
+  max-width: 160px;
   /* Mismo problema que .seekBar: sin este reset, el <input> global le mete
      10px de padding + borde + margin-bottom, y el navegador infla la caja a
      ~22px en vez de los 3px que pide esta regla. */

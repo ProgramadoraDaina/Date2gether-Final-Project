@@ -94,7 +94,7 @@ describe('AmbientMusicPlayer', () => {
     render(<AmbientMusicPlayer socket={fakeSocket() as never} isAdmin={false} />);
 
     expect(screen.queryByRole('button', { name: 'Agregar música' })).not.toBeInTheDocument();
-    expect(screen.queryByPlaceholderText('Pegá un link o ID de YouTube')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Link o ID de YouTube')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Unirme a la música' })).toBeInTheDocument();
   });
 
@@ -104,12 +104,12 @@ describe('AmbientMusicPlayer', () => {
 
     const toggle = screen.getByRole('button', { name: 'Agregar música' });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByPlaceholderText('Pegá un link o ID de YouTube')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Link o ID de YouTube')).not.toBeInTheDocument();
 
     fireEvent.click(toggle);
 
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByPlaceholderText('Pegá un link o ID de YouTube')).toBeInTheDocument();
+    expect(screen.getByLabelText('Link o ID de YouTube')).toBeInTheDocument();
   });
 
   it('el admin agrega una canción: resuelve el título por oEmbed, manda musicAddTrack y limpia el input', async () => {
@@ -118,7 +118,7 @@ describe('AmbientMusicPlayer', () => {
     render(<AmbientMusicPlayer socket={socket as never} isAdmin />);
     fireEvent.click(screen.getByRole('button', { name: 'Agregar música' }));
 
-    const input = screen.getByPlaceholderText('Pegá un link o ID de YouTube');
+    const input = screen.getByLabelText('Link o ID de YouTube');
     fireEvent.change(input, { target: { value: ' dQw4w9WgXcQ ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Elegir canción' }));
 
@@ -139,7 +139,7 @@ describe('AmbientMusicPlayer', () => {
     render(<AmbientMusicPlayer socket={socket as never} isAdmin />);
     fireEvent.click(screen.getByRole('button', { name: 'Agregar música' }));
 
-    fireEvent.change(screen.getByPlaceholderText('Pegá un link o ID de YouTube'), {
+    fireEvent.change(screen.getByLabelText('Link o ID de YouTube'), {
       target: { value: 'not-a-real-video' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Elegir canción' }));

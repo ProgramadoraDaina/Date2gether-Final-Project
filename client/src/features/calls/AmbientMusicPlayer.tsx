@@ -574,11 +574,15 @@ export function AmbientMusicPlayer({ socket, isAdmin }: AmbientMusicPlayerProps)
             </button>
             {open && (
               <div className={styles.panel}>
+                <label className={styles.trackField} htmlFor="ambient-music-track">
+                  {t('Link o ID de YouTube')}
+                </label>
                 <form onSubmit={handleAddTrack} className={styles.trackForm}>
                   <input
+                    id="ambient-music-track"
                     value={trackInput}
                     onChange={(e) => setTrackInput(e.target.value)}
-                    placeholder={t('Pegá un link o ID de YouTube')}
+                    placeholder="youtube.com/watch?v=…"
                   />
                   <button
                     type="submit"

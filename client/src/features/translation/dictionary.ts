@@ -331,7 +331,7 @@ const en: Record<string, string> = {
   Música: 'Music',
   'Agregar música': 'Add music',
   'Unirme a la música': 'Join the music',
-  'Pegá un link o ID de YouTube': 'Paste a YouTube link or video ID',
+  'Link o ID de YouTube': 'YouTube link or video ID',
   'Elegir canción': 'Set track',
   Reproducir: 'Play',
   Pausar: 'Pause',
