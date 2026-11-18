@@ -38,7 +38,7 @@ interface TranscriptionProviderProps {
   children: ReactNode;
   roomCode: string;
   roomToken: string;
-  // Avisa el sid de la llamada apenas se activan los subtítulos, para poder pedir el acta después.
+  // Fires with the call sid as soon as it is known, so the transcript can be opened later.
   onTranscriptAvailable?: (callSid: string) => void;
 }
 
@@ -79,8 +79,8 @@ export function TranscriptionProvider({
   }, [room]);
 
   useEffect(() => {
-    if (enabled && callSid) onTranscriptAvailable?.(callSid);
-  }, [enabled, callSid, onTranscriptAvailable]);
+    if (callSid) onTranscriptAvailable?.(callSid);
+  }, [callSid, onTranscriptAvailable]);
 
   useEffect(() => {
     const pending = timers.current;
@@ -173,7 +173,8 @@ export function TranscriptionProvider({
     [send, showOwnCaption],
   );
 
-  const listening = supported && enabled && isMicrophoneEnabled;
+  // Captions only control what is shown: the transcript is always recorded.
+  const listening = supported && isMicrophoneEnabled;
   useEffect(() => {
     if (!listening) commitRef.current();
   }, [listening]);

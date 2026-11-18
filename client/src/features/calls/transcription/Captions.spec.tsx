@@ -109,9 +109,27 @@ describe('Subtítulos en vivo', () => {
     expect(button).toBeDisabled();
   });
 
-  it('al activarlos transcribe el micrófono propio en el idioma de la app y manda la frase a la sala', async () => {
+  it('sin activar subtítulos transcribe igual y guarda el acta, pero no muestra nada en pantalla', async () => {
     await renderCaptions();
-    expect(FakeRecognition.instances).toHaveLength(0);
+    await waitFor(() => expect(onTranscriptAvailable).toHaveBeenCalledWith('RM_call1'));
+    const recognition = FakeRecognition.instances[0];
+    expect(recognition.start).toHaveBeenCalledTimes(1);
+
+    jest.useFakeTimers();
+    act(() => recognition.say('Nadie prendió CC', true));
+    act(() => jest.advanceTimersByTime(PHRASE_PAUSE_MS));
+    jest.useRealTimers();
+
+    expect(screen.queryByText('Nadie prendió CC')).not.toBeInTheDocument();
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(mockFetch.mock.calls[0][1]?.body))).toEqual({
+      callSid: 'RM_call1',
+      content: 'Nadie prendió CC',
+    });
+  });
+
+  it('al activarlos muestra la transcripción del micrófono propio en el idioma de la app y manda la frase a la sala', async () => {
+    await renderCaptions();
     fireEvent.click(screen.getByRole('button', { name: 'Activar subtítulos' }));
     const recognition = FakeRecognition.instances[0];
     expect(recognition.lang).toBe('es-AR');
@@ -253,16 +271,19 @@ describe('Subtítulos en vivo', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
-  it('al apagar los subtítulos guarda la frase que estaba en curso', async () => {
+  it('al apagar los subtítulos la frase en curso se sigue guardando después de la pausa', async () => {
     await renderCaptions();
     fireEvent.click(screen.getByRole('button', { name: 'Activar subtítulos' }));
     await waitFor(() => expect(onTranscriptAvailable).toHaveBeenCalled());
+    jest.useFakeTimers();
     act(() => FakeRecognition.instances[0].say('Última frase', true));
     fireEvent.click(screen.getByRole('button', { name: 'Desactivar subtítulos' }));
+    act(() => jest.advanceTimersByTime(PHRASE_PAUSE_MS));
+    jest.useRealTimers();
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
-  it('con el micrófono apagado no transcribe aunque los subtítulos estén activos', async () => {
+  it('con el micrófono apagado no transcribe, estén o no activos los subtítulos', async () => {
     micEnabled = false;
     await renderCaptions();
     fireEvent.click(screen.getByRole('button', { name: 'Activar subtítulos' }));
@@ -289,13 +310,13 @@ describe('Subtítulos en vivo', () => {
     expect(screen.queryByText('Otro')).not.toBeInTheDocument();
   });
 
-  it('al desactivarlos corta el reconocimiento y oculta los subtítulos', async () => {
+  it('al desactivarlos oculta los subtítulos pero no corta la transcripción', async () => {
     await renderCaptions();
     fireEvent.click(screen.getByRole('button', { name: 'Activar subtítulos' }));
     const recognition = FakeRecognition.instances[0];
     act(() => recognition.say('Chau', true));
     fireEvent.click(screen.getByRole('button', { name: 'Desactivar subtítulos' }));
-    expect(recognition.abort).toHaveBeenCalledTimes(1);
+    expect(recognition.abort).not.toHaveBeenCalled();
     expect(screen.queryByText('Chau')).not.toBeInTheDocument();
   });
 
