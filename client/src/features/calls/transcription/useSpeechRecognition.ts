@@ -77,11 +77,16 @@ export function useSpeechRecognition({ enabled, lang, onResult }: Options) {
     recognition.interimResults = true;
     recognition.onresult = (event) => {
       networkFailures = 0;
+      // Chrome parte lo que se está diciendo en varios parciales por evento: van juntos.
+      const interim: string[] = [];
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         const text = result[0].transcript.trim();
-        if (text) onResultRef.current({ text, final: result.isFinal });
+        if (!text) continue;
+        if (result.isFinal) onResultRef.current({ text, final: true });
+        else interim.push(text);
       }
+      if (interim.length > 0) onResultRef.current({ text: interim.join(' '), final: false });
     };
     recognition.onerror = ({ error: code }) => {
       // 'no-speech' y 'aborted' son normales: silencio largo o un stop() propio.

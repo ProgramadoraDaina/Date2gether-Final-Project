@@ -38,6 +38,12 @@ class FakeRecognition {
   constructor() {
     FakeRecognition.instances.push(this);
   }
+  emit(resultIndex: number, results: [string, boolean][]) {
+    this.onresult?.({
+      resultIndex,
+      results: results.map(([transcript, isFinal]) => ({ isFinal, 0: { transcript } })),
+    });
+  }
   say(text: string, isFinal: boolean) {
     this.onresult?.({ resultIndex: 0, results: [{ isFinal, 0: { transcript: text } }] });
   }
@@ -175,6 +181,28 @@ describe('Subtítulos en vivo', () => {
       content: 'y otra cosa',
     });
     jest.useRealTimers();
+  });
+
+  it('mientras hablás acumula todo lo dicho en vez de reemplazarlo por el último pedazo', async () => {
+    await renderCaptions();
+    fireEvent.click(screen.getByRole('button', { name: 'Activar subtítulos' }));
+    const recognition = FakeRecognition.instances[0];
+    act(() =>
+      recognition.emit(0, [
+        ['me encanta', true],
+        ['esta', false],
+        ['aplicacion', false],
+      ]),
+    );
+    expect(screen.getByText('me encanta esta aplicacion')).toBeInTheDocument();
+    act(() =>
+      recognition.emit(1, [
+        ['me encanta', true],
+        ['esta aplicacion y', false],
+        ['la uso', false],
+      ]),
+    );
+    expect(screen.getByText('me encanta esta aplicacion y la uso')).toBeInTheDocument();
   });
 
   it('si la frase se hace muy larga la guarda sin esperar la pausa', async () => {
