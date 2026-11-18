@@ -2,6 +2,8 @@ import { expect, test } from '@playwright/test';
 import { createRoomViaApi } from './support/api';
 import { SPANISH_STORAGE_STATE } from './support/env';
 
+import { leaveRoom } from './support/room';
+
 // rooms.spec.ts ya prueba que dos invitados conectados AL MISMO TIEMPO se ven
 // los mensajes entre sí (broadcast en vivo). Lo que no tenía ningún test es
 // que el historial quede guardado (chat.gateway.ts llama a
@@ -26,7 +28,7 @@ test('un mensaje queda en el historial para alguien que se une después de que s
   await page.getByRole('button', { name: 'Enviar', exact: true }).click();
   await expect(page.getByTestId('messages')).toContainText('Mensaje para la posteridad');
 
-  await page.getByRole('link', { name: 'Salir', exact: true }).click();
+  await leaveRoom(page);
   await expect(page).toHaveURL('/');
 
   await page.goto(`/room/${code}`);
@@ -62,7 +64,7 @@ test('quienes ya están en la sala ven el aviso de que alguien se unió, y despu
 
     await expect(first.getByTestId('notice')).toContainText('Segundo se unió a la sala');
 
-    await second.getByRole('link', { name: 'Salir', exact: true }).click();
+    await leaveRoom(second);
 
     await expect(first.getByTestId('notice')).toContainText('Segundo salió de la sala');
   } finally {

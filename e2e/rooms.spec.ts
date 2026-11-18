@@ -3,6 +3,8 @@ import { createRoomViaApi, registerUserViaApi } from './support/api';
 import { API_URL, SPANISH_STORAGE_STATE } from './support/env';
 import { buildTestUser } from './support/test-data';
 
+import { leaveRoom } from './support/room';
+
 const ROOM_URL_PATTERN = /\/room\/[a-z]{3}-[a-z]{4}-[a-z]{3}$/;
 
 test('crear una reunión requiere cuenta y conserva el rol de administrador', async ({
@@ -75,7 +77,7 @@ test('dos invitados con el mismo nombre chatean y salir no elimina al otro', asy
     await a.getByRole('button', { name: 'Enviar', exact: true }).click();
     await b.getByRole('button', { name: 'Conversación', exact: true }).click();
     await expect(b.getByTestId('messages')).toContainText('Mensaje entre invitados');
-    await a.getByRole('link', { name: 'Salir', exact: true }).click();
+    await leaveRoom(a);
     await b.getByRole('button', { name: 'Presentes', exact: true }).click();
     await expect(b.getByRole('heading', { name: 'En la sala (1)' })).toBeVisible();
   } finally {
