@@ -362,7 +362,7 @@
   height: 2px;
   background: var(--color-accent);
   transform: scaleX(0);
-  transform-origin: left;
+  transform-origin: center;
 }
 
 .chatTab:hover {
