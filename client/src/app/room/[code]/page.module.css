@@ -341,20 +341,37 @@
 }
 
 .chatTab {
+  position: relative;
   width: auto;
   padding: 0 0 12px;
   background: none;
   border: none;
-  border-bottom: 2px solid transparent;
+  border-radius: 0;
   color: var(--color-text-muted);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
 }
 
+.chatTab::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--color-accent);
+  transform: scaleX(0);
+  transform-origin: left;
+}
+
 .chatTab:hover {
   background: none;
   color: var(--color-text);
+}
+
+.chatTab:active {
+  transform: none;
 }
 
 .chatTab:focus {
@@ -363,19 +380,33 @@
 
 .chatTab:focus-visible {
   color: var(--color-text);
-  border-bottom-color: var(--color-text);
+  outline: 1px solid var(--color-text-muted);
+  outline-offset: 4px;
 }
 
 .chatTabActive,
-.chatTabActive:hover,
-.chatTabActive:focus-visible {
+.chatTabActive:hover {
   color: var(--color-accent);
-  border-bottom-color: var(--color-accent);
 }
 
-.chatTabActive:focus-visible {
-  text-decoration: underline;
-  text-underline-offset: 4px;
+.chatTabActive::after {
+  transform: scaleX(1);
+  animation: chatTabSweep 220ms linear;
+}
+
+@keyframes chatTabSweep {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chatTabActive::after {
+    animation: none;
+  }
 }
 
 .messages {
