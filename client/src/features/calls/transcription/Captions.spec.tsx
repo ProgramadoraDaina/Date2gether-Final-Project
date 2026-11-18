@@ -196,6 +196,53 @@ describe('Subtítulos en vivo', () => {
     });
   });
 
+  it('las frases dichas antes de que la sala conecte no se pierden: se guardan al conectar', async () => {
+    mockRoom.state = 'disconnected';
+    await renderCaptions();
+    await act(async () => {});
+
+    jest.useFakeTimers();
+    act(() => FakeRecognition.instances[0].say('Hola antes de conectar', true));
+    act(() => jest.advanceTimersByTime(PHRASE_PAUSE_MS));
+    jest.useRealTimers();
+    expect(mockFetch).not.toHaveBeenCalled();
+
+    mockRoom.state = 'connected';
+    await act(async () => mockRoom.listeners.get('connected')?.());
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(String(mockFetch.mock.calls[0][1]?.body))).toEqual({
+      callSid: 'RM_call1',
+      content: 'Hola antes de conectar',
+    });
+  });
+
+  it('si guardar una frase falla, la reintenta junto con la siguiente y en orden', async () => {
+    mockFetch
+      .mockResolvedValueOnce(new Response(null, { status: 500 }))
+      .mockResolvedValue(new Response(null, { status: 201 }));
+    await renderCaptions();
+    await waitFor(() => expect(onTranscriptAvailable).toHaveBeenCalled());
+    const recognition = FakeRecognition.instances[0];
+
+    jest.useFakeTimers();
+    act(() => recognition.say('Primera', true));
+    act(() => jest.advanceTimersByTime(PHRASE_PAUSE_MS));
+    jest.useRealTimers();
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+
+    jest.useFakeTimers();
+    act(() => recognition.say('Segunda', true));
+    act(() => jest.advanceTimersByTime(PHRASE_PAUSE_MS));
+    jest.useRealTimers();
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(3));
+    const contents = mockFetch.mock.calls.map(
+      ([, init]) => (JSON.parse(String(init?.body)) as { content: string }).content,
+    );
+    expect(contents).toEqual(['Primera', 'Primera', 'Segunda']);
+  });
+
   it('si el backend no guarda la frase, avisa sin cortar los subtítulos', async () => {
     mockFetch.mockResolvedValue(new Response('{}', { status: 500 }));
     await renderCaptions();
@@ -233,7 +280,7 @@ describe('Subtítulos en vivo', () => {
 
     act(() => recognition.say('y otra cosa', true));
     act(() => jest.advanceTimersByTime(PHRASE_PAUSE_MS));
-    expect(mockFetch).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2));
     expect(JSON.parse(String(mockFetch.mock.calls[1][1]?.body))).toMatchObject({
       content: 'y otra cosa',
     });

@@ -18,6 +18,8 @@ interface TranscriptDialogProps {
   callEnded: boolean;
 }
 
+const REFRESH_MS = 3000;
+
 type LoadState =
   { status: 'loading' } | { status: 'error' } | { status: 'ready'; lines: TranscriptEntry[] };
 
@@ -43,15 +45,37 @@ export function TranscriptDialog({
   useEffect(() => {
     if (!open) return;
     const request = new AbortController();
-    getTranscript(roomCode, roomToken, callSid, request.signal).then(
-      (lines) => setState({ status: 'ready', lines }),
-      () => !request.signal.aborted && setState({ status: 'error' }),
-    );
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const load = () => {
+      getTranscript(roomCode, roomToken, callSid, request.signal)
+        .then(
+          (lines) => setState({ status: 'ready', lines }),
+          // A failed refresh keeps the lines already shown; only the first load reports it.
+          () =>
+            !request.signal.aborted &&
+            setState((prev) => (prev.status === 'ready' ? prev : { status: 'error' })),
+        )
+        .finally(() => {
+          if (!callEnded && !request.signal.aborted) timer = setTimeout(load, REFRESH_MS);
+        });
+    };
+    load();
     return () => {
       request.abort();
+      clearTimeout(timer);
       setState({ status: 'loading' });
     };
-  }, [open, roomCode, roomToken, callSid]);
+  }, [open, roomCode, roomToken, callSid, callEnded]);
+
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const lineCount = state.status === 'ready' ? state.lines.length : 0;
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!body || lineCount === 0) return;
+    // Follow new lines only when the reader was already at the bottom.
+    if (body.scrollHeight - body.scrollTop - body.clientHeight < 80)
+      body.scrollTop = body.scrollHeight;
+  }, [lineCount]);
 
   const hasLines = state.status === 'ready' && state.lines.length > 0;
 
@@ -77,7 +101,7 @@ export function TranscriptDialog({
           ✕
         </button>
       </div>
-      <div className={styles.body}>
+      <div className={styles.body} ref={bodyRef}>
         {state.status === 'loading' && (
           <p className={styles.muted}>{t('Cargando transcripción…')}</p>
         )}
@@ -88,7 +112,9 @@ export function TranscriptDialog({
         )}
         {state.status === 'ready' && state.lines.length === 0 && (
           <p className={styles.muted}>
-            {t('Todavía no hay frases. Activá los subtítulos y hablá con el micrófono prendido.')}
+            {t(
+              'Todavía no hay frases. Se agregan solas mientras alguien habla con el micrófono prendido.',
+            )}
           </p>
         )}
         {state.status === 'ready' && state.lines.length > 0 && (

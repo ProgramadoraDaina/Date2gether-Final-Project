@@ -126,6 +126,32 @@ export function TranscriptionProvider({
     [localParticipant, showCaption],
   );
 
+  // Lines wait here until the call sid is known, and stay if a save fails so none is lost.
+  const unsaved = useRef<string[]>([]);
+  const flushing = useRef(false);
+  const flushUnsaved = useCallback(async () => {
+    if (!callSid || flushing.current) return;
+    flushing.current = true;
+    try {
+      while (unsaved.current.length > 0) {
+        try {
+          await saveTranscriptLine(roomCode, roomToken, callSid, unsaved.current[0]);
+        } catch {
+          setSaveFailed(true);
+          return;
+        }
+        unsaved.current.shift();
+        setSaveFailed(false);
+      }
+    } finally {
+      flushing.current = false;
+    }
+  }, [callSid, roomCode, roomToken]);
+
+  useEffect(() => {
+    void flushUnsaved();
+  }, [flushUnsaved]);
+
   const commitPhrase = useCallback(() => {
     clearTimeout(pauseTimer.current);
     const pending = phrase.current;
@@ -135,13 +161,9 @@ export function TranscriptionProvider({
     showOwnCaption(message);
     void send(encodeCaption(message), { reliable: true, topic: TRANSCRIPT_TOPIC });
     // Cada persona guarda solo sus propias frases: así el acta no se duplica.
-    if (callSid) {
-      saveTranscriptLine(roomCode, roomToken, callSid, message.text).then(
-        () => setSaveFailed(false),
-        () => setSaveFailed(true),
-      );
-    }
-  }, [callSid, roomCode, roomToken, send, showOwnCaption]);
+    unsaved.current.push(message.text);
+    void flushUnsaved();
+  }, [flushUnsaved, send, showOwnCaption]);
 
   const commitRef = useRef(commitPhrase);
   useEffect(() => {
