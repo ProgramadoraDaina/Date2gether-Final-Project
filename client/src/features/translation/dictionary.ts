@@ -132,6 +132,9 @@ const en: Record<string, string> = {
   'No se pudieron guardar tus últimas frases en la transcripción.':
     'Your latest phrases could not be saved to the transcript.',
   'Ver transcripción': 'View transcript',
+  'Descargar TXT': 'Download TXT',
+  'Descargar PDF': 'Download PDF',
+  'No se pudo generar el PDF': 'Could not generate the PDF',
   'Transcripción de la llamada': 'Call transcript',
   frases: 'phrases',
   'Cargando transcripción…': 'Loading transcript…',

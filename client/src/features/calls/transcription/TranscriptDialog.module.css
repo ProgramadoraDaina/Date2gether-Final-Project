@@ -85,12 +85,28 @@
 
 .footer {
   display: flex;
-  justify-content: flex-end;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 12px 16px;
   border-top: 1px solid var(--color-border);
 }
 
+.exportActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.exportActions button {
+  width: auto;
+  padding: 6px 12px;
+}
+
 .homeLink {
+  margin-left: auto;
   color: var(--color-accent);
 }
 

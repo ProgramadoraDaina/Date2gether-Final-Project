@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { getTranscript, type TranscriptEntry } from '@/lib/transcripts';
 import { useTranslation } from '../../translation/useTranslation';
+import { TranscriptExport } from './TranscriptExport';
+import { TranscriptLines } from './TranscriptLines';
 import styles from './TranscriptDialog.module.css';
 
 interface TranscriptDialogProps {
@@ -17,14 +19,6 @@ interface TranscriptDialogProps {
 
 type LoadState =
   { status: 'loading' } | { status: 'error' } | { status: 'ready'; lines: TranscriptEntry[] };
-
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-}
 
 export function TranscriptDialog({
   open,
@@ -57,6 +51,8 @@ export function TranscriptDialog({
       setState({ status: 'loading' });
     };
   }, [open, roomCode, roomToken, callSid]);
+
+  const hasLines = state.status === 'ready' && state.lines.length > 0;
 
   return (
     <dialog
@@ -95,24 +91,17 @@ export function TranscriptDialog({
           </p>
         )}
         {state.status === 'ready' && state.lines.length > 0 && (
-          <ol className={styles.lines}>
-            {state.lines.map((line) => (
-              <li key={line.id} className={styles.line}>
-                <time className={styles.time} dateTime={line.spokenAt}>
-                  {formatTime(line.spokenAt)}
-                </time>
-                <span className={styles.speaker}>{line.speakerName}</span>
-                <span>{line.content}</span>
-              </li>
-            ))}
-          </ol>
+          <TranscriptLines lines={state.lines} />
         )}
       </div>
-      {callEnded && (
+      {(hasLines || callEnded) && (
         <div className={styles.footer}>
-          <Link href="/" className={styles.homeLink}>
-            {t('Volver al inicio')}
-          </Link>
+          {hasLines && <TranscriptExport roomCode={roomCode} lines={state.lines} />}
+          {callEnded && (
+            <Link href="/" className={styles.homeLink}>
+              {t('Volver al inicio')}
+            </Link>
+          )}
         </div>
       )}
     </dialog>
