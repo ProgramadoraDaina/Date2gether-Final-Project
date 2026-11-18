@@ -14,10 +14,7 @@ interface RoomSidebarProps {
   onOpenEmojis: () => void;
   // Solo existe cuando hay una transcripción de la llamada para mostrar.
   onOpenTranscript?: () => void;
-  // Controlan el colapso animado y el ancho elegido con el handle de resize
-  // (ver useResizablePanel en RoomPage). El wrapper externo anima `width`
-  // entre 0 y `width`; el contenido interno mantiene `width` fijo para no
-  // reflowear mientras se cierra, solo queda clippeado por overflow:hidden.
+  // Collapse state and the width chosen with the resize handle (see useResizablePanel).
   open: boolean;
   width: number;
   onResizeHandleMouseDown: (e: ReactMouseEvent) => void;
@@ -29,6 +26,8 @@ interface RoomSidebarProps {
   // AdmissionControl ya trae su propio botón + dialog, así que acá entra
   // como un nodo más de bottomActions, igual que musicPlayer.
   admissionControl?: ReactNode;
+  // Room event trigger (roulette); only present for admins and collaborators.
+  eventControl?: ReactNode;
   // true mientras hay algún intento de llamada en curso (conectando, en
   // llamada, o reintentando tras un error): esos tres estados ya tienen su
   // propio botón "Colgar" con confirmación (ver HangUpButton.tsx, usado
@@ -49,6 +48,7 @@ export function RoomSidebar({
   onResizeHandleMouseDown,
   musicPlayer,
   admissionControl,
+  eventControl,
   inCall,
 }: RoomSidebarProps) {
   const { t } = useTranslation();
@@ -68,6 +68,7 @@ export function RoomSidebar({
         <div className={styles.toggles}>
           <ThemeToggle />
           <LanguageToggle />
+          {eventControl}
         </div>
 
         <div className={styles.bottomActions}>

@@ -1,5 +1,5 @@
-/* El wrapper es el que anima `width` al abrir/cerrar (ver RoomSidebar.tsx);
-   overflow:hidden recorta el contenido sin que reflowee mientras colapsa.
+/* El wrapper cambia `width` al abrir/cerrar, sin animar: animarlo deja una
+   franja negra mientras LiveKit reacomoda el video (ver RoomSidebar.tsx).
    El ancho "abierto" llega como custom property (no inline width directo)
    para poder pisarlo limpio por especificidad en mobile, sin pelear con
    !important contra un inline style. Cerrado (data-open="false") siempre
@@ -10,7 +10,6 @@
   width: var(--sidebar-width);
   height: 100%;
   overflow: hidden;
-  transition: width 200ms ease;
 }
 
 .sidebarWrap[data-open='false'] {
@@ -75,6 +74,7 @@
 
 .toggles {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
 }
 
@@ -99,59 +99,32 @@
   color: var(--color-accent);
 }
 
+/* On phones the panel is a full-screen sheet over the call; the room page closes it by default. */
 @media (max-width: 640px) {
-  /* En mobile la sidebar es una fila fija arriba, no un panel con ancho a
-     gusto: ignora el --sidebar-width elegido en desktop. ".sidebarWrap" a
-     secas (sin [data-open]) tiene menos especificidad que la regla de
-     arriba con el atributo, así que cuando está cerrada sigue ganando 0. */
   .sidebarWrap {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
     width: 100%;
-    height: auto;
-    /* No se pisa overflow:hidden (heredado de la regla base): si se
-       permitiera overflow:visible acá, al cerrar (width:0 vía el
-       selector [data-open="false"], que gana por especificidad) el
-       contenido interno podría desbordarse visible en vez de quedar
-       recortado. */
+    height: 100%;
+    overflow-y: auto;
+  }
+
+  .sidebarWrap[data-open='false'] {
+    display: none;
   }
 
   .resizeHandle {
     display: none;
   }
 
-  /* Acá sí hace falta !important: .sidebar trae un inline style={{width}}
-     en px desde el JS de desktop, y un inline style le gana a cualquier
-     regla de clase sin importar el media query. */
+  /* !important beats the desktop inline width. */
   .sidebar {
     width: 100% !important;
     height: auto;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    padding: 8px;
-    gap: 10px;
-    font-size: 13px;
+    min-height: 100%;
+    padding: calc(60px + env(safe-area-inset-top, 0px)) 16px
+      calc(16px + env(safe-area-inset-bottom, 0px));
     border-right: none;
-    border-bottom: 1px solid var(--color-border);
-  }
-
-  .brand {
-    flex-direction: row;
-    align-items: center;
-  }
-
-  .code {
-    padding: 2px 6px;
-    font-size: 12px;
-  }
-
-  .toggles {
-    flex-wrap: wrap;
-  }
-
-  .bottomActions {
-    margin-top: 0;
-    margin-left: auto;
-    flex-direction: row;
-    align-items: center;
   }
 }
