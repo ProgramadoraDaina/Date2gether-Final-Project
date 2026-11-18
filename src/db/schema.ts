@@ -203,6 +203,27 @@ export const roomScheduleSlotsRelations = relations(roomScheduleSlots, ({ one })
 export type RoomScheduleSlot = typeof roomScheduleSlots.$inferSelect;
 export type NewRoomScheduleSlot = typeof roomScheduleSlots.$inferInsert;
 
+export interface PlaylistTrack {
+  videoId: string;
+  title: string;
+}
+
+// Only permanent rooms persist their playlist; temporary rooms keep it in memory.
+export const roomPlaylists = pgTable(
+  'room_playlists',
+  {
+    roomId: uuid('room_id')
+      .primaryKey()
+      .references(() => rooms.id, { onDelete: 'cascade' }),
+    tracks: jsonb('tracks').$type<PlaylistTrack[]>().notNull().default([]),
+    currentIndex: integer('current_index').notNull().default(0),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [check('room_playlists_current_index_valid', sql`${table.currentIndex} >= 0`)],
+);
+
+export type RoomPlaylist = typeof roomPlaylists.$inferSelect;
+
 // Historial de llamadas: una fila por cada vez que una cuenta registrada
 // se une exitosamente a una sala. Los invitados sin cuenta no generan fila.
 export const callHistory = pgTable('call_history', {

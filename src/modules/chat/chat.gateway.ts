@@ -1,4 +1,4 @@
-import { Inject, UseGuards, UsePipes, ValidationPipe } from '@nestjs/common';
+import { Inject, UseGuards, UsePipes, ValidationPipe, Logger } from '@nestjs/common';
 import { isURL } from 'class-validator';
 import { eq } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
@@ -18,6 +18,7 @@ import { RoomEventsService } from '../rooms/room-events.service';
 import { RoomResolverService } from '../rooms/room-resolver.service';
 import { RoomsService } from '../rooms/rooms.service';
 import { ChatService } from './chat.service';
+import { RoomPlaylistsService } from './room-playlists.service';
 import { JoinRoomDto } from './dto/join-room.dto';
 import { MusicAddTrackDto } from './dto/music-add-track.dto';
 import { MusicPositionDto } from './dto/music-position.dto';
@@ -115,6 +116,8 @@ export class ChatGateway implements OnGatewayDisconnect {
   private readonly connectedUsers = new Map<string, ConnectedUser>();
   private readonly musicStateByRoom = new Map<string, MusicState>();
   private readonly eventStateByRoom = new Map<string, RoomEventState>();
+  private readonly permanentRoomIds = new Set<string>();
+  private readonly logger = new Logger(ChatGateway.name);
 
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleDb,
@@ -122,6 +125,7 @@ export class ChatGateway implements OnGatewayDisconnect {
     private readonly chatService: ChatService,
     private readonly roomEvents: RoomEventsService,
     private readonly resolver: RoomResolverService,
+    private readonly playlists: RoomPlaylistsService,
   ) {
     this.roomEvents.onMemberRoleChanged(({ roomCode }) => {
       this.server.to(roomCode).emit('memberRoleChanged');
@@ -174,6 +178,7 @@ export class ChatGateway implements OnGatewayDisconnect {
 
     // Sincroniza al que recién entra con lo que ya se está escuchando; si
     // nadie eligió nada todavía no tiene sentido mandar un estado vacío.
+    if (room.isPermanent) await this.restorePlaylist(dto.code, room.id);
     const musicState = this.musicStateByRoom.get(dto.code);
     if (musicState) client.emit('musicState', musicState);
 
@@ -248,7 +253,7 @@ export class ChatGateway implements OnGatewayDisconnect {
       positionSeconds: current?.positionSeconds ?? 0,
       updatedAt: Date.now(),
     };
-    this.musicStateByRoom.set(user.roomCode, state);
+    this.setMusicState(user, state);
     this.server.to(user.roomCode).emit('musicState', state);
   }
 
@@ -283,7 +288,7 @@ export class ChatGateway implements OnGatewayDisconnect {
       positionSeconds: removingCurrent ? 0 : current.positionSeconds,
       updatedAt: Date.now(),
     };
-    this.musicStateByRoom.set(user.roomCode, state);
+    this.setMusicState(user, state);
     this.server.to(user.roomCode).emit('musicState', state);
   }
 
@@ -308,7 +313,7 @@ export class ChatGateway implements OnGatewayDisconnect {
       positionSeconds: 0,
       updatedAt: Date.now(),
     };
-    this.musicStateByRoom.set(user.roomCode, state);
+    this.setMusicState(user, state);
     this.server.to(user.roomCode).emit('musicState', state);
   }
 
@@ -417,6 +422,7 @@ export class ChatGateway implements OnGatewayDisconnect {
     if (this.getUsersInRoom(user.roomCode).length === 0) {
       this.musicStateByRoom.delete(user.roomCode);
       this.eventStateByRoom.delete(user.roomCode);
+      this.permanentRoomIds.delete(user.roomId);
     }
   }
 
@@ -481,8 +487,36 @@ export class ChatGateway implements OnGatewayDisconnect {
     }
 
     const next: MusicState = { ...apply(current), updatedAt: Date.now() };
-    this.musicStateByRoom.set(user.roomCode, next);
+    this.setMusicState(user, next);
     this.server.to(user.roomCode).emit('musicState', next);
+  }
+
+  private setMusicState(user: ConnectedUser, state: MusicState) {
+    this.musicStateByRoom.set(user.roomCode, state);
+    if (!this.permanentRoomIds.has(user.roomId)) return;
+    this.playlists.save(user.roomId, state.tracks, state.currentIndex).catch(() => {
+      this.logger.warn(`No se pudo guardar la playlist de la sala ${user.roomId}`);
+    });
+  }
+
+  private async restorePlaylist(roomCode: string, roomId: string) {
+    this.permanentRoomIds.add(roomId);
+    if (this.musicStateByRoom.has(roomCode)) return;
+    let stored: Awaited<ReturnType<RoomPlaylistsService['load']>>;
+    try {
+      stored = await this.playlists.load(roomId);
+    } catch {
+      this.logger.warn(`No se pudo recuperar la playlist de la sala ${roomId}`);
+      return;
+    }
+    if (!stored || stored.tracks.length === 0 || this.musicStateByRoom.has(roomCode)) return;
+    this.musicStateByRoom.set(roomCode, {
+      tracks: stored.tracks,
+      currentIndex: Math.min(stored.currentIndex, stored.tracks.length - 1),
+      isPlaying: false,
+      positionSeconds: 0,
+      updatedAt: Date.now(),
+    });
   }
 
   private getUsersInRoom(roomCode: string): RoomUser[] {
