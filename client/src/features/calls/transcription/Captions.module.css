@@ -1,6 +1,6 @@
 .captions {
   --caption-font-size: 1.125rem;
-  --caption-max-lines: 2;
+  --caption-max-lines: 3;
   position: absolute;
   left: 50%;
   bottom: 96px;
