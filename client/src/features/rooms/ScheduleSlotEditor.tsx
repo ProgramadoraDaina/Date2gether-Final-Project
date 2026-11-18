@@ -27,9 +27,7 @@ export function ScheduleSlotEditor({ slots, onChange }: ScheduleSlotEditorProps)
   const { t } = useTranslation();
   const [dayOfWeek, setDayOfWeek] = useState(1);
   const [timeOfDay, setTimeOfDay] = useState('');
-  const [timezone, setTimezone] = useState(
-    () => Intl.DateTimeFormat().resolvedOptions().timeZone,
-  );
+  const [timezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [error, setError] = useState<string | null>(null);
 
   function addSlot(event: FormEvent) {
@@ -84,14 +82,10 @@ export function ScheduleSlotEditor({ slots, onChange }: ScheduleSlotEditorProps)
         <label>
           {t('Hora')}
           <input
+            type="time"
             value={timeOfDay}
             onChange={(event) => setTimeOfDay(event.target.value)}
-            placeholder="07:00"
           />
-        </label>
-        <label>
-          {t('Zona horaria')}
-          <input value={timezone} onChange={(event) => setTimezone(event.target.value)} />
         </label>
         <button type="button" onClick={addSlot}>
           {t('Agregar horario')}
