@@ -86,6 +86,40 @@ describe('AdmissionControl', () => {
     expect(screen.getByLabelText('Activar sala de espera')).toBeInTheDocument();
   });
 
+  it('cada opción lleva su explicación asociada y las secciones son títulos', async () => {
+    const { getRoomAdmission } = await import('@/lib/api');
+    jest.mocked(getRoomAdmission).mockResolvedValue(baseAdmission());
+    const { AdmissionControl } = await import('./AdmissionControl');
+
+    render(<AdmissionControl code="abc-defg-hij" />);
+    await openDialog();
+
+    expect(screen.getByLabelText('Activar sala de espera')).toHaveAccessibleDescription(
+      'Desactivar la espera admite las solicitudes pendientes cuando los ingresos están desbloqueados.',
+    );
+    expect(screen.getByLabelText('Bloquear nuevos ingresos')).toHaveAccessibleDescription(
+      'Los cambios de ingreso no expulsan a quienes ya están dentro.',
+    );
+    expect(screen.getByRole('heading', { name: /Solicitudes pendientes/ })).toBeInTheDocument();
+  });
+
+  it('en una sala permanente no muestra la explicación de desactivar la espera', async () => {
+    const { getRoomAdmission } = await import('@/lib/api');
+    jest
+      .mocked(getRoomAdmission)
+      .mockResolvedValue(baseAdmission({ isPermanent: true, waitingRoomEnabled: true }));
+    const { AdmissionControl } = await import('./AdmissionControl');
+
+    render(<AdmissionControl code="abc-defg-hij" />);
+    await openDialog();
+
+    expect(
+      screen.queryByText(
+        'Desactivar la espera admite las solicitudes pendientes cuando los ingresos están desbloqueados.',
+      ),
+    ).not.toBeInTheDocument();
+  });
+
   it('[5.8] marca una solicitud stale con una señal visible', async () => {
     const { getRoomAdmission } = await import('@/lib/api');
     jest.mocked(getRoomAdmission).mockResolvedValue(
