@@ -1,0 +1,122 @@
+.card {
+  composes: card from '../../styles/form.module.css';
+  max-width: 720px;
+  padding: 40px;
+}
+
+.error {
+  composes: error from '../../styles/form.module.css';
+}
+
+.authLinks {
+  composes: authLinks from '../../styles/form.module.css';
+}
+
+.list {
+  list-style: none;
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.room {
+  display: grid;
+  gap: 6px;
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.roomHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.roomName {
+  font-family: var(--font-display);
+  font-size: 16px;
+}
+
+.badge {
+  padding: 2px 6px;
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-xs);
+  color: var(--color-accent);
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.badgeMuted {
+  border-color: var(--color-border);
+  color: var(--color-text-muted);
+}
+
+.code,
+.slots,
+.next span {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+}
+
+.code {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.slots,
+.next {
+  margin: 0;
+  font-size: 13px;
+}
+
+.next {
+  color: var(--color-text-muted);
+}
+
+.next span {
+  color: var(--color-text);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.action,
+.primaryAction {
+  width: auto;
+  padding: 6px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  background: none;
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.action:hover {
+  background: none;
+  border-color: var(--color-text);
+}
+
+.primaryAction {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+}
+
+.primaryAction:hover {
+  background: var(--color-accent-hover);
+}
+
+.copied {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}

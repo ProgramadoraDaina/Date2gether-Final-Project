@@ -13,16 +13,50 @@ interface NavItem {
 
 function HomeIcon() {
   return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
       <path d="M3 11.5 12 4l9 7.5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M5.5 10v9a1 1 0 0 0 1 1H9.5v-6h5v6H17.5a1 1 0 0 0 1-1v-9" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M5.5 10v9a1 1 0 0 0 1 1H9.5v-6h5v6H17.5a1 1 0 0 0 1-1v-9"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function RoomsIcon() {
+  return (
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <rect x="3" y="4" width="18" height="16" rx="1" strokeLinejoin="round" />
+      <path d="M3 9h18M8 4v5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
 function HistoryIcon() {
   return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
       <circle cx="12" cy="12" r="9" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M12 7v5l3.5 2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
@@ -31,7 +65,14 @@ function HistoryIcon() {
 
 function SettingsIcon() {
   return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
       <path
         d="M9.49 4.93 L10.52 4.65 L10.64 1.59 L13.36 1.59 L13.48 4.65 L15.23 5.23 L16.15 5.75 L18.4 3.68 L20.32 5.6 L18.25 7.85 L19.07 9.49 L19.35 10.52 L22.41 10.64 L22.41 13.36 L19.35 13.48 L18.77 15.23 L18.25 16.15 L20.32 18.4 L18.4 20.32 L16.15 18.25 L14.51 19.07 L13.48 19.35 L13.36 22.41 L10.64 22.41 L10.52 19.35 L8.77 18.77 L7.85 18.25 L5.6 20.32 L3.68 18.4 L5.75 16.15 L4.93 14.51 L4.65 13.48 L1.59 13.36 L1.59 10.64 L4.65 10.52 L5.23 8.77 L5.75 7.85 L3.68 5.6 L5.6 3.68 L7.85 5.75 Z"
         strokeLinejoin="round"
@@ -47,6 +88,7 @@ export function AppNav() {
 
   const topItems: NavItem[] = [
     { href: '/', label: t('Inicio'), icon: <HomeIcon /> },
+    { href: '/rooms', label: t('Mis salas'), icon: <RoomsIcon /> },
     { href: '/history', label: t('Historial'), icon: <HistoryIcon /> },
   ];
   const bottomItems: NavItem[] = [

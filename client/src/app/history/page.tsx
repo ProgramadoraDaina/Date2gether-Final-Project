@@ -1,20 +1,31 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { ApiError, getCallHistory, type CallHistoryEntry } from '@/lib/api';
 import { isLoggedIn } from '@/lib/auth';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { AppShell } from '@/features/navigation/AppShell';
 import styles from './page.module.css';
 
+// useSearchParams needs a Suspense boundary or the static build of /history fails.
 export default function HistoryPage() {
+  return (
+    <Suspense fallback={null}>
+      <HistoryContent />
+    </Suspense>
+  );
+}
+
+function HistoryContent() {
   const { t, language } = useTranslation();
   const [loggedIn, setLoggedIn] = useState(false);
   const [checking, setChecking] = useState(true);
   const [entries, setEntries] = useState<CallHistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const roomFilter = useSearchParams().get('roomId');
 
   // Corre solo al montar: `t` se omite a propósito de las dependencias para
   // no repetir el fetch del historial cada vez que cambia el idioma.
@@ -41,6 +52,11 @@ export default function HistoryPage() {
       timeStyle: 'short',
     }).format(new Date(iso));
   }
+
+  const visibleEntries = roomFilter
+    ? entries.filter((entry) => entry.roomId === roomFilter)
+    : entries;
+  const filteredRoomName = visibleEntries[0]?.roomName;
 
   if (checking) return null;
 
@@ -71,13 +87,22 @@ export default function HistoryPage() {
           </p>
         )}
 
-        {!loading && !error && entries.length === 0 && (
+        {roomFilter && !loading && !error && (
+          <p className={styles.filter}>
+            {filteredRoomName
+              ? `${t('Mostrando solo las llamadas de')} ${filteredRoomName}.`
+              : t('Esta sala todavía no tiene llamadas.')}{' '}
+            <Link href="/history">{t('Ver todo el historial')}</Link>
+          </p>
+        )}
+
+        {!roomFilter && !loading && !error && entries.length === 0 && (
           <p>{t('Todavía no hiciste ninguna llamada.')}</p>
         )}
 
-        {!loading && entries.length > 0 && (
+        {!loading && visibleEntries.length > 0 && (
           <ul className={styles.list}>
-            {entries.map((entry, index) => (
+            {visibleEntries.map((entry, index) => (
               <li key={`${entry.roomId}-${entry.startedAt}-${index}`} className={styles.entry}>
                 <div className={styles.entryMain}>
                   <strong>{entry.roomName}</strong>
@@ -92,6 +117,14 @@ export default function HistoryPage() {
                   {entry.sessionId && (
                     <Link href={`/history/${entry.sessionId}`} className={styles.sessionLink}>
                       {t('Ver gráfico de interacción')}
+                    </Link>
+                  )}
+                  {entry.sessionId && (
+                    <Link
+                      href={`/history/${entry.sessionId}#transcript`}
+                      className={styles.sessionLink}
+                    >
+                      {t('Ver transcripción')}
                     </Link>
                   )}
                   {/* Las notas son por sala, no por sesión: a diferencia del

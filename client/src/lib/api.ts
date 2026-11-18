@@ -194,6 +194,32 @@ export async function getCallHistory(): Promise<CallHistoryEntry[]> {
   return res.json();
 }
 
+export interface OwnedRoomSlot {
+  dayOfWeek: number;
+  timeOfDay: string;
+  timezone: string;
+}
+
+export interface OwnedRoom {
+  id: string;
+  code: string;
+  name: string;
+  isPermanent: boolean;
+  isJoinable: boolean;
+  createdAt: string;
+  lastEnteredAt: string;
+  slots: OwnedRoomSlot[];
+  nextOccurrenceAt: string | null;
+}
+
+export async function getOwnedRooms(): Promise<OwnedRoom[]> {
+  const res = await authFetch('/rooms/mine');
+  if (!res.ok) {
+    throw new ApiError(await extractErrorMessage(res, 'No se pudieron cargar tus salas'));
+  }
+  return res.json();
+}
+
 export interface CallSessionSummary {
   id: string;
   roomCode: string;
