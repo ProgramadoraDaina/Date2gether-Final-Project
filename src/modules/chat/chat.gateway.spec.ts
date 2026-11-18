@@ -274,6 +274,64 @@ describe('ChatGateway', () => {
       );
     });
 
+    it('play/pausa no escriben en la base (no cambian la lista ni la canción actual)', async () => {
+      const { gateway, client, playlists } = await joinedAdmin('administrador', {
+        isPermanent: true,
+      });
+      await gateway.handleMusicAddTrack(client as never, {
+        videoId: 'dQw4w9WgXcQ',
+        title: 'Love Song Baby',
+      });
+      playlists.save.mockClear();
+
+      await gateway.handleMusicPlay(client as never, { positionSeconds: 0 });
+      await gateway.handleMusicPause(client as never, { positionSeconds: 12 });
+
+      expect(playlists.save).not.toHaveBeenCalled();
+    });
+
+    it('al quitar la última canción guarda la lista vacía', async () => {
+      const { gateway, client, playlists } = await joinedAdmin('administrador', {
+        isPermanent: true,
+      });
+      await gateway.handleMusicAddTrack(client as never, {
+        videoId: 'dQw4w9WgXcQ',
+        title: 'Love Song Baby',
+      });
+
+      await gateway.handleMusicRemoveTrack(client as never, { index: 0 });
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(playlists.save).toHaveBeenLastCalledWith('room-1', [], 0);
+    });
+
+    it('dos cambios seguidos se guardan en orden: el segundo espera al primero', async () => {
+      const { gateway, client, playlists } = await joinedAdmin('administrador', {
+        isPermanent: true,
+      });
+      let finishFirst!: () => void;
+      playlists.save.mockImplementationOnce(
+        () => new Promise<void>((resolve) => (finishFirst = resolve)),
+      );
+
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'aaaaaaaaaaa', title: 'Uno' });
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'bbbbbbbbbbb', title: 'Dos' });
+      await Promise.resolve();
+      expect(playlists.save).toHaveBeenCalledTimes(1);
+
+      finishFirst();
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(playlists.save).toHaveBeenCalledTimes(2);
+      expect(playlists.save).toHaveBeenLastCalledWith(
+        'room-1',
+        [
+          { videoId: 'aaaaaaaaaaa', title: 'Uno' },
+          { videoId: 'bbbbbbbbbbb', title: 'Dos' },
+        ],
+        0,
+      );
+    });
+
     it('en una sala temporal no guarda la playlist en la base', async () => {
       const { gateway, client, playlists } = await joinedAdmin('administrador');
 

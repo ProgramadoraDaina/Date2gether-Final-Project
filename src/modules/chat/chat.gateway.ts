@@ -117,6 +117,7 @@ export class ChatGateway implements OnGatewayDisconnect {
   private readonly musicStateByRoom = new Map<string, MusicState>();
   private readonly eventStateByRoom = new Map<string, RoomEventState>();
   private readonly permanentRoomIds = new Set<string>();
+  private readonly playlistSaves = new Map<string, Promise<void>>();
   private readonly logger = new Logger(ChatGateway.name);
 
   constructor(
@@ -492,10 +493,20 @@ export class ChatGateway implements OnGatewayDisconnect {
   }
 
   private setMusicState(user: ConnectedUser, state: MusicState) {
+    const previous = this.musicStateByRoom.get(user.roomCode);
     this.musicStateByRoom.set(user.roomCode, state);
     if (!this.permanentRoomIds.has(user.roomId)) return;
-    this.playlists.save(user.roomId, state.tracks, state.currentIndex).catch(() => {
-      this.logger.warn(`No se pudo guardar la playlist de la sala ${user.roomId}`);
+    if (previous?.tracks === state.tracks && previous.currentIndex === state.currentIndex) return;
+    // Chained per room so two quick changes cannot commit out of order.
+    const pending = this.playlistSaves.get(user.roomId) ?? Promise.resolve();
+    const next = pending
+      .then(() => this.playlists.save(user.roomId, state.tracks, state.currentIndex))
+      .catch(() => {
+        this.logger.warn(`No se pudo guardar la playlist de la sala ${user.roomId}`);
+      });
+    this.playlistSaves.set(user.roomId, next);
+    void next.finally(() => {
+      if (this.playlistSaves.get(user.roomId) === next) this.playlistSaves.delete(user.roomId);
     });
   }
 
