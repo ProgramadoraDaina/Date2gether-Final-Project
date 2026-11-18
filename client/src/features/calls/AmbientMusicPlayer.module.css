@@ -304,7 +304,9 @@
   border-radius: 50%;
   background: var(--color-accent);
   cursor: pointer;
-  transition: width 0.12s ease, height 0.12s ease;
+  transition:
+    width 0.12s ease,
+    height 0.12s ease;
 }
 
 .volumeBar:hover::-webkit-slider-thumb,
@@ -321,7 +323,9 @@
   border-radius: 50%;
   background: var(--color-accent);
   cursor: pointer;
-  transition: width 0.12s ease, height 0.12s ease;
+  transition:
+    width 0.12s ease,
+    height 0.12s ease;
 }
 
 .volumeBar:hover::-moz-range-thumb,
@@ -360,7 +364,9 @@
   color: var(--color-text-muted);
   cursor: pointer;
   padding: 0;
-  transition: color 0.15s ease, transform 0.1s ease;
+  transition:
+    color 0.15s ease,
+    transform 0.1s ease;
 }
 
 .transportButton:hover {
@@ -491,4 +497,84 @@
 .error {
   color: var(--color-error, #c0392b);
   font-size: 0.85rem;
+}
+
+.searchBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.searchButton {
+  width: auto;
+  flex-shrink: 0;
+  padding: 8px 12px;
+  border-radius: var(--radius-xs);
+}
+
+.searchFallback {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.searchResults {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+}
+
+.searchResults li + li {
+  border-top: 1px solid var(--color-border);
+}
+
+.searchResult {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 0;
+  background: none;
+  color: var(--color-text);
+  font-weight: 400;
+  text-align: left;
+}
+
+.searchResult:hover,
+.searchResult:focus-visible {
+  background: var(--color-surface);
+  outline: none;
+}
+
+.searchResult img {
+  flex-shrink: 0;
+  object-fit: cover;
+}
+
+.searchResultText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.searchResultTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.searchResultChannel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--color-text-muted);
 }

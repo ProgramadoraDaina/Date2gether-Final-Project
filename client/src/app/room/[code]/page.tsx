@@ -713,7 +713,14 @@ export default function RoomPage() {
             callSession.status === 'error'
           }
           musicPlayer={
-            roomSocket && <AmbientMusicPlayer socket={roomSocket} isAdmin={isCurrentUserAdmin} />
+            roomSocket && (
+              <AmbientMusicPlayer
+                socket={roomSocket}
+                isAdmin={isCurrentUserAdmin}
+                roomCode={code}
+                roomToken={access.token}
+              />
+            )
           }
           admissionControl={isCurrentUserAdmin && <AdmissionControl code={code} />}
         />

@@ -75,7 +75,9 @@ describe('AmbientMusicPlayer', () => {
   let playerInstance: FakePlayerInstance;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let playerCtor: jest.Mock<(...args: any[]) => FakePlayerInstance>;
-  let capturedOptions: { events?: { onReady?: () => void; onError?: (e: { data: number }) => void } };
+  let capturedOptions: {
+    events?: { onReady?: () => void; onError?: (e: { data: number }) => void };
+  };
 
   beforeEach(() => {
     useLanguageStore.setState({ language: 'es' });
@@ -132,8 +134,77 @@ describe('AmbientMusicPlayer', () => {
     expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('watch%3Fv%3DdQw4w9WgXcQ'));
   });
 
+  it('el admin busca una canción por nombre y al elegir un resultado la agrega a la lista', async () => {
+    global.fetch = jest.fn(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify([
+            {
+              videoId: 'fJ9rUzIMcZQ',
+              title: 'Queen – Bohemian Rhapsody',
+              channel: 'Queen Official',
+              thumbnailUrl: 'https://i.ytimg.com/vi/fJ9rUzIMcZQ/default.jpg',
+            },
+          ]),
+          { status: 200 },
+        ),
+      ),
+    ) as unknown as typeof fetch;
+    const { AmbientMusicPlayer } = await import('./AmbientMusicPlayer');
+    const socket = fakeSocket();
+    render(
+      <AmbientMusicPlayer
+        socket={socket as never}
+        isAdmin
+        roomCode="abc-defg-hij"
+        roomToken="tok"
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar música' }));
+
+    fireEvent.change(screen.getByLabelText('Buscar canción'), { target: { value: 'bohemian' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Queen – Bohemian Rhapsody/ }));
+
+    expect(socket.emit).toHaveBeenCalledWith('musicAddTrack', {
+      videoId: 'fJ9rUzIMcZQ',
+      title: 'Queen – Bohemian Rhapsody',
+    });
+    const [url, init] = (global.fetch as jest.Mock).mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/music-search/abc-defg-hij?q=bohemian');
+    expect(init.headers).toEqual({ Authorization: 'Bearer tok' });
+  });
+
+  it('si la búsqueda falla, ofrece buscar en YouTube en otra pestaña', async () => {
+    global.fetch = jest.fn(() =>
+      Promise.resolve(new Response('{}', { status: 503 })),
+    ) as unknown as typeof fetch;
+    const { AmbientMusicPlayer } = await import('./AmbientMusicPlayer');
+    render(
+      <AmbientMusicPlayer
+        socket={fakeSocket() as never}
+        isAdmin
+        roomCode="abc-defg-hij"
+        roomToken="tok"
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar música' }));
+
+    fireEvent.change(screen.getByLabelText('Buscar canción'), { target: { value: 'queen live' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar' }));
+
+    const link = await screen.findByRole('link', { name: 'Buscar en YouTube' });
+    expect(link).toHaveAttribute(
+      'href',
+      'https://www.youtube.com/results?search_query=queen%20live',
+    );
+    expect(link).toHaveAttribute('target', '_blank');
+  });
+
   it('si no se puede resolver el título (oEmbed falla), muestra un error y no manda musicAddTrack', async () => {
-    global.fetch = jest.fn(() => Promise.resolve({ ok: false } as Response)) as unknown as typeof fetch;
+    global.fetch = jest.fn(() =>
+      Promise.resolve({ ok: false } as Response),
+    ) as unknown as typeof fetch;
     const { AmbientMusicPlayer } = await import('./AmbientMusicPlayer');
     const socket = fakeSocket();
     render(<AmbientMusicPlayer socket={socket as never} isAdmin />);
@@ -493,7 +564,10 @@ describe('AmbientMusicPlayer', () => {
     fireEvent.change(slider, { target: { value: '40' } });
 
     expect(playerInstance.setVolume).toHaveBeenCalledWith(40);
-    expect(socket.emit).not.toHaveBeenCalledWith(expect.stringMatching(/volume/i), expect.anything());
+    expect(socket.emit).not.toHaveBeenCalledWith(
+      expect.stringMatching(/volume/i),
+      expect.anything(),
+    );
   });
 
   it('clickear el ícono de silenciar llama a mute(), cambia el ícono/label, y clickear de nuevo llama a unMute()', async () => {

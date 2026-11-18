@@ -10,6 +10,7 @@ import {
   type FormEvent,
 } from 'react';
 import type { Socket } from 'socket.io-client';
+import { searchMusic, youTubeSearchUrl, type MusicSearchResult } from '@/lib/musicSearch';
 import { useTranslation } from '../translation/useTranslation';
 import {
   currentTrack,
@@ -243,9 +244,16 @@ function loadYouTubeApi(): Promise<void> {
 interface AmbientMusicPlayerProps {
   socket: Socket;
   isAdmin: boolean;
+  roomCode?: string;
+  roomToken?: string;
 }
 
-export function AmbientMusicPlayer({ socket, isAdmin }: AmbientMusicPlayerProps) {
+export function AmbientMusicPlayer({
+  socket,
+  isAdmin,
+  roomCode,
+  roomToken,
+}: AmbientMusicPlayerProps) {
   const { t } = useTranslation();
   const [musicState, setMusicState] = useState<MusicState | null>(null);
   const [joined, setJoined] = useState(false);
@@ -253,6 +261,10 @@ export function AmbientMusicPlayer({ socket, isAdmin }: AmbientMusicPlayerProps)
   const [showPlaylist, setShowPlaylist] = useState(false);
   const [trackInput, setTrackInput] = useState('');
   const [resolvingTitle, setResolvingTitle] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<MusicSearchResult[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [searchFailed, setSearchFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [duration, setDuration] = useState(0);
   const [position, setPosition] = useState(0);
@@ -406,6 +418,28 @@ export function AmbientMusicPlayer({ socket, isAdmin }: AmbientMusicPlayerProps)
     } finally {
       setResolvingTitle(false);
     }
+  }
+
+  async function handleSearch(e: FormEvent) {
+    e.preventDefault();
+    const query = searchQuery.trim();
+    if (!query || !roomCode || !roomToken || searching) return;
+    setSearching(true);
+    setSearchFailed(false);
+    try {
+      setSearchResults(await searchMusic(roomCode, roomToken, query));
+    } catch {
+      setSearchResults(null);
+      setSearchFailed(true);
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  function handlePickResult(result: MusicSearchResult) {
+    socket.emit('musicAddTrack', { videoId: result.videoId, title: result.title });
+    setSearchResults(null);
+    setSearchQuery('');
   }
 
   function currentPosition(): number {
@@ -574,6 +608,64 @@ export function AmbientMusicPlayer({ socket, isAdmin }: AmbientMusicPlayerProps)
             </button>
             {open && (
               <div className={styles.panel}>
+                {roomCode && roomToken && (
+                  <div className={styles.searchBlock}>
+                    <label className={styles.trackField} htmlFor="ambient-music-search">
+                      {t('Buscar canción')}
+                    </label>
+                    <form onSubmit={(e) => void handleSearch(e)} className={styles.trackForm}>
+                      <input
+                        id="ambient-music-search"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder={t('Artista o canción')}
+                      />
+                      <button
+                        type="submit"
+                        className={styles.searchButton}
+                        disabled={searching || !searchQuery.trim()}
+                      >
+                        {searching ? t('Buscando…') : t('Buscar')}
+                      </button>
+                    </form>
+                    {searchFailed && (
+                      <p className={styles.searchFallback}>
+                        {t('No se pudo buscar ahora.')}{' '}
+                        <a
+                          href={youTubeSearchUrl(searchQuery.trim())}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {t('Buscar en YouTube')}
+                        </a>
+                      </p>
+                    )}
+                    {searchResults && searchResults.length === 0 && (
+                      <p className={styles.searchFallback}>{t('No hay resultados.')}</p>
+                    )}
+                    {searchResults && searchResults.length > 0 && (
+                      <ul className={styles.searchResults}>
+                        {searchResults.map((result) => (
+                          <li key={result.videoId}>
+                            <button
+                              type="button"
+                              className={styles.searchResult}
+                              onClick={() => handlePickResult(result)}
+                            >
+                              {result.thumbnailUrl && (
+                                <img src={result.thumbnailUrl} alt="" width={48} height={36} />
+                              )}
+                              <span className={styles.searchResultText}>
+                                <span className={styles.searchResultTitle}>{result.title}</span>
+                                <span className={styles.searchResultChannel}>{result.channel}</span>
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
                 <label className={styles.trackField} htmlFor="ambient-music-track">
                   {t('Link o ID de YouTube')}
                 </label>
