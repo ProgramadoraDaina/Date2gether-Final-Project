@@ -42,6 +42,7 @@ import { SoundboardPicker } from './reactions/SoundboardPicker';
 import { ReactionsProvider } from './reactions/ReactionsProvider';
 import { ReactionTile } from './reactions/ReactionTile';
 import { CallSettingsButton } from './settings/CallSettings';
+import { useCallSettingsStore } from './settings/store';
 import { CaptionsButton, CaptionsOverlay } from './transcription/Captions';
 import { TranscriptionProvider } from './transcription/TranscriptionProvider';
 
@@ -168,10 +169,15 @@ function MicToggleButton({ roomCode, roomToken, setDeviceError }: ToggleButtonPr
     onDeviceError: () => setDeviceError(true),
     onChange: onMicChange,
   });
+  const remember = useCallSettingsStore((state) => state.setDeviceEnabled);
   const label = enabled ? t('Desactivar micrófono') : t('Activar micrófono');
   return (
     <button
       {...buttonProps}
+      onClick={(event) => {
+        buttonProps.onClick?.(event);
+        remember('microphone', !enabled);
+      }}
       type="button"
       className={`${styles.iconButton} ${enabled ? styles.iconButtonActive : ''}`}
       title={label}
@@ -197,10 +203,15 @@ function CameraToggleButton({ roomCode, roomToken, setDeviceError }: ToggleButto
     onDeviceError: () => setDeviceError(true),
     onChange: onCameraChange,
   });
+  const remember = useCallSettingsStore((state) => state.setDeviceEnabled);
   const label = enabled ? t('Desactivar cámara') : t('Activar cámara');
   return (
     <button
       {...buttonProps}
+      onClick={(event) => {
+        buttonProps.onClick?.(event);
+        remember('camera', !enabled);
+      }}
       type="button"
       className={`${styles.iconButton} ${enabled ? styles.iconButtonActive : ''}`}
       title={label}

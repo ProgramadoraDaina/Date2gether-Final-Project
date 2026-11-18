@@ -101,6 +101,22 @@ describe('MeetingRoom', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     jest.mocked(useTrackToggle).mockImplementation(defaultUseTrackToggle as any);
   });
+  it('al tocar micrófono o cámara en la llamada recuerda la elección para la próxima vez', async () => {
+    const { useCallSettingsStore } = await import('./settings/store');
+    useCallSettingsStore.setState({ cameraEnabled: true, microphoneEnabled: true });
+    const MeetingRoom = (await import('./MeetingRoom')).default;
+    render(
+      <MeetingRoom call={state()} roomCode="abc" roomToken="test-room-token" roomEmojis={[]} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Desactivar micrófono' }));
+    expect(useCallSettingsStore.getState()).toMatchObject({
+      microphoneEnabled: false,
+      cameraEnabled: true,
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Desactivar cámara' }));
+    expect(useCallSettingsStore.getState().cameraEnabled).toBe(false);
+  });
+
   it('conecta con el pase de sala, sin encender cámara ni micrófono automáticamente', async () => {
     const { LiveKitRoom, useTracks } = await import('@livekit/components-react');
     const { Track } = await import('livekit-client');

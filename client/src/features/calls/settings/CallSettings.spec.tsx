@@ -32,6 +32,8 @@ describe('Ajustes de la llamada', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ajustes de la llamada' }));
     expect(screen.getByRole('group', { name: 'Tamaño de los subtítulos' })).toBeInTheDocument();
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByRole('group', { name: 'Tamaño de los subtítulos' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('group', { name: 'Tamaño de los subtítulos' }),
+    ).not.toBeInTheDocument();
   });
 });

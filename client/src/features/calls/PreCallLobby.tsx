@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { useTranslation } from '../translation/useTranslation';
 import type { CallDevices } from './callDevices';
+import { useCallSettingsStore } from './settings/store';
 import { useAvailableDevices, useDevicePreview } from './useDevicePreview';
 import { InitialsAvatar } from './InitialsAvatar';
 import styles from './PreCallLobby.module.css';
@@ -115,6 +116,43 @@ function MicrophoneLevel({ stream }: { stream: MediaStream | null }) {
   return <meter ref={ref} min={0} max={100} value={0} aria-label={t('Nivel del micrófono')} />;
 }
 
+async function permissionGranted(name: 'camera' | 'microphone'): Promise<boolean> {
+  try {
+    const status = await navigator.permissions?.query({ name: name as PermissionName });
+    return status?.state === 'granted';
+  } catch {
+    // Firefox no reconoce 'camera' ni 'microphone' en la Permissions API.
+    return false;
+  }
+}
+
+// Repite la última elección solo si el navegador ya dio permiso: nunca pide permisos sin un click.
+function useRestoreDevices(
+  setCamera: (enabled: boolean) => void,
+  setMicrophone: (enabled: boolean) => void,
+) {
+  const setters = useRef({ camera: setCamera, microphone: setMicrophone });
+  useEffect(() => {
+    setters.current = { camera: setCamera, microphone: setMicrophone };
+  });
+  useEffect(() => {
+    let active = true;
+    const saved = useCallSettingsStore.getState();
+    const wanted = [
+      saved.cameraEnabled && ('camera' as const),
+      saved.microphoneEnabled && ('microphone' as const),
+    ].filter((kind) => kind !== false);
+    for (const kind of wanted) {
+      void permissionGranted(kind).then((granted) => {
+        if (active && granted) setters.current[kind](true);
+      });
+    }
+    return () => {
+      active = false;
+    };
+  }, []);
+}
+
 interface Props {
   code: string;
   name: string;
@@ -135,9 +173,12 @@ export function PreCallLobby({ code, name, onNameChange, joining, error, onJoin 
     serverMediaUnsupported,
   );
   const pending = camera.pending || microphone.pending;
+  const setDeviceEnabled = useCallSettingsStore((state) => state.setDeviceEnabled);
+  useRestoreDevices(camera.setEnabled, microphone.setEnabled);
   const controls = [
     {
       kind: 'videoinput',
+      device: 'camera',
       preview: camera,
       label: 'Elegir cámara',
       fallback: 'Cámara',
@@ -146,6 +187,7 @@ export function PreCallLobby({ code, name, onNameChange, joining, error, onJoin 
     },
     {
       kind: 'audioinput',
+      device: 'microphone',
       preview: microphone,
       label: 'Elegir micrófono',
       fallback: 'Micrófono',
@@ -171,7 +213,7 @@ export function PreCallLobby({ code, name, onNameChange, joining, error, onJoin 
             superpone al borde inferior del video por margin-top negativo,
             mismo truco que .controlsDock en MeetingRoom.module.css. */}
         <div className={styles.controlsDock}>
-          {controls.map(({ kind, preview, enable, disable }) => {
+          {controls.map(({ kind, device, preview, enable, disable }) => {
             const label = t(preview.enabled ? disable : enable);
             return (
               <button
@@ -180,7 +222,10 @@ export function PreCallLobby({ code, name, onNameChange, joining, error, onJoin 
                 className={`${styles.iconButton} ${preview.enabled ? styles.iconButtonActive : ''}`}
                 aria-pressed={preview.enabled}
                 disabled={unsupported}
-                onClick={() => preview.setEnabled(!preview.enabled)}
+                onClick={() => {
+                  preview.setEnabled(!preview.enabled);
+                  setDeviceEnabled(device, !preview.enabled);
+                }}
                 title={label}
                 aria-label={label}
               >
