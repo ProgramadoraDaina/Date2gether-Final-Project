@@ -391,7 +391,7 @@
 
 .chatTabActive::after {
   transform: scaleX(1);
-  animation: chatTabSweep 220ms linear;
+  animation: chatTabSweep 120ms linear;
 }
 
 @keyframes chatTabSweep {
