@@ -385,6 +385,88 @@ describe('ChatGateway', () => {
       expect(client.emit).toHaveBeenCalledWith('roomUsers', expect.anything());
     });
 
+    it('el admin cambia el modo de reproducción y se difunde a toda la sala', async () => {
+      const { gateway, client, serverEmit } = await joinedAdmin('administrador');
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'aaaaaaaaaaa', title: 'Uno' });
+
+      await gateway.handleMusicSetMode(client as never, { mode: 'repeat-all', shuffle: true });
+
+      expect(serverEmit).toHaveBeenLastCalledWith(
+        'musicState',
+        expect.objectContaining({ mode: 'repeat-all', shuffle: true }),
+      );
+    });
+
+    it('cambiar aleatorio o repetición no reinicia la canción que está sonando', async () => {
+      const { gateway, client, serverEmit } = await joinedAdmin('administrador');
+      const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'aaaaaaaaaaa', title: 'Uno' });
+      await gateway.handleMusicPlay(client as never, { positionSeconds: 30 });
+
+      nowSpy.mockReturnValue(1_015_000);
+      await gateway.handleMusicSetMode(client as never, { mode: 'repeat-one', shuffle: true });
+      nowSpy.mockRestore();
+
+      expect(serverEmit).toHaveBeenLastCalledWith(
+        'musicState',
+        expect.objectContaining({ isPlaying: true, positionSeconds: 45, updatedAt: 1_015_000 }),
+      );
+    });
+
+    it('rechaza musicSetMode de alguien que no es administrador', async () => {
+      const { gateway, client, serverEmit } = await joinedAdmin('participante');
+
+      await gateway.handleMusicSetMode(client as never, { mode: 'repeat-one', shuffle: false });
+
+      expect(serverEmit).not.toHaveBeenCalled();
+    });
+
+    it('al terminar una canción avanza una sola vez aunque avisen varios oyentes', async () => {
+      const { gateway, client, serverEmit } = await joinedAdmin('administrador');
+      const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1_000);
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'aaaaaaaaaaa', title: 'Uno' });
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'bbbbbbbbbbb', title: 'Dos' });
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'ccccccccccc', title: 'Tres' });
+      nowSpy.mockReturnValue(2_000);
+      await gateway.handleMusicPlay(client as never, { positionSeconds: 0 });
+      nowSpy.mockReturnValue(3_000);
+
+      gateway.handleMusicTrackEnded(client as never, { updatedAt: 2_000 });
+      gateway.handleMusicTrackEnded(client as never, { updatedAt: 2_000 });
+      nowSpy.mockRestore();
+
+      const states = (serverEmit.mock.calls as [string, unknown][])
+        .filter(([event]) => event === 'musicState')
+        .map(([, payload]) => payload as { currentIndex: number; isPlaying: boolean });
+      expect(states[states.length - 1]).toMatchObject({ currentIndex: 1, isPlaying: true });
+      expect(states.filter((state) => state.currentIndex === 2)).toHaveLength(0);
+    });
+
+    it('un invitado que escucha también puede avisar que terminó la canción', async () => {
+      const setup = createGateway(
+        undefined,
+        jest.fn<RoomsService['getMemberRole']>().mockResolvedValue('administrador'),
+      );
+      const adminClient = createSocket(admin);
+      const guestClient = createSocket(guest, 'socket-2');
+      await setup.gateway.handleJoinRoom(adminClient as never, { code: 'abc-defg-hij' });
+      await setup.gateway.handleJoinRoom(guestClient as never, { code: 'abc-defg-hij' });
+      const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(5_000);
+      await setup.gateway.handleMusicAddTrack(adminClient as never, {
+        videoId: 'aaaaaaaaaaa',
+        title: 'Uno',
+      });
+      await setup.gateway.handleMusicPlay(adminClient as never, { positionSeconds: 0 });
+
+      setup.gateway.handleMusicTrackEnded(guestClient as never, { updatedAt: 5_000 });
+      nowSpy.mockRestore();
+
+      expect(setup.serverEmit).toHaveBeenLastCalledWith(
+        'musicState',
+        expect.objectContaining({ isPlaying: false, positionSeconds: 0 }),
+      );
+    });
+
     it('rechaza musicAddTrack de alguien que no es administrador de la sala', async () => {
       const { gateway, client, serverEmit } = await joinedAdmin('participante');
 
@@ -411,6 +493,27 @@ describe('ChatGateway', () => {
         message: 'Necesitás una cuenta para controlar la música de la sala',
       });
       expect(serverEmit).not.toHaveBeenCalled();
+    });
+
+    it('agregar una canción mientras suena otra no la reinicia ni cambia lo que se escucha', async () => {
+      const { gateway, client, serverEmit } = await joinedAdmin('administrador');
+      const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'aaaaaaaaaaa', title: 'Uno' });
+      await gateway.handleMusicPlay(client as never, { positionSeconds: 30 });
+
+      nowSpy.mockReturnValue(1_010_000);
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'bbbbbbbbbbb', title: 'Dos' });
+      nowSpy.mockRestore();
+
+      expect(serverEmit).toHaveBeenLastCalledWith(
+        'musicState',
+        expect.objectContaining({
+          currentIndex: 0,
+          isPlaying: true,
+          positionSeconds: 40,
+          updatedAt: 1_010_000,
+        }),
+      );
     });
 
     it('un administrador puede agregar la primera canción de la lista y se difunde a toda la sala', async () => {

@@ -55,6 +55,8 @@ function musicState(overrides: Partial<MusicState> = {}): MusicState {
     isPlaying: false,
     positionSeconds: 10,
     updatedAt: Date.now(),
+    mode: 'sequence',
+    shuffle: false,
     ...overrides,
   };
 }
@@ -76,7 +78,11 @@ describe('AmbientMusicPlayer', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let playerCtor: jest.Mock<(...args: any[]) => FakePlayerInstance>;
   let capturedOptions: {
-    events?: { onReady?: () => void; onError?: (e: { data: number }) => void };
+    events?: {
+      onReady?: () => void;
+      onError?: (e: { data: number }) => void;
+      onStateChange?: (e: { data: number }) => void;
+    };
   };
 
   beforeEach(() => {
@@ -246,11 +252,10 @@ describe('AmbientMusicPlayer', () => {
     expect(items[1]).not.toHaveAttribute('aria-current');
   });
 
-  it('la playlist está colapsada por defecto y se muestra al clickear "Ver playlist"', async () => {
+  it('la playlist está colapsada por defecto y se abre con "Ver playlist" sin abrir "Agregar música"', async () => {
     const { AmbientMusicPlayer } = await import('./AmbientMusicPlayer');
     const socket = fakeSocket();
     render(<AmbientMusicPlayer socket={socket as never} isAdmin />);
-    fireEvent.click(screen.getByRole('button', { name: 'Agregar música' }));
 
     act(() =>
       socket.handlers.musicState(
@@ -269,9 +274,14 @@ describe('AmbientMusicPlayer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ver playlist' }));
 
     expect(screen.getAllByRole('listitem')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Agregar música' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(screen.queryByLabelText('Link o ID de YouTube')).not.toBeInTheDocument();
   });
 
-  it('sacar una canción de la lista manda musicRemoveTrack con su índice', async () => {
+  it('sacar una canción pide confirmación y recién al confirmar manda musicRemoveTrack', async () => {
     const { AmbientMusicPlayer } = await import('./AmbientMusicPlayer');
     const socket = fakeSocket();
     render(<AmbientMusicPlayer socket={socket as never} isAdmin />);
@@ -290,7 +300,26 @@ describe('AmbientMusicPlayer', () => {
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Sacar de la lista' })[1]);
 
+    expect(screen.getByText('¿Quitar «Otro Tema» de la lista?')).toBeInTheDocument();
+    expect(socket.emit).not.toHaveBeenCalledWith('musicRemoveTrack', expect.anything());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar' }));
+
     expect(socket.emit).toHaveBeenCalledWith('musicRemoveTrack', { index: 1 });
+  });
+
+  it('cancelar la confirmación no saca la canción', async () => {
+    const { AmbientMusicPlayer } = await import('./AmbientMusicPlayer');
+    const socket = fakeSocket();
+    render(<AmbientMusicPlayer socket={socket as never} isAdmin />);
+    act(() => socket.handlers.musicState(musicState()));
+    fireEvent.click(screen.getByRole('button', { name: 'Ver playlist' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sacar de la lista' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+    expect(socket.emit).not.toHaveBeenCalledWith('musicRemoveTrack', expect.anything());
+    expect(screen.queryByText('¿Quitar «Love Song Baby» de la lista?')).not.toBeInTheDocument();
   });
 
   it('clickear una canción de la lista que no es la actual manda musicJumpToTrack con su índice', async () => {
@@ -568,6 +597,170 @@ describe('AmbientMusicPlayer', () => {
       expect.stringMatching(/volume/i),
       expect.anything(),
     );
+  });
+
+  it('el admin activa aleatorio y cambia el modo de repetición en ciclo', async () => {
+    const { AmbientMusicPlayer } = await import('./AmbientMusicPlayer');
+    const socket = fakeSocket();
+    render(<AmbientMusicPlayer socket={socket as never} isAdmin />);
+    act(() => socket.handlers.musicState(musicState()));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Aleatorio' }));
+    expect(socket.emit).toHaveBeenCalledWith('musicSetMode', { mode: 'sequence', shuffle: true });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Modo: Todo seguido' }));
+    expect(socket.emit).toHaveBeenCalledWith('musicSetMode', {
+      mode: 'repeat-all',
+      shuffle: false,
+    });
+
+    act(() => socket.handlers.musicState(musicState({ mode: 'repeat-all' })));
+    fireEvent.click(screen.getByRole('button', { name: 'Modo: Repetir lista' }));
+    expect(socket.emit).toHaveBeenCalledWith('musicSetMode', {
+      mode: 'repeat-one',
+      shuffle: false,
+    });
+
+    act(() => socket.handlers.musicState(musicState({ mode: 'repeat-one' })));
+    fireEvent.click(screen.getByRole('button', { name: 'Modo: Repetir esta canción' }));
+    expect(socket.emit).toHaveBeenCalledWith('musicSetMode', { mode: 'once', shuffle: false });
+
+    act(() => socket.handlers.musicState(musicState({ mode: 'once' })));
+    fireEvent.click(screen.getByRole('button', { name: 'Modo: Solo esta canción' }));
+    expect(socket.emit).toHaveBeenLastCalledWith('musicSetMode', {
+      mode: 'sequence',
+      shuffle: false,
+    });
+  });
+
+  it('en una sala permanente recuerda aleatorio y repetición del admin y los reaplica al volver', async () => {
+    localStorage.setItem(
+      'date2gether:music-mode:abc-defg-hij',
+      JSON.stringify({ mode: 'repeat-all', shuffle: true }),
+    );
+    const { AmbientMusicPlayer } = await import('./AmbientMusicPlayer');
+    const socket = fakeSocket();
+    render(
+      <AmbientMusicPlayer socket={socket as never} isAdmin roomCode="abc-defg-hij" persistModes />,
+    );
+
+    act(() => socket.handlers.musicState(musicState()));
+
+    expect(socket.emit).toHaveBeenCalledWith('musicSetMode', { mode: 'repeat-all', shuffle: true });
+  });
+
+  it('en una sala permanente guarda cada cambio de modo en localStorage', async () => {
+    localStorage.clear();
+    const { AmbientMusicPlayer } = await import('./AmbientMusicPlayer');
+    const socket = fakeSocket();
+    render(
+      <AmbientMusicPlayer socket={socket as never} isAdmin roomCode="abc-defg-hij" persistModes />,
+    );
+    act(() => socket.handlers.musicState(musicState()));
+
+    act(() => socket.handlers.musicState(musicState({ mode: 'repeat-one', shuffle: true })));
+
+    expect(
+      JSON.parse(localStorage.getItem('date2gether:music-mode:abc-defg-hij') ?? 'null'),
+    ).toEqual({
+      mode: 'repeat-one',
+      shuffle: true,
+    });
+  });
+
+  it('en una sala temporal no guarda ni reaplica el modo', async () => {
+    localStorage.setItem(
+      'date2gether:music-mode:abc-defg-hij',
+      JSON.stringify({ mode: 'repeat-all', shuffle: true }),
+    );
+    const { AmbientMusicPlayer } = await import('./AmbientMusicPlayer');
+    const socket = fakeSocket();
+    render(<AmbientMusicPlayer socket={socket as never} isAdmin roomCode="abc-defg-hij" />);
+
+    act(() => socket.handlers.musicState(musicState({ mode: 'once' })));
+
+    expect(socket.emit).not.toHaveBeenCalledWith('musicSetMode', expect.anything());
+    expect(
+      JSON.parse(localStorage.getItem('date2gether:music-mode:abc-defg-hij') ?? 'null'),
+    ).toEqual({
+      mode: 'repeat-all',
+      shuffle: true,
+    });
+    localStorage.clear();
+  });
+
+  it('con "Repetir lista" el botón siguiente sigue activo en la última canción', async () => {
+    const { AmbientMusicPlayer } = await import('./AmbientMusicPlayer');
+    const socket = fakeSocket();
+    render(<AmbientMusicPlayer socket={socket as never} isAdmin />);
+    act(() =>
+      socket.handlers.musicState(
+        musicState({
+          tracks: [
+            { videoId: 'dQw4w9WgXcQ', title: 'Love Song Baby' },
+            { videoId: 'jNQXAC9IVRw', title: 'Otro Tema' },
+          ],
+          currentIndex: 1,
+          mode: 'repeat-all',
+        }),
+      ),
+    );
+
+    expect(screen.getByRole('button', { name: 'Siguiente' })).not.toBeDisabled();
+  });
+
+  it('cuando termina el video avisa musicTrackEnded con el updatedAt del estado que sonaba', async () => {
+    const { AmbientMusicPlayer } = await import('./AmbientMusicPlayer');
+    const socket = fakeSocket();
+    render(<AmbientMusicPlayer socket={socket as never} isAdmin />);
+    await waitFor(() => expect(playerCtor).toHaveBeenCalledTimes(1));
+    act(() => capturedOptions.events?.onReady?.());
+    act(() => socket.handlers.musicState(musicState({ isPlaying: true, updatedAt: 4242 })));
+
+    act(() => capturedOptions.events?.onStateChange?.({ data: 0 }));
+
+    expect(socket.emit).toHaveBeenCalledWith('musicTrackEnded', { updatedAt: 4242 });
+  });
+
+  it('si llega música antes de que el player de YouTube esté listo, espera a onReady para cargarla', async () => {
+    const { AmbientMusicPlayer } = await import('./AmbientMusicPlayer');
+    const socket = fakeSocket();
+    render(<AmbientMusicPlayer socket={socket as never} isAdmin />);
+    await waitFor(() => expect(playerCtor).toHaveBeenCalledTimes(1));
+
+    act(() => socket.handlers.musicState(musicState({ isPlaying: false })));
+    expect(playerInstance.cueVideoById).not.toHaveBeenCalled();
+
+    act(() => capturedOptions.events?.onReady?.());
+    expect(playerInstance.cueVideoById).toHaveBeenCalledWith('dQw4w9WgXcQ', 10);
+  });
+
+  it('cambiar el idioma no vuelve a activar el sonido de la música silenciada', async () => {
+    const { AmbientMusicPlayer } = await import('./AmbientMusicPlayer');
+    render(<AmbientMusicPlayer socket={fakeSocket() as never} isAdmin />);
+    await waitFor(() => expect(playerCtor).toHaveBeenCalledTimes(1));
+    act(() => capturedOptions.events?.onReady?.());
+    await waitFor(() => expect(playerInstance.unMute).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Silenciar música' }));
+
+    act(() => useLanguageStore.setState({ language: 'en' }));
+    await act(async () => {});
+
+    expect(playerInstance.unMute).toHaveBeenCalledTimes(1);
+    expect(playerCtor).toHaveBeenCalledTimes(1);
+  });
+
+  it('al colgar silencia la música solo en este dispositivo, sin pausarla para la sala', async () => {
+    const { AmbientMusicPlayer } = await import('./AmbientMusicPlayer');
+    const socket = fakeSocket();
+    const { rerender } = render(<AmbientMusicPlayer socket={socket as never} isAdmin />);
+    await waitFor(() => expect(playerCtor).toHaveBeenCalledTimes(1));
+    act(() => capturedOptions.events?.onReady?.());
+
+    rerender(<AmbientMusicPlayer socket={socket as never} isAdmin silenced />);
+
+    expect(playerInstance.mute).toHaveBeenCalled();
+    expect(socket.emit).not.toHaveBeenCalledWith('musicPause', expect.anything());
   });
 
   it('muestra el porcentaje de volumen al lado del slider y lo actualiza al moverlo', async () => {

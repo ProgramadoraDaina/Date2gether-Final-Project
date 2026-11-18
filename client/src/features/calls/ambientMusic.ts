@@ -3,12 +3,25 @@ export interface MusicTrack {
   title: string;
 }
 
+export type PlaybackMode = 'sequence' | 'repeat-all' | 'repeat-one' | 'once';
+
+export const PLAYBACK_MODE_ORDER: PlaybackMode[] = ['sequence', 'repeat-all', 'repeat-one', 'once'];
+
+export const PLAYBACK_MODE_LABELS: Record<PlaybackMode, string> = {
+  sequence: 'Todo seguido',
+  'repeat-all': 'Repetir lista',
+  'repeat-one': 'Repetir esta canción',
+  once: 'Solo esta canción',
+};
+
 export interface MusicState {
   tracks: MusicTrack[];
   currentIndex: number;
   isPlaying: boolean;
   positionSeconds: number;
   updatedAt: number;
+  mode: PlaybackMode;
+  shuffle: boolean;
 }
 
 export function currentTrack(state: MusicState): MusicTrack | null {

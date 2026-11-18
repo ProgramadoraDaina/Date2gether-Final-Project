@@ -622,3 +622,21 @@
   font-size: 11px;
   color: var(--color-text-muted);
 }
+
+.confirmDialog {
+  composes: confirmDialog from './MeetingRoom.module.css';
+  border-radius: var(--radius-xs);
+}
+
+.confirmActions {
+  composes: confirmActions from './MeetingRoom.module.css';
+}
+
+.confirmDangerButton {
+  composes: confirmDangerButton from './MeetingRoom.module.css';
+}
+
+.modeActive,
+.modeActive:hover {
+  color: var(--color-accent);
+}

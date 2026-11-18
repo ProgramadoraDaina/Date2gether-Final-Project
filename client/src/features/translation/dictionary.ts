@@ -148,8 +148,8 @@ const en: Record<string, string> = {
   frases: 'phrases',
   'Cargando transcripción…': 'Loading transcript…',
   'No se pudo cargar la transcripción': 'Could not load the transcript',
-  'Todavía no hay frases. Activá los subtítulos y hablá con el micrófono prendido.':
-    'No phrases yet. Turn on captions and speak with your microphone on.',
+  'Todavía no hay frases. Se agregan solas mientras alguien habla con el micrófono prendido.':
+    'No lines yet. They are added automatically while someone speaks with their microphone on.',
   'Las llamadas todavía no están configuradas': 'Calls are not configured yet',
   'El servidor de llamadas no está disponible. Intentá nuevamente.':
     'The call server is unavailable. Please try again.',
@@ -380,6 +380,15 @@ const en: Record<string, string> = {
   'Mostrando solo las llamadas de': 'Showing only the calls of',
   'Esta sala todavía no tiene llamadas.': 'This room has no calls yet.',
   'Ver todo el historial': 'View full history',
+  Quitar: 'Remove',
+  '¿Quitar «{title}» de la lista?': 'Remove “{title}” from the list?',
+  'Más información': 'More information',
+  Aleatorio: 'Shuffle',
+  Modo: 'Mode',
+  'Todo seguido': 'Play through',
+  'Repetir lista': 'Repeat list',
+  'Repetir esta canción': 'Repeat this song',
+  'Solo esta canción': 'This song only',
   'Link o ID de YouTube': 'YouTube link or video ID',
   'Buscar canción': 'Search for a song',
   'Artista o canción': 'Artist or song',

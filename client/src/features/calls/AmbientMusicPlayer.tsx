@@ -16,8 +16,11 @@ import {
   currentTrack,
   fetchYouTubeTitle,
   formatTime,
+  PLAYBACK_MODE_LABELS,
+  PLAYBACK_MODE_ORDER,
   reconcilePlayerState,
   type MusicState,
+  type PlaybackMode,
 } from './ambientMusic';
 import styles from './AmbientMusicPlayer.module.css';
 
@@ -91,6 +94,60 @@ function PreviousIcon() {
     >
       <line x1="6" y1="4" x2="6" y2="20" />
       <path d="M18 4l-10 8 10 8V4z" />
+    </svg>
+  );
+}
+
+function ShuffleIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M16 3h5v5" />
+      <path d="M4 20 21 3" />
+      <path d="M21 16v5h-5" />
+      <path d="M15 15l6 6" />
+      <path d="M4 4l5 5" />
+    </svg>
+  );
+}
+
+function RepeatIcon({ mode }: { mode: PlaybackMode }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {mode === 'once' ? (
+        <path d="M5 12h14M13 6l6 6-6 6" />
+      ) : (
+        <>
+          <path d="M17 2l4 4-4 4" />
+          <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
+          <path d="M7 22l-4-4 4-4" />
+          <path d="M21 13v1a4 4 0 0 1-4 4H3" />
+        </>
+      )}
+      {(mode === 'repeat-one' || mode === 'once') && (
+        <text x="12" y="15.5" textAnchor="middle" fontSize="8" fill="currentColor" stroke="none">
+          1
+        </text>
+      )}
     </svg>
   );
 }
@@ -241,11 +298,36 @@ function loadYouTubeApi(): Promise<void> {
   });
 }
 
+const MODE_STORAGE_PREFIX = 'date2gether:music-mode:';
+
+function readStoredMode(key: string): { mode: PlaybackMode; shuffle: boolean } | null {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) ?? 'null') as {
+      mode?: unknown;
+      shuffle?: unknown;
+    } | null;
+    if (
+      parsed &&
+      PLAYBACK_MODE_ORDER.includes(parsed.mode as PlaybackMode) &&
+      typeof parsed.shuffle === 'boolean'
+    ) {
+      return { mode: parsed.mode as PlaybackMode, shuffle: parsed.shuffle };
+    }
+  } catch {
+    // Corrupt or unavailable storage: ignore it.
+  }
+  return null;
+}
+
 interface AmbientMusicPlayerProps {
   socket: Socket;
   isAdmin: boolean;
   roomCode?: string;
   roomToken?: string;
+  // Permanent rooms remember shuffle/repeat in the admin's browser.
+  persistModes?: boolean;
+  // After hanging up the music goes quiet on this device only; the room keeps playing.
+  silenced?: boolean;
 }
 
 export function AmbientMusicPlayer({
@@ -253,12 +335,16 @@ export function AmbientMusicPlayer({
   isAdmin,
   roomCode,
   roomToken,
+  persistModes = false,
+  silenced = false,
 }: AmbientMusicPlayerProps) {
   const { t } = useTranslation();
   const [musicState, setMusicState] = useState<MusicState | null>(null);
   const [joined, setJoined] = useState(false);
   const [open, setOpen] = useState(false);
   const [showPlaylist, setShowPlaylist] = useState(false);
+  const [pendingRemoval, setPendingRemoval] = useState<number | null>(null);
+  const removeDialogRef = useRef<HTMLDialogElement>(null);
   const [trackInput, setTrackInput] = useState('');
   const [resolvingTitle, setResolvingTitle] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -274,12 +360,25 @@ export function AmbientMusicPlayer({
   const playerRef = useRef<YT.Player | null>(null);
   const loadedVideoId = useRef<string | null>(null);
   const pendingState = useRef<MusicState | null>(null);
+  const modeRestored = useRef(false);
+  // YT.Player exists right after construction but its methods only after onReady.
+  const playerIsReady = useRef(false);
+  const socketRef = useRef(socket);
+  // A ref so a language switch does not recreate the player and re-run the admin auto-join.
+  const tRef = useRef(t);
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
+  useEffect(() => {
+    socketRef.current = socket;
+  }, [socket]);
 
   useEffect(() => {
     function onMusicState(state: MusicState) {
+      if (isAdmin && persistModes && roomCode) syncStoredMode(state, roomCode);
       pendingState.current = state;
       setMusicState(state);
-      if (playerRef.current) {
+      if (playerRef.current && playerIsReady.current) {
         reconcilePlayerState(playerRef.current, loadedVideoId.current, state);
         loadedVideoId.current = currentTrack(state)?.videoId ?? null;
         setDuration(playerRef.current.getDuration() || 0);
@@ -288,18 +387,35 @@ export function AmbientMusicPlayer({
     function onError({ message }: { message: string }) {
       setError(message);
     }
+    function syncStoredMode(state: MusicState, code: string) {
+      const key = `${MODE_STORAGE_PREFIX}${code}`;
+      if (!modeRestored.current) {
+        modeRestored.current = true;
+        const stored = readStoredMode(key);
+        if (stored && (stored.mode !== state.mode || stored.shuffle !== state.shuffle)) {
+          socket.emit('musicSetMode', stored);
+          return;
+        }
+      }
+      try {
+        localStorage.setItem(key, JSON.stringify({ mode: state.mode, shuffle: state.shuffle }));
+      } catch {
+        // Storage can be unavailable (private mode); the mode just is not remembered.
+      }
+    }
     socket.on('musicState', onMusicState);
     socket.on('error', onError);
     return () => {
       socket.off('musicState', onMusicState);
       socket.off('error', onError);
     };
-  }, [socket]);
+  }, [socket, isAdmin, persistModes, roomCode]);
 
   useEffect(() => {
     return () => {
       playerRef.current?.destroy();
       playerRef.current = null;
+      playerIsReady.current = false;
     };
   }, []);
 
@@ -342,6 +458,7 @@ export function AmbientMusicPlayer({
           width: '1',
           events: {
             onReady: () => {
+              playerIsReady.current = true;
               const player = playerRef.current;
               const state = pendingState.current;
               if (player && state) {
@@ -355,17 +472,22 @@ export function AmbientMusicPlayer({
             // está cargando metadata del video. onStateChange es el único
             // evento que avisa cuando ya está disponible, así que se vuelve
             // a leer ahí.
-            onStateChange: () => {
+            onStateChange: (event: { data: number }) => {
               const player = playerRef.current;
               if (player) setDuration(player.getDuration() || 0);
+              const state = pendingState.current;
+              if (event.data === 0 && state?.isPlaying) {
+                socketRef.current.emit('musicTrackEnded', { updatedAt: state.updatedAt });
+              }
             },
-            onError: () => setError(t('No se pudo reproducir ese video. Probá con otro link.')),
+            onError: () =>
+              setError(tRef.current('No se pudo reproducir ese video. Probá con otro link.')),
           },
         });
       });
     })();
     return playerReady.current;
-  }, [t]);
+  }, []);
 
   const handleJoinMusic = useCallback(async () => {
     await createPlayer();
@@ -381,6 +503,10 @@ export function AmbientMusicPlayer({
   useEffect(() => {
     if (isAdmin) void handleJoinMusic();
   }, [isAdmin, handleJoinMusic]);
+
+  useEffect(() => {
+    if (silenced && playerIsReady.current) playerRef.current?.mute();
+  }, [silenced]);
 
   function handleToggleMute() {
     const next = !muted;
@@ -420,6 +546,13 @@ export function AmbientMusicPlayer({
     }
   }
 
+  useEffect(() => {
+    const dialog = removeDialogRef.current;
+    if (!dialog) return;
+    if (pendingRemoval !== null && !dialog.open) dialog.showModal();
+    if (pendingRemoval === null && dialog.open) dialog.close();
+  }, [pendingRemoval]);
+
   async function handleSearch(e: FormEvent) {
     e.preventDefault();
     const query = searchQuery.trim();
@@ -443,7 +576,8 @@ export function AmbientMusicPlayer({
   }
 
   function currentPosition(): number {
-    return playerRef.current?.getCurrentTime() ?? musicState?.positionSeconds ?? 0;
+    const player = playerIsReady.current ? playerRef.current : null;
+    return player?.getCurrentTime() ?? musicState?.positionSeconds ?? 0;
   }
 
   function handleTogglePlay() {
@@ -453,6 +587,20 @@ export function AmbientMusicPlayer({
 
   function handlePrevious() {
     socket.emit('musicPrevious');
+  }
+
+  function handleToggleShuffle() {
+    if (!musicState) return;
+    socket.emit('musicSetMode', { mode: musicState.mode, shuffle: !musicState.shuffle });
+  }
+
+  function handleCycleMode() {
+    if (!musicState) return;
+    const next =
+      PLAYBACK_MODE_ORDER[
+        (PLAYBACK_MODE_ORDER.indexOf(musicState.mode) + 1) % PLAYBACK_MODE_ORDER.length
+      ];
+    socket.emit('musicSetMode', { mode: next, shuffle: musicState.shuffle });
   }
 
   function handleNext() {
@@ -567,6 +715,16 @@ export function AmbientMusicPlayer({
           <div className={styles.playbackButtons}>
             <button
               type="button"
+              className={`${styles.transportButton} ${musicState.shuffle ? styles.modeActive : ''}`}
+              onClick={handleToggleShuffle}
+              aria-pressed={musicState.shuffle}
+              title={t('Aleatorio')}
+              aria-label={t('Aleatorio')}
+            >
+              <ShuffleIcon />
+            </button>
+            <button
+              type="button"
               className={styles.transportButton}
               onClick={handlePrevious}
               disabled={musicState.currentIndex <= 0}
@@ -588,11 +746,24 @@ export function AmbientMusicPlayer({
               type="button"
               className={styles.transportButton}
               onClick={handleNext}
-              disabled={musicState.currentIndex >= musicState.tracks.length - 1}
+              disabled={
+                musicState.shuffle || musicState.mode === 'repeat-all'
+                  ? musicState.tracks.length < 2
+                  : musicState.currentIndex >= musicState.tracks.length - 1
+              }
               title={t('Siguiente')}
               aria-label={t('Siguiente')}
             >
               <NextIcon />
+            </button>
+            <button
+              type="button"
+              className={`${styles.transportButton} ${musicState.mode !== 'sequence' ? styles.modeActive : ''}`}
+              onClick={handleCycleMode}
+              title={`${t('Modo')}: ${t(PLAYBACK_MODE_LABELS[musicState.mode])}`}
+              aria-label={`${t('Modo')}: ${t(PLAYBACK_MODE_LABELS[musicState.mode])}`}
+            >
+              <RepeatIcon mode={musicState.mode} />
             </button>
           </div>
         )}
@@ -689,77 +860,77 @@ export function AmbientMusicPlayer({
                     <PlusIcon />
                   </button>
                 </form>
-                {musicState && musicState.tracks.length > 0 && (
-                  <>
-                    <button
-                      type="button"
-                      className={styles.toggleButton}
-                      onClick={() => setShowPlaylist((value) => !value)}
-                      aria-expanded={showPlaylist}
-                    >
-                      {t('Ver playlist')}
-                      <span className={showPlaylist ? styles.chevronOpen : styles.chevron}>
-                        <ChevronIcon />
-                      </span>
-                    </button>
-                    {showPlaylist && (
-                      <ol className={styles.playlist}>
-                        {musicState.tracks.map((track, index) => {
-                          const isCurrent = index === musicState.currentIndex;
-                          return (
-                            <li
-                              key={`${track.videoId}-${index}`}
-                              className={isCurrent ? styles.trackActive : styles.track}
-                              aria-current={isCurrent ? 'true' : undefined}
-                              tabIndex={isCurrent ? undefined : 0}
-                              onClick={isCurrent ? undefined : () => handleJumpToTrack(index)}
-                              onKeyDown={
-                                isCurrent
-                                  ? undefined
-                                  : (e) => {
-                                      if (e.key === 'Enter' || e.key === ' ') {
-                                        e.preventDefault();
-                                        handleJumpToTrack(index);
-                                      }
-                                    }
-                              }
-                            >
-                              <span className={styles.trackIndex}>
-                                {isCurrent && musicState.isPlaying ? (
-                                  <EqualizerBars />
-                                ) : (
-                                  String(index + 1).padStart(2, '0')
-                                )}
-                              </span>
-                              <img
-                                className={styles.trackThumb}
-                                src={`https://i.ytimg.com/vi/${track.videoId}/default.jpg`}
-                                alt=""
-                                width={48}
-                                height={36}
-                                loading="lazy"
-                              />
-                              <span className={styles.trackTitle}>{track.title}</span>
-                              <button
-                                type="button"
-                                className={styles.removeButton}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleRemoveTrack(index);
-                                }}
-                                title={t('Sacar de la lista')}
-                                aria-label={t('Sacar de la lista')}
-                              >
-                                <RemoveIcon />
-                              </button>
-                            </li>
-                          );
-                        })}
-                      </ol>
-                    )}
-                  </>
-                )}
               </div>
+            )}
+            {musicState && musicState.tracks.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  className={styles.toggleButton}
+                  onClick={() => setShowPlaylist((value) => !value)}
+                  aria-expanded={showPlaylist}
+                >
+                  {t('Ver playlist')}
+                  <span className={showPlaylist ? styles.chevronOpen : styles.chevron}>
+                    <ChevronIcon />
+                  </span>
+                </button>
+                {showPlaylist && (
+                  <ol className={styles.playlist}>
+                    {musicState.tracks.map((track, index) => {
+                      const isCurrent = index === musicState.currentIndex;
+                      return (
+                        <li
+                          key={`${track.videoId}-${index}`}
+                          className={isCurrent ? styles.trackActive : styles.track}
+                          aria-current={isCurrent ? 'true' : undefined}
+                          tabIndex={isCurrent ? undefined : 0}
+                          onClick={isCurrent ? undefined : () => handleJumpToTrack(index)}
+                          onKeyDown={
+                            isCurrent
+                              ? undefined
+                              : (e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    handleJumpToTrack(index);
+                                  }
+                                }
+                          }
+                        >
+                          <span className={styles.trackIndex}>
+                            {isCurrent && musicState.isPlaying ? (
+                              <EqualizerBars />
+                            ) : (
+                              String(index + 1).padStart(2, '0')
+                            )}
+                          </span>
+                          <img
+                            className={styles.trackThumb}
+                            src={`https://i.ytimg.com/vi/${track.videoId}/default.jpg`}
+                            alt=""
+                            width={48}
+                            height={36}
+                            loading="lazy"
+                          />
+                          <span className={styles.trackTitle}>{track.title}</span>
+                          <button
+                            type="button"
+                            className={styles.removeButton}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPendingRemoval(index);
+                            }}
+                            title={t('Sacar de la lista')}
+                            aria-label={t('Sacar de la lista')}
+                          >
+                            <RemoveIcon />
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                )}
+              </>
             )}
           </div>
         )}
@@ -769,6 +940,40 @@ export function AmbientMusicPlayer({
           {error}
         </p>
       )}
+      <dialog
+        ref={removeDialogRef}
+        className={styles.confirmDialog}
+        onClose={() => setPendingRemoval(null)}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) setPendingRemoval(null);
+        }}
+      >
+        {pendingRemoval !== null && musicState?.tracks[pendingRemoval] && (
+          <>
+            <p>
+              {t('¿Quitar «{title}» de la lista?').replace(
+                '{title}',
+                musicState.tracks[pendingRemoval].title,
+              )}
+            </p>
+            <div className={styles.confirmActions}>
+              <button type="button" className="secondary" onClick={() => setPendingRemoval(null)}>
+                {t('Cancelar')}
+              </button>
+              <button
+                type="button"
+                className={styles.confirmDangerButton}
+                onClick={() => {
+                  handleRemoveTrack(pendingRemoval);
+                  setPendingRemoval(null);
+                }}
+              >
+                {t('Quitar')}
+              </button>
+            </div>
+          </>
+        )}
+      </dialog>
     </div>
   );
 }
