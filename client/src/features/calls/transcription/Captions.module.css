@@ -1,5 +1,6 @@
 .captions {
   --caption-font-size: 1.125rem;
+  --caption-max-lines: 2;
   position: absolute;
   left: 50%;
   bottom: 96px;
@@ -36,8 +37,24 @@
   text-align: center;
 }
 
+.line {
+  display: flex;
+  align-items: flex-end;
+  text-align: left;
+}
+
+/* Muestra solo las últimas líneas: lo viejo desborda hacia arriba y se oculta (el acta guarda todo). */
+.text {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  max-height: calc(var(--caption-max-lines) * 1.35em);
+  overflow: hidden;
+}
+
 /* Violeta saturado fijo: el fondo de los subtítulos es siempre negro, en tema claro y oscuro. */
 .speaker {
+  flex-shrink: 0;
   margin-right: 8px;
   color: #bf5af2;
   font-weight: 700;

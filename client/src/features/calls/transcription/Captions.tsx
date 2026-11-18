@@ -81,7 +81,9 @@ export function CaptionsOverlay() {
       {captions.map((caption) => (
         <p key={caption.identity} className={styles.line}>
           <span className={styles.speaker}>{caption.name}</span>
-          <span className={caption.final ? undefined : styles.interim}>{caption.text}</span>
+          <span className={styles.text}>
+            <span className={caption.final ? undefined : styles.interim}>{caption.text}</span>
+          </span>
         </p>
       ))}
     </div>
