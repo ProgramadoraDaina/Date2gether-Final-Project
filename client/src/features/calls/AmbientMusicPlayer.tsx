@@ -521,6 +521,9 @@ export function AmbientMusicPlayer({
               onChange={handleVolumeChange}
               aria-label={t('Volumen de la música')}
             />
+            <span className={styles.volumeValue} aria-hidden="true">
+              {muted ? 0 : volume}%
+            </span>
           </div>
         )}
         {isAdmin && current && musicState && (
@@ -721,7 +724,21 @@ export function AmbientMusicPlayer({
                                     }
                               }
                             >
-                              <span className={styles.trackIndex}>{index + 1}</span>
+                              <span className={styles.trackIndex}>
+                                {isCurrent && musicState.isPlaying ? (
+                                  <EqualizerBars />
+                                ) : (
+                                  String(index + 1).padStart(2, '0')
+                                )}
+                              </span>
+                              <img
+                                className={styles.trackThumb}
+                                src={`https://i.ytimg.com/vi/${track.videoId}/default.jpg`}
+                                alt=""
+                                width={48}
+                                height={36}
+                                loading="lazy"
+                              />
                               <span className={styles.trackTitle}>{track.title}</span>
                               <button
                                 type="button"

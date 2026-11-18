@@ -570,6 +570,21 @@ describe('AmbientMusicPlayer', () => {
     );
   });
 
+  it('muestra el porcentaje de volumen al lado del slider y lo actualiza al moverlo', async () => {
+    const { AmbientMusicPlayer } = await import('./AmbientMusicPlayer');
+    const socket = fakeSocket();
+    render(<AmbientMusicPlayer socket={socket as never} isAdmin />);
+    await waitFor(() => expect(playerCtor).toHaveBeenCalledTimes(1));
+    act(() => capturedOptions.events?.onReady?.());
+    await waitFor(() => expect(playerInstance.unMute).toHaveBeenCalled());
+
+    expect(screen.getByText('100%')).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('slider', { name: 'Volumen de la música' }), {
+      target: { value: '40' },
+    });
+    expect(screen.getByText('40%')).toBeInTheDocument();
+  });
+
   it('clickear el ícono de silenciar llama a mute(), cambia el ícono/label, y clickear de nuevo llama a unMute()', async () => {
     const { AmbientMusicPlayer } = await import('./AmbientMusicPlayer');
     const socket = fakeSocket();
