@@ -18,7 +18,7 @@ import styles from './Reactions.module.css';
 // le dan su TrackRef por contexto (ver MeetingRoom.tsx: el tile en foco usa
 // el mismo mecanismo, pero con un TrackRefContext.Provider propio en vez de
 // uno de la grilla).
-export function ReactionTile() {
+export function ReactionTile({ canFocus = true }: { canFocus?: boolean }) {
   const { t } = useTranslation();
   const trackRef = useMaybeTrackRefContext();
   const layoutContext = useMaybeLayoutContext();
@@ -45,7 +45,7 @@ export function ReactionTile() {
   return (
     <div className={styles.tileWrap}>
       <ParticipantTile />
-      {trackRef && (
+      {trackRef && (canFocus || isFocused) && (
         <button
           type="button"
           className={`${styles.focusToggle} ${isFocused ? styles.focusToggleActive : ''}`}

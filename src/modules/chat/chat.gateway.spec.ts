@@ -7,6 +7,7 @@ import type { RoomEventsService } from '../rooms/room-events.service';
 import type { RoomResolverService } from '../rooms/room-resolver.service';
 import type { RoomsService } from '../rooms/rooms.service';
 import type { ChatService } from './chat.service';
+import type { RoomPlaylistsService, StoredPlaylist } from './room-playlists.service';
 import { ChatGateway } from './chat.gateway';
 
 describe('ChatGateway', () => {
@@ -20,6 +21,7 @@ describe('ChatGateway', () => {
   function createGateway(
     nameColorRow?: { nameColor: string | null },
     getMemberRole?: RoomsService['getMemberRole'],
+    roomOptions: { isPermanent?: boolean; stored?: StoredPlaylist | null } = {},
   ) {
     const limit = jest
       .fn<() => Promise<{ nameColor: string | null }[]>>()
@@ -29,7 +31,16 @@ describe('ChatGateway', () => {
     const select = jest.fn().mockReturnValue({ from });
     const db = { select } as unknown as DrizzleDb;
 
-    const room = { id: 'room-1', code: 'abc-defg-hij', isActive: true };
+    const room = {
+      id: 'room-1',
+      code: 'abc-defg-hij',
+      isActive: true,
+      isPermanent: roomOptions.isPermanent ?? false,
+    };
+    const playlists = {
+      load: jest.fn<RoomPlaylistsService['load']>().mockResolvedValue(roomOptions.stored ?? null),
+      save: jest.fn<RoomPlaylistsService['save']>().mockResolvedValue(undefined),
+    };
     const roomsService = {
       getMemberRole: getMemberRole ?? jest.fn<RoomsService['getMemberRole']>(),
     } as unknown as RoomsService;
@@ -57,7 +68,14 @@ describe('ChatGateway', () => {
       onRoomEmojisChanged: jest.fn(),
     } as unknown as RoomEventsService;
 
-    const gateway = new ChatGateway(db, roomsService, chatService, roomEvents, resolver);
+    const gateway = new ChatGateway(
+      db,
+      roomsService,
+      chatService,
+      roomEvents,
+      resolver,
+      playlists as unknown as RoomPlaylistsService,
+    );
     const serverEmit = jest.fn();
     const serverTo = jest.fn().mockReturnValue({ emit: serverEmit });
     gateway.server = { to: serverTo } as unknown as ChatGateway['server'];
@@ -72,6 +90,7 @@ describe('ChatGateway', () => {
       assertBound,
       serverTo,
       serverEmit,
+      playlists,
     };
   }
 
@@ -220,9 +239,12 @@ describe('ChatGateway', () => {
       name: 'Invitado',
     };
 
-    async function joinedAdmin(role: 'administrador' | 'colaborador' | 'participante') {
+    async function joinedAdmin(
+      role: 'administrador' | 'colaborador' | 'participante',
+      roomOptions: { isPermanent?: boolean; stored?: StoredPlaylist | null } = {},
+    ) {
       const getMemberRole = jest.fn<RoomsService['getMemberRole']>().mockResolvedValue(role);
-      const setup = createGateway(undefined, getMemberRole);
+      const setup = createGateway(undefined, getMemberRole, roomOptions);
       const client = createSocket(admin);
       await setup.gateway.handleJoinRoom(client as never, { code: 'abc-defg-hij' });
       return { ...setup, client };
@@ -234,6 +256,216 @@ describe('ChatGateway', () => {
       await setup.gateway.handleJoinRoom(client as never, { code: 'abc-defg-hij' });
       return { ...setup, client };
     }
+
+    it('en una sala permanente guarda la playlist en la base cada vez que cambia', async () => {
+      const { gateway, client, playlists } = await joinedAdmin('administrador', {
+        isPermanent: true,
+      });
+
+      await gateway.handleMusicAddTrack(client as never, {
+        videoId: 'dQw4w9WgXcQ',
+        title: 'Love Song Baby',
+      });
+
+      expect(playlists.save).toHaveBeenCalledWith(
+        'room-1',
+        [{ videoId: 'dQw4w9WgXcQ', title: 'Love Song Baby' }],
+        0,
+      );
+    });
+
+    it('play/pausa no escriben en la base (no cambian la lista ni la canción actual)', async () => {
+      const { gateway, client, playlists } = await joinedAdmin('administrador', {
+        isPermanent: true,
+      });
+      await gateway.handleMusicAddTrack(client as never, {
+        videoId: 'dQw4w9WgXcQ',
+        title: 'Love Song Baby',
+      });
+      playlists.save.mockClear();
+
+      await gateway.handleMusicPlay(client as never, { positionSeconds: 0 });
+      await gateway.handleMusicPause(client as never, { positionSeconds: 12 });
+
+      expect(playlists.save).not.toHaveBeenCalled();
+    });
+
+    it('al quitar la última canción guarda la lista vacía', async () => {
+      const { gateway, client, playlists } = await joinedAdmin('administrador', {
+        isPermanent: true,
+      });
+      await gateway.handleMusicAddTrack(client as never, {
+        videoId: 'dQw4w9WgXcQ',
+        title: 'Love Song Baby',
+      });
+
+      await gateway.handleMusicRemoveTrack(client as never, { index: 0 });
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(playlists.save).toHaveBeenLastCalledWith('room-1', [], 0);
+    });
+
+    it('dos cambios seguidos se guardan en orden: el segundo espera al primero', async () => {
+      const { gateway, client, playlists } = await joinedAdmin('administrador', {
+        isPermanent: true,
+      });
+      let finishFirst!: () => void;
+      playlists.save.mockImplementationOnce(
+        () => new Promise<void>((resolve) => (finishFirst = resolve)),
+      );
+
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'aaaaaaaaaaa', title: 'Uno' });
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'bbbbbbbbbbb', title: 'Dos' });
+      await Promise.resolve();
+      expect(playlists.save).toHaveBeenCalledTimes(1);
+
+      finishFirst();
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(playlists.save).toHaveBeenCalledTimes(2);
+      expect(playlists.save).toHaveBeenLastCalledWith(
+        'room-1',
+        [
+          { videoId: 'aaaaaaaaaaa', title: 'Uno' },
+          { videoId: 'bbbbbbbbbbb', title: 'Dos' },
+        ],
+        0,
+      );
+    });
+
+    it('en una sala temporal no guarda la playlist en la base', async () => {
+      const { gateway, client, playlists } = await joinedAdmin('administrador');
+
+      await gateway.handleMusicAddTrack(client as never, {
+        videoId: 'dQw4w9WgXcQ',
+        title: 'Love Song Baby',
+      });
+
+      expect(playlists.save).not.toHaveBeenCalled();
+      expect(playlists.load).not.toHaveBeenCalled();
+    });
+
+    it('al entrar a una sala permanente vacía recupera la playlist guardada, en pausa', async () => {
+      const { client, playlists } = await joinedAdmin('administrador', {
+        isPermanent: true,
+        stored: {
+          tracks: [
+            { videoId: 'dQw4w9WgXcQ', title: 'Love Song Baby' },
+            { videoId: 'jNQXAC9IVRw', title: 'Otro Tema' },
+          ],
+          currentIndex: 1,
+        },
+      });
+
+      expect(playlists.load).toHaveBeenCalledWith('room-1');
+      expect(client.emit).toHaveBeenCalledWith(
+        'musicState',
+        expect.objectContaining({
+          tracks: [
+            { videoId: 'dQw4w9WgXcQ', title: 'Love Song Baby' },
+            { videoId: 'jNQXAC9IVRw', title: 'Otro Tema' },
+          ],
+          currentIndex: 1,
+          isPlaying: false,
+          positionSeconds: 0,
+        }),
+      );
+    });
+
+    it('si falla la base al recuperar la playlist, la persona entra igual sin música', async () => {
+      const getMemberRole = jest
+        .fn<RoomsService['getMemberRole']>()
+        .mockResolvedValue('administrador');
+      const setup = createGateway(undefined, getMemberRole, { isPermanent: true });
+      setup.playlists.load.mockRejectedValueOnce(new Error('db down'));
+      const client = createSocket(admin);
+
+      await setup.gateway.handleJoinRoom(client as never, { code: 'abc-defg-hij' });
+
+      expect(client.emit).not.toHaveBeenCalledWith('musicState', expect.anything());
+      expect(client.emit).toHaveBeenCalledWith('roomUsers', expect.anything());
+    });
+
+    it('el admin cambia el modo de reproducción y se difunde a toda la sala', async () => {
+      const { gateway, client, serverEmit } = await joinedAdmin('administrador');
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'aaaaaaaaaaa', title: 'Uno' });
+
+      await gateway.handleMusicSetMode(client as never, { mode: 'repeat-all', shuffle: true });
+
+      expect(serverEmit).toHaveBeenLastCalledWith(
+        'musicState',
+        expect.objectContaining({ mode: 'repeat-all', shuffle: true }),
+      );
+    });
+
+    it('cambiar aleatorio o repetición no reinicia la canción que está sonando', async () => {
+      const { gateway, client, serverEmit } = await joinedAdmin('administrador');
+      const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'aaaaaaaaaaa', title: 'Uno' });
+      await gateway.handleMusicPlay(client as never, { positionSeconds: 30 });
+
+      nowSpy.mockReturnValue(1_015_000);
+      await gateway.handleMusicSetMode(client as never, { mode: 'repeat-one', shuffle: true });
+      nowSpy.mockRestore();
+
+      expect(serverEmit).toHaveBeenLastCalledWith(
+        'musicState',
+        expect.objectContaining({ isPlaying: true, positionSeconds: 45, updatedAt: 1_015_000 }),
+      );
+    });
+
+    it('rechaza musicSetMode de alguien que no es administrador', async () => {
+      const { gateway, client, serverEmit } = await joinedAdmin('participante');
+
+      await gateway.handleMusicSetMode(client as never, { mode: 'repeat-one', shuffle: false });
+
+      expect(serverEmit).not.toHaveBeenCalled();
+    });
+
+    it('al terminar una canción avanza una sola vez aunque avisen varios oyentes', async () => {
+      const { gateway, client, serverEmit } = await joinedAdmin('administrador');
+      const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1_000);
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'aaaaaaaaaaa', title: 'Uno' });
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'bbbbbbbbbbb', title: 'Dos' });
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'ccccccccccc', title: 'Tres' });
+      nowSpy.mockReturnValue(2_000);
+      await gateway.handleMusicPlay(client as never, { positionSeconds: 0 });
+      nowSpy.mockReturnValue(3_000);
+
+      gateway.handleMusicTrackEnded(client as never, { updatedAt: 2_000 });
+      gateway.handleMusicTrackEnded(client as never, { updatedAt: 2_000 });
+      nowSpy.mockRestore();
+
+      const states = (serverEmit.mock.calls as [string, unknown][])
+        .filter(([event]) => event === 'musicState')
+        .map(([, payload]) => payload as { currentIndex: number; isPlaying: boolean });
+      expect(states[states.length - 1]).toMatchObject({ currentIndex: 1, isPlaying: true });
+      expect(states.filter((state) => state.currentIndex === 2)).toHaveLength(0);
+    });
+
+    it('un invitado que escucha también puede avisar que terminó la canción', async () => {
+      const setup = createGateway(
+        undefined,
+        jest.fn<RoomsService['getMemberRole']>().mockResolvedValue('administrador'),
+      );
+      const adminClient = createSocket(admin);
+      const guestClient = createSocket(guest, 'socket-2');
+      await setup.gateway.handleJoinRoom(adminClient as never, { code: 'abc-defg-hij' });
+      await setup.gateway.handleJoinRoom(guestClient as never, { code: 'abc-defg-hij' });
+      const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(5_000);
+      await setup.gateway.handleMusicAddTrack(adminClient as never, {
+        videoId: 'aaaaaaaaaaa',
+        title: 'Uno',
+      });
+      await setup.gateway.handleMusicPlay(adminClient as never, { positionSeconds: 0 });
+
+      setup.gateway.handleMusicTrackEnded(guestClient as never, { updatedAt: 5_000 });
+      nowSpy.mockRestore();
+
+      expect(setup.serverEmit).toHaveBeenLastCalledWith(
+        'musicState',
+        expect.objectContaining({ isPlaying: false, positionSeconds: 0 }),
+      );
+    });
 
     it('rechaza musicAddTrack de alguien que no es administrador de la sala', async () => {
       const { gateway, client, serverEmit } = await joinedAdmin('participante');
@@ -261,6 +493,27 @@ describe('ChatGateway', () => {
         message: 'Necesitás una cuenta para controlar la música de la sala',
       });
       expect(serverEmit).not.toHaveBeenCalled();
+    });
+
+    it('agregar una canción mientras suena otra no la reinicia ni cambia lo que se escucha', async () => {
+      const { gateway, client, serverEmit } = await joinedAdmin('administrador');
+      const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'aaaaaaaaaaa', title: 'Uno' });
+      await gateway.handleMusicPlay(client as never, { positionSeconds: 30 });
+
+      nowSpy.mockReturnValue(1_010_000);
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'bbbbbbbbbbb', title: 'Dos' });
+      nowSpy.mockRestore();
+
+      expect(serverEmit).toHaveBeenLastCalledWith(
+        'musicState',
+        expect.objectContaining({
+          currentIndex: 0,
+          isPlaying: true,
+          positionSeconds: 40,
+          updatedAt: 1_010_000,
+        }),
+      );
     });
 
     it('un administrador puede agregar la primera canción de la lista y se difunde a toda la sala', async () => {

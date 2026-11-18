@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react';
 
-jest.mock('next/navigation', () => ({ usePathname: () => '/history' }));
+let searchParams = new URLSearchParams();
+jest.mock('next/navigation', () => ({
+  usePathname: () => '/history',
+  useSearchParams: () => searchParams,
+}));
 jest.mock('@/features/translation/useTranslation', () => {
   const t = (key: string) => key;
   return { useTranslation: () => ({ t, language: 'es' }) };
@@ -15,6 +19,7 @@ jest.mock('@/lib/api', () => ({
 describe('HistoryPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    searchParams = new URLSearchParams();
   });
 
   it('muestra el mensaje de inicio de sesión si no hay sesión', async () => {
@@ -23,10 +28,7 @@ describe('HistoryPage', () => {
     const HistoryPage = (await import('./page')).default;
     render(<HistoryPage />);
     await screen.findByText('Necesitás iniciar sesión para ver tu historial de llamadas.');
-    expect(screen.getByRole('link', { name: 'Iniciar sesión' })).toHaveAttribute(
-      'href',
-      '/login',
-    );
+    expect(screen.getByRole('link', { name: 'Iniciar sesión' })).toHaveAttribute('href', '/login');
   });
 
   it('muestra las entradas del historial cuando hay sesión, sin botón al gráfico si no hay sesión materializada', async () => {
@@ -76,9 +78,10 @@ describe('HistoryPage', () => {
     ]);
     const HistoryPage = (await import('./page')).default;
     render(<HistoryPage />);
-    expect(
-      await screen.findByRole('link', { name: 'Ver gráfico de interacción' }),
-    ).toHaveAttribute('href', '/history/session-1');
+    expect(await screen.findByRole('link', { name: 'Ver gráfico de interacción' })).toHaveAttribute(
+      'href',
+      '/history/session-1',
+    );
   });
 
   it('[5.9] el botón "Obtener notas" enlaza por roomId, con roomCode como query param', async () => {
@@ -100,5 +103,62 @@ describe('HistoryPage', () => {
       'href',
       '/history/notes/room-1?code=abc-defg-hij',
     );
+  });
+
+  it('con ?roomId= muestra solo las llamadas de esa sala y ofrece volver a todo el historial', async () => {
+    searchParams = new URLSearchParams({ roomId: 'room-2' });
+    const { isLoggedIn } = await import('@/lib/auth');
+    const { getCallHistory } = await import('@/lib/api');
+    (isLoggedIn as jest.Mock<typeof isLoggedIn>).mockReturnValue(true);
+    (getCallHistory as jest.Mock<typeof getCallHistory>).mockResolvedValue([
+      {
+        roomId: 'room-1',
+        roomCode: 'abc-defg-hij',
+        roomName: 'Reunión de Daina',
+        startedAt: '2026-01-05T10:00:00.000Z',
+        sessionId: null,
+      },
+      {
+        roomId: 'room-2',
+        roomCode: 'xyz-abcd-efg',
+        roomName: 'Cita de los lunes',
+        startedAt: '2026-01-06T10:00:00.000Z',
+        sessionId: 'session-2',
+      },
+    ]);
+    const HistoryPage = (await import('./page')).default;
+    render(<HistoryPage />);
+
+    await screen.findByText('Mostrando solo las llamadas de Cita de los lunes.');
+    expect(screen.queryByText('Reunión de Daina')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Ver todo el historial' })).toHaveAttribute(
+      'href',
+      '/history',
+    );
+    expect(screen.getByRole('link', { name: 'Ver transcripción' })).toHaveAttribute(
+      'href',
+      '/history/session-2#transcript',
+    );
+  });
+
+  it('con ?roomId= de una sala sin llamadas, lo dice en vez del estado vacío general', async () => {
+    searchParams = new URLSearchParams({ roomId: 'room-9' });
+    const { isLoggedIn } = await import('@/lib/auth');
+    const { getCallHistory } = await import('@/lib/api');
+    (isLoggedIn as jest.Mock<typeof isLoggedIn>).mockReturnValue(true);
+    (getCallHistory as jest.Mock<typeof getCallHistory>).mockResolvedValue([
+      {
+        roomId: 'room-1',
+        roomCode: 'abc-defg-hij',
+        roomName: 'Reunión de Daina',
+        startedAt: '2026-01-05T10:00:00.000Z',
+        sessionId: null,
+      },
+    ]);
+    const HistoryPage = (await import('./page')).default;
+    render(<HistoryPage />);
+
+    await screen.findByText('Esta sala todavía no tiene llamadas.');
+    expect(screen.queryByText('Reunión de Daina')).not.toBeInTheDocument();
   });
 });

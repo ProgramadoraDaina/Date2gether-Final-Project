@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from 'react';
+import { BrandMark } from '@/features/brand/BrandMark';
 import { ThemeToggle } from '@/features/theme/ThemeToggle';
 import { LanguageToggle } from '@/features/translation/LanguageToggle';
 import { useTranslation } from '@/features/translation/useTranslation';
@@ -14,10 +15,7 @@ interface RoomSidebarProps {
   onOpenEmojis: () => void;
   // Solo existe cuando hay una transcripción de la llamada para mostrar.
   onOpenTranscript?: () => void;
-  // Controlan el colapso animado y el ancho elegido con el handle de resize
-  // (ver useResizablePanel en RoomPage). El wrapper externo anima `width`
-  // entre 0 y `width`; el contenido interno mantiene `width` fijo para no
-  // reflowear mientras se cierra, solo queda clippeado por overflow:hidden.
+  // Collapse state and the width chosen with the resize handle (see useResizablePanel).
   open: boolean;
   width: number;
   onResizeHandleMouseDown: (e: ReactMouseEvent) => void;
@@ -29,6 +27,8 @@ interface RoomSidebarProps {
   // AdmissionControl ya trae su propio botón + dialog, así que acá entra
   // como un nodo más de bottomActions, igual que musicPlayer.
   admissionControl?: ReactNode;
+  // Room event trigger (roulette); only present for admins and collaborators.
+  eventControl?: ReactNode;
   // true mientras hay algún intento de llamada en curso (conectando, en
   // llamada, o reintentando tras un error): esos tres estados ya tienen su
   // propio botón "Colgar" con confirmación (ver HangUpButton.tsx, usado
@@ -49,6 +49,7 @@ export function RoomSidebar({
   onResizeHandleMouseDown,
   musicPlayer,
   admissionControl,
+  eventControl,
   inCall,
 }: RoomSidebarProps) {
   const { t } = useTranslation();
@@ -61,13 +62,17 @@ export function RoomSidebar({
     >
       <div className={styles.sidebar} style={{ width }}>
         <div className={styles.brand}>
-          <strong className={styles.brandName}>Date2gether</strong>
+          <strong className={styles.brandName}>
+            <BrandMark size={22} />
+            Date2gether
+          </strong>
           <span className={styles.code}>{code}</span>
         </div>
 
         <div className={styles.toggles}>
           <ThemeToggle />
           <LanguageToggle />
+          {eventControl}
         </div>
 
         <div className={styles.bottomActions}>

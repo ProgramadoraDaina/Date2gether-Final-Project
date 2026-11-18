@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 import { IBM_Plex_Sans, Space_Grotesk } from 'next/font/google';
 import { TopBar } from '@/features/layout/TopBar';
+import { requestOrigin } from '@/features/share/origin';
+import { SHARE_IMAGE_SIZE } from '@/features/share/shareCard';
 import { THEME_SCRIPT } from '@/features/theme/themeScript';
 import { ThemeSync } from '@/features/theme/ThemeSync';
 import styles from './layout.module.css';
@@ -20,11 +22,40 @@ const ibmPlexSans = IBM_Plex_Sans({
   variable: '--font-ibm-plex-sans',
 });
 
-export const metadata: Metadata = {
-  title: 'Date2gether',
-  description: 'Videollamadas simples, en el navegador.',
-  icons: { icon: '/favicon.svg' },
-};
+const SITE_DESCRIPTION = 'Videollamadas simples, en el navegador.';
+
+export async function generateMetadata(): Promise<Metadata> {
+  const origin = await requestOrigin();
+  const images = [{ url: new URL('/og', origin).href, ...SHARE_IMAGE_SIZE, alt: 'Date2gether' }];
+  return {
+    metadataBase: origin,
+    title: { default: 'Date2gether', template: '%s · Date2gether' },
+    description: SITE_DESCRIPTION,
+    applicationName: 'Date2gether',
+    openGraph: {
+      type: 'website',
+      siteName: 'Date2gether',
+      locale: 'es_AR',
+      title: 'Date2gether',
+      description: SITE_DESCRIPTION,
+      images,
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: 'Date2gether',
+      description: SITE_DESCRIPTION,
+      images,
+    },
+    icons: {
+      icon: [
+        { url: '/favicon.svg', type: 'image/svg+xml' },
+        { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+        { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+      ],
+      apple: { url: '/apple-icon.png', sizes: '180x180' },
+    },
+  };
+}
 
 // Sin esto, Chrome en Android no sabe que la página ya maneja su propio
 // tema oscuro (ver globals.css, :root[data-theme='dark']) y puede aplicar

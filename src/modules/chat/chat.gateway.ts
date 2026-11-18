@@ -1,4 +1,4 @@
-import { Inject, UseGuards, UsePipes, ValidationPipe } from '@nestjs/common';
+import { Inject, UseGuards, UsePipes, ValidationPipe, Logger } from '@nestjs/common';
 import { isURL } from 'class-validator';
 import { eq } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
@@ -18,6 +18,10 @@ import { RoomEventsService } from '../rooms/room-events.service';
 import { RoomResolverService } from '../rooms/room-resolver.service';
 import { RoomsService } from '../rooms/rooms.service';
 import { ChatService } from './chat.service';
+import { RoomPlaylistsService } from './room-playlists.service';
+import { afterTrackEnded, skipToNext, type PlaybackState } from './music-playback';
+import { MusicModeDto } from './dto/music-mode.dto';
+import { MusicTrackEndedDto } from './dto/music-track-ended.dto';
 import { JoinRoomDto } from './dto/join-room.dto';
 import { MusicAddTrackDto } from './dto/music-add-track.dto';
 import { MusicPositionDto } from './dto/music-position.dto';
@@ -82,16 +86,7 @@ interface ConnectedUser {
 // internos (roomId), para no declarar un segundo tipo con los mismos campos.
 type RoomUser = Pick<ConnectedUser, 'participantId' | 'userName' | 'userId' | 'nameColor'>;
 
-interface MusicTrack {
-  videoId: string;
-  title: string;
-}
-
-interface MusicState {
-  tracks: MusicTrack[];
-  currentIndex: number;
-  isPlaying: boolean;
-  positionSeconds: number;
+interface MusicState extends PlaybackState {
   updatedAt: number;
 }
 
@@ -101,6 +96,12 @@ interface RoomEventState {
   winner: RoomUser;
   startedAt: number;
   expiresAt: number;
+}
+
+// Clients extrapolate from updatedAt, so refreshing it requires advancing the position too.
+function livePosition(state: MusicState, now: number): number {
+  if (!state.isPlaying) return state.positionSeconds;
+  return state.positionSeconds + Math.max(0, now - state.updatedAt) / 1000;
 }
 
 @WebSocketGateway({
@@ -115,6 +116,9 @@ export class ChatGateway implements OnGatewayDisconnect {
   private readonly connectedUsers = new Map<string, ConnectedUser>();
   private readonly musicStateByRoom = new Map<string, MusicState>();
   private readonly eventStateByRoom = new Map<string, RoomEventState>();
+  private readonly permanentRoomIds = new Set<string>();
+  private readonly playlistSaves = new Map<string, Promise<void>>();
+  private readonly logger = new Logger(ChatGateway.name);
 
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleDb,
@@ -122,6 +126,7 @@ export class ChatGateway implements OnGatewayDisconnect {
     private readonly chatService: ChatService,
     private readonly roomEvents: RoomEventsService,
     private readonly resolver: RoomResolverService,
+    private readonly playlists: RoomPlaylistsService,
   ) {
     this.roomEvents.onMemberRoleChanged(({ roomCode }) => {
       this.server.to(roomCode).emit('memberRoleChanged');
@@ -174,6 +179,7 @@ export class ChatGateway implements OnGatewayDisconnect {
 
     // Sincroniza al que recién entra con lo que ya se está escuchando; si
     // nadie eligió nada todavía no tiene sentido mandar un estado vacío.
+    if (room.isPermanent) await this.restorePlaylist(dto.code, room.id);
     const musicState = this.musicStateByRoom.get(dto.code);
     if (musicState) client.emit('musicState', musicState);
 
@@ -241,14 +247,18 @@ export class ChatGateway implements OnGatewayDisconnect {
     // Agregar una canción a una lista que ya está sonando no debe interrumpir
     // la reproducción en curso: solo la primera canción de la sala arranca
     // en currentIndex 0, pausada, en el segundo 0.
+    const now = Date.now();
     const state: MusicState = {
       tracks: [...(current?.tracks ?? []), { videoId, title }],
       currentIndex: current?.currentIndex ?? 0,
       isPlaying: current?.isPlaying ?? false,
-      positionSeconds: current?.positionSeconds ?? 0,
-      updatedAt: Date.now(),
+      positionSeconds: current ? livePosition(current, now) : 0,
+      mode: current?.mode ?? 'sequence',
+      shuffle: current?.shuffle ?? false,
+      played: current?.played ?? [0],
+      updatedAt: now,
     };
-    this.musicStateByRoom.set(user.roomCode, state);
+    this.setMusicState(user, state);
     this.server.to(user.roomCode).emit('musicState', state);
   }
 
@@ -280,10 +290,13 @@ export class ChatGateway implements OnGatewayDisconnect {
       tracks,
       currentIndex,
       isPlaying: removingCurrent ? false : current.isPlaying,
-      positionSeconds: removingCurrent ? 0 : current.positionSeconds,
+      positionSeconds: removingCurrent ? 0 : livePosition(current, Date.now()),
+      mode: current.mode,
+      shuffle: current.shuffle,
+      played: [currentIndex],
       updatedAt: Date.now(),
     };
-    this.musicStateByRoom.set(user.roomCode, state);
+    this.setMusicState(user, state);
     this.server.to(user.roomCode).emit('musicState', state);
   }
 
@@ -306,19 +319,17 @@ export class ChatGateway implements OnGatewayDisconnect {
       ...current,
       currentIndex: dto.index,
       positionSeconds: 0,
+      played: current.played.includes(dto.index) ? current.played : [...current.played, dto.index],
       updatedAt: Date.now(),
     };
-    this.musicStateByRoom.set(user.roomCode, state);
+    this.setMusicState(user, state);
     this.server.to(user.roomCode).emit('musicState', state);
   }
 
   @UseGuards(WsJwtAuthGuard)
   @SubscribeMessage('musicNext')
   async handleMusicNext(@ConnectedSocket() client: Socket) {
-    await this.updateMusicState(client, (state) => {
-      if (state.currentIndex >= state.tracks.length - 1) return state;
-      return { ...state, currentIndex: state.currentIndex + 1, positionSeconds: 0 };
-    });
+    await this.updateMusicState(client, (state) => skipToNext(state) ?? state);
   }
 
   @UseGuards(WsJwtAuthGuard)
@@ -357,6 +368,30 @@ export class ChatGateway implements OnGatewayDisconnect {
       ...state,
       positionSeconds: dto.positionSeconds,
     }));
+  }
+
+  @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage('musicSetMode')
+  async handleMusicSetMode(@ConnectedSocket() client: Socket, @MessageBody() dto: MusicModeDto) {
+    await this.updateMusicState(client, (state) => ({
+      ...state,
+      mode: dto.mode,
+      shuffle: dto.shuffle,
+      played: [state.currentIndex],
+    }));
+  }
+
+  // Any listener may report the end: the admin is not necessarily listening.
+  @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage('musicTrackEnded')
+  handleMusicTrackEnded(@ConnectedSocket() client: Socket, @MessageBody() dto: MusicTrackEndedDto) {
+    const user = this.connectedUsers.get(client.id);
+    if (!user) return;
+    const current = this.musicStateByRoom.get(user.roomCode);
+    if (!current?.isPlaying || current.updatedAt !== dto.updatedAt) return;
+    const next: MusicState = { ...afterTrackEnded(current), updatedAt: Date.now() };
+    this.setMusicState(user, next);
+    this.server.to(user.roomCode).emit('musicState', next);
   }
 
   @UseGuards(WsJwtAuthGuard)
@@ -417,6 +452,7 @@ export class ChatGateway implements OnGatewayDisconnect {
     if (this.getUsersInRoom(user.roomCode).length === 0) {
       this.musicStateByRoom.delete(user.roomCode);
       this.eventStateByRoom.delete(user.roomCode);
+      this.permanentRoomIds.delete(user.roomId);
     }
   }
 
@@ -480,9 +516,52 @@ export class ChatGateway implements OnGatewayDisconnect {
       return;
     }
 
-    const next: MusicState = { ...apply(current), updatedAt: Date.now() };
-    this.musicStateByRoom.set(user.roomCode, next);
+    const now = Date.now();
+    const live = { ...current, positionSeconds: livePosition(current, now) };
+    const next: MusicState = { ...apply(live), updatedAt: now };
+    this.setMusicState(user, next);
     this.server.to(user.roomCode).emit('musicState', next);
+  }
+
+  private setMusicState(user: ConnectedUser, state: MusicState) {
+    const previous = this.musicStateByRoom.get(user.roomCode);
+    this.musicStateByRoom.set(user.roomCode, state);
+    if (!this.permanentRoomIds.has(user.roomId)) return;
+    if (previous?.tracks === state.tracks && previous.currentIndex === state.currentIndex) return;
+    // Chained per room so two quick changes cannot commit out of order.
+    const pending = this.playlistSaves.get(user.roomId) ?? Promise.resolve();
+    const next = pending
+      .then(() => this.playlists.save(user.roomId, state.tracks, state.currentIndex))
+      .catch(() => {
+        this.logger.warn(`No se pudo guardar la playlist de la sala ${user.roomId}`);
+      });
+    this.playlistSaves.set(user.roomId, next);
+    void next.finally(() => {
+      if (this.playlistSaves.get(user.roomId) === next) this.playlistSaves.delete(user.roomId);
+    });
+  }
+
+  private async restorePlaylist(roomCode: string, roomId: string) {
+    this.permanentRoomIds.add(roomId);
+    if (this.musicStateByRoom.has(roomCode)) return;
+    let stored: Awaited<ReturnType<RoomPlaylistsService['load']>>;
+    try {
+      stored = await this.playlists.load(roomId);
+    } catch {
+      this.logger.warn(`No se pudo recuperar la playlist de la sala ${roomId}`);
+      return;
+    }
+    if (!stored || stored.tracks.length === 0 || this.musicStateByRoom.has(roomCode)) return;
+    this.musicStateByRoom.set(roomCode, {
+      tracks: stored.tracks,
+      currentIndex: Math.min(stored.currentIndex, stored.tracks.length - 1),
+      isPlaying: false,
+      positionSeconds: 0,
+      mode: 'sequence',
+      shuffle: false,
+      played: [Math.min(stored.currentIndex, stored.tracks.length - 1)],
+      updatedAt: Date.now(),
+    });
   }
 
   private getUsersInRoom(roomCode: string): RoomUser[] {

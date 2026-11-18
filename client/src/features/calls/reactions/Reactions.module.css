@@ -477,3 +477,8 @@
     opacity: 0;
   }
 }
+
+/* LiveKit's built-in focus toggle duplicates .focusToggle. */
+.tileWrap :global(.lk-focus-toggle-button) {
+  display: none;
+}

@@ -38,7 +38,7 @@ interface TranscriptionProviderProps {
   children: ReactNode;
   roomCode: string;
   roomToken: string;
-  // Avisa el sid de la llamada apenas se activan los subtítulos, para poder pedir el acta después.
+  // Fires with the call sid as soon as it is known, so the transcript can be opened later.
   onTranscriptAvailable?: (callSid: string) => void;
 }
 
@@ -79,8 +79,8 @@ export function TranscriptionProvider({
   }, [room]);
 
   useEffect(() => {
-    if (enabled && callSid) onTranscriptAvailable?.(callSid);
-  }, [enabled, callSid, onTranscriptAvailable]);
+    if (callSid) onTranscriptAvailable?.(callSid);
+  }, [callSid, onTranscriptAvailable]);
 
   useEffect(() => {
     const pending = timers.current;
@@ -126,6 +126,32 @@ export function TranscriptionProvider({
     [localParticipant, showCaption],
   );
 
+  // Lines wait here until the call sid is known, and stay if a save fails so none is lost.
+  const unsaved = useRef<string[]>([]);
+  const flushing = useRef(false);
+  const flushUnsaved = useCallback(async () => {
+    if (!callSid || flushing.current) return;
+    flushing.current = true;
+    try {
+      while (unsaved.current.length > 0) {
+        try {
+          await saveTranscriptLine(roomCode, roomToken, callSid, unsaved.current[0]);
+        } catch {
+          setSaveFailed(true);
+          return;
+        }
+        unsaved.current.shift();
+        setSaveFailed(false);
+      }
+    } finally {
+      flushing.current = false;
+    }
+  }, [callSid, roomCode, roomToken]);
+
+  useEffect(() => {
+    void flushUnsaved();
+  }, [flushUnsaved]);
+
   const commitPhrase = useCallback(() => {
     clearTimeout(pauseTimer.current);
     const pending = phrase.current;
@@ -135,13 +161,9 @@ export function TranscriptionProvider({
     showOwnCaption(message);
     void send(encodeCaption(message), { reliable: true, topic: TRANSCRIPT_TOPIC });
     // Cada persona guarda solo sus propias frases: así el acta no se duplica.
-    if (callSid) {
-      saveTranscriptLine(roomCode, roomToken, callSid, message.text).then(
-        () => setSaveFailed(false),
-        () => setSaveFailed(true),
-      );
-    }
-  }, [callSid, roomCode, roomToken, send, showOwnCaption]);
+    unsaved.current.push(message.text);
+    void flushUnsaved();
+  }, [flushUnsaved, send, showOwnCaption]);
 
   const commitRef = useRef(commitPhrase);
   useEffect(() => {
@@ -173,7 +195,8 @@ export function TranscriptionProvider({
     [send, showOwnCaption],
   );
 
-  const listening = supported && enabled && isMicrophoneEnabled;
+  // Captions only control what is shown: the transcript is always recorded.
+  const listening = supported && isMicrophoneEnabled;
   useEffect(() => {
     if (!listening) commitRef.current();
   }, [listening]);

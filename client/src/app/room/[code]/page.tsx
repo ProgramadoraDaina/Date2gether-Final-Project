@@ -31,7 +31,13 @@ import { WaitingRoom } from '@/features/rooms/WaitingRoom';
 import { useAdmissionRequest } from '@/features/rooms/useAdmissionRequest';
 import { useRoomMembers } from '@/features/rooms/useRoomMembers';
 import { useRoomNotes } from '@/features/rooms/useRoomNotes';
-import { ApiError, requestRoomAccess, type RoomAccess, type RoomEmoji } from '@/lib/api';
+import {
+  ApiError,
+  getRoomInfo,
+  requestRoomAccess,
+  type RoomAccess,
+  type RoomEmoji,
+} from '@/lib/api';
 import { PreCallLobby } from '@/features/calls/PreCallLobby';
 import { DEFAULT_CALL_DEVICES, type CallDevices } from '@/features/calls/callDevices';
 import { useCallSession } from '@/features/calls/useCallSession';
@@ -86,6 +92,50 @@ function personalNotesKey(roomCode: string, participant: RoomAccess['participant
   return `date2gether:notes:${roomCode}:${identity}`;
 }
 
+function CloseIcon() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M6 6l12 12M18 6 6 18" />
+    </svg>
+  );
+}
+
+// Desktop keeps the panel glyph; phones show a close cross because the panel covers the call.
+function PanelCloseIcon() {
+  return (
+    <>
+      <span className={styles.desktopOnly}>
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <rect x="3" y="4" width="18" height="16" rx="2" />
+          <line x1="10" y1="4" x2="10" y2="20" />
+        </svg>
+      </span>
+      <span className={styles.mobileOnly}>
+        <CloseIcon />
+      </span>
+    </>
+  );
+}
+
 export default function RoomPage() {
   const { t } = useTranslation();
   const router = useRouter();
@@ -130,6 +180,33 @@ export default function RoomPage() {
   }[sharedNotes.status];
   const [chatOpen, setChatOpen] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  // On phones each panel covers the whole screen, so opening one closes the other.
+  const isPhone = () => window.matchMedia?.('(max-width: 640px)').matches ?? false;
+  function toggleSidebar() {
+    const next = !sidebarOpen;
+    setSidebarOpen(next);
+    if (next && isPhone()) setChatOpen(false);
+  }
+  function toggleChat() {
+    const next = !chatOpen;
+    setChatOpen(next);
+    if (next && isPhone()) setSidebarOpen(false);
+  }
+
+  // On phones both panels cover the call, so they start closed.
+  useEffect(() => {
+    if (isPhone()) {
+      setSidebarOpen(false);
+      setChatOpen(false);
+    }
+  }, []);
+  const [isPermanentRoom, setIsPermanentRoom] = useState(false);
+  useEffect(() => {
+    getRoomInfo(code).then(
+      (room) => setIsPermanentRoom(room.isPermanent),
+      () => setIsPermanentRoom(false),
+    );
+  }, [code]);
   // Además del ref (que el resto del componente ya usaba para emitir desde
   // handlers sin re-render), se guarda en estado para pasarlo como prop a
   // MeetingRoom: mutar un ref no dispara un re-render, así que sin esto
@@ -176,6 +253,12 @@ export default function RoomPage() {
   // Sin userId = sin cuenta en la sala (room_members no tiene invitados):
   // es la señal para la @mención colectiva 'invitados' en mentions.ts.
   const isGuest = !access?.participant.userId;
+  // A ref so switching language never reconnects the room socket.
+  const tRef = useRef(t);
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
+
   const myMentionRoleKeywords = useMemo<string[]>(
     () => (isGuest ? ['invitados'] : currentUserRole ? [currentUserRole] : []),
     [isGuest, currentUserRole],
@@ -263,7 +346,9 @@ export default function RoomPage() {
       setNotice({ text: message });
     });
     socket.on('exception', ({ message }: { message: string }) => setNotice({ text: message }));
-    socket.on('connect_error', () => setNotice({ text: t('No se pudo conectar a la sala') }));
+    socket.on('connect_error', () =>
+      setNotice({ text: tRef.current('No se pudo conectar a la sala') }),
+    );
 
     function rememberNames(names: string[]) {
       setMentionNames((prev) => Array.from(new Set([...prev, ...names])));
@@ -323,7 +408,7 @@ export default function RoomPage() {
       socketRef.current = null;
       setRoomSocket(null);
     };
-  }, [code, access, myMentionRoleKeywords, refetchMembers, refetchEmojis, t]);
+  }, [code, access, myMentionRoleKeywords, refetchMembers, refetchEmojis]);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
@@ -713,31 +798,51 @@ export default function RoomPage() {
             callSession.status === 'error'
           }
           musicPlayer={
-            roomSocket && <AmbientMusicPlayer socket={roomSocket} isAdmin={isCurrentUserAdmin} />
+            roomSocket && (
+              <AmbientMusicPlayer
+                socket={roomSocket}
+                isAdmin={isCurrentUserAdmin}
+                roomCode={code}
+                roomToken={access.token}
+                persistModes={isPermanentRoom}
+                silenced={callEnded}
+              />
+            )
           }
           admissionControl={isCurrentUserAdmin && <AdmissionControl code={code} />}
+          eventControl={
+            <RoomEventButton
+              canManage={canManageEvents}
+              participants={eventParticipants}
+              onStartRoulette={roomEvents.startRoulette}
+            />
+          }
         />
         <button
           type="button"
           className={styles.sidebarToggleButton}
           style={{ left: sidebarOpen ? sidebarResize.width - 46 : 12 }}
-          onClick={() => setSidebarOpen((open) => !open)}
+          onClick={toggleSidebar}
           aria-label={sidebarOpen ? t('Ocultar panel lateral') : t('Mostrar panel lateral')}
           title={sidebarOpen ? t('Ocultar panel lateral') : t('Mostrar panel lateral')}
         >
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <rect x="3" y="4" width="18" height="16" rx="2" />
-            <line x1="10" y1="4" x2="10" y2="20" />
-          </svg>
+          {sidebarOpen ? (
+            <PanelCloseIcon />
+          ) : (
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="3" y="4" width="18" height="16" rx="2" />
+              <line x1="10" y1="4" x2="10" y2="20" />
+            </svg>
+          )}
         </button>
 
         <div className={styles.roomMain}>
@@ -793,30 +898,27 @@ export default function RoomPage() {
             <button
               type="button"
               className={styles.chatToggleButton}
-              onClick={() => setChatOpen((open) => !open)}
+              onClick={toggleChat}
               aria-label={chatOpen ? t('Ocultar chat') : t('Mostrar chat')}
               title={chatOpen ? t('Ocultar chat') : t('Mostrar chat')}
             >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-              </svg>
+              {chatOpen ? (
+                <CloseIcon />
+              ) : (
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                </svg>
+              )}
             </button>
-            <div className={styles.eventButtonWrap}>
-              <RoomEventButton
-                canManage={canManageEvents}
-                participants={eventParticipants}
-                onStartRoulette={roomEvents.startRoulette}
-              />
-            </div>
             {roomEvents.spin && (
               <RouletteWheel
                 key={roomEvents.spin.startedAt}
@@ -828,12 +930,7 @@ export default function RoomPage() {
               <EventTicker state={roomEvents.settled} onClose={roomEvents.clearSettled} />
             )}
             {callSession.session ? (
-              // En llamada: el chat queda "acoplado" con ancho fijo y puede
-              // colapsarse. Siempre se monta (no se condiciona con chatOpen),
-              // porque es el wrapper el que anima `width` entre 0 y el ancho
-              // elegido — si se condicionara el montaje, desaparecería de
-              // golpe en vez de animarse (ver RoomSidebar para el mismo
-              // patrón, ya usado en la sidebar izquierda).
+              // Always mounted so closing the chat keeps its scroll and draft.
               <div
                 className={styles.chatPanelInCallWrap}
                 data-open={chatOpen}

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { useLanguageStore } from '../../translation/store';
 import { TranscriptDialog } from './TranscriptDialog';
 
@@ -90,5 +90,56 @@ describe('TranscriptDialog', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'No se pudo cargar la transcripción',
     );
+  });
+
+  it('mientras la llamada sigue, actualiza la transcripción sola con las frases nuevas', async () => {
+    jest.useFakeTimers();
+    const ana = { id: '1', speakerName: 'Ana', content: 'Hola', spokenAt: '2026-11-06T20:01:05Z' };
+    const juan = {
+      id: '2',
+      speakerName: 'Juan',
+      content: 'Qué tal',
+      spokenAt: '2026-11-06T20:01:08Z',
+    };
+    mockFetch
+      .mockResolvedValueOnce(Response.json([ana]))
+      .mockResolvedValueOnce(Response.json([ana, juan]));
+    renderDialog();
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByText('Hola')).toBeInTheDocument();
+    expect(screen.queryByText('Qué tal')).not.toBeInTheDocument();
+
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(3000);
+    });
+
+    expect(screen.getByText('Qué tal')).toBeInTheDocument();
+    expect(screen.getByText('2 frases')).toBeInTheDocument();
+    jest.useRealTimers();
+  });
+
+  it('con la llamada terminada no vuelve a pedir la transcripción', async () => {
+    jest.useFakeTimers();
+    mockFetch.mockResolvedValue(Response.json([]));
+    renderDialog(true);
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(10_000);
+    });
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    jest.useRealTimers();
+  });
+
+  it('sin frases explica que se agregan solas, sin pedir activar subtítulos', async () => {
+    mockFetch.mockResolvedValue(Response.json([]));
+    renderDialog();
+
+    expect(
+      await screen.findByText(
+        'Todavía no hay frases. Se agregan solas mientras alguien habla con el micrófono prendido.',
+      ),
+    ).toBeInTheDocument();
   });
 });

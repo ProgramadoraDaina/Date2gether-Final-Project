@@ -177,7 +177,6 @@
   color: var(--color-text);
   cursor: pointer;
   padding: 0;
-  transition: left 200ms ease;
 }
 
 .sidebarToggleButton:hover {
@@ -233,11 +232,11 @@
    solo cuando la llamada está activa (mismo criterio que antes, mismas
    declaraciones).
 
-   El wrapper (chatPanelInCallWrap) es el que anima `width` al abrir/cerrar
+   El wrapper (chatPanelInCallWrap) cambia `width` al abrir/cerrar, sin animar,
    y lleva el margen que antes tenía la tarjeta — igual patrón que
    .sidebarWrap/.sidebar en RoomSidebar: el wrapper colapsa con
    overflow:hidden, la tarjeta interna mantiene su ancho fijo (vía inline
-   style) para no reflowear mientras se cierra. */
+   style). */
 .chatPanelInCallWrap {
   position: relative;
   flex-shrink: 0;
@@ -245,9 +244,6 @@
   height: calc(100% - 64px);
   margin: var(--space-8) var(--space-4) var(--space-8) 0;
   overflow: hidden;
-  transition:
-    width 200ms ease,
-    margin 200ms ease;
 }
 
 .chatPanelInCallWrap[data-open='false'] {
@@ -310,17 +306,6 @@
   color: var(--color-accent);
 }
 
-/* Mismo criterio que .chatToggleButton, pero en la esquina opuesta: fijo
-   arriba a la izquierda de .meetingAndChat, fuera del flujo del video/chat.
-   RoomEventButton.tsx se encarga de no renderizar nada si canManage es
-   false, así que este wrapper no necesita su propia condición de visibilidad. */
-.eventButtonWrap {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  z-index: 10;
-}
-
 .chatTabs {
   display: flex;
   gap: var(--space-5);
@@ -329,15 +314,28 @@
 }
 
 .chatTab {
+  position: relative;
   width: auto;
   padding: 0 0 12px;
   background: none;
   border: none;
-  border-bottom: 2px solid transparent;
+  border-radius: 0;
   color: var(--color-text-muted);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+}
+
+.chatTab::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--color-accent);
+  transform: scaleX(0);
+  transform-origin: center;
 }
 
 .chatTab:hover {
@@ -345,10 +343,43 @@
   color: var(--color-text);
 }
 
+.chatTab:active {
+  transform: none;
+}
+
+.chatTab:focus {
+  outline: none;
+}
+
+.chatTab:focus-visible {
+  color: var(--color-text);
+  outline: 1px solid var(--color-text-muted);
+  outline-offset: 4px;
+}
+
 .chatTabActive,
 .chatTabActive:hover {
   color: var(--color-accent);
-  border-bottom-color: var(--color-accent);
+}
+
+.chatTabActive::after {
+  transform: scaleX(1);
+  animation: chatTabSweep 120ms linear;
+}
+
+@keyframes chatTabSweep {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chatTabActive::after {
+    animation: none;
+  }
 }
 
 .messages {
@@ -468,56 +499,66 @@
   flex-direction: row;
 }
 
+.desktopOnly,
+.mobileOnly {
+  display: flex;
+}
+
+.mobileOnly {
+  display: none;
+}
+
 @media (max-width: 640px) {
+  .desktopOnly {
+    display: none;
+  }
+
+  .mobileOnly {
+    display: flex;
+  }
+
   .roomLayout {
     flex-direction: column;
   }
-  .meetingAndChat {
-    flex-direction: column;
+
+  /* Both toggles stay fixed above the full-screen sheets so they can always close them. */
+  .sidebarToggleButton,
+  .chatToggleButton {
+    position: fixed;
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    z-index: 60;
   }
 
-  /* En mobile la sidebar pasa a ser una fila horizontal de ancho completo
-     (ver RoomSidebar.module.css), no una columna angosta: el `left`
-     calculado a partir de sidebarResize.width (pensado para desktop) ya no
-     tiene sentido acá. Se ancla a la derecha en su lugar; !important porque
-     el inline style de left gana por especificidad sobre una regla de
-     clase normal. */
   .sidebarToggleButton {
-    left: auto !important;
-    right: 12px;
+    left: 10px !important;
   }
 
-  /* En mobile .meetingAndChat pasa a columna: el chat deja de acoplarse al
-     costado con ancho elegible por cursor (no hay "ancho" que arrastrar en
-     una fila vertical) y vuelve a un alto fijo, igual que antes. Sigue
-     pudiendo abrirse/cerrarse animado, ahora por `height` en vez de
-     `width`. */
+  .chatToggleButton {
+    right: 10px;
+  }
+
   .chatPanelInCallWrap {
-    /* Pisa el width:var(--chat-width) de la regla de desktop: en columna
-       no hay ancho elegible, el panel ocupa todo el ancho disponible. */
+    position: fixed;
+    inset: 0;
+    z-index: 40;
     width: 100%;
-    height: 220px;
-    max-height: 50vh;
-    margin: 8px;
-    transition:
-      height 200ms ease,
-      margin 200ms ease;
+    height: 100%;
+    margin: 0;
   }
 
   .chatPanelInCallWrap[data-open='false'] {
-    width: 100%;
-    height: 0;
-    margin: 0 8px;
+    display: none;
   }
 
   .chatResizeHandle {
     display: none;
   }
 
-  /* La tarjeta interna trae un inline style={{width}} (pensado para
-     desktop); en mobile se ignora y se fuerza a ocupar todo el wrapper. */
+  /* !important beats the desktop inline width; top padding clears the close button. */
   .chatPanelInCall {
     width: 100% !important;
     height: 100%;
+    border-radius: 0;
+    padding-top: calc(48px + env(safe-area-inset-top, 0px));
   }
 }

@@ -33,7 +33,7 @@ export function SessionTranscript({
   }, [sessionId]);
 
   return (
-    <section className={styles.session} aria-labelledby="session-transcript-title">
+    <section id="transcript" className={styles.session} aria-labelledby="session-transcript-title">
       <h2 id="session-transcript-title">{t('Transcripción')}</h2>
       {state.status === 'loading' && <p className={styles.muted}>{t('Cargando transcripción…')}</p>}
       {state.status === 'error' && (

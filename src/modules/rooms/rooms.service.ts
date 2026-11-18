@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { generateRoomCode } from '../../common/generate-room-code';
 import { DRIZZLE, DrizzleDb } from '../../db/drizzle.module';
 import {
@@ -20,6 +20,7 @@ import {
 import type { CreateScheduleSlotDto } from './dto/create-schedule-slot.dto';
 import { RoomEventsService } from './room-events.service';
 import { RoomResolverService } from './room-resolver.service';
+import { nextOccurrence, type ScheduleSlot } from './schedule/next-occurrence';
 
 export interface RoomMemberView {
   userId: string;
@@ -32,7 +33,20 @@ export interface CreateRoomOptions {
   slots?: CreateScheduleSlotDto[];
 }
 
+export interface OwnedRoomView {
+  id: string;
+  code: string;
+  name: string;
+  isPermanent: boolean;
+  isJoinable: boolean;
+  createdAt: Date;
+  lastEnteredAt: Date;
+  slots: ScheduleSlot[];
+  nextOccurrenceAt: string | null;
+}
+
 const CREATE_ROOM_MAX_ATTEMPTS = 5;
+const TEMPORARY_ROOM_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class RoomsService {
@@ -97,6 +111,61 @@ export class RoomsService {
 
   async getByCodeOrThrow(code: string): Promise<Room> {
     return this.resolver.resolveJoinable(code);
+  }
+
+  // The creator is the room's only administrador (UpdateMemberRoleDto never grants it).
+  async listOwnedRooms(userId: string, now: Date = new Date()): Promise<OwnedRoomView[]> {
+    const owned = await this.db
+      .select({
+        id: rooms.id,
+        code: rooms.code,
+        name: rooms.name,
+        isPermanent: rooms.isPermanent,
+        createdAt: rooms.createdAt,
+        lastEnteredAt: rooms.lastEnteredAt,
+      })
+      .from(roomMembers)
+      .innerJoin(rooms, eq(rooms.id, roomMembers.roomId))
+      .where(
+        and(
+          eq(roomMembers.userId, userId),
+          eq(roomMembers.role, 'administrador'),
+          isNull(rooms.retiredAt),
+        ),
+      )
+      .orderBy(desc(rooms.isPermanent), desc(rooms.lastEnteredAt));
+    if (owned.length === 0) return [];
+
+    const slotRows = await this.db
+      .select({
+        roomId: roomScheduleSlots.roomId,
+        dayOfWeek: roomScheduleSlots.dayOfWeek,
+        timeOfDay: roomScheduleSlots.timeOfDay,
+        timezone: roomScheduleSlots.timezone,
+      })
+      .from(roomScheduleSlots)
+      .where(
+        inArray(
+          roomScheduleSlots.roomId,
+          owned.map((room) => room.id),
+        ),
+      )
+      .orderBy(asc(roomScheduleSlots.dayOfWeek), asc(roomScheduleSlots.timeOfDay));
+
+    return owned.map((room) => {
+      const slots = slotRows
+        .filter((slot) => slot.roomId === room.id)
+        .map(({ dayOfWeek, timeOfDay, timezone }) => ({ dayOfWeek, timeOfDay, timezone }));
+      const next = slots.length > 0 ? nextOccurrence(slots, now) : null;
+      return {
+        ...room,
+        isJoinable:
+          room.isPermanent ||
+          room.lastEnteredAt.getTime() > now.getTime() - TEMPORARY_ROOM_WINDOW_MS,
+        slots,
+        nextOccurrenceAt: next ? next.toISOString() : null,
+      };
+    });
   }
 
   async joinRoom(code: string, userId: string): Promise<void> {

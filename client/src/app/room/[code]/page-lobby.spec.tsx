@@ -32,6 +32,7 @@ jest.mock('@/features/room-emojis/useRoomEmojis', () => {
 jest.mock('@/features/chat/ExpressionPicker', () => ({ ExpressionPicker: () => null }));
 jest.mock('@/lib/api', () => ({
   requestRoomAccess: jest.fn(),
+  getRoomInfo: jest.fn<() => Promise<unknown>>().mockResolvedValue({ isPermanent: false }),
   getAdmissionStatus: jest.fn(),
   cancelAdmissionRequest: jest.fn(),
   getRoomEmojis: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),

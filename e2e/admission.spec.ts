@@ -243,7 +243,6 @@ test('el anfitrión rechaza o admite desde la interfaz; esperar, recargar y canc
     await expect(guest.getByRole('heading', { name: 'Sala de espera' })).toBeVisible();
     await guest.reload();
     await expect(guest.getByRole('heading', { name: 'Sala de espera' })).toBeVisible();
-    await host.getByRole('button', { name: 'Actualizar solicitudes' }).click();
     await host.getByRole('button', { name: 'Rechazar Invitada', exact: true }).click();
     await expect(guest.getByRole('status')).toHaveText('El anfitrión rechazó tu solicitud.', {
       timeout: 10000,
@@ -257,7 +256,6 @@ test('el anfitrión rechaza o admite desde la interfaz; esperar, recargar y canc
     await expect(guest.getByLabel('Tu nombre en la reunión')).toBeVisible();
     expect(earlyConnections).toBe(0);
     await guest.getByRole('button', { name: 'Entrar a la reunión', exact: true }).click();
-    await host.getByRole('button', { name: 'Actualizar solicitudes' }).click();
     await host.getByRole('button', { name: 'Admitir Invitada', exact: true }).click();
     await expect(guest.getByPlaceholder('Escribí un mensaje...')).toBeVisible({ timeout: 10000 });
     await host.getByRole('button', { name: 'Cerrar', exact: true }).click();

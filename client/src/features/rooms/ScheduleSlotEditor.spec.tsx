@@ -20,6 +20,26 @@ describe('ScheduleSlotEditor', () => {
     ]);
   });
 
+  it('toma la zona horaria de la PC sin pedirla y usa un input de hora', async () => {
+    const onChange = jest.fn();
+    const { ScheduleSlotEditor } = await import('./ScheduleSlotEditor');
+    render(<ScheduleSlotEditor slots={[]} onChange={onChange} />);
+
+    expect(screen.queryByLabelText('Zona horaria')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Hora')).toHaveAttribute('type', 'time');
+
+    fireEvent.change(screen.getByLabelText('Hora'), { target: { value: '21:30' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar horario' }));
+
+    expect(onChange).toHaveBeenCalledWith([
+      {
+        dayOfWeek: 1,
+        timeOfDay: '21:30',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      },
+    ]);
+  });
+
   it('quita un slot existente', async () => {
     const onChange = jest.fn();
     const slots = [{ dayOfWeek: 2, timeOfDay: '07:00', timezone: 'UTC' }];

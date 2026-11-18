@@ -11,12 +11,14 @@ describe('RoomsController', () => {
   let roomsService: {
     createRoom: jest.Mock<(...args: unknown[]) => Promise<unknown>>;
     getByCodeOrThrow: jest.Mock<(...args: unknown[]) => Promise<unknown>>;
+    listOwnedRooms: jest.Mock<(...args: unknown[]) => Promise<unknown>>;
   };
 
   beforeEach(async () => {
     roomsService = {
       createRoom: jest.fn(),
       getByCodeOrThrow: jest.fn(),
+      listOwnedRooms: jest.fn(),
     };
 
     const module = await Test.createTestingModule({
@@ -33,6 +35,23 @@ describe('RoomsController', () => {
       .compile();
 
     controller = module.get(RoomsController);
+  });
+
+  it('GET /rooms/mine requiere autenticación y devuelve las salas que administra el usuario', async () => {
+    const handler = Object.getOwnPropertyDescriptor(RoomsController.prototype, 'listMine')!
+      .value as object;
+    expect((Reflect.getMetadata('__guards__', handler) ?? []) as unknown[]).toContain(JwtAuthGuard);
+    const owned = [{ id: 'r1', code: 'abc-defg-hij' }];
+    roomsService.listOwnedRooms.mockResolvedValue(owned);
+
+    await expect(controller.listMine({ sub: 'user-1' } as never)).resolves.toBe(owned);
+    expect(roomsService.listOwnedRooms).toHaveBeenCalledWith('user-1');
+  });
+
+  it('declara /rooms/mine antes de /rooms/:code para que "mine" no se tome como código de sala', () => {
+    const methods = Object.getOwnPropertyNames(RoomsController.prototype);
+    expect(methods.indexOf('listMine')).toBeGreaterThan(-1);
+    expect(methods.indexOf('listMine')).toBeLessThan(methods.indexOf('findOne'));
   });
 
   it('requiere autenticación para crear salas pero permite consultar el enlace', () => {

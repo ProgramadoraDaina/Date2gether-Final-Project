@@ -23,15 +23,16 @@
 
 .heading {
   margin: 0;
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 700;
   color: var(--color-text);
 }
 
 .wheelFrame {
+  --wheel-size: min(420px, 70vmin);
   position: relative;
-  width: 240px;
-  height: 240px;
+  width: var(--wheel-size);
+  height: var(--wheel-size);
 }
 
 .pointer {
@@ -42,9 +43,9 @@
   width: 0;
   height: 0;
   transform: translateX(-50%);
-  border-left: 10px solid transparent;
-  border-right: 10px solid transparent;
-  border-top: 16px solid var(--color-text);
+  border-left: 14px solid transparent;
+  border-right: 14px solid transparent;
+  border-top: 22px solid var(--color-text);
 }
 
 .wheel {
@@ -63,10 +64,10 @@
   left: 50%;
   transform-origin: 0 0;
   white-space: nowrap;
-  max-width: 90px;
+  max-width: calc(var(--wheel-size) * 0.375);
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
   color: #fff;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
@@ -74,7 +75,7 @@
 
 .winnerBanner {
   margin: 0;
-  font-size: 16px;
+  font-size: 20px;
   font-weight: 700;
   color: var(--color-text);
   animation: fadeIn 200ms ease;

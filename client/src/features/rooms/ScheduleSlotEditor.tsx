@@ -27,9 +27,7 @@ export function ScheduleSlotEditor({ slots, onChange }: ScheduleSlotEditorProps)
   const { t } = useTranslation();
   const [dayOfWeek, setDayOfWeek] = useState(1);
   const [timeOfDay, setTimeOfDay] = useState('');
-  const [timezone, setTimezone] = useState(
-    () => Intl.DateTimeFormat().resolvedOptions().timeZone,
-  );
+  const [timezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [error, setError] = useState<string | null>(null);
 
   function addSlot(event: FormEvent) {
@@ -50,7 +48,9 @@ export function ScheduleSlotEditor({ slots, onChange }: ScheduleSlotEditorProps)
   return (
     <fieldset className={styles.editor}>
       <legend>{t('Horario semanal')}</legend>
-      {slots.length === 0 && <p className={styles.empty}>{t('Todavía no agregaste ningún horario.')}</p>}
+      {slots.length === 0 && (
+        <p className={styles.empty}>{t('Todavía no agregaste ningún horario.')}</p>
+      )}
       <ul className={styles.list}>
         {slots.map((slot, index) => (
           <li key={`${slot.dayOfWeek}-${slot.timeOfDay}-${slot.timezone}`} className={styles.slot}>
@@ -70,10 +70,7 @@ export function ScheduleSlotEditor({ slots, onChange }: ScheduleSlotEditorProps)
       <div className={styles.row}>
         <label>
           {t('Día')}
-          <select
-            value={dayOfWeek}
-            onChange={(event) => setDayOfWeek(Number(event.target.value))}
-          >
+          <select value={dayOfWeek} onChange={(event) => setDayOfWeek(Number(event.target.value))}>
             {DAY_LABELS.map((label, index) => (
               <option key={label} value={index}>
                 {t(label)}
@@ -84,14 +81,10 @@ export function ScheduleSlotEditor({ slots, onChange }: ScheduleSlotEditorProps)
         <label>
           {t('Hora')}
           <input
+            type="time"
             value={timeOfDay}
             onChange={(event) => setTimeOfDay(event.target.value)}
-            placeholder="07:00"
           />
-        </label>
-        <label>
-          {t('Zona horaria')}
-          <input value={timezone} onChange={(event) => setTimezone(event.target.value)} />
         </label>
         <button type="button" onClick={addSlot}>
           {t('Agregar horario')}

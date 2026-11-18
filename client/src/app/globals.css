@@ -224,8 +224,11 @@ button {
     transform 0.1s ease;
 }
 
-button:hover {
-  background: var(--color-accent-hover);
+/* Touch screens keep :hover stuck after a tap, so hover colors only apply with a real pointer. */
+@media (hover: hover) {
+  button:hover {
+    background: var(--color-accent-hover);
+  }
 }
 
 button:active {
@@ -244,6 +247,8 @@ button.secondary {
   border: 1px solid var(--color-border);
 }
 
-button.secondary:hover {
-  background: var(--color-chip-bg);
+@media (hover: hover) {
+  button.secondary:hover {
+    background: var(--color-chip-bg);
+  }
 }

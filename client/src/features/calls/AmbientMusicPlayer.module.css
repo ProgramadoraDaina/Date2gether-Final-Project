@@ -86,8 +86,17 @@
   align-items: center;
 }
 
+.trackField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
 .trackForm input {
   flex: 1;
+  min-width: 0;
+  margin: 0;
 }
 
 /* Mini "now playing" a la Spotify: una tile cuadrada (equalizador en vez de
@@ -256,9 +265,27 @@
 }
 
 .volumeRow {
+  container-type: inline-size;
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.volumeValue {
+  flex-shrink: 0;
+  min-width: 4ch;
+  text-align: right;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Hidden when the panel is too narrow for slider + label. */
+@container (max-width: 150px) {
+  .volumeValue {
+    display: none;
+  }
 }
 
 /* A la YouTube: el slider de volumen no estira todo el ancho de la tarjeta
@@ -266,8 +293,8 @@
    thumb se achica a 0 en reposo y solo aparece al pasar el mouse o tocar,
    igual que en el player nativo de YouTube. */
 .volumeBar {
-  width: 72px;
-  flex-shrink: 0;
+  flex: 1 1 auto;
+  min-width: 48px;
   /* Mismo problema que .seekBar: sin este reset, el <input> global le mete
      10px de padding + borde + margin-bottom, y el navegador infla la caja a
      ~22px en vez de los 3px que pide esta regla. */
@@ -294,7 +321,9 @@
   border-radius: 50%;
   background: var(--color-accent);
   cursor: pointer;
-  transition: width 0.12s ease, height 0.12s ease;
+  transition:
+    width 0.12s ease,
+    height 0.12s ease;
 }
 
 .volumeBar:hover::-webkit-slider-thumb,
@@ -311,7 +340,9 @@
   border-radius: 50%;
   background: var(--color-accent);
   cursor: pointer;
-  transition: width 0.12s ease, height 0.12s ease;
+  transition:
+    width 0.12s ease,
+    height 0.12s ease;
 }
 
 .volumeBar:hover::-moz-range-thumb,
@@ -350,7 +381,9 @@
   color: var(--color-text-muted);
   cursor: pointer;
   padding: 0;
-  transition: color 0.15s ease, transform 0.1s ease;
+  transition:
+    color 0.15s ease,
+    transform 0.1s ease;
 }
 
 .transportButton:hover {
@@ -362,7 +395,8 @@
 }
 
 .transportButton:disabled {
-  color: var(--color-disabled);
+  color: var(--color-text-muted);
+  opacity: 0.35;
   cursor: not-allowed;
   transform: none;
 }
@@ -401,48 +435,46 @@
 .playlist {
   display: flex;
   flex-direction: column;
-  gap: 2px;
   margin: 0;
   padding: 0;
   list-style: none;
-  max-height: 160px;
+  max-height: 240px;
   overflow-y: auto;
+  border-top: 1px solid var(--color-border);
 }
 
 .track,
 .trackActive {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 8px;
-  border-radius: 8px;
+  gap: 10px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--color-border);
   font-size: 13px;
-  border-left: 2px solid transparent;
 }
 
-/* Clickeable: salta a esa canción (ver handleJumpToTrack). La que ya está
-   sonando (.trackActive) no lo es, no tiene sentido "saltar" a sí misma. */
+/* Clickable: jumps to that track; the one already playing is not. */
 .track {
   cursor: pointer;
 }
 
-.track:hover {
+.track:hover,
+.track:focus-visible {
   background: var(--color-surface);
+  outline: none;
 }
 
-/* La canción que está sonando se marca con una barra de acento a la
-   izquierda y el texto en el color de acento, como el resto de la UI. */
 .trackActive {
   background: var(--color-surface);
-  color: var(--color-accent);
-  font-weight: 600;
-  border-left-color: var(--color-accent);
 }
 
 .trackIndex {
   flex-shrink: 0;
-  width: 16px;
-  text-align: right;
+  width: 2.5ch;
+  display: flex;
+  justify-content: center;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 12px;
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
 }
@@ -451,34 +483,160 @@
   color: var(--color-accent);
 }
 
+.trackThumb {
+  flex-shrink: 0;
+  width: 48px;
+  height: 36px;
+  object-fit: cover;
+  background: var(--color-border);
+}
+
 .trackTitle {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--color-text);
+}
+
+.trackActive .trackTitle {
+  color: var(--color-accent);
+  font-weight: 600;
 }
 
 .removeButton {
   flex-shrink: 0;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
   border: none;
+  border-radius: 0;
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
   padding: 0;
+  opacity: 0;
+}
+
+.track:hover .removeButton,
+.trackActive:hover .removeButton,
+.removeButton:focus-visible {
+  opacity: 1;
 }
 
 .removeButton:hover {
   color: var(--color-error);
-  background: var(--color-chip-bg);
+  background: none;
+}
+
+@media (hover: none) {
+  .removeButton {
+    opacity: 1;
+  }
 }
 
 .error {
   color: var(--color-error, #c0392b);
   font-size: 0.85rem;
+}
+
+.searchBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.searchButton {
+  width: auto;
+  flex-shrink: 0;
+  padding: 8px 12px;
+  border-radius: var(--radius-xs);
+}
+
+.searchFallback {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.searchResults {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+}
+
+.searchResults li + li {
+  border-top: 1px solid var(--color-border);
+}
+
+.searchResult {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 0;
+  background: none;
+  color: var(--color-text);
+  font-weight: 400;
+  text-align: left;
+}
+
+.searchResult:hover,
+.searchResult:focus-visible {
+  background: var(--color-surface);
+  outline: none;
+}
+
+.searchResult img {
+  flex-shrink: 0;
+  object-fit: cover;
+}
+
+.searchResultText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.searchResultTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.searchResultChannel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.confirmDialog {
+  composes: confirmDialog from './MeetingRoom.module.css';
+  border-radius: var(--radius-xs);
+}
+
+.confirmActions {
+  composes: confirmActions from './MeetingRoom.module.css';
+}
+
+.confirmDangerButton {
+  composes: confirmDangerButton from './MeetingRoom.module.css';
+}
+
+.modeActive,
+.modeActive:hover {
+  color: var(--color-accent);
 }

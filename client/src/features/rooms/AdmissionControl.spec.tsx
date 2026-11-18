@@ -23,6 +23,9 @@ function baseAdmission(overrides: Partial<AdmissionManagement> = {}): AdmissionM
   };
 }
 
+const ADMISSION_HELP =
+  'Aceptá o rechazá a quienes piden entrar y elegí cómo se ingresa a la sala. Las solicitudes se actualizan solas.';
+
 async function openDialog() {
   fireEvent.click(screen.getByRole('button', { name: /Administrar ingresos/ }));
   // Espera a que la carga inicial resuelva -- la leyenda del fieldset solo
@@ -56,6 +59,22 @@ describe('AdmissionControl', () => {
     ).toBeInTheDocument();
   });
 
+  it('explica qué hace el botón y no ofrece actualizar a mano (se actualiza solo)', async () => {
+    const { getRoomAdmission } = await import('@/lib/api');
+    jest.mocked(getRoomAdmission).mockResolvedValue(baseAdmission());
+    const { AdmissionControl } = await import('./AdmissionControl');
+
+    render(<AdmissionControl code="abc-defg-hij" />);
+    const trigger = screen.getByRole('button', { name: /Administrar ingresos/ });
+    expect(trigger).toHaveAttribute('title', ADMISSION_HELP);
+    await openDialog();
+
+    expect(screen.getByText(ADMISSION_HELP)).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Actualizar solicitudes' }),
+    ).not.toBeInTheDocument();
+  });
+
   it('una sala no permanente muestra el toggle de sala de espera', async () => {
     const { getRoomAdmission } = await import('@/lib/api');
     jest.mocked(getRoomAdmission).mockResolvedValue(baseAdmission());
@@ -65,6 +84,40 @@ describe('AdmissionControl', () => {
     await openDialog();
 
     expect(screen.getByLabelText('Activar sala de espera')).toBeInTheDocument();
+  });
+
+  it('cada opción lleva su explicación asociada y las secciones son títulos', async () => {
+    const { getRoomAdmission } = await import('@/lib/api');
+    jest.mocked(getRoomAdmission).mockResolvedValue(baseAdmission());
+    const { AdmissionControl } = await import('./AdmissionControl');
+
+    render(<AdmissionControl code="abc-defg-hij" />);
+    await openDialog();
+
+    expect(screen.getByLabelText('Activar sala de espera')).toHaveAccessibleDescription(
+      'Desactivar la espera admite las solicitudes pendientes cuando los ingresos están desbloqueados.',
+    );
+    expect(screen.getByLabelText('Bloquear nuevos ingresos')).toHaveAccessibleDescription(
+      'Los cambios de ingreso no expulsan a quienes ya están dentro.',
+    );
+    expect(screen.getByRole('heading', { name: /Solicitudes pendientes/ })).toBeInTheDocument();
+  });
+
+  it('en una sala permanente no muestra la explicación de desactivar la espera', async () => {
+    const { getRoomAdmission } = await import('@/lib/api');
+    jest
+      .mocked(getRoomAdmission)
+      .mockResolvedValue(baseAdmission({ isPermanent: true, waitingRoomEnabled: true }));
+    const { AdmissionControl } = await import('./AdmissionControl');
+
+    render(<AdmissionControl code="abc-defg-hij" />);
+    await openDialog();
+
+    expect(
+      screen.queryByText(
+        'Desactivar la espera admite las solicitudes pendientes cuando los ingresos están desbloqueados.',
+      ),
+    ).not.toBeInTheDocument();
   });
 
   it('[5.8] marca una solicitud stale con una señal visible', async () => {

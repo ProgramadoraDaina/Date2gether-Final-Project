@@ -19,6 +19,8 @@ function state(overrides: Partial<MusicState> = {}): MusicState {
     isPlaying: false,
     positionSeconds: 10,
     updatedAt: Date.now(),
+    mode: 'sequence',
+    shuffle: false,
     ...overrides,
   };
 }

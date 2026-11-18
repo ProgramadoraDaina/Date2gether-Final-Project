@@ -17,6 +17,12 @@ export interface RoomAccess {
   participant: { sub: string; roomId: string; roomCode: string; name: string; userId?: string };
 }
 
+export async function getRoomInfo(code: string): Promise<Room> {
+  const res = await fetch(`${API_URL}/rooms/${encodeURIComponent(code)}`);
+  if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se encontró la sala'));
+  return (await res.json()) as Room;
+}
+
 // El nombre se confirma antes de obtener acceso, tanto con cuenta como sin ella.
 export async function requestRoomAccess(
   code: string,
@@ -190,6 +196,32 @@ export async function getCallHistory(): Promise<CallHistoryEntry[]> {
   const res = await authFetch('/calls/history');
   if (!res.ok) {
     throw new ApiError(await extractErrorMessage(res, 'No se pudo obtener el historial'));
+  }
+  return res.json();
+}
+
+export interface OwnedRoomSlot {
+  dayOfWeek: number;
+  timeOfDay: string;
+  timezone: string;
+}
+
+export interface OwnedRoom {
+  id: string;
+  code: string;
+  name: string;
+  isPermanent: boolean;
+  isJoinable: boolean;
+  createdAt: string;
+  lastEnteredAt: string;
+  slots: OwnedRoomSlot[];
+  nextOccurrenceAt: string | null;
+}
+
+export async function getOwnedRooms(): Promise<OwnedRoom[]> {
+  const res = await authFetch('/rooms/mine');
+  if (!res.ok) {
+    throw new ApiError(await extractErrorMessage(res, 'No se pudieron cargar tus salas'));
   }
   return res.json();
 }

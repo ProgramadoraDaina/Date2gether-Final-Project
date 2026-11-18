@@ -48,7 +48,9 @@
   font-size: 11px;
   font-weight: 500;
   text-align: center;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .navItem:hover {
@@ -70,11 +72,7 @@
 
 /* En mobile no hay alto de sobra para un riel vertical a un costado: se
    convierte en una barra de tabs fija abajo, como cualquier app nativa.
-   .top/.bottom se reparten el ancho mitad y mitad en vez de ir apiladas
-   (ahí vivía el margin-top:auto que empujaba Configuración al fondo del
-   riel vertical — en una fila no hace falta, los tres items quedan a la
-   misma altura). env(safe-area-inset-bottom): no se tapa con la barra de
-   gestos de iOS. */
+   env(safe-area-inset-bottom): no se tapa con la barra de gestos de iOS. */
 @media (max-width: 640px) {
   .rail {
     position: fixed;
@@ -91,17 +89,16 @@
     border-top: 1px solid var(--color-border);
   }
 
+  /* The two desktop groups dissolve so all items share the bar evenly. */
   .top,
   .bottom {
-    flex: 1;
-    flex-direction: row;
-    justify-content: space-around;
-    margin-top: 0;
+    display: contents;
   }
 
   .navItem {
     width: auto;
-    flex: 0 0 auto;
-    padding: 6px var(--space-3);
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 6px var(--space-1);
   }
 }

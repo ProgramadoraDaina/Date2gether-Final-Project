@@ -9,6 +9,30 @@ import {
 import { useTranslation } from '../translation/useTranslation';
 import styles from './AdmissionControl.module.css';
 
+const ADMISSION_HELP =
+  'Aceptá o rechazá a quienes piden entrar y elegí cómo se ingresa a la sala. Las solicitudes se actualizan solas.';
+
+function InfoTip({
+  id,
+  label,
+  children,
+}: {
+  id: string;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <span className={styles.infoTip}>
+      <button type="button" className={styles.infoIcon} aria-label={label} aria-describedby={id}>
+        i
+      </button>
+      <span id={id} role="tooltip" className={styles.tooltip}>
+        {children}
+      </span>
+    </span>
+  );
+}
+
 export function AdmissionControl({ code }: { code: string }) {
   const { t } = useTranslation();
   const [data, setData] = useState<AdmissionManagement | null>(null);
@@ -90,7 +114,12 @@ export function AdmissionControl({ code }: { code: string }) {
 
   return (
     <div className={styles.control}>
-      <button type="button" aria-haspopup="dialog" onClick={() => setOpen(true)}>
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        title={t(ADMISSION_HELP)}
+        onClick={() => setOpen(true)}
+      >
         {t('Administrar ingresos')} <span aria-live="polite">({data?.requests.length ?? 0})</span>
       </button>
       {error && !open && <p role="alert">{t(error)}</p>}
@@ -101,106 +130,115 @@ export function AdmissionControl({ code }: { code: string }) {
         onClose={() => setOpen(false)}
         aria-labelledby="admission-title"
       >
-        <button type="button" className={styles.close} onClick={() => setOpen(false)}>
-          {t('Cerrar')}
-        </button>
-        <h2 id="admission-title">{t('Administrar ingresos')}</h2>
+        <header className={styles.header}>
+          <h2 id="admission-title">{t('Administrar ingresos')}</h2>
+          <button type="button" className={styles.close} onClick={() => setOpen(false)}>
+            {t('Cerrar')}
+          </button>
+        </header>
+        <p className={styles.help}>{t(ADMISSION_HELP)}</p>
         {!data && !error && <p role="status">{t('Cargando solicitudes…')}</p>}
         {error && (
           <p role="alert" className={styles.error}>
             {t(error)}
           </p>
         )}
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => {
-            void refresh();
-          }}
-        >
-          {t('Actualizar solicitudes')}
-        </button>
         {data && (
           <>
-            <fieldset disabled={busy}>
-              <legend>{t('Configuración de ingreso')}</legend>
+            <fieldset disabled={busy} className={styles.section}>
+              <legend className={styles.sectionTitle}>{t('Configuración de ingreso')}</legend>
               {data.isPermanent ? (
-                <p>{t('Esta sala es permanente: la sala de espera está siempre activa.')}</p>
+                <p className={styles.note}>
+                  {t('Esta sala es permanente: la sala de espera está siempre activa.')}
+                </p>
               ) : (
+                <div className={styles.option}>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={data.waitingRoomEnabled}
+                      aria-describedby="admission-waiting-hint"
+                      onChange={(event) => {
+                        const checked = event.currentTarget.checked;
+                        setData({ ...data, waitingRoomEnabled: checked });
+                        void mutate(() =>
+                          updateRoomAdmission(code, { waitingRoomEnabled: checked }),
+                        );
+                      }}
+                    />
+                    {t('Activar sala de espera')}
+                  </label>
+                  <InfoTip id="admission-waiting-hint" label={t('Más información')}>
+                    {t(
+                      'Desactivar la espera admite las solicitudes pendientes cuando los ingresos están desbloqueados.',
+                    )}
+                  </InfoTip>
+                </div>
+              )}
+              <div className={styles.option}>
                 <label>
                   <input
                     type="checkbox"
-                    checked={data.waitingRoomEnabled}
+                    checked={data.entryLocked}
+                    aria-describedby="admission-lock-hint"
                     onChange={(event) => {
                       const checked = event.currentTarget.checked;
-                      setData({ ...data, waitingRoomEnabled: checked });
-                      void mutate(() =>
-                        updateRoomAdmission(code, { waitingRoomEnabled: checked }),
-                      );
+                      setData({ ...data, entryLocked: checked });
+                      void mutate(() => updateRoomAdmission(code, { entryLocked: checked }));
                     }}
                   />
-                  {t('Activar sala de espera')}
+                  {t('Bloquear nuevos ingresos')}
                 </label>
-              )}
-              <label>
-                <input
-                  type="checkbox"
-                  checked={data.entryLocked}
-                  onChange={(event) => {
-                    const checked = event.currentTarget.checked;
-                    setData({ ...data, entryLocked: checked });
-                    void mutate(() => updateRoomAdmission(code, { entryLocked: checked }));
-                  }}
-                />
-                {t('Bloquear nuevos ingresos')}
-              </label>
+                <InfoTip id="admission-lock-hint" label={t('Más información')}>
+                  {t('Los cambios de ingreso no expulsan a quienes ya están dentro.')}
+                </InfoTip>
+              </div>
             </fieldset>
-            <p>
-              {t(
-                'Desactivar la espera admite las solicitudes pendientes cuando los ingresos están desbloqueados.',
+            <section className={styles.section} aria-labelledby="admission-requests-title">
+              <h3 id="admission-requests-title" className={styles.sectionTitle}>
+                {t('Solicitudes pendientes')}{' '}
+                <span className={styles.count}>{data.requests.length}</span>
+              </h3>
+              {!data.requests.length && (
+                <p className={styles.empty}>{t('No hay solicitudes pendientes')}</p>
               )}
-            </p>
-            <p>{t('Los cambios de ingreso no expulsan a quienes ya están dentro.')}</p>
-            <h3>
-              {t('Solicitudes pendientes')} ({data.requests.length})
-            </h3>
-            {!data.requests.length && <p>{t('No hay solicitudes pendientes')}</p>}
-            <ul className={styles.requests}>
-              {data.requests.map((request) => (
-                <li key={request.id}>
-                  <strong>{request.name}</strong>
-                  <span>{t(request.registered ? 'Cuenta registrada' : 'Invitado')}</span>
-                  <time dateTime={request.createdAt}>
-                    {new Date(request.createdAt).toLocaleTimeString()}
-                  </time>
-                  {request.stale && (
-                    <span className={styles.stale}>{t('Esperando hace más de 24h')}</span>
-                  )}
-                  <div className={styles.actions}>
-                    <button
-                      type="button"
-                      disabled={busy || data.entryLocked}
-                      aria-label={t('Admitir') + ' ' + request.name}
-                      onClick={() => {
-                        void mutate(() => decideAdmission(code, request.id, 'admitted'));
-                      }}
-                    >
-                      {t('Admitir')}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      aria-label={t('Rechazar') + ' ' + request.name}
-                      onClick={() => {
-                        void mutate(() => decideAdmission(code, request.id, 'rejected'));
-                      }}
-                    >
-                      {t('Rechazar')}
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
+              <ul className={styles.requests}>
+                {data.requests.map((request) => (
+                  <li key={request.id}>
+                    <strong>{request.name}</strong>
+                    <span>{t(request.registered ? 'Cuenta registrada' : 'Invitado')}</span>
+                    <time dateTime={request.createdAt}>
+                      {new Date(request.createdAt).toLocaleTimeString()}
+                    </time>
+                    {request.stale && (
+                      <span className={styles.stale}>{t('Esperando hace más de 24h')}</span>
+                    )}
+                    <div className={styles.actions}>
+                      <button
+                        type="button"
+                        disabled={busy || data.entryLocked}
+                        aria-label={t('Admitir') + ' ' + request.name}
+                        onClick={() => {
+                          void mutate(() => decideAdmission(code, request.id, 'admitted'));
+                        }}
+                      >
+                        {t('Admitir')}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        aria-label={t('Rechazar') + ' ' + request.name}
+                        onClick={() => {
+                          void mutate(() => decideAdmission(code, request.id, 'rejected'));
+                        }}
+                      >
+                        {t('Rechazar')}
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
           </>
         )}
       </dialog>

@@ -332,16 +332,20 @@ function MeetingContent({
           <ConnectionStateToast />
           {focusTrack ? (
             <FocusLayoutContainer className={styles.meetingGrid}>
-              <CarouselLayout tracks={carouselTracks}>
-                <ReactionTile />
+              {/* Remount per focus: LiveKit's stable ordering throws when reused across focus changes. */}
+              <CarouselLayout
+                key={`${focusTrack.participant.identity}-${focusTrack.source}`}
+                tracks={carouselTracks}
+              >
+                <ReactionTile canFocus={tracks.length > 1} />
               </CarouselLayout>
               <TrackRefContext.Provider value={focusTrack}>
-                <ReactionTile />
+                <ReactionTile canFocus={tracks.length > 1} />
               </TrackRefContext.Provider>
             </FocusLayoutContainer>
           ) : (
             <GridLayout tracks={tracks} className={styles.meetingGrid}>
-              <ReactionTile />
+              <ReactionTile canFocus={tracks.length > 1} />
             </GridLayout>
           )}
           <ReactionOverlay />

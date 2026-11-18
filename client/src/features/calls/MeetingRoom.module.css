@@ -1,15 +1,20 @@
 .meetingRoom {
   position: relative;
+  min-width: 0;
   min-height: 240px;
   flex: 3;
   display: flex;
   flex-direction: column;
   overflow: auto;
+  overflow-x: hidden;
 }
 
+/* Without min-width 0 the grid keeps its old width until LiveKit relayouts. */
 .meetingGrid {
   flex: 1;
+  min-width: 0;
   min-height: 280px;
+  overflow: hidden;
 }
 
 .meetingGrid :global(.lk-participant-media-video[data-lk-orientation='landscape']) {
@@ -54,7 +59,8 @@
    control del propio LiveKit). */
 .controlsDock {
   position: relative;
-  z-index: 1;
+  /* Above tile controls (z 2-3) so device menus are not painted under them. */
+  z-index: 4;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -63,7 +69,8 @@
   width: fit-content;
   max-width: calc(100% - 24px);
   margin: -28px auto var(--space-3);
-  padding: var(--space-3) var(--space-4);
+  --dock-pad-y: var(--space-3);
+  padding: var(--dock-pad-y) var(--space-4);
   border-radius: 999px;
   background: var(--color-surface);
   box-shadow: var(--shadow-md);
@@ -161,8 +168,52 @@
 
 @media (max-width: 640px) {
   .controlsDock {
+    --dock-pad-y: 8px;
     gap: 6px;
-    padding: 8px 10px;
+    padding: var(--dock-pad-y) 10px;
     margin-top: -16px;
   }
+}
+
+/* LiveKit anchors the menu 6px above the button; lift it past the dock padding too. */
+.controlsGroup :global(.lk-device-menu) {
+  min-width: 200px;
+  max-width: 280px;
+  padding: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-text);
+  transform: translateY(calc(-1 * var(--dock-pad-y)));
+}
+
+.controlsGroup :global(.lk-device-menu-heading) {
+  padding: 6px 8px 4px;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.controlsGroup :global(.lk-media-device-select li > .lk-button) {
+  overflow: hidden;
+  padding: 6px 8px;
+  border-radius: var(--radius-xs);
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.controlsGroup :global(.lk-media-device-select li:not([data-lk-active='true']) > .lk-button) {
+  color: var(--color-text);
+}
+
+.controlsGroup
+  :global(
+    .lk-media-device-select li:not([data-lk-active='true']) > .lk-button:not(:disabled):hover
+  ) {
+  background: var(--color-chip-bg);
 }

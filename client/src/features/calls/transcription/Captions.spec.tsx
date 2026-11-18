@@ -109,9 +109,27 @@ describe('Subtítulos en vivo', () => {
     expect(button).toBeDisabled();
   });
 
-  it('al activarlos transcribe el micrófono propio en el idioma de la app y manda la frase a la sala', async () => {
+  it('sin activar subtítulos transcribe igual y guarda el acta, pero no muestra nada en pantalla', async () => {
     await renderCaptions();
-    expect(FakeRecognition.instances).toHaveLength(0);
+    await waitFor(() => expect(onTranscriptAvailable).toHaveBeenCalledWith('RM_call1'));
+    const recognition = FakeRecognition.instances[0];
+    expect(recognition.start).toHaveBeenCalledTimes(1);
+
+    jest.useFakeTimers();
+    act(() => recognition.say('Nadie prendió CC', true));
+    act(() => jest.advanceTimersByTime(PHRASE_PAUSE_MS));
+    jest.useRealTimers();
+
+    expect(screen.queryByText('Nadie prendió CC')).not.toBeInTheDocument();
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(mockFetch.mock.calls[0][1]?.body))).toEqual({
+      callSid: 'RM_call1',
+      content: 'Nadie prendió CC',
+    });
+  });
+
+  it('al activarlos muestra la transcripción del micrófono propio en el idioma de la app y manda la frase a la sala', async () => {
+    await renderCaptions();
     fireEvent.click(screen.getByRole('button', { name: 'Activar subtítulos' }));
     const recognition = FakeRecognition.instances[0];
     expect(recognition.lang).toBe('es-AR');
@@ -178,6 +196,53 @@ describe('Subtítulos en vivo', () => {
     });
   });
 
+  it('las frases dichas antes de que la sala conecte no se pierden: se guardan al conectar', async () => {
+    mockRoom.state = 'disconnected';
+    await renderCaptions();
+    await act(async () => {});
+
+    jest.useFakeTimers();
+    act(() => FakeRecognition.instances[0].say('Hola antes de conectar', true));
+    act(() => jest.advanceTimersByTime(PHRASE_PAUSE_MS));
+    jest.useRealTimers();
+    expect(mockFetch).not.toHaveBeenCalled();
+
+    mockRoom.state = 'connected';
+    await act(async () => mockRoom.listeners.get('connected')?.());
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(String(mockFetch.mock.calls[0][1]?.body))).toEqual({
+      callSid: 'RM_call1',
+      content: 'Hola antes de conectar',
+    });
+  });
+
+  it('si guardar una frase falla, la reintenta junto con la siguiente y en orden', async () => {
+    mockFetch
+      .mockResolvedValueOnce(new Response(null, { status: 500 }))
+      .mockResolvedValue(new Response(null, { status: 201 }));
+    await renderCaptions();
+    await waitFor(() => expect(onTranscriptAvailable).toHaveBeenCalled());
+    const recognition = FakeRecognition.instances[0];
+
+    jest.useFakeTimers();
+    act(() => recognition.say('Primera', true));
+    act(() => jest.advanceTimersByTime(PHRASE_PAUSE_MS));
+    jest.useRealTimers();
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+
+    jest.useFakeTimers();
+    act(() => recognition.say('Segunda', true));
+    act(() => jest.advanceTimersByTime(PHRASE_PAUSE_MS));
+    jest.useRealTimers();
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(3));
+    const contents = mockFetch.mock.calls.map(
+      ([, init]) => (JSON.parse(String(init?.body)) as { content: string }).content,
+    );
+    expect(contents).toEqual(['Primera', 'Primera', 'Segunda']);
+  });
+
   it('si el backend no guarda la frase, avisa sin cortar los subtítulos', async () => {
     mockFetch.mockResolvedValue(new Response('{}', { status: 500 }));
     await renderCaptions();
@@ -215,7 +280,7 @@ describe('Subtítulos en vivo', () => {
 
     act(() => recognition.say('y otra cosa', true));
     act(() => jest.advanceTimersByTime(PHRASE_PAUSE_MS));
-    expect(mockFetch).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2));
     expect(JSON.parse(String(mockFetch.mock.calls[1][1]?.body))).toMatchObject({
       content: 'y otra cosa',
     });
@@ -253,16 +318,19 @@ describe('Subtítulos en vivo', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
-  it('al apagar los subtítulos guarda la frase que estaba en curso', async () => {
+  it('al apagar los subtítulos la frase en curso se sigue guardando después de la pausa', async () => {
     await renderCaptions();
     fireEvent.click(screen.getByRole('button', { name: 'Activar subtítulos' }));
     await waitFor(() => expect(onTranscriptAvailable).toHaveBeenCalled());
+    jest.useFakeTimers();
     act(() => FakeRecognition.instances[0].say('Última frase', true));
     fireEvent.click(screen.getByRole('button', { name: 'Desactivar subtítulos' }));
+    act(() => jest.advanceTimersByTime(PHRASE_PAUSE_MS));
+    jest.useRealTimers();
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
-  it('con el micrófono apagado no transcribe aunque los subtítulos estén activos', async () => {
+  it('con el micrófono apagado no transcribe, estén o no activos los subtítulos', async () => {
     micEnabled = false;
     await renderCaptions();
     fireEvent.click(screen.getByRole('button', { name: 'Activar subtítulos' }));
@@ -289,13 +357,13 @@ describe('Subtítulos en vivo', () => {
     expect(screen.queryByText('Otro')).not.toBeInTheDocument();
   });
 
-  it('al desactivarlos corta el reconocimiento y oculta los subtítulos', async () => {
+  it('al desactivarlos oculta los subtítulos pero no corta la transcripción', async () => {
     await renderCaptions();
     fireEvent.click(screen.getByRole('button', { name: 'Activar subtítulos' }));
     const recognition = FakeRecognition.instances[0];
     act(() => recognition.say('Chau', true));
     fireEvent.click(screen.getByRole('button', { name: 'Desactivar subtítulos' }));
-    expect(recognition.abort).toHaveBeenCalledTimes(1);
+    expect(recognition.abort).not.toHaveBeenCalled();
     expect(screen.queryByText('Chau')).not.toBeInTheDocument();
   });
 
