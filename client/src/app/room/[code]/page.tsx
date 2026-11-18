@@ -228,14 +228,18 @@ export default function RoomPage() {
     if (access) void joinCall(code, access.token);
   }, [access, code, joinCall]);
 
-  // Una vez que se llegó a 'in-call' por primera vez, no se vuelve a tapar
-  // toda la pantalla aunque la llamada después falle o termine: ese caso ya
-  // lo cubren callLoadingPanel/callEndedPanel dentro de la sala (ver más
-  // abajo). Este flag solo gobierna la transición inicial de "Entrando a la
-  // reunión" -> sala completa.
+  // Una vez que se llegó a 'in-call' o 'error' por primera vez, no se vuelve
+  // a tapar toda la pantalla aunque la llamada después falle o termine: ese
+  // caso ya lo cubren callLoadingPanel/callEndedPanel dentro de la sala (ver
+  // más abajo). Este flag solo gobierna la transición inicial de "Entrando a
+  // la reunión" -> sala completa. Si no se cuenta 'error' acá, una llamada
+  // que nunca logra conectar deja el overlay pegado para siempre tapando el
+  // resto de la sala (chat incluido).
   const [hasJoinedCall, setHasJoinedCall] = useState(false);
   useEffect(() => {
-    if (callSession.status === 'in-call') setHasJoinedCall(true);
+    if (callSession.status === 'in-call' || callSession.status === 'error') {
+      setHasJoinedCall(true);
+    }
   }, [callSession.status]);
 
   useEffect(() => {
