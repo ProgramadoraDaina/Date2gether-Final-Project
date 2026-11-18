@@ -345,10 +345,25 @@
   color: var(--color-text);
 }
 
+.chatTab:focus {
+  outline: none;
+}
+
+.chatTab:focus-visible {
+  color: var(--color-text);
+  border-bottom-color: var(--color-text);
+}
+
 .chatTabActive,
-.chatTabActive:hover {
+.chatTabActive:hover,
+.chatTabActive:focus-visible {
   color: var(--color-accent);
   border-bottom-color: var(--color-accent);
+}
+
+.chatTabActive:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 
 .messages {
