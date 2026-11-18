@@ -23,7 +23,14 @@ const ibmPlexSans = IBM_Plex_Sans({
 export const metadata: Metadata = {
   title: 'Date2gether',
   description: 'Videollamadas simples, en el navegador.',
-  icons: { icon: '/favicon.svg' },
+  icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: { url: '/apple-icon.png', sizes: '180x180' },
+  },
 };
 
 // Sin esto, Chrome en Android no sabe que la página ya maneja su propio

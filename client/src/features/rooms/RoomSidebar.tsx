@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from 'react';
+import { BrandMark } from '@/features/brand/BrandMark';
 import { ThemeToggle } from '@/features/theme/ThemeToggle';
 import { LanguageToggle } from '@/features/translation/LanguageToggle';
 import { useTranslation } from '@/features/translation/useTranslation';
@@ -61,7 +62,10 @@ export function RoomSidebar({
     >
       <div className={styles.sidebar} style={{ width }}>
         <div className={styles.brand}>
-          <strong className={styles.brandName}>Date2gether</strong>
+          <strong className={styles.brandName}>
+            <BrandMark size={22} />
+            Date2gether
+          </strong>
           <span className={styles.code}>{code}</span>
         </div>
 

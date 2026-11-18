@@ -1,5 +1,6 @@
 'use client';
 
+import { BrandMark } from '@/features/brand/BrandMark';
 import Link from 'next/link';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
@@ -96,7 +97,10 @@ export default function HomePage() {
   return (
     <AppShell>
       <div className={styles.card}>
-        <h1>Date2gether</h1>
+        <h1 className={styles.brandTitle}>
+          <BrandMark size={46} />
+          Date2gether
+        </h1>
         <p className={styles.subtitle} data-testid="subtitle">
           {t('Videollamadas simples, en el navegador.')}
         </p>

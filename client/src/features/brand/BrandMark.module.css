@@ -1,0 +1,16 @@
+.mark {
+  flex-shrink: 0;
+}
+
+.frame {
+  fill: none;
+  stroke: var(--color-text);
+}
+
+.bubble {
+  fill: var(--color-accent);
+}
+
+.person {
+  fill: var(--color-text);
+}
