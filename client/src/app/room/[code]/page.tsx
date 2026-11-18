@@ -35,6 +35,7 @@ import { ApiError, requestRoomAccess, type RoomAccess, type RoomEmoji } from '@/
 import { PreCallLobby } from '@/features/calls/PreCallLobby';
 import { DEFAULT_CALL_DEVICES, type CallDevices } from '@/features/calls/callDevices';
 import { useCallSession } from '@/features/calls/useCallSession';
+import { TranscriptDialog } from '@/features/calls/transcription/TranscriptDialog';
 import { HangUpButton } from '@/features/calls/HangUpButton';
 import { EventTicker } from '@/features/calls/roomEvents/EventTicker';
 import { RoomEventButton } from '@/features/calls/roomEvents/RoomEventButton';
@@ -156,6 +157,9 @@ export default function RoomPage() {
   const { joinCall } = callSession;
   const [initialDevices, setInitialDevices] = useState(DEFAULT_CALL_DEVICES);
   const [emojisOpen, setEmojisOpen] = useState(false);
+  const [transcriptCallSid, setTranscriptCallSid] = useState<string | null>(null);
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
+  const [callEnded, setCallEnded] = useState(false);
   const { emojis, refetchEmojis } = useRoomEmojis(access ? code : undefined);
   const chatEmojis = useMemo(() => emojis.filter((e) => e.kind === 'emoji'), [emojis]);
   const emojisByName = useMemo(() => new Map(chatEmojis.map((e) => [e.name, e])), [chatEmojis]);
@@ -179,7 +183,10 @@ export default function RoomPage() {
   // Sugerencias del autocompletar @: gente presente + los 4 roles, así se
   // puede mencionar "a todos los colaboradores" sin tipear cada nombre.
   const mentionSuggestions = useMemo(
-    () => [...users, ...ROLE_MENTION_KEYWORDS.map((role) => ({ participantId: `role:${role}`, userName: role }))],
+    () => [
+      ...users,
+      ...ROLE_MENTION_KEYWORDS.map((role) => ({ participantId: `role:${role}`, userName: role })),
+    ],
     [users],
   );
   // Misma vara que RoomEmojisDialog (canManage): armar un evento es moderación
@@ -402,7 +409,10 @@ export default function RoomPage() {
             >
               {t('Reintentar')}
             </button>
-            <HangUpButton className={styles.callLoadingButton} onConfirm={leaveFailedOrConnectingCall}>
+            <HangUpButton
+              className={styles.callLoadingButton}
+              onConfirm={leaveFailedOrConnectingCall}
+            >
               {t('Colgar')}
             </HangUpButton>
           </div>
@@ -411,7 +421,10 @@ export default function RoomPage() {
         <>
           <div className={styles.callLoadingSpinner} />
           <p>{t('Cargando llamada…')}</p>
-          <HangUpButton className={styles.callLoadingButton} onConfirm={leaveFailedOrConnectingCall}>
+          <HangUpButton
+            className={styles.callLoadingButton}
+            onConfirm={leaveFailedOrConnectingCall}
+          >
             {t('Colgar')}
           </HangUpButton>
         </>
@@ -495,7 +508,9 @@ export default function RoomPage() {
               return (
                 <li
                   key={m.id}
-                  className={mentionsMe ? `${styles.message} ${styles.messageMentioned}` : styles.message}
+                  className={
+                    mentionsMe ? `${styles.message} ${styles.messageMentioned}` : styles.message
+                  }
                 >
                   <span className={styles.author} style={color ? { color } : undefined}>
                     {m.authorName}
@@ -666,12 +681,23 @@ export default function RoomPage() {
         emojis={emojis}
         canManage={currentUserRole === 'administrador' || currentUserRole === 'colaborador'}
       />
+      {access && transcriptCallSid && (
+        <TranscriptDialog
+          open={transcriptOpen}
+          onClose={() => setTranscriptOpen(false)}
+          roomCode={code}
+          roomToken={access.token}
+          callSid={transcriptCallSid}
+          callEnded={callEnded}
+        />
+      )}
       <div className={styles.roomLayout}>
         <RoomSidebar
           code={code}
           copied={copied}
           onCopyLink={handleCopyLink}
           onOpenEmojis={() => setEmojisOpen(true)}
+          onOpenTranscript={transcriptCallSid ? () => setTranscriptOpen(true) : undefined}
           open={sidebarOpen}
           width={sidebarResize.width}
           onResizeHandleMouseDown={sidebarResize.handleMouseDown}
@@ -681,7 +707,11 @@ export default function RoomPage() {
           // 'in-call' lo tiene en el dock de MeetingRoom. 'ended' (el
           // anfitrión se desconectó) es la excepción: ahí no hay nada que
           // colgar, la llamada ya terminó del lado del servidor.
-          inCall={callSession.status === 'connecting' || callSession.status === 'in-call' || callSession.status === 'error'}
+          inCall={
+            callSession.status === 'connecting' ||
+            callSession.status === 'in-call' ||
+            callSession.status === 'error'
+          }
           musicPlayer={
             roomSocket && <AmbientMusicPlayer socket={roomSocket} isAdmin={isCurrentUserAdmin} />
           }
@@ -742,6 +772,15 @@ export default function RoomPage() {
                   roomToken={access.token}
                   roomEmojis={emojis}
                   initialDevices={initialDevices}
+                  onTranscriptAvailable={setTranscriptCallSid}
+                  onHangUp={
+                    transcriptCallSid
+                      ? () => {
+                          setCallEnded(true);
+                          setTranscriptOpen(true);
+                        }
+                      : undefined
+                  }
                 />
               </div>
             )}

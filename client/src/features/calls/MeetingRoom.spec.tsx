@@ -8,6 +8,7 @@ const mockPush = jest.fn();
 const mockEvents: Record<string, () => void> = {};
 const mockRoom = {
   state: 'disconnected',
+  getSid: () => Promise.resolve('RM_test'),
   on: jest.fn(),
   off: jest.fn(),
   localParticipant: {
@@ -90,8 +91,14 @@ describe('MeetingRoom', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     mockRoom.state = 'disconnected';
+    // Como un EventEmitter real: varios componentes pueden escuchar el mismo evento.
+    for (const key of Object.keys(mockEvents)) delete mockEvents[key];
     mockRoom.on.mockImplementation((event, callback) => {
-      mockEvents[event as string] = callback as () => void;
+      const previous = mockEvents[event as string];
+      mockEvents[event as string] = () => {
+        previous?.();
+        (callback as () => void)();
+      };
     });
     mockRoom.localParticipant.setMicrophoneEnabled.mockResolvedValue();
     mockRoom.localParticipant.setCameraEnabled.mockResolvedValue();
@@ -100,12 +107,35 @@ describe('MeetingRoom', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     jest.mocked(useTrackToggle).mockImplementation(defaultUseTrackToggle as any);
   });
+  it('al tocar micrófono o cámara en la llamada recuerda la elección para la próxima vez', async () => {
+    const { useCallSettingsStore } = await import('./settings/store');
+    useCallSettingsStore.setState({ cameraEnabled: true, microphoneEnabled: true });
+    const MeetingRoom = (await import('./MeetingRoom')).default;
+    render(
+      <MeetingRoom call={state()} roomCode="abc" roomToken="test-room-token" roomEmojis={[]} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Desactivar micrófono' }));
+    expect(useCallSettingsStore.getState()).toMatchObject({
+      microphoneEnabled: false,
+      cameraEnabled: true,
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Desactivar cámara' }));
+    expect(useCallSettingsStore.getState().cameraEnabled).toBe(false);
+  });
+
   it('conecta con el pase de sala, sin encender cámara ni micrófono automáticamente', async () => {
     const { LiveKitRoom, useTracks } = await import('@livekit/components-react');
     const { Track } = await import('livekit-client');
     const MeetingRoom = (await import('./MeetingRoom')).default;
     const call = state();
-    render(<MeetingRoom call={call} roomCode="abc-defg-hij" roomToken="test-room-token" roomEmojis={[]} />);
+    render(
+      <MeetingRoom
+        call={call}
+        roomCode="abc-defg-hij"
+        roomToken="test-room-token"
+        roomEmojis={[]}
+      />,
+    );
     const props = jest.mocked(LiveKitRoom).mock.calls[0][0];
     expect(props).toMatchObject({
       serverUrl: call.session!.url,
@@ -129,7 +159,14 @@ describe('MeetingRoom', () => {
   it('los botones de micrófono y cámara son íconos accesibles por aria-label/title', async () => {
     const MeetingRoom = (await import('./MeetingRoom')).default;
     const call = state();
-    render(<MeetingRoom call={call} roomCode="abc-defg-hij" roomToken="test-room-token" roomEmojis={[]} />);
+    render(
+      <MeetingRoom
+        call={call}
+        roomCode="abc-defg-hij"
+        roomToken="test-room-token"
+        roomEmojis={[]}
+      />,
+    );
     const micButton = screen.getByRole('button', { name: 'Desactivar micrófono' });
     const cameraButton = screen.getByRole('button', { name: 'Desactivar cámara' });
     expect(micButton).toHaveAttribute('title', 'Desactivar micrófono');
@@ -141,7 +178,12 @@ describe('MeetingRoom', () => {
     const MeetingRoom = (await import('./MeetingRoom')).default;
     const call = state();
     const { rerender } = render(
-      <MeetingRoom call={call} roomCode="abc-defg-hij" roomToken="test-room-token" roomEmojis={[]} />,
+      <MeetingRoom
+        call={call}
+        roomCode="abc-defg-hij"
+        roomToken="test-room-token"
+        roomEmojis={[]}
+      />,
     );
     const firstMicOnChange = jest
       .mocked(useTrackToggle)
@@ -150,7 +192,12 @@ describe('MeetingRoom', () => {
     // Forzar un segundo render con las mismas props (algo que pasa todo el
     // tiempo en una llamada real: estado de conexión, nivel de audio, etc.).
     rerender(
-      <MeetingRoom call={{ ...call }} roomCode="abc-defg-hij" roomToken="test-room-token" roomEmojis={[]} />,
+      <MeetingRoom
+        call={{ ...call }}
+        roomCode="abc-defg-hij"
+        roomToken="test-room-token"
+        roomEmojis={[]}
+      />,
     );
     const secondMicOnChange = jest
       .mocked(useTrackToggle)
@@ -164,7 +211,14 @@ describe('MeetingRoom', () => {
     const { Track } = await import('livekit-client');
     const MeetingRoom = (await import('./MeetingRoom')).default;
     const call = state();
-    render(<MeetingRoom call={call} roomCode="abc-defg-hij" roomToken="test-room-token" roomEmojis={[]} />);
+    render(
+      <MeetingRoom
+        call={call}
+        roomCode="abc-defg-hij"
+        roomToken="test-room-token"
+        roomEmojis={[]}
+      />,
+    );
 
     const micCall = jest
       .mocked(useTrackToggle)
@@ -205,7 +259,14 @@ describe('MeetingRoom', () => {
     );
     const MeetingRoom = (await import('./MeetingRoom')).default;
     const call = state();
-    render(<MeetingRoom call={call} roomCode="abc-defg-hij" roomToken="test-room-token" roomEmojis={[]} />);
+    render(
+      <MeetingRoom
+        call={call}
+        roomCode="abc-defg-hij"
+        roomToken="test-room-token"
+        roomEmojis={[]}
+      />,
+    );
     const micButton = screen.getByRole('button', { name: 'Activar micrófono' });
     const cameraButton = screen.getByRole('button', { name: 'Desactivar cámara' });
     expect(micButton).toHaveAttribute('title', 'Activar micrófono');
@@ -214,7 +275,14 @@ describe('MeetingRoom', () => {
   it('un permiso rechazado muestra instrucciones y conserva los controles de la llamada', async () => {
     const MeetingRoom = (await import('./MeetingRoom')).default;
     const call = state();
-    render(<MeetingRoom call={call} roomCode="abc-defg-hij" roomToken="test-room-token" roomEmojis={[]} />);
+    render(
+      <MeetingRoom
+        call={call}
+        roomCode="abc-defg-hij"
+        roomToken="test-room-token"
+        roomEmojis={[]}
+      />,
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Desactivar cámara' }));
     expect(screen.getByRole('alert')).toHaveTextContent('Revisá los permisos');
     expect(screen.getByRole('button', { name: 'Colgar' })).toBeInTheDocument();
@@ -225,7 +293,14 @@ describe('MeetingRoom', () => {
     const { Track } = await import('livekit-client');
     const MeetingRoom = (await import('./MeetingRoom')).default;
     const call = state();
-    render(<MeetingRoom call={call} roomCode="abc-defg-hij" roomToken="test-room-token" roomEmojis={[]} />);
+    render(
+      <MeetingRoom
+        call={call}
+        roomCode="abc-defg-hij"
+        roomToken="test-room-token"
+        roomEmojis={[]}
+      />,
+    );
     const screenShareButton = screen.getByRole('button', { name: 'Dejar de compartir pantalla' });
     expect(screenShareButton).toHaveAttribute('title', 'Dejar de compartir pantalla');
     expect(jest.mocked(useTrackToggle)).toHaveBeenCalledWith(
@@ -239,7 +314,14 @@ describe('MeetingRoom', () => {
     const { LiveKitRoom } = await import('@livekit/components-react');
     const MeetingRoom = (await import('./MeetingRoom')).default;
     const call = state();
-    render(<MeetingRoom call={call} roomCode="abc-defg-hij" roomToken="test-room-token" roomEmojis={[]} />);
+    render(
+      <MeetingRoom
+        call={call}
+        roomCode="abc-defg-hij"
+        roomToken="test-room-token"
+        roomEmojis={[]}
+      />,
+    );
     const props = jest.mocked(LiveKitRoom).mock.calls[0][0];
     act(() => props.onDisconnected?.(1));
     expect(call.leaveCall).toHaveBeenCalledTimes(1);
@@ -247,6 +329,26 @@ describe('MeetingRoom', () => {
     act(() => props.onError?.(new Error('network')));
     expect(call.failed).toHaveBeenCalledTimes(1);
     expect(mockPush).toHaveBeenCalledTimes(1);
+  });
+  it('si la sala pasa onHangUp, al colgar lo llama en vez de volver al inicio', async () => {
+    const { LiveKitRoom } = await import('@livekit/components-react');
+    const MeetingRoom = (await import('./MeetingRoom')).default;
+    const call = state();
+    const onHangUp = jest.fn();
+    render(
+      <MeetingRoom
+        call={call}
+        roomCode="abc-defg-hij"
+        roomToken="test-room-token"
+        roomEmojis={[]}
+        onHangUp={onHangUp}
+      />,
+    );
+    const props = jest.mocked(LiveKitRoom).mock.calls[0][0];
+    act(() => props.onDisconnected?.(1));
+    expect(call.leaveCall).toHaveBeenCalledTimes(1);
+    expect(onHangUp).toHaveBeenCalledTimes(1);
+    expect(mockPush).not.toHaveBeenCalled();
   });
   it('aplica los dispositivos elegidos solo en la primera conexión, sin reactivarlos al reconectar', async () => {
     const { LiveKitRoom } = await import('@livekit/components-react');
@@ -312,7 +414,14 @@ describe('MeetingRoom', () => {
     const { DisconnectReason } = await import('livekit-client');
     const MeetingRoom = (await import('./MeetingRoom')).default;
     const call = state();
-    render(<MeetingRoom call={call} roomCode="abc-defg-hij" roomToken="test-room-token" roomEmojis={[]} />);
+    render(
+      <MeetingRoom
+        call={call}
+        roomCode="abc-defg-hij"
+        roomToken="test-room-token"
+        roomEmojis={[]}
+      />,
+    );
     const props = jest.mocked(LiveKitRoom).mock.calls[0][0];
     act(() => props.onDisconnected?.(DisconnectReason.ROOM_DELETED));
     expect(call.endedByHost).toHaveBeenCalledTimes(1);
@@ -324,7 +433,14 @@ describe('MeetingRoom', () => {
     const { DisconnectReason } = await import('livekit-client');
     const MeetingRoom = (await import('./MeetingRoom')).default;
     const call = state();
-    render(<MeetingRoom call={call} roomCode="abc-defg-hij" roomToken="test-room-token" roomEmojis={[]} />);
+    render(
+      <MeetingRoom
+        call={call}
+        roomCode="abc-defg-hij"
+        roomToken="test-room-token"
+        roomEmojis={[]}
+      />,
+    );
     const props = jest.mocked(LiveKitRoom).mock.calls[0][0];
     act(() => props.onDisconnected?.(DisconnectReason.ROOM_CLOSED));
     expect(call.endedByHost).toHaveBeenCalledTimes(1);

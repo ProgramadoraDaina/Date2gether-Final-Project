@@ -12,6 +12,7 @@ jest.mock('@/features/translation/useTranslation', () => {
 jest.mock('@/lib/auth', () => ({ isLoggedIn: jest.fn() }));
 jest.mock('@/lib/api', () => ({
   getCallSessionTimeline: jest.fn(),
+  getSessionTranscript: jest.fn(() => Promise.resolve([])),
   ApiError: class extends Error {
     status?: number;
     constructor(message: string, status?: number) {

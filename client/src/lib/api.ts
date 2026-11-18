@@ -1,3 +1,4 @@
+import type { TranscriptEntry } from './transcripts';
 import { extractErrorMessage, getAccessToken, refreshAccessToken, type AuthUser } from './auth';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
@@ -515,4 +516,25 @@ export async function deleteScheduleSlot(code: string, slotId: string): Promise<
     method: 'DELETE',
   });
   if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudo borrar el horario'));
+}
+
+// Acta de una sesión del historial: mismo 404 que la línea de tiempo si no participaste.
+export async function getSessionTranscript(sessionId: string): Promise<TranscriptEntry[]> {
+  const res = await authFetch(`/calls/sessions/${encodeURIComponent(sessionId)}/transcript`);
+  if (!res.ok) {
+    throw new ApiError(
+      await extractErrorMessage(res, 'No se pudo cargar la transcripción'),
+      res.status,
+    );
+  }
+  return res.json();
+}
+
+// La sesión del historial recién existe cuando la llamada termina para todos.
+export async function resolveCallSessionBySid(livekitRoomSid: string): Promise<{ id: string }> {
+  const res = await authFetch(`/calls/sessions/by-sid/${encodeURIComponent(livekitRoomSid)}`);
+  if (!res.ok) {
+    throw new ApiError(await extractErrorMessage(res, 'No se encontró la sesión'), res.status);
+  }
+  return res.json();
 }

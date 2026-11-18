@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useState } from 'react';
 import { PreCallLobby } from './PreCallLobby';
 import { useLanguageStore } from '../translation/store';
+import { useCallSettingsStore } from './settings/store';
 
 const getUserMedia = jest.fn<typeof navigator.mediaDevices.getUserMedia>();
 const enumerateDevices = jest.fn<() => Promise<MediaDeviceInfo[]>>();
@@ -36,6 +37,8 @@ function Lobby() {
 beforeEach(() => {
   jest.clearAllMocks();
   useLanguageStore.setState({ language: 'es' });
+  useCallSettingsStore.setState({ cameraEnabled: false, microphoneEnabled: false });
+  Object.defineProperty(navigator, 'permissions', { configurable: true, value: undefined });
   enumerateDevices.mockResolvedValue([
     { kind: 'videoinput', deviceId: 'camera-1', label: 'Camera one' },
     { kind: 'videoinput', deviceId: 'camera-2', label: 'Camera two' },
@@ -56,7 +59,54 @@ beforeEach(() => {
   join.mockResolvedValue();
 });
 
+function grantPermissions(state: PermissionState) {
+  const query = jest.fn(() => Promise.resolve({ state } as PermissionStatus));
+  Object.defineProperty(navigator, 'permissions', { configurable: true, value: { query } });
+  return query;
+}
+
 describe('PreCallLobby', () => {
+  it('recuerda si dejaste cámara y micrófono prendidos y al volver los prende si el permiso ya está dado', async () => {
+    useCallSettingsStore.setState({ cameraEnabled: true, microphoneEnabled: true });
+    grantPermissions('granted');
+    getUserMedia
+      .mockResolvedValueOnce(capture('video', 'camera-1').stream)
+      .mockResolvedValueOnce(capture('audio', 'mic-1').stream);
+    render(<Lobby />);
+    await waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole('button', { name: 'Desactivar cámara' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: 'Desactivar micrófono' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
+  it('si el navegador todavía no dio permiso, no lo pide solo aunque los hayas dejado prendidos', async () => {
+    useCallSettingsStore.setState({ cameraEnabled: true, microphoneEnabled: true });
+    const query = grantPermissions('prompt');
+    render(<Lobby />);
+    await waitFor(() => expect(query).toHaveBeenCalledTimes(2));
+    await screen.findByRole('option', { name: 'Camera one' });
+    expect(getUserMedia).not.toHaveBeenCalled();
+  });
+
+  it('tocar cámara o micrófono en el lobby guarda la elección para la próxima vez', async () => {
+    getUserMedia.mockResolvedValueOnce(capture('video', 'camera-1').stream);
+    render(<Lobby />);
+    fireEvent.click(screen.getByRole('button', { name: 'Activar cámara' }));
+    expect(useCallSettingsStore.getState()).toMatchObject({
+      cameraEnabled: true,
+      microphoneEnabled: false,
+    });
+    expect(JSON.parse(localStorage.getItem('date2gether:call-settings') ?? '{}')).toMatchObject({
+      state: { cameraEnabled: true },
+    });
+    await screen.findByRole('button', { name: 'Desactivar cámara' });
+  });
+
   it('no pide permisos al abrir y permite entrar con ambos dispositivos apagados', async () => {
     render(<Lobby />);
     await screen.findByRole('option', { name: 'Camera one' });

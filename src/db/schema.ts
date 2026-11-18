@@ -284,6 +284,23 @@ export const usersRelations = relations(users, ({ many }) => ({
   callHistory: many(callHistory),
 }));
 
+// Frases finales de los subtítulos en vivo. call_sid es el sid de la sala de LiveKit:
+// cambia en cada llamada, así el acta de una llamada no mezcla frases de otras.
+export const transcriptLines = pgTable(
+  'transcript_lines',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    roomId: uuid('room_id')
+      .notNull()
+      .references(() => rooms.id, { onDelete: 'cascade' }),
+    callSid: varchar('call_sid', { length: 64 }).notNull(),
+    speakerName: varchar('speaker_name', { length: 60 }).notNull(),
+    content: text('content').notNull(),
+    spokenAt: timestamp('spoken_at').notNull().defaultNow(),
+  },
+  (table) => [index('transcript_lines_room_call_idx').on(table.roomId, table.callSid)],
+);
+
 export const roomsRelations = relations(rooms, ({ many, one }) => ({
   messages: many(messages),
   notes: one(roomNotes, { fields: [rooms.id], references: [roomNotes.roomId] }),
@@ -321,6 +338,7 @@ export type RoomRole = (typeof roomRoleEnum.enumValues)[number];
 export type CallHistory = typeof callHistory.$inferSelect;
 export type NewCallHistory = typeof callHistory.$inferInsert;
 export type NameColor = (typeof nameColorEnum.enumValues)[number];
+export type TranscriptLine = typeof transcriptLines.$inferSelect;
 
 // ---------------------------------------------------------------------------
 // Línea de tiempo de participación en llamadas (ver openspec/changes/
