@@ -36,10 +36,11 @@
   text-align: center;
 }
 
+/* Violeta claro fijo: el fondo de los subtítulos es siempre negro, en tema claro y oscuro. */
 .speaker {
-  margin-right: 6px;
-  font-size: 0.8em;
-  opacity: 0.6;
+  margin-right: 8px;
+  color: #c77dff;
+  font-weight: 600;
 }
 
 .interim {

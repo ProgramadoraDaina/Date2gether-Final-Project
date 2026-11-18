@@ -2,6 +2,7 @@ export const TRANSCRIPT_TOPIC = 'transcript';
 export const MAX_CAPTION_LENGTH = 500;
 // Tiempo que queda visible una frase terminada si la persona no sigue hablando.
 export const CAPTION_LIFETIME_MS = 5000;
+export const PHRASE_PAUSE_MS = 1500;
 
 // `id` identifica la frase: los resultados parciales y el final de una misma frase comparten id.
 export interface CaptionMessage {

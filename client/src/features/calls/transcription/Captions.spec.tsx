@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useLanguageStore } from '../../translation/store';
-import { encodeCaption } from './transcript';
+import { encodeCaption, PHRASE_PAUSE_MS } from './transcript';
 
 type DataHandler = (msg: {
   payload: Uint8Array;
@@ -94,11 +94,14 @@ describe('Subtítulos en vivo', () => {
     expect(recognition.lang).toBe('es-AR');
     expect(recognition.start).toHaveBeenCalledTimes(1);
 
+    jest.useFakeTimers();
     act(() => recognition.say('Hola a todos', true));
-
     expect(screen.getByText('Ana')).toBeInTheDocument();
     expect(screen.getByText('Hola a todos')).toBeInTheDocument();
-    const [payload, options] = mockSend.mock.calls[0] as unknown as [Uint8Array, object];
+    act(() => jest.advanceTimersByTime(PHRASE_PAUSE_MS));
+    jest.useRealTimers();
+
+    const [payload, options] = mockSend.mock.calls.at(-1) as unknown as [Uint8Array, object];
     expect(decode(payload)).toMatchObject({ text: 'Hola a todos', final: true });
     expect(options).toEqual({ reliable: true, topic: 'transcript' });
   });
@@ -111,7 +114,11 @@ describe('Subtítulos en vivo', () => {
 
     act(() => recognition.say('Hola a', false));
     expect(mockFetch).not.toHaveBeenCalled();
+    jest.useFakeTimers();
     act(() => recognition.say('Hola a todos', true));
+    expect(mockFetch).not.toHaveBeenCalled();
+    act(() => jest.advanceTimersByTime(PHRASE_PAUSE_MS));
+    jest.useRealTimers();
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const [url, init] = mockFetch.mock.calls[0];
@@ -131,9 +138,61 @@ describe('Subtítulos en vivo', () => {
     await renderCaptions();
     fireEvent.click(screen.getByRole('button', { name: 'Activar subtítulos' }));
     await waitFor(() => expect(onTranscriptAvailable).toHaveBeenCalled());
+    jest.useFakeTimers();
     act(() => FakeRecognition.instances[0].say('Hola', true));
+    act(() => jest.advanceTimersByTime(PHRASE_PAUSE_MS));
+    jest.useRealTimers();
     expect(await screen.findByRole('alert')).toHaveTextContent('No se pudieron guardar');
     expect(screen.getByText('Hola')).toBeInTheDocument();
+  });
+
+  it('junta las palabras que Chrome confirma de a una en una sola frase y la guarda una vez', async () => {
+    await renderCaptions();
+    fireEvent.click(screen.getByRole('button', { name: 'Activar subtítulos' }));
+    await waitFor(() => expect(onTranscriptAvailable).toHaveBeenCalled());
+    const recognition = FakeRecognition.instances[0];
+    jest.useFakeTimers();
+
+    for (const word of ['me', 'encanta', 'esta', 'aplicacion'])
+      act(() => recognition.say(word, true));
+    expect(screen.getByText('me encanta esta aplicacion')).toBeInTheDocument();
+    act(() => recognition.say('me encanta esta aplicacion', true));
+
+    expect(screen.getAllByText('Ana')).toHaveLength(1);
+    expect(screen.getByText('me encanta esta aplicacion')).toBeInTheDocument();
+    expect(mockFetch).not.toHaveBeenCalled();
+    act(() => jest.advanceTimersByTime(PHRASE_PAUSE_MS));
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(mockFetch.mock.calls[0][1]?.body))).toEqual({
+      callSid: 'RM_call1',
+      content: 'me encanta esta aplicacion',
+    });
+
+    act(() => recognition.say('y otra cosa', true));
+    act(() => jest.advanceTimersByTime(PHRASE_PAUSE_MS));
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(String(mockFetch.mock.calls[1][1]?.body))).toMatchObject({
+      content: 'y otra cosa',
+    });
+    jest.useRealTimers();
+  });
+
+  it('si la frase se hace muy larga la guarda sin esperar la pausa', async () => {
+    await renderCaptions();
+    fireEvent.click(screen.getByRole('button', { name: 'Activar subtítulos' }));
+    await waitFor(() => expect(onTranscriptAvailable).toHaveBeenCalled());
+    const long = 'palabra '.repeat(30).trim();
+    act(() => FakeRecognition.instances[0].say(long, true));
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('al apagar los subtítulos guarda la frase que estaba en curso', async () => {
+    await renderCaptions();
+    fireEvent.click(screen.getByRole('button', { name: 'Activar subtítulos' }));
+    await waitFor(() => expect(onTranscriptAvailable).toHaveBeenCalled());
+    act(() => FakeRecognition.instances[0].say('Última frase', true));
+    fireEvent.click(screen.getByRole('button', { name: 'Desactivar subtítulos' }));
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
   it('con el micrófono apagado no transcribe aunque los subtítulos estén activos', async () => {

@@ -25,7 +25,7 @@ type RecognitionConstructor = new () => Recognition;
 const RESTART_DELAY_MS = 250;
 const MAX_NETWORK_RETRIES = 3;
 
-export type SpeechRecognitionError ='not-allowed' | 'network' | 'unknown';
+export type SpeechRecognitionError = 'not-allowed' | 'network' | 'unknown';
 
 export interface SpeechResult {
   text: string;
