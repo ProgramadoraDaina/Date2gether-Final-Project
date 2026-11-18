@@ -310,49 +310,53 @@ function MeetingContent({
         {focusTrack ? (
           <FocusLayoutContainer className={styles.meetingGrid}>
             <CarouselLayout tracks={carouselTracks}>
-              <ReactionTile />
+              <ReactionTile canFocus={tracks.length > 1} />
             </CarouselLayout>
             <TrackRefContext.Provider value={focusTrack}>
-              <ReactionTile />
+              <ReactionTile canFocus={tracks.length > 1} />
             </TrackRefContext.Provider>
           </FocusLayoutContainer>
         ) : (
           <GridLayout tracks={tracks} className={styles.meetingGrid}>
-            <ReactionTile />
+            <ReactionTile canFocus={tracks.length > 1} />
           </GridLayout>
         )}
         <ReactionOverlay />
-      {deviceError && (
-        <p className={styles.error} role="alert">
-          {t(
-            'No se pudo activar el dispositivo. Revisá los permisos del navegador; podés continuar en la llamada.',
-          )}
-        </p>
-      )}
-      <div className={styles.controlsDock}>
-        <div className={styles.controlsGroup}>
-          <MicToggleButton roomCode={roomCode} roomToken={roomToken} setDeviceError={setDeviceError} />
-          <MediaDeviceMenu
-            kind="audioinput"
-            requestPermissions={false}
-            aria-label={t('Elegir micrófono')}
-          />
-          <CameraToggleButton
-            roomCode={roomCode}
-            roomToken={roomToken}
-            setDeviceError={setDeviceError}
-          />
-          <MediaDeviceMenu
-            kind="videoinput"
-            requestPermissions={false}
-            aria-label={t('Elegir cámara')}
-          />
-          <ScreenShareToggleButton setDeviceError={setDeviceError} />
-          <ReactionPicker buttonClassName={styles.iconButton} />
-          <SoundboardPicker buttonClassName={styles.iconButton} />
+        {deviceError && (
+          <p className={styles.error} role="alert">
+            {t(
+              'No se pudo activar el dispositivo. Revisá los permisos del navegador; podés continuar en la llamada.',
+            )}
+          </p>
+        )}
+        <div className={styles.controlsDock}>
+          <div className={styles.controlsGroup}>
+            <MicToggleButton
+              roomCode={roomCode}
+              roomToken={roomToken}
+              setDeviceError={setDeviceError}
+            />
+            <MediaDeviceMenu
+              kind="audioinput"
+              requestPermissions={false}
+              aria-label={t('Elegir micrófono')}
+            />
+            <CameraToggleButton
+              roomCode={roomCode}
+              roomToken={roomToken}
+              setDeviceError={setDeviceError}
+            />
+            <MediaDeviceMenu
+              kind="videoinput"
+              requestPermissions={false}
+              aria-label={t('Elegir cámara')}
+            />
+            <ScreenShareToggleButton setDeviceError={setDeviceError} />
+            <ReactionPicker buttonClassName={styles.iconButton} />
+            <SoundboardPicker buttonClassName={styles.iconButton} />
+          </div>
+          <ConnectedHangUpButton />
         </div>
-        <ConnectedHangUpButton />
-      </div>
       </LayoutContextProvider>
     </ReactionsProvider>
   );
