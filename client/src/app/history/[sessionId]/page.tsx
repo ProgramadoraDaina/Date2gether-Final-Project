@@ -8,6 +8,7 @@ import { isLoggedIn } from '@/lib/auth';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { AppShell } from '@/features/navigation/AppShell';
 import { ParticipationTimeline } from '@/features/calls/ParticipationTimeline';
+import { SessionTranscript } from '@/features/calls/transcription/SessionTranscript';
 import styles from './page.module.css';
 
 export default function CallSessionTimelinePage() {
@@ -44,7 +45,9 @@ export default function CallSessionTimelinePage() {
           setNotFound(true);
           return;
         }
-        setError(err instanceof ApiError ? err.message : t('No se pudo obtener la línea de tiempo'));
+        setError(
+          err instanceof ApiError ? err.message : t('No se pudo obtener la línea de tiempo'),
+        );
       })
       .finally(() => setLoading(false));
   }, [sessionId]);
@@ -118,6 +121,7 @@ export default function CallSessionTimelinePage() {
               startedAt={timeline.startedAt}
               endedAt={timeline.endedAt}
             />
+            <SessionTranscript sessionId={sessionId} roomCode={timeline.roomCode} />
           </>
         )}
       </div>
