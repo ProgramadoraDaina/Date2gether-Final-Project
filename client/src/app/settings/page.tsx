@@ -96,7 +96,7 @@ export default function SettingsPage() {
 
           <div className={styles.section}>
             <p className={styles.subtitle}>{t('Notificaciones')}</p>
-            <div className={styles.sectionRow}>
+            <label className={`${styles.sectionRow} ${styles.toggleRow}`}>
               <span>{t('Sonido al mencionarte')}</span>
               <input
                 type="checkbox"
@@ -104,8 +104,9 @@ export default function SettingsPage() {
                 onChange={handleToggleMentionSound}
                 aria-label={t('Sonido al mencionarte')}
                 data-testid="mention-sound-toggle"
+                className={styles.checkbox}
               />
-            </div>
+            </label>
           </div>
 
           <p>{t('Necesitás iniciar sesión para elegir el color de tu nombre.')}</p>
@@ -133,7 +134,7 @@ export default function SettingsPage() {
 
         <div className={styles.section}>
           <p className={styles.subtitle}>{t('Notificaciones')}</p>
-          <div className={styles.sectionRow}>
+          <label className={`${styles.sectionRow} ${styles.toggleRow}`}>
             <span>{t('Sonido al mencionarte')}</span>
             <input
               type="checkbox"
@@ -141,8 +142,9 @@ export default function SettingsPage() {
               onChange={handleToggleMentionSound}
               aria-label={t('Sonido al mencionarte')}
               data-testid="mention-sound-toggle"
+                className={styles.checkbox}
             />
-          </div>
+          </label>
         </div>
 
         <p className={styles.subtitle}>{t('Elegí el color de tu nombre')}</p>

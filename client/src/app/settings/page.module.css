@@ -61,3 +61,21 @@
   font-size: 13px;
   color: var(--color-text-muted);
 }
+
+.toggleRow {
+  margin: 0;
+  padding: var(--space-2) 0;
+  font-size: 15px;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.checkbox {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  flex-shrink: 0;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
