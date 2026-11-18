@@ -9,10 +9,11 @@ import type { TranscriptsService } from './transcripts.service';
 
 const request = {
   participant: { kind: 'room-participant', sub: 'guest-1', roomCode: 'abc-defg-hij', name: 'Ana' },
-} as ParticipantRequest;
+  room: { id: 'room-1', code: 'abc-defg-hij' },
+} as unknown as ParticipantRequest;
 
 describe('TranscriptsController', () => {
-  it('guarda la frase con el nombre del pase verificado, no con uno del body', async () => {
+  it('guarda la frase en la sala que resolvió el guard, con el nombre del pase y no con uno del body', async () => {
     const service = { save: jest.fn<TranscriptsService['save']>() };
     const controller = new TranscriptsController(service as unknown as TranscriptsService);
     const body = Object.assign(new SaveTranscriptLineDto(), {
@@ -21,9 +22,9 @@ describe('TranscriptsController', () => {
       speakerName: 'Otra persona',
     });
 
-    await controller.save('abc-defg-hij', body, request);
+    await controller.save(body, request);
 
-    expect(service.save).toHaveBeenCalledWith('abc-defg-hij', 'RM_abc', 'Ana', 'Hola');
+    expect(service.save).toHaveBeenCalledWith('room-1', 'RM_abc', 'Ana', 'Hola');
   });
 
   it('devuelve el acta de la llamada pedida sin cachear', async () => {
@@ -31,12 +32,9 @@ describe('TranscriptsController', () => {
     const controller = new TranscriptsController(service as unknown as TranscriptsService);
 
     await expect(
-      controller.getCall(
-        'abc-defg-hij',
-        Object.assign(new GetTranscriptDto(), { callSid: 'RM_abc' }),
-      ),
+      controller.getCall(Object.assign(new GetTranscriptDto(), { callSid: 'RM_abc' }), request),
     ).resolves.toEqual([]);
-    expect(service.getCall).toHaveBeenCalledWith('abc-defg-hij', 'RM_abc');
+    expect(service.getCall).toHaveBeenCalledWith('room-1', 'RM_abc');
     const handler = Object.getOwnPropertyDescriptor(TranscriptsController.prototype, 'getCall')!
       .value as object;
     expect(Reflect.getMetadata('__headers__', handler)).toContainEqual({

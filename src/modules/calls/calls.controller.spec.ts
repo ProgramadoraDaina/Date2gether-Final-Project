@@ -30,4 +30,24 @@ describe('CallsController', () => {
       value: 'no-store',
     });
   });
+
+  it('reenvía el reporte de mute/unmute al servicio con la identity del pase verificado', async () => {
+    const service = {
+      reportTrackState: jest.fn<CallsService['reportTrackState']>().mockResolvedValue(undefined),
+    };
+    const controller = new CallsController(service as unknown as CallsService);
+    const request = {
+      participant: {
+        kind: 'room-participant',
+        sub: 'guest-123',
+        roomCode: 'abc-defg-hij',
+        name: 'Alex',
+      },
+    } as ParticipantRequest;
+    const dto = { source: 'microphone' as const, enabled: false };
+
+    await controller.reportTrackState('abc-defg-hij', dto, request);
+
+    expect(service.reportTrackState).toHaveBeenCalledWith('abc-defg-hij', request.participant, dto);
+  });
 });

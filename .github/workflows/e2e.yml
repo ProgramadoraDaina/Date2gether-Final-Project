@@ -18,6 +18,25 @@ jobs:
   unit-server:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Algunas specs bajo src/ son de integración real contra Postgres (ver
+    # src/test-support/test-database.ts), no solo unitarias con mocks: el
+    # testRegex de jest no las distingue de las demás *.spec.ts, así que este
+    # job necesita el mismo Postgres descartable que el job `e2e`.
+    services:
+      postgres-test:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: date2gether_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d date2gether_test"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
 
@@ -30,6 +49,10 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+
+      # El service container ya está healthy antes de este paso (GitHub
+      # Actions no arranca steps hasta que pasa el healthcheck).
+      - run: pnpm test:e2e:db:migrate
 
       - run: pnpm test
 

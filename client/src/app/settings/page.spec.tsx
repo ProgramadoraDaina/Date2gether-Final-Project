@@ -70,4 +70,18 @@ describe('SettingsPage', () => {
     expect(updateNameColor).toHaveBeenCalledWith('teal');
     expect(tealButton).toHaveAttribute('aria-pressed', 'true');
   });
+
+  it('el toggle de sonido de mención arranca prendido y persiste al apagarlo', async () => {
+    const { isLoggedIn } = await import('@/lib/auth');
+    (isLoggedIn as jest.Mock<typeof isLoggedIn>).mockReturnValue(false);
+    const SettingsPage = (await import('./page')).default;
+    render(<SettingsPage />);
+    const toggle = await screen.findByTestId('mention-sound-toggle');
+    expect(toggle).toBeChecked();
+
+    fireEvent.click(toggle);
+
+    expect(toggle).not.toBeChecked();
+    expect(localStorage.getItem('date2gether:mentionSoundEnabled')).toBe('false');
+  });
 });

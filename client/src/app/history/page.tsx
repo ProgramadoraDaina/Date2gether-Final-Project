@@ -50,8 +50,8 @@ export default function HistoryPage() {
         <div className={styles.card}>
           <h1>{t('Historial')}</h1>
           <p>{t('Necesitás iniciar sesión para ver tu historial de llamadas.')}</p>
-          <p>
-            <Link href="/login">{t('Iniciar sesión')}</Link> ·{' '}
+          <p className={styles.authLinks}>
+            <Link href="/login">{t('Iniciar sesión')}</Link>
             <Link href="/register">{t('Crear cuenta')}</Link>
           </p>
         </div>
@@ -78,12 +78,35 @@ export default function HistoryPage() {
         {!loading && entries.length > 0 && (
           <ul className={styles.list}>
             {entries.map((entry, index) => (
-              <li key={`${entry.roomCode}-${entry.startedAt}-${index}`} className={styles.entry}>
+              <li key={`${entry.roomId}-${entry.startedAt}-${index}`} className={styles.entry}>
                 <div className={styles.entryMain}>
                   <strong>{entry.roomName}</strong>
                   <span className={styles.code}>{entry.roomCode}</span>
                 </div>
-                <span className={styles.date}>{formatDate(entry.startedAt)}</span>
+                <div className={styles.entryMeta}>
+                  <span className={styles.date}>{formatDate(entry.startedAt)}</span>
+                  {/* Sin sessionId: el intento nunca llegó a materializarse
+                      en una sesión (falló, o nadie llegó a conectar del
+                      todo) — la fila sigue ahí para no perder de cuál
+                      llamada era, simplemente sin botón al gráfico. */}
+                  {entry.sessionId && (
+                    <Link href={`/history/${entry.sessionId}`} className={styles.sessionLink}>
+                      {t('Ver gráfico de interacción')}
+                    </Link>
+                  )}
+                  {/* Las notas son por sala, no por sesión: a diferencia del
+                      gráfico de arriba, este botón sale siempre. La ruta
+                      identifica la sala por roomId (D4-C: el code puede
+                      haber sido reciclado a otra sala desde esta llamada);
+                      roomCode viaja como query param, solo para la clave
+                      de notas personales de este dispositivo. */}
+                  <Link
+                    href={`/history/notes/${entry.roomId}?code=${encodeURIComponent(entry.roomCode)}`}
+                    className={styles.sessionLink}
+                  >
+                    {t('Obtener notas')}
+                  </Link>
+                </div>
               </li>
             ))}
           </ul>

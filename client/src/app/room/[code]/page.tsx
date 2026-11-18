@@ -1,11 +1,22 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+} from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import type { Socket } from 'socket.io-client';
 import { ExpressionPicker, type ExpressionTab } from '@/features/chat/ExpressionPicker';
+import { MentionInput } from '@/features/chat/MentionInput';
+import { isSelfMentioned, ROLE_MENTION_KEYWORDS } from '@/features/chat/mentions';
+import { playMentionSound } from '@/features/chat/mentionSound';
 import { MessageText } from '@/features/chat/MessageText';
 import { RoomEmojiShortcuts } from '@/features/chat/RoomEmojiShortcuts';
 import { AppShell } from '@/features/navigation/AppShell';
@@ -15,16 +26,31 @@ import { RoleTag } from '@/features/rooms/RoleTag';
 import roleTagStyles from '@/features/rooms/RoleTag.module.css';
 import { RoomSidebar } from '@/features/rooms/RoomSidebar';
 import { useResizablePanel } from '@/features/rooms/useResizablePanel';
+import { AdmissionControl } from '@/features/rooms/AdmissionControl';
+import { WaitingRoom } from '@/features/rooms/WaitingRoom';
+import { useAdmissionRequest } from '@/features/rooms/useAdmissionRequest';
 import { useRoomMembers } from '@/features/rooms/useRoomMembers';
+import { useRoomNotes } from '@/features/rooms/useRoomNotes';
 import { ApiError, requestRoomAccess, type RoomAccess, type RoomEmoji } from '@/lib/api';
+import { PreCallLobby } from '@/features/calls/PreCallLobby';
+import { DEFAULT_CALL_DEVICES, type CallDevices } from '@/features/calls/callDevices';
 import { useCallSession } from '@/features/calls/useCallSession';
 import { TranscriptDialog } from '@/features/calls/transcription/TranscriptDialog';
+import { HangUpButton } from '@/features/calls/HangUpButton';
+import { EventTicker } from '@/features/calls/roomEvents/EventTicker';
+import { RoomEventButton } from '@/features/calls/roomEvents/RoomEventButton';
+import { RouletteWheel } from '@/features/calls/roomEvents/RouletteWheel';
+import { useRoomEvents } from '@/features/calls/roomEvents/useRoomEvents';
 import { createRoomSocket } from '@/lib/socket';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { NAME_COLOR_HEX, isNameColorId } from '@/lib/nameColors';
 import styles from './page.module.css';
 
 const MeetingRoom = dynamic(() => import('@/features/calls/MeetingRoom'), { ssr: false });
+const AmbientMusicPlayer = dynamic(
+  () => import('@/features/calls/AmbientMusicPlayer').then((m) => m.AmbientMusicPlayer),
+  { ssr: false },
+);
 
 const NAME_KEY = 'date2gether:userName';
 
@@ -55,15 +81,26 @@ function nameColorHex(nameColor?: string | null): string | undefined {
   return NAME_COLOR_HEX[nameColor];
 }
 
+function personalNotesKey(roomCode: string, participant: RoomAccess['participant']): string {
+  const identity = participant.userId ?? `guest:${participant.name.trim().toLocaleLowerCase()}`;
+  return `date2gether:notes:${roomCode}:${identity}`;
+}
+
 export default function RoomPage() {
   const { t } = useTranslation();
+  const router = useRouter();
   const { code } = useParams<{ code: string }>();
   const [name, setName] = useState('');
   const [access, setAccess] = useState<RoomAccess | null>(null);
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // Dismiss manual del panel de cierre forzado (D5, design.md): "Volver a
+  // la sala" no reinicia la llamada (no hay flujo de reingreso en este PR),
+  // solo deja de mostrar el panel para que el usuario siga viendo el chat.
+  const [callEndedDismissed, setCallEndedDismissed] = useState(false);
   const [users, setUsers] = useState<RoomPresence[]>([]);
+  const [mentionNames, setMentionNames] = useState<string[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -72,9 +109,33 @@ export default function RoomPage() {
     const timer = setTimeout(() => setNotice(null), 'text' in notice ? 6000 : 2500);
     return () => clearTimeout(timer);
   }, [notice]);
-  const [chatTab, setChatTab] = useState<'chat' | 'presentes'>('chat');
+  const [chatTab, setChatTab] = useState<'chat' | 'presentes' | 'notas'>('chat');
+  const [notesTab, setNotesTab] = useState<'personal' | 'sala'>('personal');
+  const [personalNotes, setPersonalNotes] = useState('');
+  const [notesStatus, setNotesStatus] = useState('');
+  const sharedNotes = useRoomNotes(
+    code,
+    access?.token,
+    access ? `${personalNotesKey(code, access.participant)}:shared-draft` : undefined,
+  );
+  const sharedNotesStatus = {
+    loading: 'Cargando notas de sala…',
+    ready: 'Estas notas son compartidas con la sala',
+    pending: 'Guardando…',
+    saving: 'Guardando…',
+    saved: 'Notas guardadas',
+    'load-error': 'No se pudieron cargar las notas de sala',
+    'save-error': 'No se pudieron guardar las notas. Tu borrador se conserva.',
+    conflict: 'Otra persona actualizó las notas. Revisá ambas versiones antes de guardar.',
+  }[sharedNotes.status];
   const [chatOpen, setChatOpen] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Además del ref (que el resto del componente ya usaba para emitir desde
+  // handlers sin re-render), se guarda en estado para pasarlo como prop a
+  // MeetingRoom: mutar un ref no dispara un re-render, así que sin esto
+  // AmbientMusicPlayer podía quedarse con socket=null aunque el ref ya
+  // tuviera la conexión real.
+  const [roomSocket, setRoomSocket] = useState<Socket | null>(null);
   const sidebarResize = useResizablePanel({
     storageKey: 'date2gether:sidebarWidth',
     defaultWidth: 220,
@@ -93,6 +154,8 @@ export default function RoomPage() {
   const listRef = useRef<HTMLUListElement>(null);
   const draftInputRef = useRef<HTMLInputElement>(null);
   const callSession = useCallSession();
+  const { joinCall } = callSession;
+  const [initialDevices, setInitialDevices] = useState(DEFAULT_CALL_DEVICES);
   const [emojisOpen, setEmojisOpen] = useState(false);
   const [transcriptCallSid, setTranscriptCallSid] = useState<string | null>(null);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
@@ -110,20 +173,56 @@ export default function RoomPage() {
     changeRole,
     refetchMembers,
   } = useRoomMembers(access ? code : undefined);
-
+  // Sin userId = sin cuenta en la sala (room_members no tiene invitados):
+  // es la señal para la @mención colectiva 'invitados' en mentions.ts.
+  const isGuest = !access?.participant.userId;
+  const myMentionRoleKeywords = useMemo<string[]>(
+    () => (isGuest ? ['invitados'] : currentUserRole ? [currentUserRole] : []),
+    [isGuest, currentUserRole],
+  );
+  // Sugerencias del autocompletar @: gente presente + los 4 roles, así se
+  // puede mencionar "a todos los colaboradores" sin tipear cada nombre.
+  const mentionSuggestions = useMemo(
+    () => [
+      ...users,
+      ...ROLE_MENTION_KEYWORDS.map((role) => ({ participantId: `role:${role}`, userName: role })),
+    ],
+    [users],
+  );
+  // Misma vara que RoomEmojisDialog (canManage): armar un evento es moderación
+  // liviana de la sala, no exclusiva del admin.
+  const canManageEvents = currentUserRole === 'administrador' || currentUserRole === 'colaborador';
+  const roomEvents = useRoomEvents(roomSocket);
+  const eventParticipants = useMemo(
+    () => users.map(({ participantId, userName }) => ({ participantId, userName })),
+    [users],
+  );
   useEffect(() => {
     setName(localStorage.getItem(NAME_KEY) ?? '');
   }, []);
 
-  async function handleJoin(e: FormEvent) {
-    e.preventDefault();
+  const acceptAccess = useCallback((roomAccess: RoomAccess) => {
+    localStorage.setItem(NAME_KEY, roomAccess.participant.name);
+    setName(roomAccess.participant.name);
+    setAccess(roomAccess);
+  }, []);
+  const admission = useAdmissionRequest(code, acceptAccess);
+
+  useEffect(() => {
+    if (!access) return;
+    const key = personalNotesKey(code, access.participant);
+    setPersonalNotes(localStorage.getItem(key) ?? '');
+  }, [access, code]);
+
+  async function handleJoin(devices: CallDevices) {
     if (!name.trim() || joining) return;
     setJoining(true);
     setJoinError(null);
     try {
       const roomAccess = await requestRoomAccess(code, name.trim());
-      localStorage.setItem(NAME_KEY, roomAccess.participant.name);
-      setAccess(roomAccess);
+      setInitialDevices(devices);
+      if ('token' in roomAccess) acceptAccess(roomAccess);
+      else admission.start(roomAccess);
     } catch (error) {
       setJoinError(error instanceof ApiError ? error.message : t('No se pudo entrar a la sala'));
     } finally {
@@ -131,23 +230,26 @@ export default function RoomPage() {
     }
   }
 
-  // Al estilo Google Meet: entrar a la sala ya significa estar en la llamada,
-  // sin un paso manual de "Llamar". Si el usuario corta manualmente, este
-  // efecto no debe reconectar: `access`/`code` no cambian después de un
-  // hangup, así que no se vuelve a disparar. `callSession` se omite a
-  // propósito de las dependencias: es estable (useCallback sin deps) y
-  // agregarla no cambia el comportamiento, solo confunde la intención.
-  // (oxlint no soporta suprimir esta regla con un comentario inline; el
-  // warning "missing dependency: callSession" que queda es esperado.)
+  // El lobby confirma nombre y dispositivos antes de conectar chat y medios.
   useEffect(() => {
-    if (!access) return;
-    callSession.joinCall(code, access.token);
-  }, [access, code]);
+    if (access) void joinCall(code, access.token);
+  }, [access, code, joinCall]);
+
+  // Una vez que se llegó a 'in-call' por primera vez, no se vuelve a tapar
+  // toda la pantalla aunque la llamada después falle o termine: ese caso ya
+  // lo cubren callLoadingPanel/callEndedPanel dentro de la sala (ver más
+  // abajo). Este flag solo gobierna la transición inicial de "Entrando a la
+  // reunión" -> sala completa.
+  const [hasJoinedCall, setHasJoinedCall] = useState(false);
+  useEffect(() => {
+    if (callSession.status === 'in-call') setHasJoinedCall(true);
+  }, [callSession.status]);
 
   useEffect(() => {
     if (!code || !access) return;
     const socket = createRoomSocket(access.token);
     socketRef.current = socket;
+    setRoomSocket(socket);
 
     socket.on('connect', () => {
       socket.emit('joinRoom', { code });
@@ -159,10 +261,20 @@ export default function RoomPage() {
     socket.on('exception', ({ message }: { message: string }) => setNotice({ text: message }));
     socket.on('connect_error', () => setNotice({ text: t('No se pudo conectar a la sala') }));
 
-    socket.on('roomHistory', (history: ChatMessage[]) => setMessages(history));
-    socket.on('roomUsers', (list: RoomPresence[]) => setUsers(list));
+    function rememberNames(names: string[]) {
+      setMentionNames((prev) => Array.from(new Set([...prev, ...names])));
+    }
+    socket.on('roomHistory', (history: ChatMessage[]) => {
+      setMessages(history);
+      rememberNames(history.map((message) => message.authorName));
+    });
+    socket.on('roomUsers', (list: RoomPresence[]) => {
+      setUsers(list);
+      rememberNames(list.map((user) => user.userName));
+    });
 
     socket.on('userJoined', (joined: RoomPresence) => {
+      rememberNames([joined.userName]);
       setUsers((prev) =>
         prev.some((u) => u.participantId === joined.participantId) ? prev : [...prev, joined],
       );
@@ -176,6 +288,17 @@ export default function RoomPage() {
 
     socket.on('newMessage', (message: ChatMessage) => {
       setMessages((prev) => [...prev, message]);
+      // Nunca te notifica tu propio mensaje, aunque te auto-menciones.
+      if (
+        message.kind === 'text' &&
+        message.authorName !== access.participant.name &&
+        isSelfMentioned(message.content, {
+          name: access.participant.name,
+          roleKeywords: myMentionRoleKeywords,
+        })
+      ) {
+        playMentionSound();
+      }
     });
 
     // El REST de roles (useRoomMembers) no tiene su propio socket: cuando
@@ -194,8 +317,9 @@ export default function RoomPage() {
       socket.removeAllListeners();
       socket.disconnect();
       socketRef.current = null;
+      setRoomSocket(null);
     };
-  }, [code, access, refetchMembers, refetchEmojis, t]);
+  }, [code, access, myMentionRoleKeywords, refetchMembers, refetchEmojis, t]);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
@@ -237,69 +361,96 @@ export default function RoomPage() {
     }
   }
 
-  // Misma tarjeta para el estado "todavía sin acceso" y para el de "acceso
-  // concedido pero la llamada no está in-call": en este segundo caso se
-  // muestra como overlay de pantalla completa ARRIBA de la sala (ver el
-  // return final), no en vez de ella. La sala y <MeetingRoom> tienen que
-  // montarse ya (aunque quede tapada) porque es justamente ese montaje el
-  // que dispara la conexión a LiveKit y, con ella, el status 'in-call' que
-  // hace desaparecer este overlay. Si se la reemplaza en vez de tapar, el
-  // status nunca avanza de 'connecting' (no hay nada que la saque de ahí).
-  const joinCard = (
-    <div className={styles.card}>
-      <h1>{t('Entrar a la reunión')}</h1>
-      <p className="code">{code}</p>
-      <p>{t('Elegí cómo querés aparecer. No necesitás una cuenta.')}</p>
-      <form onSubmit={handleJoin}>
-        <label htmlFor="guest-name">{t('Tu nombre en la reunión')}</label>
-        <input
-          id="guest-name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          maxLength={60}
-          required
-          autoComplete="nickname"
-        />
-        <button type="submit" disabled={joining || !name.trim()}>
-          {joining ? t('Entrando…') : t('Entrar a la reunión')}
-        </button>
-      </form>
-      {joinError && (
-        <p className={styles.error} role="alert" data-testid="error-message">
-          {joinError}
-        </p>
-      )}
-      <Link href="/">{t('Volver al inicio')}</Link>
-    </div>
-  );
-
   if (!access) {
-    return <AppShell>{joinCard}</AppShell>;
+    return (
+      <AppShell>
+        {admission.receipt ? (
+          <WaitingRoom code={code} admission={admission} />
+        ) : (
+          <PreCallLobby
+            code={code}
+            name={name}
+            onNameChange={setName}
+            joining={joining}
+            error={joinError}
+            onJoin={handleJoin}
+          />
+        )}
+      </AppShell>
+    );
   }
 
   // A diferencia de antes, este estado de "conectando"/"error" NO tapa toda
   // la pantalla: el chat y la lista de presentes se pueden usar desde que se
   // entra a la sala, sin esperar a que la llamada de audio/video termine de
   // conectar (ni dependen de que llegue a conectar en absoluto).
+  // Resetea el intento de llamada y vuelve al inicio: equivalente a "Colgar"
+  // para cuando MeetingRoom (y su LiveKitRoom) todavía ni se montaron, así
+  // que no hay nada de LiveKit que desconectar — ver HangUpButton.tsx.
+  function leaveFailedOrConnectingCall() {
+    callSession.leaveCall();
+    router.push('/');
+  }
+
   const callLoadingPanel = (
     <div className={styles.callLoadingPanel} role="status" aria-live="polite">
       {callSession.status === 'error' ? (
         <>
           <p>{callSession.error ? t(callSession.error) : t('No se pudo conectar a la llamada')}</p>
-          <button
-            type="button"
-            className={styles.callLoadingButton}
-            onClick={() => callSession.joinCall(code, access.token)}
-          >
-            {t('Reintentar')}
-          </button>
+          <div className={styles.callEndedActions}>
+            <button
+              type="button"
+              className={styles.callLoadingButton}
+              onClick={() => callSession.joinCall(code, access.token)}
+            >
+              {t('Reintentar')}
+            </button>
+            <HangUpButton
+              className={styles.callLoadingButton}
+              onConfirm={leaveFailedOrConnectingCall}
+            >
+              {t('Colgar')}
+            </HangUpButton>
+          </div>
         </>
       ) : (
         <>
           <div className={styles.callLoadingSpinner} />
           <p>{t('Cargando llamada…')}</p>
+          <HangUpButton
+            className={styles.callLoadingButton}
+            onConfirm={leaveFailedOrConnectingCall}
+          >
+            {t('Colgar')}
+          </HangUpButton>
         </>
       )}
+    </div>
+  );
+
+  // Cierre forzado por el anfitrión (D5, design.md): estado terminal
+  // distinto de 'error' — la llamada no falló, terminó porque se desconectó
+  // el último administrador. "Ver línea de tiempo" lleva al listado general
+  // (todavía no hay un sessionId disponible del lado del cliente en este
+  // momento: la cabecera de sesión se materializa recién al recibir
+  // room_finished, de forma asíncrona). "Volver a la sala" solo descarta
+  // este panel; la sala y el chat siguen disponibles sin cambios (alcance
+  // exclusivo a la videollamada, spec host-gate/alcance-exclusivo).
+  const callEndedPanel = (
+    <div className={styles.callLoadingPanel} role="status" aria-live="polite">
+      <p>{t('La llamada terminó porque el anfitrión se desconectó.')}</p>
+      <div className={styles.callEndedActions}>
+        <Link href="/history" className={styles.callLoadingButton}>
+          {t('Ver línea de tiempo')}
+        </Link>
+        <button
+          type="button"
+          className={styles.callLoadingButton}
+          onClick={() => setCallEndedDismissed(true)}
+        >
+          {t('Volver a la sala')}
+        </button>
+      </div>
     </div>
   );
 
@@ -324,6 +475,13 @@ export default function RoomPage() {
         >
           {t('Presentes')}
         </button>
+        <button
+          type="button"
+          className={`${styles.chatTab} ${chatTab === 'notas' ? styles.chatTabActive : ''}`}
+          onClick={() => setChatTab('notas')}
+        >
+          {t('Notas')}
+        </button>
       </div>
       {chatTab === 'chat' ? (
         <>
@@ -337,15 +495,31 @@ export default function RoomPage() {
               // quedar sin color o con el color equivocado.
               const presence = users.find((u) => u.userName === m.authorName);
               const color = nameColorHex(presence?.nameColor);
+              const mentionsMe =
+                m.kind === 'text' &&
+                isSelfMentioned(m.content, {
+                  name: access?.participant.name ?? '',
+                  roleKeywords: myMentionRoleKeywords,
+                });
               return (
-                <li key={m.id} className={styles.message}>
+                <li
+                  key={m.id}
+                  className={
+                    mentionsMe ? `${styles.message} ${styles.messageMentioned}` : styles.message
+                  }
+                >
                   <span className={styles.author} style={color ? { color } : undefined}>
                     {m.authorName}
                   </span>
                   {m.kind === 'gif' ? (
                     <img className={styles.gifMessage} src={m.content} alt="GIF" loading="lazy" />
                   ) : (
-                    <MessageText text={m.content} roomCode={code} emojisByName={emojisByName} />
+                    <MessageText
+                      text={m.content}
+                      roomCode={code}
+                      emojisByName={emojisByName}
+                      mentionNames={[...mentionNames, ...ROLE_MENTION_KEYWORDS]}
+                    />
                   )}
                 </li>
               );
@@ -373,17 +547,18 @@ export default function RoomPage() {
               onGifSelect={handleGifSelect}
               onRoomEmojiSelect={handleRoomEmojiSelect}
             />
-            <input
-              ref={draftInputRef}
+            <MentionInput
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              onChange={setDraft}
+              inputRef={draftInputRef}
+              users={mentionSuggestions}
               placeholder={t('Escribí un mensaje...')}
-              autoComplete="off"
+              label={t('Mencionar participante')}
             />
             <button type="submit">{t('Enviar')}</button>
           </form>
         </>
-      ) : (
+      ) : chatTab === 'presentes' ? (
         <div className={styles.usersPanel} data-testid="users-panel">
           <h3>
             {t('En la sala')} ({users.length})
@@ -423,6 +598,72 @@ export default function RoomPage() {
             })}
           </ul>
         </div>
+      ) : (
+        <section className={styles.notesPanel}>
+          <div className={styles.notesTabs}>
+            <button
+              type="button"
+              aria-pressed={notesTab === 'personal'}
+              onClick={() => setNotesTab('personal')}
+            >
+              {t('Personales')}
+            </button>
+            <button
+              type="button"
+              aria-pressed={notesTab === 'sala'}
+              onClick={() => setNotesTab('sala')}
+            >
+              {t('De la sala')}
+            </button>
+          </div>
+          <textarea
+            aria-label={
+              notesTab === 'personal' ? t('Notas personales') : t('Notas compartidas de la sala')
+            }
+            placeholder={t('Escribí tus notas...')}
+            value={notesTab === 'personal' ? personalNotes : sharedNotes.content}
+            disabled={notesTab === 'sala' && ['loading', 'load-error'].includes(sharedNotes.status)}
+            onChange={(event) => {
+              if (notesTab === 'personal') {
+                const value = event.target.value;
+                setPersonalNotes(value);
+                localStorage.setItem(personalNotesKey(code, access.participant), value);
+                setNotesStatus(t('Notas guardadas en este dispositivo'));
+              } else {
+                sharedNotes.edit(event.target.value);
+              }
+            }}
+            maxLength={20000}
+          />
+          <small aria-live="polite">
+            {notesTab === 'personal'
+              ? notesStatus || t('Solo vos podés ver estas notas')
+              : t(sharedNotesStatus)}
+          </small>
+          {notesTab === 'sala' && ['load-error', 'save-error'].includes(sharedNotes.status) && (
+            <button type="button" onClick={sharedNotes.retry}>
+              {t('Reintentar')}
+            </button>
+          )}
+          {notesTab === 'sala' &&
+            sharedNotes.status === 'conflict' &&
+            (sharedNotes.remote ? (
+              <div className={styles.notesConflict}>
+                <label htmlFor="room-notes-remote">{t('Versión actual de la sala')}</label>
+                <textarea id="room-notes-remote" value={sharedNotes.remote.content} readOnly />
+                <button type="button" onClick={() => sharedNotes.resolveConflict(false)}>
+                  {t('Descartar mi borrador y usar la versión de sala')}
+                </button>
+                <button type="button" onClick={() => sharedNotes.resolveConflict(true)}>
+                  {t('Reemplazar la versión de sala con mi borrador')}
+                </button>
+              </div>
+            ) : (
+              <button type="button" onClick={sharedNotes.retry}>
+                {t('Cargar versión actual')}
+              </button>
+            ))}
+        </section>
       )}
     </>
   );
@@ -456,6 +697,21 @@ export default function RoomPage() {
           open={sidebarOpen}
           width={sidebarResize.width}
           onResizeHandleMouseDown={sidebarResize.handleMouseDown}
+          // "Salir" (sin confirmar) solo tiene sentido cuando no hay ningún
+          // intento de llamada en curso: conectando y error ya tienen su
+          // propio botón "Colgar" (con confirmación) en callLoadingPanel, y
+          // 'in-call' lo tiene en el dock de MeetingRoom. 'ended' (el
+          // anfitrión se desconectó) es la excepción: ahí no hay nada que
+          // colgar, la llamada ya terminó del lado del servidor.
+          inCall={
+            callSession.status === 'connecting' ||
+            callSession.status === 'in-call' ||
+            callSession.status === 'error'
+          }
+          musicPlayer={
+            roomSocket && <AmbientMusicPlayer socket={roomSocket} isAdmin={isCurrentUserAdmin} />
+          }
+          admissionControl={isCurrentUserAdmin && <AdmissionControl code={code} />}
         />
         <button
           type="button"
@@ -495,25 +751,41 @@ export default function RoomPage() {
           )}
 
           <div className={styles.meetingAndChat}>
-            {callSession.session ? (
-              <MeetingRoom
-                call={callSession}
-                roomCode={code}
-                roomToken={access.token}
-                roomEmojis={emojis}
-                onTranscriptAvailable={setTranscriptCallSid}
-                onHangUp={
-                  transcriptCallSid
-                    ? () => {
-                        setCallEnded(true);
-                        setTranscriptOpen(true);
-                      }
-                    : undefined
-                }
-              />
-            ) : (
-              callLoadingPanel
+            {/* MeetingRoom se monta apenas hay credenciales (session), aunque
+                LiveKit todavía no haya confirmado la conexión: necesita estar
+                montado para que onConnected llegue a disparar 'in-call'. Se
+                mantiene oculto (data-hidden) hasta ese momento para que la
+                transición visual sea un único spinner continuo en vez de
+                pasar por la grilla de video todavía conectando. */}
+            {callSession.session && (
+              <div
+                className={styles.meetingRoomSlot}
+                data-hidden={callSession.status !== 'in-call'}
+              >
+                <MeetingRoom
+                  call={callSession}
+                  roomCode={code}
+                  roomToken={access.token}
+                  roomEmojis={emojis}
+                  initialDevices={initialDevices}
+                  onTranscriptAvailable={setTranscriptCallSid}
+                  onHangUp={
+                    transcriptCallSid
+                      ? () => {
+                          setCallEnded(true);
+                          setTranscriptOpen(true);
+                        }
+                      : undefined
+                  }
+                />
+              </div>
             )}
+            {/* Antes de hasJoinedCall ya se ve el mismo mensaje en
+                .enteringScreen (ver abajo): no duplicarlo acá también. */}
+            {hasJoinedCall &&
+              (callSession.status === 'ended'
+                ? !callEndedDismissed && callEndedPanel
+                : callSession.status !== 'in-call' && callLoadingPanel)}
             <button
               type="button"
               className={styles.chatToggleButton}
@@ -534,6 +806,23 @@ export default function RoomPage() {
                 <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
               </svg>
             </button>
+            <div className={styles.eventButtonWrap}>
+              <RoomEventButton
+                canManage={canManageEvents}
+                participants={eventParticipants}
+                onStartRoulette={roomEvents.startRoulette}
+              />
+            </div>
+            {roomEvents.spin && (
+              <RouletteWheel
+                key={roomEvents.spin.startedAt}
+                state={roomEvents.spin}
+                onDone={roomEvents.dismissSpin}
+              />
+            )}
+            {roomEvents.settled && !roomEvents.spin && (
+              <EventTicker state={roomEvents.settled} onClose={roomEvents.clearSettled} />
+            )}
             {callSession.session ? (
               // En llamada: el chat queda "acoplado" con ancho fijo y puede
               // colapsarse. Siempre se monta (no se condiciona con chatOpen),
@@ -569,6 +858,16 @@ export default function RoomPage() {
           </div>
         </div>
       </div>
+      {/* Mientras no se llegó a 'in-call' por primera vez, este overlay (fijo,
+          pantalla completa) tapa todo .roomLayout, que igual sigue montado
+          detrás: la sala, el chat y MeetingRoom ya se están conectando en
+          segundo plano, así que al sacar el overlay todo aparece ya listo de
+          una sola vez, en vez de ir apareciendo en pedazos. */}
+      {!hasJoinedCall && (
+        <div className={styles.enteringScreen}>
+          <div className={styles.enteringCallWrap}>{callLoadingPanel}</div>
+        </div>
+      )}
     </>
   );
 }

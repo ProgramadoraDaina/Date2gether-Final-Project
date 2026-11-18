@@ -1,17 +1,26 @@
 'use client';
 
 import {
+  CarouselLayout,
   ConnectionStateToast,
+  FocusLayoutContainer,
   GridLayout,
+  LayoutContextProvider,
   LiveKitRoom,
   MediaDeviceMenu,
   RoomAudioRenderer,
   StartAudio,
+  TrackRefContext,
+  useCreateLayoutContext,
   useDisconnectButton,
+  usePinnedTracks,
+  useRoomContext,
   useTracks,
   useTrackToggle,
 } from '@livekit/components-react';
 import {
+  ConnectionState,
+  RoomEvent,
   DefaultReconnectPolicy,
   DisconnectReason,
   Track,
@@ -19,9 +28,12 @@ import {
   type RoomOptions,
 } from 'livekit-client';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
-import { useTranslation } from '../translation/useTranslation';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { DEFAULT_CALL_DEVICES, type CallDevices } from './callDevices';
+import { HangUpButton } from './HangUpButton';
 import type { RoomEmoji } from '@/lib/api';
+import { useTranslation } from '../translation/useTranslation';
+import { reportTrackState } from '@/lib/calls';
 import type { CallSessionState } from './useCallSession';
 import styles from './MeetingRoom.module.css';
 import { ReactionOverlay } from './reactions/ReactionOverlay';
@@ -50,10 +62,12 @@ const options: RoomOptions = {
   reconnectPolicy: new DefaultReconnectPolicy([0, 500]),
 };
 
-// Default de livekit-client: 15s por intento antes de darlo por fallido.
-// Combinado con el reconnectPolicy acotado de arriba, el peor caso (2
-// intentos) queda bien por debajo de un timeout de test típico.
-const connectOptions = { peerConnectionTimeout: 5000 };
+// Los tests e2e simulan LiveKit por completo (no hacen una conexión WebRTC
+// real, ver e2e/README.md), así que este valor no está acotado por ningún
+// timeout de test. 5s era insuficiente para la primera negociación ICE real
+// (ej. latencia extra del reenvío de puertos UDP de Docker Desktop en
+// Windows); se vuelve al default de livekit-client.
+const connectOptions = { peerConnectionTimeout: 15000 };
 
 function MicIcon({ muted }: { muted: boolean }) {
   return (
@@ -97,7 +111,7 @@ function CameraIcon({ off }: { off: boolean }) {
   );
 }
 
-function HangUpIcon() {
+function ScreenShareIcon() {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -110,37 +124,49 @@ function HangUpIcon() {
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      {/* Auricular de "llamar" rotado 135° (convención de colgar), achicado para no recortar las puntas. */}
-      <g transform="translate(12 12) rotate(135) scale(0.78) translate(-12 -12)">
-        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
-      </g>
+      <rect x="3" y="4" width="18" height="12" rx="2" />
+      <path d="M8 20h8" />
+      <path d="M12 16v4" />
+      <path d="M9 11l3-3 3 3" />
+      <path d="M12 8v4" />
     </svg>
   );
 }
 
-function HangUpButton() {
-  const { t } = useTranslation();
+// Dentro de la llamada ya conectada, "colgar" significa desconectar de
+// LiveKit. La pantalla de conectando/error (RoomPage) reusa el mismo
+// HangUpButton con un onConfirm distinto (ver comentario ahí) — el diálogo
+// de confirmación es compartido, ver HangUpButton.tsx.
+function ConnectedHangUpButton() {
   const { buttonProps } = useDisconnectButton({});
-  const label = t('Colgar');
-  return (
-    <button
-      {...buttonProps}
-      type="button"
-      className={styles.hangUpButton}
-      title={label}
-      aria-label={label}
-    >
-      <HangUpIcon />
-    </button>
-  );
+  return <HangUpButton onConfirm={buttonProps.onClick} />;
 }
 
-function MicToggleButton({ setDeviceError }: { setDeviceError: (value: boolean) => void }) {
+interface ToggleButtonProps {
+  roomCode: string;
+  roomToken: string;
+  setDeviceError: (value: boolean) => void;
+}
+
+function MicToggleButton({ roomCode, roomToken, setDeviceError }: ToggleButtonProps) {
   const { t } = useTranslation();
+  // useTrackToggle sincroniza `onChange` con un useEffect propio que depende
+  // de [enabled, onChange] (ver livekit-client/components-react): una
+  // función nueva en cada render reengancha ese efecto en cada render, no
+  // solo cuando `enabled` realmente cambia. Sin useCallback acá, un mic
+  // encendido 15s mandaba ~25 reportes de "desmuteado" repetidos — cada uno
+  // pisando el intervalo real como si fuera un prendido nuevo.
+  const onMicChange = useCallback(
+    (isEnabled: boolean) => {
+      setDeviceError(false);
+      void reportTrackState(roomCode, roomToken, 'microphone', isEnabled);
+    },
+    [roomCode, roomToken, setDeviceError],
+  );
   const { buttonProps, enabled } = useTrackToggle({
     source: Track.Source.Microphone,
     onDeviceError: () => setDeviceError(true),
-    onChange: () => setDeviceError(false),
+    onChange: onMicChange,
   });
   const label = enabled ? t('Desactivar micrófono') : t('Activar micrófono');
   return (
@@ -156,12 +182,20 @@ function MicToggleButton({ setDeviceError }: { setDeviceError: (value: boolean) 
   );
 }
 
-function CameraToggleButton({ setDeviceError }: { setDeviceError: (value: boolean) => void }) {
+function CameraToggleButton({ roomCode, roomToken, setDeviceError }: ToggleButtonProps) {
   const { t } = useTranslation();
+  // Mismo motivo que en MicToggleButton: onChange tiene que ser estable.
+  const onCameraChange = useCallback(
+    (isEnabled: boolean) => {
+      setDeviceError(false);
+      void reportTrackState(roomCode, roomToken, 'camera', isEnabled);
+    },
+    [roomCode, roomToken, setDeviceError],
+  );
   const { buttonProps, enabled } = useTrackToggle({
     source: Track.Source.Camera,
     onDeviceError: () => setDeviceError(true),
-    onChange: () => setDeviceError(false),
+    onChange: onCameraChange,
   });
   const label = enabled ? t('Desactivar cámara') : t('Activar cámara');
   return (
@@ -177,27 +211,102 @@ function CameraToggleButton({ setDeviceError }: { setDeviceError: (value: boolea
   );
 }
 
+function ScreenShareToggleButton({ setDeviceError }: { setDeviceError: (value: boolean) => void }) {
+  const { t } = useTranslation();
+  const { buttonProps, enabled } = useTrackToggle({
+    source: Track.Source.ScreenShare,
+    captureOptions: { audio: true },
+    onDeviceError: () => setDeviceError(true),
+    onChange: () => setDeviceError(false),
+  });
+  const label = enabled ? t('Dejar de compartir pantalla') : t('Compartir pantalla');
+  return (
+    <button
+      {...buttonProps}
+      type="button"
+      className={`${styles.iconButton} ${enabled ? styles.iconButtonActive : ''}`}
+      title={label}
+      aria-label={label}
+    >
+      <ScreenShareIcon />
+    </button>
+  );
+}
+
 interface MeetingRoomProps {
   call: CallSessionState;
   roomCode: string;
   roomToken: string;
   roomEmojis: RoomEmoji[];
+  initialDevices?: CallDevices;
   onTranscriptAvailable?: (callSid: string) => void;
   // Reemplaza la vuelta al inicio al colgar (por ejemplo, para mostrar el acta).
   onHangUp?: () => void;
+}
+
+// Un permiso revocado después del lobby no debe hacer fallar la llamada.
+// Solo se aplica al conectar por primera vez; reconectar conserva los estados.
+function InitialCallDevices({
+  devices,
+  onDeviceError,
+}: {
+  devices: CallDevices;
+  onDeviceError(): void;
+}) {
+  const room = useRoomContext();
+  const appliedTo = useRef<typeof room | null>(null);
+  useEffect(() => {
+    const publish = () => {
+      if (appliedTo.current === room) return;
+      appliedTo.current = room;
+      if (devices.microphoneEnabled)
+        void room.localParticipant.setMicrophoneEnabled(true).catch(onDeviceError);
+      if (devices.cameraEnabled)
+        void room.localParticipant.setCameraEnabled(true).catch(onDeviceError);
+    };
+    room.on(RoomEvent.Connected, publish);
+    if (room.state === ConnectionState.Connected) publish();
+    return () => {
+      room.off(RoomEvent.Connected, publish);
+    };
+  }, [room, devices, onDeviceError]);
+  return null;
 }
 
 function MeetingContent({
   roomCode,
   roomToken,
   roomEmojis,
+  initialDevices = DEFAULT_CALL_DEVICES,
   onTranscriptAvailable,
 }: Omit<MeetingRoomProps, 'call' | 'onHangUp'>) {
   const { t } = useTranslation();
   const [deviceError, setDeviceError] = useState(false);
-  const tracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], {
-    onlySubscribed: false,
-  });
+  const showDeviceError = useCallback(() => setDeviceError(true), []);
+  const tracks = useTracks(
+    [
+      { source: Track.Source.Camera, withPlaceholder: true },
+      { source: Track.Source.ScreenShare, withPlaceholder: false },
+    ],
+    { onlySubscribed: false },
+  );
+  // Clickear el botón de foco de un .tileWrap (ver ReactionTile) pinea ese
+  // trackRef acá. Mientras haya uno pineado, la grilla pareja se
+  // reemplaza por foco + carrusel (a lo Zoom/Meet); sin nada pineado,
+  // vuelve a la grilla normal. El contexto se crea y se provee una sola
+  // vez, no por cada tile — así todos los tiles leen el mismo pin.
+  const layoutContext = useCreateLayoutContext();
+  const pinnedTracks = usePinnedTracks(layoutContext);
+  const focusTrack = pinnedTracks[0];
+  const carouselTracks = focusTrack
+    ? tracks.filter(
+        (track) =>
+          !(
+            track.participant.identity === focusTrack.participant.identity &&
+            track.source === focusTrack.source
+          ),
+      )
+    : tracks;
   return (
     <ReactionsProvider roomCode={roomCode} roomEmojis={roomEmojis}>
       <TranscriptionProvider
@@ -205,45 +314,68 @@ function MeetingContent({
         roomToken={roomToken}
         onTranscriptAvailable={onTranscriptAvailable}
       >
-        <RoomAudioRenderer />
-        <StartAudio label={t('Activar sonido de la reunión')} />
-        <ConnectionStateToast />
-        <GridLayout tracks={tracks} className={styles.meetingGrid}>
-          <ReactionTile />
-        </GridLayout>
-        <ReactionOverlay />
-        <CaptionsOverlay />
-        {deviceError && (
-          <p className={styles.error} role="alert">
-            {t(
-              'No se pudo activar el dispositivo. Revisá los permisos del navegador; podés continuar en la llamada.',
-            )}
-          </p>
-        )}
-        <div className={styles.controlsDock}>
-          <div className={styles.controlsGroup}>
-            <MicToggleButton setDeviceError={setDeviceError} />
-            <MediaDeviceMenu
-              kind="audioinput"
-              requestPermissions={false}
-              aria-label={t('Elegir micrófono')}
-            />
-            <CameraToggleButton setDeviceError={setDeviceError} />
-            <MediaDeviceMenu
-              kind="videoinput"
-              requestPermissions={false}
-              aria-label={t('Elegir cámara')}
-            />
-            <ReactionPicker buttonClassName={styles.iconButton} />
-            <SoundboardPicker buttonClassName={styles.iconButton} />
-            <CaptionsButton
-              buttonClassName={styles.iconButton}
-              activeClassName={styles.iconButtonActive}
-            />
+        <LayoutContextProvider value={layoutContext}>
+          <InitialCallDevices devices={initialDevices} onDeviceError={showDeviceError} />
+          <RoomAudioRenderer />
+          <StartAudio label={t('Activar sonido de la reunión')} />
+          <ConnectionStateToast />
+          {focusTrack ? (
+            <FocusLayoutContainer className={styles.meetingGrid}>
+              <CarouselLayout tracks={carouselTracks}>
+                <ReactionTile />
+              </CarouselLayout>
+              <TrackRefContext.Provider value={focusTrack}>
+                <ReactionTile />
+              </TrackRefContext.Provider>
+            </FocusLayoutContainer>
+          ) : (
+            <GridLayout tracks={tracks} className={styles.meetingGrid}>
+              <ReactionTile />
+            </GridLayout>
+          )}
+          <ReactionOverlay />
+          <CaptionsOverlay />
+          {deviceError && (
+            <p className={styles.error} role="alert">
+              {t(
+                'No se pudo activar el dispositivo. Revisá los permisos del navegador; podés continuar en la llamada.',
+              )}
+            </p>
+          )}
+          <div className={styles.controlsDock}>
+            <div className={styles.controlsGroup}>
+              <MicToggleButton
+                roomCode={roomCode}
+                roomToken={roomToken}
+                setDeviceError={setDeviceError}
+              />
+              <MediaDeviceMenu
+                kind="audioinput"
+                requestPermissions={false}
+                aria-label={t('Elegir micrófono')}
+              />
+              <CameraToggleButton
+                roomCode={roomCode}
+                roomToken={roomToken}
+                setDeviceError={setDeviceError}
+              />
+              <MediaDeviceMenu
+                kind="videoinput"
+                requestPermissions={false}
+                aria-label={t('Elegir cámara')}
+              />
+              <ScreenShareToggleButton setDeviceError={setDeviceError} />
+              <ReactionPicker buttonClassName={styles.iconButton} />
+              <SoundboardPicker buttonClassName={styles.iconButton} />
+              <CaptionsButton
+                buttonClassName={styles.iconButton}
+                activeClassName={styles.iconButtonActive}
+              />
+            </div>
+            <CallSettingsButton buttonClassName={styles.iconButton} />
+            <ConnectedHangUpButton />
           </div>
-          <CallSettingsButton buttonClassName={styles.iconButton} />
-          <HangUpButton />
-        </div>
+        </LayoutContextProvider>
       </TranscriptionProvider>
     </ReactionsProvider>
   );
@@ -254,10 +386,22 @@ export default function MeetingRoom({
   roomCode,
   roomToken,
   roomEmojis,
+  initialDevices = DEFAULT_CALL_DEVICES,
   onTranscriptAvailable,
   onHangUp,
 }: MeetingRoomProps) {
   const router = useRouter();
+  const roomOptions = useMemo(
+    () => ({
+      ...options,
+      audioCaptureDefaults: { deviceId: initialDevices.microphoneId || undefined },
+      videoCaptureDefaults: {
+        ...options.videoCaptureDefaults,
+        deviceId: initialDevices.cameraId || undefined,
+      },
+    }),
+    [initialDevices.microphoneId, initialDevices.cameraId],
+  );
   if (!call.session) return null;
   return (
     <LiveKitRoom
@@ -266,7 +410,7 @@ export default function MeetingRoom({
       connect
       audio={false}
       video={false}
-      options={options}
+      options={roomOptions}
       connectOptions={connectOptions}
       onConnected={call.connected}
       onError={call.failed}
@@ -275,6 +419,15 @@ export default function MeetingRoom({
           call.leaveCall();
           if (onHangUp) onHangUp();
           else router.push('/');
+        } else if (
+          // Cierre forzado por el anfitrión (D5, design.md): LiveKit
+          // reporta ROOM_DELETED cuando se llamó a RoomService.DeleteRoom
+          // (nuestro cierre forzado) y ROOM_CLOSED cuando LiveKit cierra la
+          // sala por su cuenta. Ninguno de los dos es un error de red.
+          reason === DisconnectReason.ROOM_DELETED ||
+          reason === DisconnectReason.ROOM_CLOSED
+        ) {
+          call.endedByHost();
         } else call.failed(new Error('Disconnected'));
       }}
       data-lk-theme="default"
@@ -284,6 +437,7 @@ export default function MeetingRoom({
         roomCode={roomCode}
         roomToken={roomToken}
         roomEmojis={roomEmojis}
+        initialDevices={initialDevices}
         onTranscriptAvailable={onTranscriptAvailable}
       />
     </LiveKitRoom>

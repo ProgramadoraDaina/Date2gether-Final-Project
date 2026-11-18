@@ -52,6 +52,9 @@ def main():
         'room': {'auto_create': False, 'max_participants': args.participants, 'empty_timeout': 300, 'departure_timeout': 30},
         'turn': {'enabled': True, 'domain': hosts['turn'], 'external_tls': True, 'tls_port': 5349, 'udp_port': 3478},
         'logging': {'level': 'warn'},
+        # network_mode: host en compose.yaml: el backend es alcanzable por
+        # loopback, sin necesidad de un nombre de servicio Docker.
+        'webhook': {'api_key': env['LIVEKIT_API_KEY'], 'urls': ['http://127.0.0.1:3001/calls/livekit/webhook']},
     }
     # SNI/TURN routing follows github.com/livekit/deploy/generate/templates/caddy.go.
     # A private IPv4 TURN upstream (rather than loopback) supports Firefox.

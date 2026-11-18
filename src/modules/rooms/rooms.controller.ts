@@ -2,8 +2,6 @@ import {
   Body,
   Controller,
   Get,
-  Headers,
-  ForbiddenException,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -18,34 +16,32 @@ import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
 import { RoomRolesGuard } from './guards/room-roles.guard';
 import { RoomsService } from './rooms.service';
-import { RoomAccessService } from '../auth/room-access.service';
-import { RoomAccessDto } from './dto/room-access.dto';
+import { RoomAccessGuard } from '../auth/guards/room-access.guard';
+import { SaveRoomNotesDto } from './dto/save-room-notes.dto';
 
 @Controller('rooms')
 export class RoomsController {
-  constructor(
-    private readonly roomsService: RoomsService,
-    private readonly roomAccess: RoomAccessService,
-  ) {}
+  constructor(private readonly roomsService: RoomsService) {}
 
-  @Post(':code/access')
-  async access(
-    @Param('code') code: string,
-    @Body() dto: RoomAccessDto,
-    @Headers('authorization') authorization?: string,
-  ) {
-    const room = await this.roomsService.getByCodeOrThrow(code);
-    if (!room.isActive) throw new ForbiddenException('La sala está cerrada');
-    const access = await this.roomAccess.create(code, dto.name, authorization);
-    if (access.participant.userId)
-      await this.roomsService.joinRoom(code, access.participant.userId);
-    return access;
+  @UseGuards(RoomAccessGuard)
+  @Get(':roomCode/notes')
+  getRoomNotes(@Param('roomCode') roomCode: string) {
+    return this.roomsService.getRoomNotes(roomCode);
+  }
+
+  @UseGuards(RoomAccessGuard)
+  @Patch(':roomCode/notes')
+  saveRoomNotes(@Param('roomCode') roomCode: string, @Body() dto: SaveRoomNotesDto) {
+    return this.roomsService.saveRoomNotes(roomCode, dto.content, dto.revision);
   }
 
   @UseGuards(JwtAuthGuard)
   @Post()
   create(@Body() dto: CreateRoomDto, @CurrentUser() user: AccessTokenPayload) {
-    return this.roomsService.createRoom(dto.name, user.sub);
+    return this.roomsService.createRoom(dto.name, user.sub, {
+      isPermanent: dto.isPermanent,
+      slots: dto.slots,
+    });
   }
 
   @Get(':code')

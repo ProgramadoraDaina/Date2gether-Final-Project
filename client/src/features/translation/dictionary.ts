@@ -1,5 +1,97 @@
 // Clave: string original en español. Valor: traducción al inglés.
 const en: Record<string, string> = {
+  'Necesitás ser admitido para unirte a esta sala': 'You must be admitted before joining this room',
+  // Moderación de ingreso
+  'Sala de espera': 'Waiting room',
+  'El anfitrión debe admitir tu ingreso.': 'The host needs to admit you.',
+  'El anfitrión rechazó tu solicitud.': 'The host declined your request.',
+  'La solicitud fue cancelada.': 'The request was cancelled.',
+  'La solicitud venció. Podés volver a solicitar el ingreso.':
+    'Your request expired. You can request access again.',
+  'Todavía no estás conectado al chat ni a la llamada.':
+    'You are not connected to the chat or call yet.',
+  'Volver al formulario': 'Back to the form',
+  'Revisar estado': 'Check status',
+  'Cancelar solicitud': 'Cancel request',
+  'Cancelando…': 'Cancelling…',
+  'Administrar ingresos': 'Manage access',
+  'Cargando solicitudes…': 'Loading requests…',
+  'Actualizar solicitudes': 'Refresh requests',
+  'Configuración de ingreso': 'Access settings',
+  'Activar sala de espera': 'Enable waiting room',
+  'Bloquear nuevos ingresos': 'Block new entries',
+  'Desactivar la espera admite las solicitudes pendientes cuando los ingresos están desbloqueados.':
+    'Turning off the waiting room admits pending requests when entry is unlocked.',
+  'Los cambios de ingreso no expulsan a quienes ya están dentro.':
+    'Changing access settings does not remove people who are already in the room.',
+  'Solicitudes pendientes': 'Pending requests',
+  'No hay solicitudes pendientes': 'No pending requests',
+  'Cuenta registrada': 'Registered account',
+  Admitir: 'Admit',
+  Rechazar: 'Decline',
+  'No se pudo consultar la solicitud. Reintentando…': 'Could not check your request. Retrying…',
+  'No se pudo cancelar. Reintentá la cancelación.': 'Could not cancel. Try cancelling again.',
+  'No se pudieron cargar las solicitudes': 'Could not load requests',
+  'No se pudo actualizar la admisión': 'Could not update access',
+  'La sala no permite nuevos ingresos': 'The room is not allowing new entries',
+  'Desbloqueá los ingresos antes de admitir': 'Unlock entry before admitting people',
+  'La solicitud ya fue resuelta': 'The request has already been resolved',
+  'La solicitud venció': 'The request expired',
+  'La solicitud no existe o venció': 'The request does not exist or has expired',
+  'La solicitud de ingreso es inválida o venció': 'The access request is invalid or has expired',
+  'No existe una sala con ese código': 'There is no room with that code',
+  Notas: 'Notes',
+  Personales: 'Personal',
+  'De la sala': 'Shared',
+  'Notas personales': 'Personal notes',
+  'Notas compartidas de la sala': 'Shared room notes',
+  'Escribí tus notas...': 'Write your notes...',
+  'Solo vos podés ver estas notas': 'Only you can see these notes',
+  'Notas guardadas en este dispositivo': 'Notes saved on this device',
+  'Cargando notas de sala…': 'Loading room notes…',
+  'Estas notas son compartidas con la sala': 'These notes are shared with the room',
+  'Guardando…': 'Saving…',
+  'Notas guardadas': 'Notes saved',
+  'No se pudieron cargar las notas de sala': 'Could not load room notes',
+  'No se pudieron guardar las notas. Tu borrador se conserva.':
+    'Could not save notes. Your draft is preserved.',
+  'Otra persona actualizó las notas. Revisá ambas versiones antes de guardar.':
+    'Someone else updated the notes. Review both versions before saving.',
+  'Versión actual de la sala': 'Current room version',
+  'Descartar mi borrador y usar la versión de sala': 'Discard my draft and use the room version',
+  'Reemplazar la versión de sala con mi borrador': 'Replace the room version with my draft',
+  'Cargar versión actual': 'Load current version',
+  // Lobby previo a la llamada
+  'Prepará tu cámara y micrófono': 'Set up your camera and microphone',
+  'Vista previa de tu cámara': 'Your camera preview',
+  'Nivel del micrófono': 'Microphone level',
+  'Esta prueba es solo para vos. Nadie te ve ni te escucha hasta que entrás.':
+    'This preview is private. Nobody can see or hear you until you join.',
+  'Esperando permiso de cámara…': 'Waiting for camera permission…',
+  'Cámara apagada': 'Camera off',
+  'Micrófono apagado': 'Microphone off',
+  'Hablá para comprobar el nivel del micrófono.': 'Speak to check your microphone level.',
+  'Predeterminado del sistema': 'System default',
+  'Dispositivo no disponible': 'Device unavailable',
+  Cámara: 'Camera',
+  Micrófono: 'Microphone',
+  'Esperando permiso del navegador. Podés apagar el dispositivo para continuar.':
+    'Waiting for browser permission. You can turn the device off to continue.',
+  'El permiso fue rechazado. Revisá los permisos del navegador o entrá con el dispositivo apagado.':
+    'Permission was denied. Check your browser permissions or join with the device off.',
+  'No se encontró el dispositivo. Elegí otro o entrá con el dispositivo apagado.':
+    'Device not found. Choose another device or join with it off.',
+  'El dispositivo está ocupado o no se pudo iniciar. Cerrá otras aplicaciones e intentá otra vez.':
+    'The device is busy or could not start. Close other applications and try again.',
+  'No se pudo activar el dispositivo. Podés reintentar o entrar con el dispositivo apagado.':
+    'Could not enable the device. Try again or join with it off.',
+  'El dispositivo se desconectó. Elegí otro y volvé a activarlo.':
+    'The device was disconnected. Choose another device and enable it again.',
+  'Este navegador no permite probar dispositivos. Usá HTTPS o localhost; podés entrar sin cámara ni micrófono.':
+    'This browser cannot preview devices. Use HTTPS or localhost; you can join without a camera or microphone.',
+  'No se pudo obtener la lista de dispositivos. Podés probar el dispositivo predeterminado.':
+    'Could not list devices. You can try the system default device.',
+
   'Podés entrar con un enlace o código sin crear una cuenta.':
     'You can join with a link or code without creating an account.',
   'Entrar a la reunión': 'Join the meeting',
@@ -16,6 +108,10 @@ const en: Record<string, string> = {
   'Conectando...': 'Connecting...',
   'Cargando llamada…': 'Loading call…',
   Colgar: 'Hang up',
+  'Poner en foco': 'Spotlight',
+  'Quitar de foco': 'Remove spotlight',
+  '¿Estás seguro de que querés salir de la llamada?': 'Are you sure you want to leave the call?',
+  'Salir de la llamada': 'Leave the call',
   'Elegir micrófono': 'Choose microphone',
   'Elegir cámara': 'Choose camera',
   'Activar sonido de la reunión': 'Enable meeting audio',
@@ -69,6 +165,13 @@ const en: Record<string, string> = {
   'Permití el acceso al micrófono para iniciar la llamada':
     'Allow microphone access to start the call',
   'No se pudo iniciar la llamada': 'Could not start the call',
+  'Esperá a que se conecte un anfitrión para unirte a la llamada.':
+    'Wait for a host to join before you can enter the call.',
+  'La llamada terminó porque el anfitrión se desconectó.':
+    'The call ended because the host disconnected.',
+  'Volver a la sala': 'Back to the room',
+  'Ver línea de tiempo': 'View timeline',
+  'Ver gráfico de interacción': 'View interaction chart',
   'Videollamadas simples, en el navegador.': 'Simple video calls, in the browser.',
 
   // Inicio
@@ -188,7 +291,7 @@ const en: Record<string, string> = {
   'Buscar en Freesound (ej: bruh, airhorn)': 'Search Freesound (e.g. bruh, airhorn)',
   'Buscar sonido en Freesound': 'Search sound on Freesound',
   'Buscando…': 'Searching…',
-  'No se encontraron sonidos de hasta 5 segundos': 'No sounds up to 5 seconds found',
+  'No se encontraron sonidos de hasta 10 segundos': 'No sounds up to 10 seconds found',
   Usar: 'Use',
   Elegido: 'Selected',
   'No se pudieron cargar los sonidos': 'Could not load the sounds',
@@ -222,7 +325,7 @@ const en: Record<string, string> = {
   'Falta la imagen del emoji': 'The emoji image is missing',
   'La imagen no puede superar los 2 MB': 'The image cannot exceed 2 MB',
   'El audio no puede superar los 512 KB': 'The sound cannot exceed 512 KB',
-  'El audio no puede durar más de 5 segundos': 'The sound cannot be longer than 5 seconds',
+  'El audio no puede durar más de 10 segundos': 'The sound cannot be longer than 10 seconds',
   'No se pudo agregar el emoji': 'Could not add the emoji',
   'No se pudo borrar el emoji': 'Could not delete the emoji',
   'No se pudieron cargar los emojis': 'Could not load the emojis',
@@ -247,6 +350,29 @@ const en: Record<string, string> = {
   'Mostrar chat': 'Show chat',
   'Ocultar chat': 'Hide chat',
 
+  // Música ambiental
+  Música: 'Music',
+  'Agregar música': 'Add music',
+  'Unirme a la música': 'Join the music',
+  'Pegá un link o ID de YouTube': 'Paste a YouTube link or video ID',
+  'Elegir canción': 'Set track',
+  Reproducir: 'Play',
+  Pausar: 'Pause',
+  Anterior: 'Previous',
+  Siguiente: 'Next',
+  'Sacar de la lista': 'Remove from queue',
+  'Avance de la canción': 'Track progress',
+  'El link o ID de YouTube no es válido': 'That YouTube link or ID is not valid',
+  'No se pudo reproducir ese video. Probá con otro link.':
+    'That video could not be played. Try another link.',
+  'No se pudo obtener la información de ese video. Probá con otro link.':
+    "Could not get that video's info. Try another link.",
+  'Silenciar música': 'Mute music',
+  'Activar sonido de la música': 'Unmute music',
+  'Volumen de la música': 'Music volume',
+  'Ver playlist': 'View playlist',
+  Pista: 'Track',
+
   // Tema
   'Cambiar a modo claro': 'Switch to light mode',
   'Cambiar a modo oscuro': 'Switch to dark mode',
@@ -264,9 +390,35 @@ const en: Record<string, string> = {
   'Todavía no hiciste ninguna llamada.': "You haven't made any calls yet.",
   'No se pudo obtener el historial': 'Could not fetch the history',
 
+  // Notas desde el historial
+  'Obtener notas': 'Get notes',
+  'Necesitás iniciar sesión para ver estas notas.': 'You need to log in to see these notes.',
+  'No encontramos historial en esta sala, o no participaste de ella.':
+    'We could not find history for this room, or you did not take part in it.',
+  'Cargando notas…': 'Loading notes…',
+  'No se pudieron cargar las notas': 'Could not load the notes',
+  'No escribiste notas personales en este dispositivo para esta sala.':
+    'You have not written personal notes on this device for this room.',
+  'Esta sala no tiene notas compartidas.': 'This room has no shared notes.',
+
+  // Línea de tiempo de participación
+  'Esta sesión no tiene participantes registrados.': 'This session has no recorded participants.',
+  Entró: 'Joined',
+  Salió: 'Left',
+  Habló: 'Spoke',
+  'Cámara encendida': 'Camera on',
+  'Compartió pantalla': 'Shared screen',
+  'Se reconectó': 'Reconnected',
+  'Duración total': 'Total duration',
+  '1 participante': '1 participant',
+  participantes: 'participants',
+  Finalizada: 'Ended',
+
   // Configuración
   Apariencia: 'Appearance',
   'Modo oscuro': 'Dark mode',
+  Notificaciones: 'Notifications',
+  'Sonido al mencionarte': 'Sound when you are mentioned',
   'Necesitás iniciar sesión para elegir el color de tu nombre.':
     'You need to log in to choose your name color.',
   'Elegí el color de tu nombre': 'Choose your name color',
@@ -280,6 +432,14 @@ const en: Record<string, string> = {
   Naranja: 'Orange',
   Verde: 'Green',
   Rosa: 'Pink',
+  // Eventos de sala (ruleta)
+  'Hacer evento': 'Start an event',
+  Ruleta: 'Roulette',
+  'Seleccionar todos': 'Select all',
+  'Vaciar selección': 'Clear selection',
+  'Todavía no hay nadie más en la sala.': 'There is no one else in the room yet.',
+  'Girar ruleta': 'Spin the wheel',
+  'ganó la ruleta': 'won the roulette',
 };
 
 export default en;

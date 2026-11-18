@@ -1,6 +1,6 @@
 # Date2gether en EC2: entrega académica
 
-La aplicación utiliza LiveKit autohospedado para audio y video, con **6 participantes por llamada** de forma predeterminada. Registro, invitados con nombre, roles y chat siguen en NestJS/Socket.io. La cámara y el micrófono empiezan apagados. El cupo lo aplica LiveKit al conectar: tener un token no reserva un lugar. El chat no aplica todavía un cupo de admisión equivalente.
+La aplicación utiliza LiveKit autohospedado para audio y video, con **6 participantes por llamada** de forma predeterminada. Registro, invitados con nombre, roles y chat siguen en NestJS/Socket.io. La cámara y el micrófono empiezan apagados en el lobby; cada persona puede probarlos y confirmar con qué dispositivos y estados entra. El cupo lo aplica LiveKit al conectar: tener un token no reserva un lugar. El chat no aplica todavía un cupo de admisión equivalente.
 
 Una EC2 en **us-east-2** ejecuta frontend, API, PostgreSQL, LiveKit y Caddy con Docker Compose. EC2 está admitido en el plan FREE del nuevo AWS experience; no requiere Chime SDK ni activar funciones avanzadas. El consumo de cómputo, disco, IPv4 y tráfico se descuenta de los créditos según sus condiciones. Verificar saldo y vencimiento en **AWS Settings > Billing**, y región en **AWS Settings > View all projects > Overview > Additional Info > Region**.
 
@@ -51,12 +51,13 @@ sudo docker compose -f /opt/date2gether/deploy/ec2/compose.yaml ps
 
 No compartir logs que incluyan datos de usuarios, nombres de sala o tokens. `configure.py` no imprime secretos. Si hay dominio propio, esperar a que los tres registros DNS resuelvan a la IP antes de exigir que HTTPS responda.
 
-Abrir `ApplicationUrl` por **HTTPS**. Crear una cuenta, crear una sala, copiar el enlace y abrirlo en otro dispositivo. El invitado solo confirma un nombre. Cada persona pulsa Llamar y activa sus dispositivos desde los controles. Se puede participar escuchando sin otorgar permisos de cámara o micrófono.
+Abrir `ApplicationUrl` por **HTTPS**. Crear una cuenta, crear una sala, copiar el enlace y abrirlo en otro dispositivo. El invitado solo confirma un nombre. Cada persona puede seleccionar y probar sus dispositivos en el lobby antes de pulsar Entrar a la reunión; también puede cambiarlos desde los controles de la llamada. Se puede participar escuchando sin otorgar permisos de cámara o micrófono.
 
 ## Prueba de la entrega
 
 - Dos dispositivos, idealmente Wi-Fi y datos móviles; usar auriculares para evitar acople.
 - Invitados sin cuenta y nombres repetidos conservan identidades distintas; los nombres vienen del pase verificado.
+- Probar la cámara y el nivel de micrófono en el lobby, elegir dispositivos y entrar con los estados elegidos; comprobar permisos rechazados y el ingreso con ambos apagados.
 - Activar cámara y micrófono, cambiar el dispositivo con los menús, apagarlos y comprobar que los demás dejan de recibir el medio.
 - Rechazar permisos y continuar escuchando o usando el chat; los errores de dispositivos no deben cerrar la llamada.
 - Colgar o salir de la página libera cámara y micrófono. Volver a llamar permite reconectar.

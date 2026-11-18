@@ -1,5 +1,7 @@
 .card {
   composes: card from '../../styles/form.module.css';
+  max-width: 400px;
+  padding: 40px;
 }
 
 .subtitle {
@@ -10,9 +12,13 @@
   composes: error from '../../styles/form.module.css';
 }
 
+.authLinks {
+  composes: authLinks from '../../styles/form.module.css';
+}
+
 .section {
-  margin: 0 0 24px;
-  padding-bottom: 20px;
+  margin: 0 0 var(--space-6);
+  padding-bottom: var(--space-5);
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -20,13 +26,13 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .palette {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .swatch {
@@ -51,7 +57,7 @@
 }
 
 .saved {
-  margin: 16px 0 0;
+  margin: var(--space-4) 0 0;
   font-size: 13px;
   color: var(--color-text-muted);
 }

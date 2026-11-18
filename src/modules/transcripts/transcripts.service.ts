@@ -2,7 +2,6 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, eq } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
 import { transcriptLines, type TranscriptLine } from '../../db/schema';
-import { RoomsService } from '../rooms/rooms.service';
 
 export const TRANSCRIPT_LIMIT = 2000;
 
@@ -10,31 +9,26 @@ export type TranscriptEntry = Pick<TranscriptLine, 'id' | 'speakerName' | 'conte
 
 @Injectable()
 export class TranscriptsService {
-  constructor(
-    private readonly roomsService: RoomsService,
-    @Inject(DRIZZLE) private readonly db: DrizzleDb,
-  ) {}
+  constructor(@Inject(DRIZZLE) private readonly db: DrizzleDb) {}
 
   async save(
-    roomCode: string,
+    roomId: string,
     callSid: string,
     speakerName: string,
     content: string,
   ): Promise<TranscriptEntry> {
-    const room = await this.roomsService.getByCodeOrThrow(roomCode);
     const [line] = await this.db
       .insert(transcriptLines)
-      .values({ roomId: room.id, callSid, speakerName, content })
+      .values({ roomId, callSid, speakerName, content })
       .returning();
     return toEntry(line);
   }
 
-  async getCall(roomCode: string, callSid: string): Promise<TranscriptEntry[]> {
-    const room = await this.roomsService.getByCodeOrThrow(roomCode);
+  async getCall(roomId: string, callSid: string): Promise<TranscriptEntry[]> {
     const lines = await this.db
       .select()
       .from(transcriptLines)
-      .where(and(eq(transcriptLines.roomId, room.id), eq(transcriptLines.callSid, callSid)))
+      .where(and(eq(transcriptLines.roomId, roomId), eq(transcriptLines.callSid, callSid)))
       .orderBy(asc(transcriptLines.spokenAt))
       .limit(TRANSCRIPT_LIMIT);
     return lines.map(toEntry);

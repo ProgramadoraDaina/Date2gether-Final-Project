@@ -1,17 +1,15 @@
-/* --- primitivos compartidos de formulario/tarjeta, reusados por la
-   tarjeta de "entrar con tu nombre" (pre-join) --- */
-.card {
-  composes: card from '../../../styles/form.module.css';
-}
 .error {
   composes: error from '../../../styles/form.module.css';
 }
 
 /* --- estado de "conectando"/error de la llamada ---
-   Ocupa solo el espacio del video (mismo flex/min-height que .meetingRoom
-   en MeetingRoom.module.css), para que el chat y la lista de presentes
-   sigan usables mientras la llamada conecta o si nunca llega a conectar
-   (antes esto era un overlay de pantalla completa que tapaba todo). */
+   Este mismo panel se usa en dos lugares (RoomPage decide cuál):
+   - Entrada inicial (.enteringCallWrap, pantalla completa): hasta que se
+     llega a 'in-call' por primera vez, nada de la sala se ve todavía.
+   - Después de haber entrado (dentro de .meetingAndChat, flex:3, mismo
+     min-height que .meetingRoom en MeetingRoom.module.css): si la llamada
+     se cae más adelante, el chat y la lista de presentes siguen usables en
+     vez de tapar todo de nuevo. */
 .callLoadingPanel {
   flex: 3;
   min-height: 240px;
@@ -19,19 +17,57 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  padding: 24px;
-  border-radius: 12px;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
   color: var(--color-text);
   text-align: center;
   animation: callLoadingFadeIn 200ms ease;
 }
 
+/* MeetingRoom se monta apenas hay credenciales (ver RoomPage), antes de que
+   LiveKit termine de conectar: sin esto, al llegar las credenciales la
+   pantalla pasaba del spinner de "Cargando llamada…" directamente a la
+   grilla de video todavía conectando (toasts, tiles vacíos), un segundo
+   salto visual. display:contents mientras conecta deja que el root de
+   MeetingRoom (.meetingRoom en MeetingRoom.module.css, flex:3) se comporte
+   como si fuera hijo directo de .meetingAndChat, sin alterar el layout. */
+.meetingRoomSlot {
+  display: contents;
+}
+
+.meetingRoomSlot[data-hidden='true'] {
+  display: block;
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .callLoadingPanel p {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
+}
+
+/* Overlay de pantalla completa para la entrada inicial (ver RoomPage): tapa
+   todo .roomLayout (que sigue montado detrás, conectando sala/chat/llamada
+   en segundo plano) hasta que la llamada llega a 'in-call' por primera vez.
+   z-index por encima de los controles propios de .roomLayout (10 como
+   máximo, ver .sidebarToggleButton/.chatToggleButton). */
+.enteringScreen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg);
+}
+
+.enteringCallWrap {
+  width: min(100%, 420px);
 }
 
 .callLoadingSpinner {
@@ -55,6 +91,15 @@
 
 .callLoadingButton:hover {
   background: var(--color-chip-bg);
+}
+
+/* Acciones del panel de cierre forzado (D5, design.md): "Ver línea de
+   tiempo" y "Volver a la sala" lado a lado, reusando el mismo botón pill. */
+.callEndedActions {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 @keyframes callLoadingFadeIn {
@@ -128,7 +173,7 @@
   border-radius: 50%;
   border: none;
   background: var(--color-surface);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-md);
   color: var(--color-text);
   cursor: pointer;
   padding: 0;
@@ -140,7 +185,7 @@
 }
 
 .notice {
-  padding: 8px 20px;
+  padding: var(--space-2) var(--space-5);
   background: var(--color-notice-bg);
   color: var(--color-accent);
   font-size: 13px;
@@ -151,15 +196,14 @@
    #messages/#message-form, con el mismo scroll interno. */
 .usersPanel {
   flex: 1;
-  padding: 16px 20px;
+  padding: var(--space-4) var(--space-5);
   overflow-y: auto;
 }
 
 .usersPanel h3 {
   font-size: 12px;
-  text-transform: uppercase;
   color: var(--color-text-muted);
-  margin: 0 0 10px;
+  margin: 0 0 var(--space-2);
 }
 
 .usersPanel ul {
@@ -199,7 +243,7 @@
   flex-shrink: 0;
   width: var(--chat-width);
   height: calc(100% - 64px);
-  margin: 32px 16px 32px 0;
+  margin: var(--space-8) var(--space-4) var(--space-8) 0;
   overflow: hidden;
   transition:
     width 200ms ease,
@@ -208,7 +252,7 @@
 
 .chatPanelInCallWrap[data-open='false'] {
   width: 0;
-  margin: 32px 0;
+  margin: var(--space-8) 0;
 }
 
 .chatResizeHandle {
@@ -233,8 +277,8 @@
   width: 100%;
   height: 100%;
   background: var(--color-surface);
-  border-radius: 12px;
-  box-shadow: var(--shadow-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
   overflow: hidden;
 }
 
@@ -256,7 +300,7 @@
   border-radius: 50%;
   border: none;
   background: var(--color-surface);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-md);
   color: var(--color-text);
   cursor: pointer;
   padding: 0;
@@ -266,10 +310,21 @@
   color: var(--color-accent);
 }
 
+/* Mismo criterio que .chatToggleButton, pero en la esquina opuesta: fijo
+   arriba a la izquierda de .meetingAndChat, fuera del flujo del video/chat.
+   RoomEventButton.tsx se encarga de no renderizar nada si canManage es
+   false, así que este wrapper no necesita su propia condición de visibilidad. */
+.eventButtonWrap {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 10;
+}
+
 .chatTabs {
   display: flex;
-  gap: 20px;
-  padding: 14px 20px 0;
+  gap: var(--space-5);
+  padding: var(--space-4) var(--space-5) 0;
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -301,38 +356,103 @@
   overflow-y: auto;
   list-style: none;
   margin: 0;
-  padding: 16px 20px;
+  padding: var(--space-4) var(--space-5);
 }
 
 .message {
-  margin-bottom: 10px;
+  margin-bottom: var(--space-3);
   font-size: 14px;
   line-height: 1.4;
 }
 
+/* Te mencionaron a vos (por nombre o por rol/"invitados", ver
+   isSelfMentioned en mentions.ts): dorado, para que se note entre el resto
+   de los mensajes sin tener que leerlos todos. */
+.messageMentioned {
+  padding: var(--space-2) var(--space-3);
+  margin-left: calc(-1 * var(--space-3));
+  margin-right: calc(-1 * var(--space-3));
+  border-radius: var(--radius-sm);
+  background: var(--color-mention-self-bg);
+  border-left: 3px solid var(--color-mention-self-border);
+}
+
 .gifMessage {
   display: block;
-  margin-top: 4px;
+  margin-top: var(--space-1);
   max-width: 200px;
   max-height: 200px;
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
 }
 
 .message .author {
   font-weight: 600;
-  margin-right: 6px;
+  margin-right: var(--space-2);
 }
 
 .messageForm {
   position: relative;
   display: flex;
-  gap: 8px;
-  padding: 16px 20px;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5);
   border-top: 1px solid var(--color-border);
 }
 
-.messageForm > input {
-  margin-bottom: 0;
+.notesPanel {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+
+.notesTabs {
+  display: flex;
+  gap: 8px;
+}
+
+.notesTabs button {
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.notesTabs button[aria-pressed='true'] {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.notesPanel textarea {
+  flex: 1;
+  min-height: 120px;
+  resize: none;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.notesPanel small {
+  color: var(--color-text-muted);
+}
+
+.notesConflict {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 50%;
+  overflow-y: auto;
+}
+
+.notesConflict textarea {
+  flex: none;
+  min-height: 80px;
 }
 
 .messageForm > button {

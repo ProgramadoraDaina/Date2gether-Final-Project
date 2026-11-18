@@ -6,10 +6,13 @@ const CHAIN_METHODS = [
   'limit',
   'orderBy',
   'innerJoin',
+  'leftJoin',
   'values',
   'set',
   'returning',
   'onConflictDoNothing',
+  'onConflictDoUpdate',
+  'for',
 ] as const;
 
 type ChainMethodName = (typeof CHAIN_METHODS)[number];
@@ -34,6 +37,7 @@ export function createFakeDb() {
     select: jest.fn(),
     insert: jest.fn(),
     update: jest.fn(),
+    delete: jest.fn(),
     transaction: jest.fn(),
   };
 }

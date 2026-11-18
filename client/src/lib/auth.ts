@@ -49,15 +49,33 @@ export function clearTokens(): void {
   localStorage.removeItem(REFRESH_TOKEN_KEY);
 }
 
-export async function extractErrorMessage(res: Response, fallback: string): Promise<string> {
+// Variante de extractErrorMessage que además devuelve `code`, si el backend
+// lo manda (p. ej. NO_HOST_CONNECTED del gate de anfitrión de llamadas). El
+// body solo se puede leer una vez por Response, así que los puntos de
+// llamada que necesitan ambos datos deben usar esta función en lugar de
+// llamar a extractErrorMessage y luego intentar leer el código por su
+// cuenta.
+export async function extractErrorDetails(
+  res: Response,
+  fallback: string,
+): Promise<{ message: string; code?: string }> {
   try {
     const body = await res.json();
-    if (Array.isArray(body.message)) return body.message[0];
-    if (typeof body.message === 'string') return body.message;
+    const message = Array.isArray(body.message)
+      ? body.message[0]
+      : typeof body.message === 'string'
+        ? body.message
+        : fallback;
+    const code = typeof body.code === 'string' ? body.code : undefined;
+    return { message, code };
   } catch {
     // respuesta sin body JSON: se usa el mensaje por defecto
+    return { message: fallback };
   }
-  return fallback;
+}
+
+export async function extractErrorMessage(res: Response, fallback: string): Promise<string> {
+  return (await extractErrorDetails(res, fallback)).message;
 }
 
 export async function register(email: string, password: string, name: string): Promise<AuthUser> {

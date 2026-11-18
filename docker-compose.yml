@@ -17,9 +17,9 @@ services:
     restart: unless-stopped
     command: ['--config', '/etc/livekit.yaml', '--bind', '0.0.0.0']
     ports:
-      - '127.0.0.1:7880:7880'
-      - '127.0.0.1:7881:7881'
-      - '127.0.0.1:7882:7882/udp'
+      - '0.0.0.0:7880:7880'
+      - '0.0.0.0:7881:7881'
+      - '0.0.0.0:7882:7882/udp'
     volumes:
       - ./deploy/local/livekit.yaml:/etc/livekit.yaml:ro
 

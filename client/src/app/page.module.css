@@ -1,11 +1,16 @@
 .card {
   composes: card from '../styles/form.module.css';
+  max-width: 400px;
+  padding: 40px;
 }
 .subtitle {
   composes: subtitle from '../styles/form.module.css';
 }
 .authBar {
   composes: authBar from '../styles/form.module.css';
+}
+.authLinks {
+  composes: authLinks from '../styles/form.module.css';
 }
 .linkButton {
   composes: linkButton from '../styles/form.module.css';
@@ -21,4 +26,28 @@
 }
 .error {
   composes: error from '../styles/form.module.css';
+}
+.permanentToggle {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin: var(--space-2) 0 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-chip-bg);
+  color: var(--color-text);
+  font-size: 13px;
+  line-height: 1.45;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+.permanentToggle:hover {
+  border-color: var(--color-accent);
+}
+.permanentToggle input[type='checkbox'] {
+  width: auto;
+  flex-shrink: 0;
+  margin: 2px 0 0;
+  accent-color: var(--color-accent);
 }

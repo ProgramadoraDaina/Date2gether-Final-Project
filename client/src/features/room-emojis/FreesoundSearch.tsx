@@ -78,7 +78,7 @@ export function FreesoundSearch({ code, selected, onSelect }: FreesoundSearchPro
         )}
         {!error && loading && <p className={styles.status}>{t('Buscando…')}</p>}
         {!error && !loading && query.trim().length >= 2 && results.length === 0 && (
-          <p className={styles.status}>{t('No se encontraron sonidos de hasta 5 segundos')}</p>
+          <p className={styles.status}>{t('No se encontraron sonidos de hasta 10 segundos')}</p>
         )}
         <ul className={styles.list}>
           {results.map((sound) => (

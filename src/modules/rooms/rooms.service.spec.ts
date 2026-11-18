@@ -4,6 +4,7 @@ import type { DrizzleDb } from '../../db/drizzle.module';
 import type { Room } from '../../db/schema';
 import { chain, createFakeDb, type FakeDb } from '../../test-support/fake-drizzle';
 import type { RoomEventsService } from './room-events.service';
+import type { RoomResolverService } from './room-resolver.service';
 import { RoomsService } from './rooms.service';
 
 const room: Room = {
@@ -11,6 +12,11 @@ const room: Room = {
   code: 'abc-defg-hij',
   name: 'Reunión de Daina',
   isActive: true,
+  isPermanent: false,
+  lastEnteredAt: new Date(),
+  retiredAt: null,
+  waitingRoomEnabled: false,
+  entryLocked: false,
   createdAt: new Date(),
   chimeMeetingId: null,
 };
@@ -18,68 +24,147 @@ const room: Room = {
 describe('RoomsService', () => {
   let db: FakeDb;
   let roomEvents: { emitMemberRoleChanged: ReturnType<typeof jest.fn> };
+  let resolver: {
+    resolveJoinable: ReturnType<typeof jest.fn>;
+    touchEntry: ReturnType<typeof jest.fn>;
+    findPoolOccupant: ReturnType<typeof jest.fn>;
+    retireExpired: ReturnType<typeof jest.fn>;
+  };
   let service: RoomsService;
 
   beforeEach(() => {
     db = createFakeDb();
     roomEvents = { emitMemberRoleChanged: jest.fn() };
+    resolver = {
+      resolveJoinable: jest.fn().mockResolvedValue(room),
+      touchEntry: jest.fn().mockResolvedValue(undefined),
+      findPoolOccupant: jest.fn().mockResolvedValue(undefined),
+      retireExpired: jest.fn().mockResolvedValue(undefined),
+    };
     service = new RoomsService(
       db as unknown as DrizzleDb,
       roomEvents as unknown as RoomEventsService,
+      resolver as unknown as RoomResolverService,
     );
   });
 
   describe('createRoom', () => {
-    it('crea la sala y agrega a quien la crea como administrador, en la misma transacción', async () => {
-      db.select.mockReturnValueOnce(chain([])); // el código generado no choca con uno existente
-      const roomInsert = chain([room]);
-      const memberInsert = chain([]);
+    function stubTransaction(insertResults: unknown[][]) {
+      const inserts = insertResults.map((rows) => chain(rows));
+      const tx = { insert: jest.fn() };
+      for (const insertChain of inserts) tx.insert.mockReturnValueOnce(insertChain);
       db.transaction.mockImplementationOnce(async (cb: unknown) => {
-        const tx = { insert: jest.fn().mockReturnValueOnce(roomInsert).mockReturnValueOnce(memberInsert) };
         return (cb as (transaction: typeof tx) => Promise<Room>)(tx);
       });
+      return { tx, inserts };
+    }
+
+    it('crea la sala y agrega a quien la crea como administrador, en la misma transacción', async () => {
+      const { inserts } = stubTransaction([[room], []]);
 
       const result = await service.createRoom('Reunión de Daina', 'owner-1');
 
       expect(result).toBe(room);
-      expect(roomInsert.values).toHaveBeenCalledWith(
+      expect(inserts[0].values).toHaveBeenCalledWith(
         expect.objectContaining({ name: 'Reunión de Daina' }),
       );
-      expect(memberInsert.values).toHaveBeenCalledWith(
+      expect(inserts[1].values).toHaveBeenCalledWith(
         expect.objectContaining({ roomId: room.id, userId: 'owner-1', role: 'administrador' }),
       );
     });
 
-    it('reintenta si el código generado ya existe, y tira error después de 5 intentos fallidos', async () => {
-      for (let i = 0; i < 5; i++) {
-        db.select.mockReturnValueOnce(chain([room])); // siempre "ya existe" una sala con ese código
-      }
+    it('[4.11] corre el sweep de retiro (retireExpired) antes del probe de colisión, dentro de la misma transacción', async () => {
+      const { tx } = stubTransaction([[room], []]);
+
+      await service.createRoom('Reunión de Daina', 'owner-1');
+
+      expect(resolver.retireExpired).toHaveBeenCalledWith(tx);
+      expect(resolver.findPoolOccupant).toHaveBeenCalledWith(expect.any(String), tx);
+      // El sweep debe ejecutarse antes de que se inspeccione el pool, no después.
+      const sweepOrder = resolver.retireExpired.mock.invocationCallOrder[0];
+      const probeOrder = resolver.findPoolOccupant.mock.invocationCallOrder[0];
+      expect(sweepOrder).toBeLessThan(probeOrder);
+    });
+
+    it('[3.4] una sala permanente se inserta con waitingRoomEnabled:true explícito', async () => {
+      const permanentRoom = { ...room, isPermanent: true, waitingRoomEnabled: true };
+      const { inserts } = stubTransaction([[permanentRoom], []]);
+
+      await service.createRoom('Sala permanente', 'owner-1', { isPermanent: true });
+
+      expect(inserts[0].values).toHaveBeenCalledWith(
+        expect.objectContaining({ isPermanent: true, waitingRoomEnabled: true }),
+      );
+    });
+
+    it('una sala no permanente NO fuerza waitingRoomEnabled (queda en el default de la columna)', async () => {
+      const { inserts } = stubTransaction([[room], []]);
+
+      await service.createRoom('Reunión de Daina', 'owner-1');
+
+      expect(inserts[0].values).toHaveBeenCalledWith(
+        expect.not.objectContaining({ waitingRoomEnabled: expect.anything() }),
+      );
+    });
+
+    it('[4.10/4.11] inserta los slots junto con la sala, en la misma transacción', async () => {
+      const slots = [{ dayOfWeek: 2, timeOfDay: '07:00', timezone: 'UTC' }];
+      const { inserts } = stubTransaction([[room], [], []]);
+
+      await service.createRoom('Sala con horario', 'owner-1', { slots });
+
+      expect(inserts[2].values).toHaveBeenCalledWith([
+        expect.objectContaining({ roomId: room.id, ...slots[0] }),
+      ]);
+    });
+
+    it('sin slots, no hace ningún insert a roomScheduleSlots', async () => {
+      const { tx } = stubTransaction([[room], []]);
+
+      await service.createRoom('Reunión de Daina', 'owner-1');
+
+      expect(tx.insert).toHaveBeenCalledTimes(2); // room + member, nunca slots
+    });
+
+    it('reintenta si el código generado ya existe en el pool, y tira error después de 5 intentos fallidos', async () => {
+      resolver.findPoolOccupant.mockResolvedValue(room); // siempre ocupado
+      db.transaction.mockImplementationOnce(async (cb: unknown) => {
+        const tx = { insert: jest.fn() };
+        return (cb as (transaction: typeof tx) => Promise<Room>)(tx);
+      });
 
       await expect(service.createRoom('Reunión de Daina', 'owner-1')).rejects.toThrow(
         'No se pudo generar un código de sala único',
       );
-      expect(db.select).toHaveBeenCalledTimes(5);
-      expect(db.transaction).not.toHaveBeenCalled();
+      expect(resolver.findPoolOccupant).toHaveBeenCalledTimes(5);
     });
   });
 
   describe('getByCodeOrThrow', () => {
-    it('lanza NotFoundException si no existe una sala con ese código', async () => {
-      db.select.mockReturnValueOnce(chain([]));
-
-      await expect(service.getByCodeOrThrow('no-existe')).rejects.toThrow(NotFoundException);
+    it('delega en RoomResolverService.resolveJoinable y propaga su resultado', async () => {
+      await expect(service.getByCodeOrThrow(room.code)).resolves.toBe(room);
+      expect(resolver.resolveJoinable).toHaveBeenCalledWith(room.code);
     });
 
-    it('devuelve la sala cuando el código existe', async () => {
-      db.select.mockReturnValueOnce(chain([room]));
+    it('propaga el 404 del resolver para un código retirado o vencido (D1: indistinguible de uno inexistente)', async () => {
+      resolver.resolveJoinable.mockRejectedValueOnce(
+        new NotFoundException(`No existe una sala con el código "${room.code}"`),
+      );
 
-      await expect(service.getByCodeOrThrow(room.code)).resolves.toBe(room);
+      await expect(service.getByCodeOrThrow(room.code)).rejects.toThrow(NotFoundException);
+    });
+
+    it('propaga el 403 del resolver cuando la sala existe pero está cerrada', async () => {
+      resolver.resolveJoinable.mockRejectedValueOnce(
+        new ForbiddenException('La sala está cerrada'),
+      );
+
+      await expect(service.getByCodeOrThrow(room.code)).rejects.toThrow(ForbiddenException);
     });
   });
 
   describe('joinRoom', () => {
     it('agrega a quien se une como participante, sin fallar si ya era miembro', async () => {
-      db.select.mockReturnValueOnce(chain([room]));
       const memberInsert = chain([]);
       db.insert.mockReturnValueOnce(memberInsert);
 
@@ -90,11 +175,28 @@ describe('RoomsService', () => {
       );
       expect(memberInsert.onConflictDoNothing).toHaveBeenCalled();
     });
+
+    it('[D5 2.19] marca la entrada (touchEntry) -- joinRoom es uno de los tres sitios de "entrada"', async () => {
+      const memberInsert = chain([]);
+      db.insert.mockReturnValueOnce(memberInsert);
+
+      await service.joinRoom(room.code, 'user-2');
+
+      expect(resolver.touchEntry).toHaveBeenCalledWith(room.id);
+    });
+
+    it('rechaza con el 404/403 del resolver para una sala retirada, vencida o cerrada, sin tocar roomMembers', async () => {
+      resolver.resolveJoinable.mockRejectedValueOnce(
+        new NotFoundException(`No existe una sala con el código "${room.code}"`),
+      );
+
+      await expect(service.joinRoom(room.code, 'user-2')).rejects.toThrow(NotFoundException);
+      expect(db.insert).not.toHaveBeenCalled();
+    });
   });
 
   describe('listMembers', () => {
     it('devuelve la lista de miembros con su nombre y rol', async () => {
-      db.select.mockReturnValueOnce(chain([room]));
       const membersView = [{ userId: 'user-1', name: 'Alex', role: 'administrador' as const }];
       db.select.mockReturnValueOnce(chain(membersView));
 
@@ -106,14 +208,12 @@ describe('RoomsService', () => {
 
   describe('getMemberRole', () => {
     it('devuelve undefined si la persona no es miembro de la sala', async () => {
-      db.select.mockReturnValueOnce(chain([room]));
       db.select.mockReturnValueOnce(chain([]));
 
       await expect(service.getMemberRole(room.code, 'alguien-ajeno')).resolves.toBeUndefined();
     });
 
     it('devuelve el rol de la persona cuando sí es miembro', async () => {
-      db.select.mockReturnValueOnce(chain([room]));
       db.select.mockReturnValueOnce(chain([{ role: 'colaborador' }]));
 
       await expect(service.getMemberRole(room.code, 'user-2')).resolves.toBe('colaborador');
@@ -122,7 +222,6 @@ describe('RoomsService', () => {
 
   describe('setMemberRole', () => {
     it('lanza NotFoundException si el destino todavía no es miembro de la sala', async () => {
-      db.select.mockReturnValueOnce(chain([room]));
       db.select.mockReturnValueOnce(chain([]));
 
       await expect(service.setMemberRole(room.code, 'ajeno', 'colaborador')).rejects.toThrow(
@@ -132,7 +231,6 @@ describe('RoomsService', () => {
     });
 
     it('impide cambiar el rol de quien es administrador de la sala', async () => {
-      db.select.mockReturnValueOnce(chain([room]));
       db.select.mockReturnValueOnce(chain([{ role: 'administrador' }]));
 
       await expect(service.setMemberRole(room.code, 'owner-1', 'participante')).rejects.toThrow(
@@ -143,7 +241,6 @@ describe('RoomsService', () => {
     });
 
     it('actualiza el rol y notifica el cambio vía RoomEventsService', async () => {
-      db.select.mockReturnValueOnce(chain([room]));
       db.select.mockReturnValueOnce(chain([{ role: 'participante' }]));
       const updateChain = chain([]);
       db.update.mockReturnValueOnce(updateChain);

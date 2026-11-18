@@ -11,9 +11,21 @@ Las reglas de producto están en [docs/requirements.md](docs/requirements.md). E
 - El nombre visible no concede permisos. El servidor emite un pase de participante para esa sala, válido durante 24 horas. Sirve para chat y llamadas; no sirve para crear salas, consultar cuentas ni administrar roles. Cada participante recibe un identificador distinto aunque repita el nombre de otra persona.
 - Los usuarios registrados conservan los roles por sala: administrador, colaborador y participante. Los invitados no reciben permisos de administración.
 - Hay chat de texto persistente, presencia en tiempo real, interfaz ES/EN y tema claro/oscuro.
-- El botón **Llamar** conecta audio y video con LiveKit. Hay grilla de participantes, controles y selección de cámara y micrófono; ambos dispositivos empiezan apagados. Las llamadas admiten seis personas por defecto. Compartir pantalla sigue pendiente.
-- El botón **CC** de la llamada activa los subtítulos en vivo con la Web Speech API del navegador (solo Chrome y Edge). Cada persona transcribe únicamente su propio micrófono, y solo mientras lo tiene prendido; el texto viaja a los demás por el data channel de LiveKit (topic `transcript`). Las frases finales se guardan en `transcript_lines`, asociadas al sid de la llamada de LiveKit. **Ver transcripción**, en el panel lateral, muestra el acta de esa llamada, y al colgar se abre sola. En Chrome, el audio de los subtítulos pasa por los servidores de Google.
-- El ingreso actual es directo con enlace y nombre. La sala de espera, el bloqueo de ingresos y el cupo de admisión al chat son funcionalidades pendientes; no se presentan como controles implementados.
+- Antes de entrar hay un lobby para confirmar el nombre, seleccionar cámara y micrófono y probarlos con video local y un medidor de voz. Ambos empiezan apagados y solo se solicitan permisos al activarlos. Una vez concedido el ingreso, se conectan chat y llamada con LiveKit usando la elección confirmada; hay grilla de participantes y controles para cambiar los dispositivos durante la llamada. Las llamadas admiten seis personas por defecto. También se puede compartir pantalla durante la llamada.
+- El botón **CC** de la llamada activa los subtítulos en vivo con la Web Speech API del navegador (solo Chrome y Edge). Cada persona transcribe únicamente su propio micrófono, y solo mientras lo tiene prendido; el texto viaja a los demás por el data channel de LiveKit (topic `transcript`). Las frases finales se guardan en `transcript_lines`, asociadas al sid de la llamada de LiveKit. **Ver transcripción**, en el panel lateral, muestra el acta de esa llamada, y al colgar se abre sola. El botón de ajustes, a la izquierda de colgar, permite elegir el tamaño de los subtítulos y lo recuerda para las próximas llamadas. En Chrome, el audio de los subtítulos pasa por los servidores de Google.
+- El ingreso es directo por defecto. El administrador puede activar la sala de espera, admitir o rechazar solicitudes y bloquear nuevos ingresos desde **Administrar ingresos**. Quien espera no recibe chat ni pases de llamada; el cupo de admisión al chat sigue pendiente.
+
+## Moderar el ingreso
+
+El administrador entra con su cuenta y abre **Administrar ingresos** desde la sala. Puede activar o desactivar la espera y bloquear nuevos ingresos. La espera empieza desactivada; el anfitrión no necesita admitirse a sí mismo. Los nombres visibles nunca conceden permisos de administrador.
+
+Con la espera activa, cada ingreso crea una solicitud propia, incluso si varias personas usan el mismo nombre. El administrador ve su nombre, si tiene cuenta y cuándo lo solicitó, y puede admitirla o rechazarla. La pantalla se actualiza automáticamente; el invitado consulta el resultado cada cinco segundos y puede cancelar. Un rechazo requiere una nueva acción de la persona para volver a solicitar acceso.
+
+La credencial de espera se limita a consultar o cancelar esa solicitud; no sirve para chat, llamadas ni acciones de cuenta. Se conserva en sessionStorage para recuperar la espera al recargar, y vence a las 24 horas. La configuración y las decisiones se guardan en PostgreSQL y sobreviven a un reinicio. La admisión usa el ID de la solicitud como identidad estable; volver a consultar el resultado no crea otra participación.
+
+Desactivar la espera admite las solicitudes pendientes cuando los ingresos están desbloqueados; no cambia rechazos o cancelaciones anteriores. Bloquear impide nuevas solicitudes y admisiones, sin retirar a quienes ya fueron admitidos. Si se desactiva la espera mientras está bloqueada, las solicitudes continúan pendientes hasta desbloquear. La capacidad de seis conexiones de LiveKit continúa separada del cupo de admisión al chat, que está pendiente.
+
+Aplicar la migración versionada con `pnpm db:migrate` antes de desplegar este cambio.
 
 ## Requisitos
 
@@ -87,7 +99,7 @@ Para probar localmente, `docker compose up -d` inicia PostgreSQL y LiveKit. Las 
 
 `POST /calls/:roomCode` valida el pase de sala, confirma que la sala siga abierta y solicita a LiveKit una sala con `MAX_ROOM_PARTICIPANTS=6` (admite valores entre 2 y 20 para la demo). Emite un token temporal de 15 minutos limitado al nombre de esa sala y a la identidad/nombre confirmados del participante. No otorga administración ni grabación del servidor. LiveKit aplica el cupo al conectar, incluso ante solicitudes simultáneas; emitir un token no reserva un lugar. El chat mantiene su control de acceso pero aún no tiene un cupo equivalente de admisión. Cambiar el límite requiere cerrar las salas de medios que ya estaban creadas o esperar a que caduquen.
 
-Al pulsar Llamar se conecta con cámara y micrófono apagados. Se pueden activar o desactivar y elegir los dispositivos desde la llamada. La grilla muestra nombre y estado de cámara, incluido un recuadro para quien no publica video. El audio remoto se reproduce mediante LiveKit; si el navegador lo bloquea, se ofrece Activar sonido de la reunión. Rechazar un permiso no impide continuar con el resto de la reunión. Colgar o abandonar la página desconecta y libera los dispositivos.
+En el lobby se eligen los dispositivos y si se entra con cámara y micrófono encendidos o apagados. La vista previa no conecta el chat ni envía medios a otras personas. Al entrar se liberan sus capturas locales y LiveKit abre los dispositivos elegidos; un fallo de cámara o micrófono permite continuar con los medios disponibles. Se pueden activar o desactivar y elegir los dispositivos desde la llamada. La grilla muestra nombre y estado de cámara, incluido un recuadro para quien no publica video. El audio remoto se reproduce mediante LiveKit; si el navegador lo bloquea, se ofrece Activar sonido de la reunión. Rechazar un permiso no impide continuar con el resto de la reunión. Colgar o abandonar la página desconecta y libera los dispositivos.
 
 Las llamadas requieren HTTPS o localhost. En EC2 el frontend usa `/api` para REST y Socket.io a través del mismo dominio HTTPS, evitando contenido mixto. Las credenciales privadas de LiveKit permanecen en el servidor; el navegador recibe solo su pase temporal. No se registran tokens ni se versionan archivos de configuración generados.
 
@@ -101,7 +113,7 @@ Las credenciales reales de LiveKit, PostgreSQL y JWT del despliegue EC2 se gener
 
 En desarrollo local, PostgreSQL y LiveKit publican sus puertos solo en `127.0.0.1`. Si PostgreSQL ya estaba levantado con una configuración anterior, aplicar el cambio ejecutando `docker compose up -d postgres`; Docker recrea ese contenedor y conserva su volumen de datos. No ejecutar `docker compose down -v` salvo que se desee eliminar esos datos.
 
-Los códigos nuevos de las salas usan aleatoriedad criptográfica. Cualquier persona que posea el enlace puede solicitar acceso y leer el chat de esa sala; tratar el enlace como privado. El proyecto todavía no implementa sala de espera, expulsión ni revocación completa de invitaciones. Las sesiones de cuenta se guardan en `localStorage`, por lo que una inyección de scripts en el navegador podría exponerlas; se debe revisar esa decisión antes de usar la aplicación con datos reales.
+Los códigos nuevos de las salas usan aleatoriedad criptográfica. Cualquier persona que posea el enlace puede solicitar acceso. Con la espera desactivada ingresa directamente; con la espera activa debe ser admitida antes de leer el chat. Tratar el enlace como privado. El proyecto todavía no implementa expulsión ni revocación completa de invitaciones. Las sesiones de cuenta se guardan en `localStorage`, por lo que una inyección de scripts en el navegador podría exponerlas; se debe revisar esa decisión antes de usar la aplicación con datos reales.
 
 La auditoría de dependencias realizada el 27 de octubre de 2026 terminó sin vulnerabilidades conocidas en `pnpm audit` después de actualizar Next.js, body-parser, multer y herramientas de desarrollo. El resultado depende de la base de avisos en ese momento y no reemplaza una auditoría o prueba de penetración. También se revisaron los archivos versionables y las referencias Git locales buscando patrones habituales de claves, sin hallar coincidencias; esa búsqueda no garantiza detectar todos los formatos de secretos.
 
@@ -109,21 +121,32 @@ Los cambios de LiveKit y seguridad deben revisarse en el PR antes de desplegarlo
 
 ## API y Socket.io
 
-| Método | Ruta                                                             | Acceso                                                             |
-| ------ | ---------------------------------------------------------------- | ------------------------------------------------------------------ |
-| POST   | `/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout` | Gestión de cuentas y sesión                                        |
-| GET    | `/auth/me`                                                       | JWT de cuenta                                                      |
-| POST   | `/rooms`                                                         | JWT de cuenta; registra al administrador                           |
-| GET    | `/rooms/:code`                                                   | Consulta mediante código                                           |
-| POST   | `/rooms/:code/access`                                            | Enlace/código y `{ "name": "Ana" }`; JWT de cuenta opcional        |
-| POST   | `/rooms/:code/join`                                              | JWT de cuenta; membresía registrada                                |
-| GET    | `/rooms/:code/members`                                           | Cuenta miembro de la sala                                          |
-| PATCH  | `/rooms/:code/members/:userId`                                   | Administrador de la sala                                           |
+| Método | Ruta                                                             | Acceso                                                                                  |
+| ------ | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| POST   | `/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout` | Gestión de cuentas y sesión                                                             |
+| GET    | `/auth/me`                                                       | JWT de cuenta                                                                           |
+| POST   | `/rooms`                                                         | JWT de cuenta; registra al administrador                                                |
+| GET    | `/rooms/:code`                                                   | Consulta mediante código                                                                |
+| POST   | `/rooms/:code/access`                                            | Enlace/código y `{ "name": "Ana" }`; JWT de cuenta opcional                             |
+| POST   | `/rooms/:code/join`                                              | JWT de cuenta; membresía registrada                                                     |
+| GET    | `/rooms/:code/members`                                           | Cuenta miembro de la sala                                                               |
+| PATCH  | `/rooms/:code/members/:userId`                                   | Administrador de la sala                                                                |
 | POST   | `/calls/:roomCode`                                               | Pase de participante de esa sala; devuelve `{ url, token, roomName, participantLimit }` |
-| POST   | `/transcripts/:roomCode`                                         | Pase de participante; `{ callSid, content }`. El nombre sale del pase |
-| GET    | `/transcripts/:roomCode?callSid=`                                | Pase de participante; acta de esa llamada en orden                 |
+| POST   | `/transcripts/:roomCode`                                         | Pase de participante; `{ callSid, content }`. El nombre sale del pase                   |
+| GET    | `/transcripts/:roomCode?callSid=`                                | Pase de participante; acta de esa llamada en orden                                      |
 
-`POST /rooms/:code/access` devuelve `{ token, participant }`. El frontend conserva el pase en memoria durante la visita; abrir o recargar el enlace vuelve a pedir confirmación del nombre. Una reconexión automática del socket usa el mismo pase. El nombre anterior puede estar precargado, pero no se ingresa automáticamente.
+Con ingreso directo, `POST /rooms/:code/access` devuelve `{ token, participant }`. El frontend conserva el pase en memoria durante la visita; abrir o recargar el enlace vuelve a pedir confirmación del nombre. Una reconexión automática del socket usa el mismo pase. El nombre anterior puede estar precargado, pero no se ingresa automáticamente.
+
+Las rutas de admisión son:
+
+| Método      | Ruta                                | Acceso                                                  |
+| ----------- | ----------------------------------- | ------------------------------------------------------- |
+| GET / PATCH | `/rooms/:code/admission`            | Sesión de cuenta y rol administrador de esa sala        |
+| PATCH       | `/rooms/:code/admission/:id`        | Administrador; `{ decision: "admitted" \| "rejected" }` |
+| GET         | `/rooms/:code/admission/:id/status` | Credencial de espera de esa solicitud                   |
+| POST        | `/rooms/:code/admission/:id/cancel` | Credencial de espera de esa solicitud                   |
+
+Con espera, `POST /rooms/:code/access` devuelve `{ status: "pending", requestId, ticket }` en lugar del pase de participante. La consulta de estado devuelve `{ status: "admitted", access: { token, participant } }` solo después de la admisión. El resto de los estados son `pending`, `rejected`, `cancelled` o `expired`. Las decisiones sobre solicitudes ya resueltas no se sobrescriben; las solicitudes de otras salas no se pueden consultar ni resolver.
 
 El namespace Socket.io es `/rooms`, con `auth: { token }` usando el pase de sala. `joinRoom` recibe `{ code }`; el nombre, el identificador y la cuenta se obtienen del pase verificado. `sendMessage` recibe `{ content }` y `leaveRoom` no requiere payload. El servidor emite `roomHistory`, `roomUsers`, `userJoined`, `userLeft`, `newMessage` y `memberRoleChanged`. La presencia incluye `{ participantId, userName, userId? }`.
 
@@ -139,4 +162,4 @@ pnpm test:client --runInBand
 
 La [guía E2E](e2e/README.md) explica cómo probar los recorridos con una base separada. El [README del cliente](client/README.md) detalla el flujo del navegador y las [decisiones técnicas](docs/decisiones-tecnicas.md) registran la integración de esta rama.
 
-La entrega académica usa seis participantes por llamada. Siguen pendientes la previsualización antes de entrar, compartir pantalla, moderación de acceso, cupo del chat, cierre de salas de la aplicación, vencimiento del chat, adjuntos, stickers, grabación local, subtítulos y fondos, según los requisitos.
+La entrega académica usa seis participantes por llamada. Siguen pendientes expulsión, cupo del chat, cierre de salas de la aplicación, vencimiento del chat, adjuntos, stickers, grabación local, subtítulos y fondos, según los requisitos.

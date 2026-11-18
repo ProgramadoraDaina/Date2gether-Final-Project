@@ -88,4 +88,19 @@ describe('useCallSession: LiveKit', () => {
       true,
     );
   });
+  it('endedByHost() produce el estado terminal "ended" con endReason "host-left" (D5, design.md)', async () => {
+    const fake = await setup();
+    await act(() => fake.result.current.joinCall('abc', 'room-token'));
+    act(() => fake.result.current.endedByHost());
+    expect(fake.result.current.status).toBe('ended');
+    expect(fake.result.current.endReason).toBe('host-left');
+    expect(fake.result.current.session).toBeNull();
+  });
+  it('un nuevo joinCall después de un cierre forzado limpia endReason', async () => {
+    const fake = await setup();
+    await act(() => fake.result.current.joinCall('abc', 'room-token'));
+    act(() => fake.result.current.endedByHost());
+    await act(() => fake.result.current.joinCall('abc', 'room-token'));
+    expect(fake.result.current.endReason).toBeNull();
+  });
 });
