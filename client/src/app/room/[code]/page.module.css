@@ -319,6 +319,18 @@
   top: 12px;
   left: 12px;
   z-index: 10;
+  transition: opacity 0.15s linear;
+}
+
+/* Collapsed sidebar puts its toggle at left: 12px (38px wide). */
+.eventButtonWrap[data-sidebar-open='false'] {
+  left: 58px;
+}
+
+@media (hover: hover) {
+  .meetingAndChat:not(:hover) .eventButtonWrap:not(:focus-within) {
+    opacity: 0;
+  }
 }
 
 .chatTabs {
