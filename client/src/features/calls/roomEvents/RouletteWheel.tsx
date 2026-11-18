@@ -102,7 +102,7 @@ export function RouletteWheel({ state, onDone }: RouletteWheelProps) {
               <span
                 key={p.participantId}
                 className={styles.label}
-                style={{ transform: `rotate(${i * segment + segment / 2}deg) translateX(30px)` }}
+                style={{ transform: `rotate(${i * segment + segment / 2}deg) translateX(calc(var(--wheel-size) / 8))` }}
               >
                 {p.userName}
               </span>
