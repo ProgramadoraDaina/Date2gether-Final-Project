@@ -44,6 +44,13 @@ export class RoomsController {
     });
   }
 
+  // Must stay above @Get(':code') or "mine" is matched as a room code.
+  @UseGuards(JwtAuthGuard)
+  @Get('mine')
+  listMine(@CurrentUser() user: AccessTokenPayload) {
+    return this.roomsService.listOwnedRooms(user.sub);
+  }
+
   @Get(':code')
   findOne(@Param('code') code: string) {
     return this.roomsService.getByCodeOrThrow(code);
