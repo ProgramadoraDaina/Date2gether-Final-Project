@@ -1,15 +1,35 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { AppController } from './app.controller';
+import { HttpOnlyThrottlerGuard } from './common/http-only-throttler.guard';
 import { DrizzleModule } from './db/drizzle.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { CallsModule } from './modules/calls/calls.module';
 import { ChatModule } from './modules/chat/chat.module';
+import { GifsModule } from './modules/gifs/gifs.module';
+import { MusicSearchModule } from './modules/music-search/music-search.module';
+import { RoomEmojisModule } from './modules/room-emojis/room-emojis.module';
 import { RoomsModule } from './modules/rooms/rooms.module';
+import { TranscriptsModule } from './modules/transcripts/transcripts.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    // Límite global de requests: 60 por minuto y por IP, para todos los endpoints HTTP.
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 60 }]),
     DrizzleModule,
+    AuthModule,
     RoomsModule,
     ChatModule,
+    CallsModule,
+    GifsModule,
+    MusicSearchModule,
+    RoomEmojisModule,
+    TranscriptsModule,
   ],
+  controllers: [AppController],
+  providers: [{ provide: APP_GUARD, useClass: HttpOnlyThrottlerGuard }],
 })
 export class AppModule {}

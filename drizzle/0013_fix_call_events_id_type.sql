@@ -1,0 +1,1 @@
+ALTER TABLE "call_events" ALTER COLUMN "id" SET DATA TYPE varchar(40);

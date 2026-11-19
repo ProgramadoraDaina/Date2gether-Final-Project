@@ -1,0 +1,164 @@
+.lobby {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: var(--space-7);
+  width: min(100%, 1000px);
+  padding: var(--space-7);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+}
+.previewPanel {
+  align-self: center;
+  min-width: 0;
+}
+.preview {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: #171b25;
+  color: #fff;
+}
+.preview video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform: scaleX(-1);
+}
+
+/* Reemplazo de la cámara cuando está apagada: un avatar con las iniciales
+   (mismo componente que usa la sala en vivo), no solo texto suelto. */
+.cameraOff {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  text-align: center;
+}
+.cameraOff p {
+  margin: 0;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* Dock flotante sobre el borde inferior del video: mismo lenguaje que el
+   dock real de la llamada (.controlsDock en MeetingRoom.module.css), para
+   que probar cámara/mic acá se sienta continuo con la sala. El ícono vive
+   acá, no en el <select> de abajo: elegir *qué* dispositivo es secundario,
+   prender/apagar es la acción principal. */
+.controlsDock {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  width: fit-content;
+  margin: -22px auto 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: 999px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+}
+
+.iconButton {
+  composes: iconButton from './MeetingRoom.module.css';
+}
+.iconButtonActive {
+  composes: iconButtonActive from './MeetingRoom.module.css';
+}
+.form {
+  min-width: 0;
+}
+.form h1 {
+  margin-top: 0;
+  font-size: 24px;
+}
+
+/* Chip monoespaciado para el código de sala: mismo lenguaje que .code en
+   RoomSidebar.module.css (antes era un string literal "code" sin ninguna
+   clase real detrás, quedaba sin estilo). */
+.code {
+  display: inline-block;
+  font-family: monospace;
+  font-weight: 600;
+  background: var(--color-chip-bg);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-variant-numeric: tabular-nums;
+  margin: var(--space-2) 0;
+}
+
+.form fieldset {
+  border: 0;
+  padding: 0;
+  margin: var(--space-5) 0;
+  min-width: 0;
+}
+.form legend {
+  font-weight: 600;
+  margin-bottom: var(--space-4);
+}
+.device {
+  margin-bottom: var(--space-4);
+}
+.deviceSelect {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 10px var(--space-3);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+
+/* El <meter> nativo no tiene ninguna pseudo-clase estándar entre browsers;
+   Firefox no soporta las de -webkit-, así que ahí se ve el meter por
+   defecto del navegador en vez de esta barra fina. Degradación aceptable:
+   sigue siendo funcional, solo pierde el estilo en ese motor. */
+.form meter {
+  display: block;
+  width: 100%;
+  height: 6px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  border-radius: 3px;
+  background: var(--color-chip-bg);
+}
+.form meter::-webkit-meter-bar {
+  background: var(--color-chip-bg);
+  border: none;
+  border-radius: 3px;
+  height: 6px;
+}
+.form meter::-webkit-meter-optimum-value {
+  background: var(--color-accent);
+  border-radius: 3px;
+  transition: width 0.1s linear;
+}
+.hint {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.error {
+  color: var(--color-error);
+  font-size: 13px;
+}
+.lobby :focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 3px;
+}
+@media (max-width: 720px) {
+  .lobby {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+    padding: var(--space-5);
+  }
+}

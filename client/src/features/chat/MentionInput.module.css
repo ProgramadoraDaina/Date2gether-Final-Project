@@ -1,0 +1,56 @@
+.composerWrap {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+/* .messageForm (page.module.css) estira sus hijos directos a la misma
+   altura (align-items: stretch, el default), pero eso solo estira esta caja
+   envolvente: el <input> de adentro, al no ser flex, se queda con su alto
+   natural y queda más chico y flotando arriba, no igual que el botón de
+   enviar ni el disparador de emojis/stickers (ver ExpressionPicker.module.css
+   .trigger, que sí usa height:100%). display:flex arriba hace que este
+   <input> también se estire a esa misma altura. El margin-bottom viene del
+   <input> global en globals.css (pensado para formularios apilados, no para
+   esta fila) y hay que anularlo para que no le sume alto de más. */
+.composerWrap > input {
+  width: 100%;
+  margin-bottom: 0;
+}
+
+.mentionSuggestions {
+  position: absolute;
+  z-index: 5;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 6px);
+  max-height: 180px;
+  overflow-y: auto;
+  list-style: none;
+  padding: 4px;
+  margin: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.mentionSuggestions button {
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.mentionSuggestions button:hover {
+  background: var(--color-bg);
+}
+
+.mentionSuggestions button[aria-selected='true'] {
+  background: var(--color-bg);
+}

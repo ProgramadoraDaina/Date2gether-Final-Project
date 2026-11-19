@@ -15,10 +15,15 @@ export class ChatService {
       .orderBy(asc(messages.createdAt));
   }
 
-  async createMessage(roomId: string, authorName: string, content: string): Promise<Message> {
+  async createMessage(
+    roomId: string,
+    authorName: string,
+    content: string,
+    kind: Message['kind'] = 'text',
+  ): Promise<Message> {
     const [message] = await this.db
       .insert(messages)
-      .values({ roomId, authorName, content })
+      .values({ roomId, authorName, content, kind })
       .returning();
     return message;
   }

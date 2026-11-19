@@ -1,0 +1,104 @@
+/* position:sticky (no height:100% + stretch, que lo estiraba a la altura
+   del contenido en páginas largas como el historial, bien más alto que un
+   viewport — con eso, el riel se iba scrolleando junto con la página en vez
+   de quedarse fijo). align-self:flex-start cancela el stretch del flex
+   padre para que la altura real sea exactamente 100vh, no la del hermano
+   más alto. */
+.rail {
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  width: 76px;
+  height: 100vh;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-4) var(--space-2);
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+}
+
+.top {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: auto;
+}
+
+.navItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  width: 100%;
+  padding: 10px var(--space-1);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 500;
+  text-align: center;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.navItem:hover {
+  background: var(--color-chip-bg);
+}
+
+.navItemActive {
+  background: var(--color-chip-bg);
+  color: var(--color-accent);
+}
+
+.icon {
+  display: flex;
+}
+
+.label {
+  line-height: 1.1;
+}
+
+/* En mobile no hay alto de sobra para un riel vertical a un costado: se
+   convierte en una barra de tabs fija abajo, como cualquier app nativa.
+   env(safe-area-inset-bottom): no se tapa con la barra de gestos de iOS. */
+@media (max-width: 640px) {
+  .rail {
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    width: 100%;
+    height: auto;
+    flex-direction: row;
+    padding: var(--space-1) var(--space-2) calc(var(--space-1) + env(safe-area-inset-bottom));
+    border-right: none;
+    border-top: 1px solid var(--color-border);
+  }
+
+  /* The two desktop groups dissolve so all items share the bar evenly. */
+  .top,
+  .bottom {
+    display: contents;
+  }
+
+  .navItem {
+    width: auto;
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 6px var(--space-1);
+  }
+}

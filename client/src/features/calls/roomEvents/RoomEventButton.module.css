@@ -1,0 +1,163 @@
+.wrap {
+  position: relative;
+  display: flex;
+}
+
+.trigger {
+  width: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.trigger:hover,
+.trigger[aria-expanded='true'] {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  width: max-content;
+  min-width: 160px;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.menuItem {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  text-align: left;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.menuItem:hover {
+  background: var(--color-chip-bg);
+}
+
+/* --- diálogo de selección de participantes --- */
+.dialog {
+  width: min(360px, calc(100% - 32px));
+  max-height: min(520px, calc(100% - 32px));
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow-md);
+}
+
+.dialog::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.dialogHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dialogHeader h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.dialogClose {
+  width: auto;
+  margin-left: auto;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.dialogClose:hover {
+  background: var(--color-chip-bg);
+}
+
+.quickActions {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-3) 16px 0;
+}
+
+.quickActions button {
+  width: auto;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--color-chip-bg);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.quickActions button:hover {
+  color: var(--color-accent);
+}
+
+.participantList {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: var(--space-3) 16px;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.participantRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px;
+  border-radius: var(--radius-sm);
+}
+
+.participantRow:hover {
+  background: var(--color-chip-bg);
+}
+
+.participantRow input {
+  width: auto;
+  margin: 0;
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-3) 16px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3) 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+.dialogActions button {
+  width: auto;
+}

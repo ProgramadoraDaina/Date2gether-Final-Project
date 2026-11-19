@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, MaxLength, Matches } from 'class-validator';
+import { IsNotEmpty, IsString, Matches } from 'class-validator';
 
 export class JoinRoomDto {
   @IsString()
@@ -7,9 +7,4 @@ export class JoinRoomDto {
     message: 'code debe tener el formato "abc-defg-hij"',
   })
   code: string;
-
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(60)
-  userName: string;
 }

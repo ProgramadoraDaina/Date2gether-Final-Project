@@ -1,0 +1,71 @@
+# Tests end-to-end (Playwright)
+
+Prueban la app completa como la usaría una persona real: abren un navegador,
+hacen click, completan formularios. Para eso levantan el backend (NestJS) y
+el frontend (Next.js) juntos, contra una base de datos de Postgres separada
+y descartable (no la de desarrollo).
+
+La explicación de **qué** verifica cada test puntual está en un comentario
+arriba de cada `test(...)`, en `auth.spec.ts` y `rooms.spec.ts`. Este README
+es solo la guía para correrlos.
+
+## Antes de la primera vez
+
+```bash
+pnpm install
+pnpm exec playwright install chromium
+```
+
+## Correr los tests
+
+```bash
+# 1. Levanta Postgres de prueba (puerto 5433) y le aplica las migraciones
+pnpm test:e2e:setup
+
+# 2. Corre la suite completa (Playwright prende el backend y el frontend solo)
+pnpm test:e2e
+
+# Modo interactivo, útil mientras se escribe un test nuevo
+pnpm test:e2e:ui
+
+# Ver el último reporte HTML
+pnpm test:e2e:report
+```
+
+Cuando termines por el día, podés tirar la base de prueba:
+
+```bash
+pnpm test:e2e:db:down
+```
+
+## Qué pasa detrás de escena
+
+- `docker-compose.test.yml` levanta un Postgres vacío en el puerto **5433**
+  (el de desarrollo usa 5432, no se pisan).
+- `playwright.config.ts` prende el backend en el puerto 3001 apuntando a esa
+  base de prueba, y el frontend en el puerto 3002 apuntando a ese backend.
+  La configuración tiene `reuseExistingServer: false`: los servidores de desarrollo
+  deben estar detenidos y los puertos 3001 y 3002 libres. Playwright no reutiliza
+  procesos existentes, para evitar escribir en la base de desarrollo.
+- Cada test que necesita un usuario genera un email único (ver
+  `support/test-data.ts`), así corridas repetidas no chocan entre sí con
+  "ya existe esa cuenta".
+
+## Carpeta
+
+- `admission.spec.ts` — ingreso directo y con espera, permisos del administrador, aislamiento de credenciales, bloqueo, cancelación, vencimiento y decisiones simultáneas; recorre también admisión y rechazo entre dos navegadores.
+- `lobby.spec.ts` — vista previa de cámara, prueba de micrófono y apagado con dispositivos sintéticos de Chromium; comprueba también el diseño móvil y que no se conecte a la sala antes de entrar.
+- `auth.spec.ts` — registro, login, persistencia de sesión, logout.
+- `rooms.spec.ts` — crear sala, unirse con código, dos personas en la misma
+  sala, código inexistente.
+- `support/` — helpers compartidos (puertos/URLs, datos de prueba, llamadas
+  directas a la API para preparar datos sin pasar por el formulario).
+
+## Cuentas, invitados y llamadas
+
+Crear una sala exige una cuenta autenticada. Los invitados pueden abrir su enlace
+sin cuenta y deben confirmar un nombre antes de conectarse; el nombre no otorga
+permisos de administrador. Los escenarios de salas confirman ese paso tanto para
+cuentas registradas como para invitados.
+
+La suite de navegador comprueba ingreso y chat sin iniciar llamadas reales. Los tests de llamadas simulan LiveKit y validan emisión de pases, permisos, conexión y controles. Para validar audio/video reales, iniciar LiveKit local o usar el [despliegue EC2](../deploy/ec2/README.md), reunir dispositivos con el mismo enlace y comprobar también el rechazo de la séptima conexión de medios. No hace falta Chime SDK.

@@ -1,0 +1,81 @@
+.card {
+  composes: card from '../../styles/form.module.css';
+  max-width: 400px;
+  padding: 40px;
+}
+
+.subtitle {
+  composes: subtitle from '../../styles/form.module.css';
+}
+
+.error {
+  composes: error from '../../styles/form.module.css';
+}
+
+.authLinks {
+  composes: authLinks from '../../styles/form.module.css';
+}
+
+.section {
+  margin: 0 0 var(--space-6);
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sectionRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.palette {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-3);
+}
+
+.swatch {
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 0;
+  margin: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.swatch:hover {
+  filter: brightness(0.95);
+}
+
+.swatchSelected {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-surface) inset;
+}
+
+.saved {
+  margin: var(--space-4) 0 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.toggleRow {
+  margin: 0;
+  padding: var(--space-2) 0;
+  font-size: 15px;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.checkbox {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  flex-shrink: 0;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}

@@ -5,6 +5,8 @@
     "node_modules",
     "dist",
     "**/*spec.ts",
-    "test"
+    "test",
+    "e2e",
+    "playwright.config.ts"
   ]
 }

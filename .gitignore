@@ -3,10 +3,14 @@ node_modules/
 
 # build
 dist/
+coverage/
 
 # variables de entorno
-.env
-.env.local
+.env*
+!.env.example
+.aws/
+*.pem
+*.key
 
 # logs
 *.log
@@ -16,3 +20,18 @@ pnpm-debug.log*
 .DS_Store
 .vscode/*
 !.vscode/extensions.json
+
+# Playwright: resultados y reportes de cada corrida (se regeneran siempre)
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
+.codegraph
+CLAUDE.md
+.atl/
+# Generated deployment credentials, TLS files and database backups
+/deploy/ec2/runtime/
+/deploy/ec2/backups/
+**/__pycache__/
+.claude/

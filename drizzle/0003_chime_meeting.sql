@@ -1,0 +1,1 @@
+ALTER TABLE "rooms" ADD COLUMN "chime_meeting_id" varchar(64);

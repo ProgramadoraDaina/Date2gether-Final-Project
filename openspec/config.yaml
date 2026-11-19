@@ -1,0 +1,48 @@
+schema: spec-driven
+
+context: |
+  Tech stack: NestJS 12 (backend, pnpm workspace root) + Next.js 15 / React 19 (client/, separate pnpm filter).
+  Realtime: Socket.io + LiveKit (livekit-server-sdk server-side, livekit-client + @livekit/components-react client-side).
+  Data: Drizzle ORM over Postgres.
+  Architecture: NestJS modules under src/modules/{auth,calls,chat,gifs,room-emojis,rooms}; calls module already has
+    calls.controller/service + call-history.controller/service. No LiveKit webhook handling exists yet.
+  Testing: Jest (root, rootDir src, *.spec.ts colocated) + Jest/RTL (client/, *.spec.tsx) + Playwright E2E (e2e/).
+    Spec files are colocated per source file — TDD is already the house convention.
+  Style: ESLint + Prettier (root), oxlint + tsc --noEmit (client).
+
+strict_tdd: true
+
+testing:
+  test_command: "pnpm test"
+  test_watch_command: "pnpm test:watch"
+  coverage_command: "pnpm test:cov"
+  client_test_command: "pnpm test:client"
+  e2e_test_command: "pnpm test:e2e"
+  lint_command: "pnpm lint"
+  client_lint_command: "pnpm --filter client lint"
+  client_typecheck_command: "pnpm --filter client typecheck"
+  format_command: "pnpm format"
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+    - State which LiveKit webhook events are required and how signature verification is handled
+  specs:
+    - Use Given/When/Then for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+  design:
+    - Include sequence diagrams for complex flows (e.g. webhook -> persistence -> timeline read model)
+    - Document architecture decisions with rationale
+  tasks:
+    - Group by phase, use hierarchical numbering
+    - Keep tasks completable in one session
+  apply:
+    - Follow existing code patterns (NestJS module structure under src/modules/calls)
+    tdd: true
+    test_command: "pnpm test"
+  verify:
+    test_command: "pnpm test"
+    build_command: "pnpm build"
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas

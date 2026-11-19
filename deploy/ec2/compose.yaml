@@ -1,0 +1,71 @@
+# Linux/EC2 only: host networking avoids an additional NAT layer for WebRTC.
+x-defaults: &defaults
+  restart: unless-stopped
+  network_mode: host
+  logging:
+    driver: json-file
+    options:
+      max-size: '10m'
+      max-file: '3'
+
+services:
+  postgres:
+    <<: *defaults
+    image: postgres:16-alpine
+    env_file: runtime/runtime.env
+    command: ['postgres', '-c', 'listen_addresses=127.0.0.1']
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U date2gether -d date2gether']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  livekit:
+    <<: *defaults
+    image: livekit/livekit-server:v1.13.11
+    command: ['--config', '/etc/livekit.yaml']
+    volumes:
+      - ./runtime/livekit.yaml:/etc/livekit.yaml:ro
+
+  backend:
+    <<: *defaults
+    image: date2gether-backend:demo
+    build:
+      context: ../..
+      dockerfile: deploy/Dockerfile
+      target: backend
+    env_file: runtime/runtime.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      livekit:
+        condition: service_started
+
+  frontend:
+    <<: *defaults
+    image: date2gether-client:demo
+    build:
+      context: ../..
+      dockerfile: deploy/Dockerfile
+      target: client
+      args:
+        NEXT_PUBLIC_API_URL: /api
+    depends_on:
+      - backend
+
+  caddy:
+    <<: *defaults
+    image: livekit/caddyl4@sha256:9dd090159a6042a907dbff0ce9dda27a21d2a559dc7b03b60a8e6b1b60b8348e
+    command: ['run', '--config', '/etc/caddy.json']
+    volumes:
+      - ./runtime/caddy.json:/etc/caddy.json:ro
+      - caddy_data:/data
+    depends_on:
+      - frontend
+      - livekit
+
+volumes:
+  postgres_data:
+  caddy_data:

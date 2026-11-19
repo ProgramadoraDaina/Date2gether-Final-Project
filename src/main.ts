@@ -1,15 +1,14 @@
-import { ValidationPipe } from '@nestjs/common';
-import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { createApp } from './app-setup';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-
-  app.enableCors({ origin: process.env.CORS_ORIGIN ?? '*' });
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  const app = await createApp(AppModule);
 
   const port = process.env.PORT ?? 3001;
   await app.listen(port);
-  console.log(`Roomy API corriendo en http://localhost:${port}`);
+  console.log(`Date2gether API corriendo en http://localhost:${port}`);
 }
-bootstrap();
+bootstrap().catch((error: unknown) => {
+  console.error('No se pudo iniciar la aplicación', error);
+  process.exit(1);
+});
