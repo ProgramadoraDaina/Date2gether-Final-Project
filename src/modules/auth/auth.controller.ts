@@ -4,6 +4,8 @@ import { CurrentUser } from './decorators/current-user.decorator';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
+import { sanitizeAvatar } from './avatar';
+import { UpdateAvatarDto } from './dto/update-avatar.dto';
 import { UpdateNameColorDto } from './dto/update-name-color.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import type { AccessTokenPayload } from './auth.types';
@@ -43,5 +45,11 @@ export class AuthController {
   @Patch('me/color')
   updateNameColor(@CurrentUser() user: AccessTokenPayload, @Body() dto: UpdateNameColorDto) {
     return this.authService.updateNameColor(user.sub, dto.nameColor);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('me/avatar')
+  updateAvatar(@CurrentUser() user: AccessTokenPayload, @Body() dto: UpdateAvatarDto) {
+    return this.authService.updateAvatar(user.sub, sanitizeAvatar(dto) ?? { sticker: true });
   }
 }
