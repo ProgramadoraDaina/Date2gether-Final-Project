@@ -193,6 +193,8 @@ const en: Record<string, string> = {
   'Crear cuenta': 'Sign up',
   'Tu nombre': 'Your name',
   '¿Cómo te llamás?': "What's your name?",
+  'Sala permanente (enlace fijo, con sala de espera siempre activa)':
+    'Permanent room (fixed link, waiting room always enabled)',
   'Creando…': 'Creating…',
   'Crear reunión': 'Create meeting',
   'o unite a una existente': 'or join an existing one',
