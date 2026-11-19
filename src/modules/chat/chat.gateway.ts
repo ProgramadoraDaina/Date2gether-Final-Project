@@ -3,6 +3,8 @@ import { isURL } from 'class-validator';
 import { eq } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
 import { users } from '../../db/schema';
+import { sanitizeAvatar, type UserAvatar } from '../auth/avatar';
+import { UpdateAvatarDto } from '../auth/dto/update-avatar.dto';
 import { WsJwtAuthGuard } from '../auth/guards/ws-jwt-auth.guard';
 import type { RoomParticipant } from '../auth/room-access.service';
 import {
@@ -80,11 +82,15 @@ interface ConnectedUser {
   userName: string;
   userId?: string;
   nameColor?: string | null;
+  avatar?: UserAvatar | null;
 }
 
 // Shape pública de la presencia: mismos campos que ConnectedUser salvo los
 // internos (roomId), para no declarar un segundo tipo con los mismos campos.
-type RoomUser = Pick<ConnectedUser, 'participantId' | 'userName' | 'userId' | 'nameColor'>;
+type RoomUser = Pick<
+  ConnectedUser,
+  'participantId' | 'userName' | 'userId' | 'nameColor' | 'avatar'
+>;
 
 interface MusicState extends PlaybackState {
   updatedAt: number;
@@ -160,12 +166,13 @@ export class ChatGateway implements OnGatewayDisconnect {
     }
     if (this.connectedUsers.has(client.id)) this.removeClient(client);
     await client.join(dto.code);
-    const nameColor = await this.getNameColor(participant.userId);
+    const account = await this.getAccountLook(participant.userId);
     const presence: RoomUser = {
       participantId: participant.sub,
       userName: participant.name,
       userId: participant.userId,
-      nameColor,
+      nameColor: account?.nameColor,
+      avatar: account?.avatar ?? undefined,
     };
     this.connectedUsers.set(client.id, {
       roomCode: dto.code,
@@ -192,6 +199,18 @@ export class ChatGateway implements OnGatewayDisconnect {
     if (eventState && eventState.expiresAt > Date.now()) client.emit('eventState', eventState);
 
     client.to(dto.code).emit('userJoined', presence);
+  }
+
+  // Solo en vivo: las cuentas además lo guardan con PATCH /auth/me/avatar.
+  @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage('setAvatar')
+  handleSetAvatar(@ConnectedSocket() client: Socket, @MessageBody() dto: UpdateAvatarDto) {
+    const user = this.connectedUsers.get(client.id);
+    if (!user) return;
+    user.avatar = sanitizeAvatar(dto);
+    this.server
+      .to(user.roomCode)
+      .emit('avatarChanged', { participantId: user.participantId, avatar: user.avatar });
   }
 
   @SubscribeMessage('leaveRoom')
@@ -567,23 +586,26 @@ export class ChatGateway implements OnGatewayDisconnect {
   private getUsersInRoom(roomCode: string): RoomUser[] {
     return Array.from(this.connectedUsers.values())
       .filter((user) => user.roomCode === roomCode)
-      .map(({ participantId, userName, userId, nameColor }) => ({
+      .map(({ participantId, userName, userId, nameColor, avatar }) => ({
         participantId,
         userName,
         userId,
         nameColor,
+        avatar,
       }));
   }
 
-  // Los invitados no tienen cuenta ni color guardado: devuelve undefined para
-  // que el payload de presencia no incluya el campo en ese caso.
-  private async getNameColor(userId?: string): Promise<string | null | undefined> {
+  // Los invitados no tienen cuenta: devuelve undefined para que el payload de
+  // presencia no incluya esos campos (su avatar llega después por setAvatar).
+  private async getAccountLook(
+    userId?: string,
+  ): Promise<{ nameColor: string | null; avatar: UserAvatar | null } | undefined> {
     if (!userId) return undefined;
     const [account] = await this.db
-      .select({ nameColor: users.nameColor })
+      .select({ nameColor: users.nameColor, avatar: users.avatar })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
-    return account?.nameColor;
+    return account;
   }
 }

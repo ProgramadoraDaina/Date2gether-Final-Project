@@ -179,6 +179,61 @@ describe('ChatGateway', () => {
     });
   });
 
+  it('incluye el avatar guardado de una cuenta registrada en la presencia', async () => {
+    const avatar = { head: 'crown', sticker: true };
+    const { gateway } = createGateway({ nameColor: null, avatar } as never);
+    const participant: RoomParticipant = {
+      kind: 'room-participant',
+      roomId: 'room-1',
+      sub: 'participant-1',
+      roomCode: 'abc-defg-hij',
+      name: 'Ana',
+      userId: 'user-1',
+    };
+    const client = createSocket(participant);
+
+    await gateway.handleJoinRoom(client as never, { code: 'abc-defg-hij' });
+
+    expect(client.toEmit).toHaveBeenCalledWith(
+      'userJoined',
+      expect.objectContaining({ participantId: 'participant-1', avatar }),
+    );
+  });
+
+  it('setAvatar avisa a toda la sala el avatar limpio y queda en la presencia', async () => {
+    const { gateway, serverTo, serverEmit } = createGateway();
+    const participant: RoomParticipant = {
+      kind: 'room-participant',
+      roomId: 'room-1',
+      sub: 'participant-9',
+      roomCode: 'abc-defg-hij',
+      name: 'Invitada',
+    };
+    const client = createSocket(participant);
+    await gateway.handleJoinRoom(client as never, { code: 'abc-defg-hij' });
+
+    gateway.handleSetAvatar(client as never, {
+      head: 'cap',
+      colors: { head: '#3D7BE0', face: '#ffffff' },
+      sticker: false,
+    });
+
+    const expected = { head: 'cap', colors: { head: '#3d7be0' }, sticker: false };
+    expect(serverTo).toHaveBeenCalledWith('abc-defg-hij');
+    expect(serverEmit).toHaveBeenCalledWith('avatarChanged', {
+      participantId: 'participant-9',
+      avatar: expected,
+    });
+    const other = createSocket({ ...participant, sub: 'participant-10' }, 'socket-2');
+    await gateway.handleJoinRoom(other as never, { code: 'abc-defg-hij' });
+    expect(other.emit).toHaveBeenCalledWith(
+      'roomUsers',
+      expect.arrayContaining([
+        expect.objectContaining({ participantId: 'participant-9', avatar: expected }),
+      ]),
+    );
+  });
+
   it('no incluye nameColor para invitados sin cuenta', async () => {
     const { gateway, select } = createGateway();
     const participant: RoomParticipant = {

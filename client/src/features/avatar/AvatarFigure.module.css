@@ -1,0 +1,200 @@
+.figure {
+  --ink: #121212;
+  --sticker: #f2f0ea;
+  --sil: #5a5a5a;
+  display: block;
+  overflow: visible;
+}
+
+.silhouette {
+  fill: var(--sil);
+}
+
+/* Las piezas vienen como markup del catálogo, por eso las clases internas son globales. */
+.piece :global(*) {
+  stroke: var(--ink);
+  stroke-width: 5px;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.piece :global(.f) {
+  fill: var(--c);
+}
+.piece :global(.k) {
+  fill: var(--ink);
+}
+.piece :global(.w) {
+  fill: #f2f0ea;
+}
+.piece :global(.o) {
+  fill: none;
+}
+.piece :global(.ns) {
+  stroke: none;
+}
+.piece :global(.thin) {
+  stroke-width: 3px;
+}
+.piece :global(.ink) {
+  fill: var(--ink);
+  stroke: none;
+  font:
+    700 17px 'IBM Plex Mono',
+    ui-monospace,
+    monospace;
+}
+
+.sticker :global(*) {
+  fill: var(--sticker) !important;
+  stroke: var(--sticker) !important;
+  stroke-width: 13px !important;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.sticker :global(.o) {
+  fill: none !important;
+}
+.sticker :global(text),
+.sticker :global(.detail) {
+  display: none;
+}
+
+.slot,
+.anim,
+.figure :global(.spin) {
+  transform-box: view-box;
+}
+.slot[data-slot='head'],
+.slot[data-slot='head'] .anim {
+  transform-origin: 160px 62px;
+}
+.slot[data-slot='face'],
+.slot[data-slot='face'] .anim {
+  transform-origin: 160px 140px;
+}
+.slot[data-slot='neck'],
+.slot[data-slot='neck'] .anim {
+  transform-origin: 160px 200px;
+}
+.figure :global(.spin) {
+  transform-origin: 160px 24px;
+}
+.figure :global(.pom) {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+
+.figure[data-animated] .slot[data-slot='head'] .anim {
+  animation: tilt 4s linear infinite;
+}
+.figure[data-animated] .slot[data-piece='halo'] .anim {
+  animation: float 2s linear infinite;
+}
+.figure[data-animated] .slot[data-slot='neck'] .anim {
+  animation: sway 5s linear infinite;
+}
+.figure[data-animated] :global(.pom) {
+  animation: wobble 1.4s linear infinite;
+}
+.figure[data-animated] :global(.spin) {
+  animation: spin 0.5s linear infinite;
+}
+
+/* Hablar va aparte de animated: el gorro rebota y bigote/barba se mueven solo con voz. */
+.figure[data-speaking] .slot[data-slot='head'] .anim {
+  animation: bob 0.3s linear infinite alternate;
+}
+.figure[data-speaking] .slot[data-talks] .anim {
+  animation: talk 0.16s linear infinite alternate;
+}
+.figure[data-speaking] :global(.blink) {
+  animation: blink 0.5s steps(2) infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@keyframes tilt {
+  0%,
+  78%,
+  100% {
+    transform: none;
+  }
+  84% {
+    transform: rotate(-5deg);
+  }
+  90% {
+    transform: rotate(4deg);
+  }
+  95% {
+    transform: rotate(-1deg);
+  }
+}
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+@keyframes wobble {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  25% {
+    transform: rotate(-12deg);
+  }
+  75% {
+    transform: rotate(12deg);
+  }
+}
+@keyframes sway {
+  0%,
+  80%,
+  100% {
+    transform: none;
+  }
+  88% {
+    transform: rotate(3deg);
+  }
+  94% {
+    transform: rotate(-3deg);
+  }
+}
+@keyframes spin {
+  0%,
+  100% {
+    transform: scaleX(1);
+  }
+  50% {
+    transform: scaleX(-1);
+  }
+}
+@keyframes bob {
+  from {
+    transform: none;
+  }
+  to {
+    transform: translateY(-5px) rotate(-3deg);
+  }
+}
+@keyframes talk {
+  from {
+    transform: none;
+  }
+  to {
+    transform: translateY(4px) scaleY(0.82);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .figure * {
+    animation: none !important;
+  }
+}

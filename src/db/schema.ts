@@ -17,6 +17,7 @@ import {
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
+import type { UserAvatar } from '../modules/auth/avatar';
 
 // Drizzle no trae una columna bytea propia: se declara con customType.
 const bytea = customType<{ data: Buffer; driverData: Buffer }>({
@@ -43,6 +44,7 @@ export const users = pgTable('users', {
   passwordHash: varchar('password_hash', { length: 255 }).notNull(),
   name: varchar('name', { length: 100 }).notNull(),
   nameColor: nameColorEnum('name_color'),
+  avatar: jsonb('avatar').$type<UserAvatar>(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 

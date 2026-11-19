@@ -28,6 +28,7 @@ function buildUser(overrides: Partial<User> = {}): User {
     passwordHash: 'reemplazado-en-cada-test',
     name: 'Ana',
     nameColor: null,
+    avatar: null,
     createdAt: new Date(),
     ...overrides,
   };
@@ -213,6 +214,20 @@ describe('AuthService', () => {
 
       const profile = await service.getProfile(userId);
 
+      expect(profile).not.toHaveProperty('passwordHash');
+    });
+  });
+
+  describe('updateAvatar', () => {
+    it('guarda el avatar del usuario y lo devuelve en el perfil público', async () => {
+      const avatar = { head: 'cap' as const, face: 'mustache' as const, sticker: true };
+      const updateChain = chain([buildUser({ avatar })]);
+      db.update.mockReturnValueOnce(updateChain);
+
+      const profile = await service.updateAvatar(userId, avatar);
+
+      expect(updateChain.set).toHaveBeenCalledWith({ avatar });
+      expect(profile.avatar).toEqual(avatar);
       expect(profile).not.toHaveProperty('passwordHash');
     });
   });

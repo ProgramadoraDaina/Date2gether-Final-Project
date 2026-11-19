@@ -2,6 +2,9 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { AvatarSettingsSection } from '@/features/avatar/AvatarSettingsSection';
+import { toAvatar } from '@/features/avatar/catalog';
+import { useAvatarStore } from '@/features/avatar/store';
 import { isMentionSoundEnabled, setMentionSoundEnabled } from '@/features/chat/mentionPreferences';
 import { ApiError, updateNameColor } from '@/lib/api';
 import { getCurrentUser, isLoggedIn } from '@/lib/auth';
@@ -58,6 +61,8 @@ export default function SettingsPage() {
         if (user?.nameColor && NAME_COLOR_IDS.includes(user.nameColor as NameColorId)) {
           setSelected(user.nameColor as NameColorId);
         }
+        const saved = toAvatar(user?.avatar);
+        if (saved) useAvatarStore.getState().setAvatar(saved);
       })
       .finally(() => setChecking(false));
   }, []);
@@ -109,6 +114,11 @@ export default function SettingsPage() {
             </label>
           </div>
 
+          <div className={styles.section}>
+            <p className={styles.subtitle}>{t('Avatar')}</p>
+            <AvatarSettingsSection />
+          </div>
+
           <p>{t('Necesitás iniciar sesión para elegir el color de tu nombre.')}</p>
           <p className={styles.authLinks}>
             <Link href="/login">{t('Iniciar sesión')}</Link>
@@ -145,6 +155,11 @@ export default function SettingsPage() {
               className={styles.checkbox}
             />
           </label>
+        </div>
+
+        <div className={styles.section}>
+          <p className={styles.subtitle}>{t('Avatar')}</p>
+          <AvatarSettingsSection />
         </div>
 
         <p className={styles.subtitle}>{t('Elegí el color de tu nombre')}</p>

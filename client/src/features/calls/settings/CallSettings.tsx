@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
+import { AvatarDialog } from '@/features/avatar/AvatarDialog';
 import { useDismiss } from '@/lib/useDismiss';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { useCallSettingsStore, type CaptionSize } from './store';
@@ -31,24 +32,30 @@ function SettingsIcon() {
   );
 }
 
+type View = 'menu' | 'captions';
+
 export function CallSettingsButton({ buttonClassName }: { buttonClassName: string }) {
   const { t } = useTranslation();
   const { captionSize, setCaptionSize } = useCallSettingsStore();
   const [open, setOpen] = useState(false);
+  const [view, setView] = useState<View>('menu');
+  const [avatarOpen, setAvatarOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
-  useDismiss(
-    open,
-    wrapRef,
-    useCallback(() => setOpen(false), []),
-  );
+  const close = useCallback(() => {
+    setOpen(false);
+    setView('menu');
+  }, []);
+  useDismiss(open, wrapRef, close);
   const label = t('Ajustes de la llamada');
+  const captionsLabel = t('Tamaño de los subtítulos');
+  const currentSize = CAPTION_SIZES.find((size) => size.value === captionSize);
 
   return (
     <div className={styles.wrap} ref={wrapRef}>
       <button
         type="button"
         className={buttonClassName}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => (open ? close() : setOpen(true))}
         title={label}
         aria-label={label}
         aria-expanded={open}
@@ -57,25 +64,79 @@ export function CallSettingsButton({ buttonClassName }: { buttonClassName: strin
       </button>
       {open && (
         <div className={styles.panel} role="dialog" aria-label={label}>
-          <fieldset className={styles.field}>
-            <legend className={styles.legend}>{t('Tamaño de los subtítulos')}</legend>
-            <div className={styles.segmented}>
-              {CAPTION_SIZES.map(({ value, label: optionLabel }) => (
-                <label key={value} className={styles.option}>
-                  <input
-                    type="radio"
-                    name="caption-size"
-                    value={value}
-                    checked={captionSize === value}
-                    onChange={() => setCaptionSize(value)}
-                  />
-                  <span>{t(optionLabel)}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
+          {view === 'menu' ? (
+            <ul className={styles.menu}>
+              <li>
+                <button
+                  type="button"
+                  className={styles.menuItem}
+                  onClick={() => setView('captions')}
+                >
+                  <span>{captionsLabel}</span>
+                  <span className={styles.menuHint}>
+                    {currentSize ? t(currentSize.label) : ''} ›
+                  </span>
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  className={styles.menuItem}
+                  onClick={() => {
+                    close();
+                    setAvatarOpen(true);
+                  }}
+                >
+                  <span>{t('Personalizar avatar')}</span>
+                  <span className={styles.menuHint}>›</span>
+                </button>
+              </li>
+            </ul>
+          ) : (
+            <>
+              <div className={styles.subHead}>
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  onClick={() => setView('menu')}
+                  aria-label={t('Volver')}
+                  title={t('Volver')}
+                >
+                  ‹
+                </button>
+                <span className={styles.subTitle}>{captionsLabel}</span>
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  onClick={close}
+                  aria-label={t('Cerrar')}
+                  title={t('Cerrar')}
+                >
+                  ×
+                </button>
+              </div>
+              <fieldset className={styles.field}>
+                <legend className={styles.srOnly}>{captionsLabel}</legend>
+                <div className={styles.segmented}>
+                  {CAPTION_SIZES.map(({ value, label: optionLabel }) => (
+                    <label key={value} className={styles.option}>
+                      <input
+                        type="radio"
+                        name="caption-size"
+                        value={value}
+                        checked={captionSize === value}
+                        onChange={() => setCaptionSize(value)}
+                      />
+                      <span>{t(optionLabel)}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            </>
+          )}
         </div>
       )}
+      <AvatarDialog open={avatarOpen} onClose={() => setAvatarOpen(false)} />
     </div>
   );
 }

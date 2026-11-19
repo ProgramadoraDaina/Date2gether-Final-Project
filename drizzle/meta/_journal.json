@@ -148,6 +148,13 @@
       "when": 1795025921728,
       "tag": "0020_room_playlists",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1795046766660,
+      "tag": "0021_user_avatar",
+      "breakpoints": true
     }
   ]
 }

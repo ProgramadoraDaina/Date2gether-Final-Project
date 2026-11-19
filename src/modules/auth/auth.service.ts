@@ -14,6 +14,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
 import { refreshTokens, users, type NameColor, type User } from '../../db/schema';
 import type { AccessTokenPayload, AuthTokens, RefreshTokenPayload } from './auth.types';
+import type { UserAvatar } from './avatar';
 import type { LoginDto } from './dto/login.dto';
 import type { RegisterDto } from './dto/register.dto';
 
@@ -119,6 +120,18 @@ export class AuthService {
     const [user] = await this.db
       .update(users)
       .set({ nameColor })
+      .where(eq(users.id, userId))
+      .returning();
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+    return this.toPublicUser(user);
+  }
+
+  async updateAvatar(userId: string, avatar: UserAvatar): Promise<PublicUser> {
+    const [user] = await this.db
+      .update(users)
+      .set({ avatar })
       .where(eq(users.id, userId))
       .returning();
     if (!user) {
