@@ -6,7 +6,9 @@ import {
   useMaybeTrackRefContext,
   usePinnedTracks,
 } from '@livekit/components-react';
-import type { CSSProperties } from 'react';
+import { Track } from 'livekit-client';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { TileAvatar } from '@/features/avatar/TileAvatar';
 import { useTranslation } from '../../translation/useTranslation';
 import { customReactionKey } from './reactions';
 import { ReactionGlyph } from './ReactionGlyph';
@@ -35,6 +37,13 @@ export function ReactionTile({ canFocus = true }: { canFocus?: boolean }) {
     focused.source === trackRef.source
   );
 
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [placeholder, setPlaceholder] = useState<Element | null>(null);
+  const isCamera = trackRef?.source === Track.Source.Camera;
+  useEffect(() => {
+    setPlaceholder(wrapRef.current?.querySelector('.lk-participant-placeholder') ?? null);
+  }, [isCamera, identity]);
+
   function toggleFocus() {
     if (!trackRef || !layoutContext?.pin.dispatch) return;
     layoutContext.pin.dispatch(
@@ -43,8 +52,11 @@ export function ReactionTile({ canFocus = true }: { canFocus?: boolean }) {
   }
 
   return (
-    <div className={styles.tileWrap}>
+    <div className={styles.tileWrap} ref={wrapRef}>
       <ParticipantTile />
+      {trackRef && isCamera && placeholder && (
+        <TileAvatar participant={trackRef.participant} placeholder={placeholder} />
+      )}
       {trackRef && (canFocus || isFocused) && (
         <button
           type="button"

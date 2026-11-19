@@ -13,6 +13,9 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useParams, useRouter } from 'next/navigation';
 import type { Socket } from 'socket.io-client';
+import { AvatarDirectoryProvider } from '@/features/avatar/AvatarDirectory';
+import { buildAvatarDirectory } from '@/features/avatar/directoryContext';
+import { useShareMyAvatar } from '@/features/avatar/useShareMyAvatar';
 import { ExpressionPicker, type ExpressionTab } from '@/features/chat/ExpressionPicker';
 import { MentionInput } from '@/features/chat/MentionInput';
 import { isSelfMentioned, ROLE_MENTION_KEYWORDS } from '@/features/chat/mentions';
@@ -78,6 +81,8 @@ interface RoomPresence {
   userId?: string;
   // Solo cuentas que eligieron un color en /settings; ausente/null en invitados.
   nameColor?: string | null;
+  // Se valida con toAvatar al armar el directorio de los tiles.
+  avatar?: unknown;
 }
 
 // El id ya viene validado por el backend (uno de los 8 de NAME_COLOR_HEX),
@@ -276,6 +281,8 @@ export default function RoomPage() {
   // liviana de la sala, no exclusiva del admin.
   const canManageEvents = currentUserRole === 'administrador' || currentUserRole === 'colaborador';
   const roomEvents = useRoomEvents(roomSocket);
+  useShareMyAvatar(roomSocket);
+  const avatarDirectory = useMemo(() => buildAvatarDirectory(users), [users]);
   const eventParticipants = useMemo(
     () => users.map(({ participantId, userName }) => ({ participantId, userName })),
     [users],
@@ -368,6 +375,12 @@ export default function RoomPage() {
         prev.some((u) => u.participantId === joined.participantId) ? prev : [...prev, joined],
       );
       setNotice({ event: 'joined', userName: joined.userName });
+    });
+
+    socket.on('avatarChanged', ({ participantId, avatar }: RoomPresence) => {
+      setUsers((prev) =>
+        prev.map((u) => (u.participantId === participantId ? { ...u, avatar } : u)),
+      );
     });
 
     socket.on('userLeft', (left: RoomPresence) => {
@@ -871,22 +884,24 @@ export default function RoomPage() {
                 className={styles.meetingRoomSlot}
                 data-hidden={callSession.status !== 'in-call'}
               >
-                <MeetingRoom
-                  call={callSession}
-                  roomCode={code}
-                  roomToken={access.token}
-                  roomEmojis={emojis}
-                  initialDevices={initialDevices}
-                  onTranscriptAvailable={setTranscriptCallSid}
-                  onHangUp={
-                    transcriptCallSid
-                      ? () => {
-                          setCallEnded(true);
-                          setTranscriptOpen(true);
-                        }
-                      : undefined
-                  }
-                />
+                <AvatarDirectoryProvider directory={avatarDirectory}>
+                  <MeetingRoom
+                    call={callSession}
+                    roomCode={code}
+                    roomToken={access.token}
+                    roomEmojis={emojis}
+                    initialDevices={initialDevices}
+                    onTranscriptAvailable={setTranscriptCallSid}
+                    onHangUp={
+                      transcriptCallSid
+                        ? () => {
+                            setCallEnded(true);
+                            setTranscriptOpen(true);
+                          }
+                        : undefined
+                    }
+                  />
+                </AvatarDirectoryProvider>
               </div>
             )}
             {/* Antes de hasJoinedCall ya se ve el mismo mensaje en

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 jest.mock('next/navigation', () => ({ usePathname: () => '/settings' }));
 jest.mock('@/features/translation/useTranslation', () => {
@@ -9,6 +9,7 @@ jest.mock('@/features/translation/useTranslation', () => {
 jest.mock('@/lib/auth', () => ({ isLoggedIn: jest.fn(), getCurrentUser: jest.fn() }));
 jest.mock('@/lib/api', () => ({
   updateNameColor: jest.fn(),
+  updateAvatar: jest.fn(),
   ApiError: class extends Error {},
 }));
 
@@ -69,6 +70,30 @@ describe('SettingsPage', () => {
     await screen.findByText('Guardado');
     expect(updateNameColor).toHaveBeenCalledWith('teal');
     expect(tealButton).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('con sesión trae el avatar guardado y al guardarlo desde el modal lo manda al servidor', async () => {
+    const { isLoggedIn, getCurrentUser } = await import('@/lib/auth');
+    const { updateAvatar } = await import('@/lib/api');
+    (isLoggedIn as jest.Mock<typeof isLoggedIn>).mockReturnValue(true);
+    (getCurrentUser as jest.Mock<typeof getCurrentUser>).mockResolvedValue({
+      id: '1',
+      email: 'a@a.com',
+      name: 'Daina',
+      createdAt: '2026-01-01',
+      nameColor: null,
+      avatar: { head: 'crown', sticker: true },
+    });
+    (updateAvatar as jest.Mock<typeof updateAvatar>).mockResolvedValue({} as never);
+    const SettingsPage = (await import('./page')).default;
+    render(<SettingsPage />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Personalizar avatar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar avatar' }));
+
+    await waitFor(() =>
+      expect(updateAvatar).toHaveBeenCalledWith({ head: 'crown', sticker: true }),
+    );
   });
 
   it('el toggle de sonido de mención arranca prendido y persiste al apagarlo', async () => {
