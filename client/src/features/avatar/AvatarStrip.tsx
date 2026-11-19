@@ -3,7 +3,7 @@
 import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { useTranslation } from '../translation/useTranslation';
 import { AvatarFigure } from './AvatarFigure';
-import { PIECES, SLOT_LABELS, withPiece, type Avatar, type AvatarSlot } from './catalog';
+import { PIECES, SLOT_LABELS, idsOf, withPiece, type Avatar, type AvatarSlot } from './catalog';
 import { SlotColors } from './SlotColors';
 import styles from './AvatarEditor.module.css';
 
@@ -19,7 +19,11 @@ interface AvatarStripProps {
 export function AvatarStrip({ slot, avatar, onChange }: AvatarStripProps) {
   const { t } = useTranslation();
   const ids: (string | undefined)[] = [undefined, ...Object.keys(PIECES[slot])];
-  const index = Math.max(0, ids.indexOf(avatar[slot]));
+  // El probador es un carrusel de a una pieza por vez: siempre reemplaza todo
+  // el slot (ver withPiece), así que "actual" es la de más arriba del
+  // stack armado en la pestaña Catálogo.
+  const topId = idsOf(avatar, slot).at(-1);
+  const index = Math.max(0, ids.indexOf(topId));
   const [dragX, setDragX] = useState(0);
   const [slide, setSlide] = useState<{ dir: 'next' | 'prev'; n: number } | null>(null);
   const startX = useRef<number | null>(null);

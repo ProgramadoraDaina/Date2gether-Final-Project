@@ -8,7 +8,9 @@ import {
   AVATAR_SLOTS,
   PIECES,
   SLOT_LABELS,
+  idsOf,
   randomAvatar,
+  togglePiece,
   withPiece,
   type Avatar,
   type AvatarSlot,
@@ -103,26 +105,41 @@ interface CatalogSectionProps {
 
 function CatalogSection({ slot, avatar, onChange }: CatalogSectionProps) {
   const { t } = useTranslation();
-  const current = avatar[slot];
-  const options: (string | undefined)[] = [undefined, ...Object.keys(PIECES[slot])];
+  const selectedIds = idsOf(avatar, slot);
+  // "Nada" vacía todo el slot de un golpe: con multi-selección no tiene
+  // sentido que represente "ninguna pieza puesta" como una opción más del
+  // array (no es una pieza), así que queda aparte como botón de reset.
+  const pieceIds = Object.keys(PIECES[slot]);
 
   return (
     <section className={styles.catalogSection} aria-label={t(SLOT_LABELS[slot])}>
       <h3 className={styles.stripLabel}>{t(SLOT_LABELS[slot])}</h3>
       <div className={styles.grid}>
-        {options.map((id) => {
-          const label = id ? t(PIECES[slot][id].label) : t('Nada');
+        <button
+          type="button"
+          className={styles.thumb}
+          aria-pressed={selectedIds.length === 0}
+          aria-label={t('Nada')}
+          title={t('Nada')}
+          onClick={() => onChange(withPiece(avatar, slot, undefined))}
+        >
+          <AvatarFigure avatar={{ sticker: avatar.sticker }} animated={false} />
+          <span>{t('Nada')}</span>
+        </button>
+        {pieceIds.map((id) => {
+          const label = t(PIECES[slot][id].label);
+          const selected = selectedIds.includes(id);
           return (
             <button
-              key={id ?? 'none'}
+              key={id}
               type="button"
               className={styles.thumb}
-              aria-pressed={current === id}
+              aria-pressed={selected}
               aria-label={label}
               title={label}
-              onClick={() => onChange(withPiece(avatar, slot, id))}
+              onClick={() => onChange(togglePiece(avatar, slot, id))}
             >
-              <AvatarFigure avatar={{ sticker: avatar.sticker, [slot]: id }} animated={false} />
+              <AvatarFigure avatar={{ sticker: avatar.sticker, [slot]: [id] }} animated={false} />
               <span>{label}</span>
             </button>
           );

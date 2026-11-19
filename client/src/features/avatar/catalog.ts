@@ -1,13 +1,14 @@
 // Ids iguales a src/modules/auth/avatar.ts del backend, que valida contra ellos.
 // Dibujo en viewBox 0 0 320 300: cabeza centro (160,118) r56, cuerpo desde y≈184.
-export const AVATAR_SLOTS = ['head', 'face', 'neck'] as const;
+export const AVATAR_SLOTS = ['body', 'head', 'face', 'neck'] as const;
 export type AvatarSlot = (typeof AVATAR_SLOTS)[number];
 
 export interface AvatarPiece {
   label: string;
   color: string;
   svg: string;
-  // Se dibuja detrás de la silueta (capas).
+  // Capa opcional dibujada detrás de la silueta del cuerpo (p. ej. una capa,
+  // o el pelo que asoma detrás de los hombros).
   back?: string;
   talks?: boolean;
 }
@@ -316,6 +317,55 @@ export const HEAD_PIECES = {
     <path class="ns" d="M202 72 C218 96 224 132 218 162 C212 150 210 120 200 100 Z" style="fill:rgba(0,0,0,.16)"/>
     <path class="o ns" d="M128 130 Q126 150 134 166" style="stroke:rgba(255,255,255,.55);stroke-width:3px"/>`,
   },
+  tiara: {
+    label: 'Tiara',
+    color: '#f2c14e',
+    svg: `
+      <path class="f" d="M106 90 C106 70 118 58 132 62 C130 48 146 38 160 42 C174 38 190 48 188 62 C202 58 214 70 214 90 Q160 80 106 90 Z"/>
+      <path class="o thin" d="M122 72 Q130 62 140 68" style="stroke:var(--c)"/>
+      <path class="o thin" d="M198 72 Q190 62 180 68" style="stroke:var(--c)"/>
+      <path d="M160 44 C160 36 152 32 148 36 C144 40 150 46 160 54 C170 46 176 40 172 36 C168 32 160 36 160 44 Z" style="fill:#f05a8a"/>
+      <path d="M160 28 C160 24 156 22 154 24 C152 26 156 30 160 34 C164 30 168 26 166 24 C164 22 160 24 160 28 Z" style="fill:#f05a8a"/>
+      <circle class="w" cx="160" cy="22" r="4"/>
+      <circle cx="116" cy="80" r="5" style="fill:#f05a8a"/>
+      <circle cx="204" cy="80" r="5" style="fill:#f05a8a"/>
+      <circle class="w" cx="124" cy="88" r="3"/>
+      <circle class="w" cx="140" cy="90" r="3"/>
+      <circle class="w" cx="160" cy="91" r="3"/>
+      <circle class="w" cx="180" cy="90" r="3"/>
+      <circle class="w" cx="196" cy="88" r="3"/>`,
+  },
+  rose: {
+    label: 'Rosa',
+    color: '#e0507a',
+    svg: `
+      <g class="pom">
+        <circle class="f" cx="122" cy="56" r="11"/>
+        <circle class="f" cx="109" cy="65" r="11"/>
+        <circle class="f" cx="114" cy="80" r="11"/>
+        <circle class="f" cx="130" cy="80" r="11"/>
+        <circle class="f" cx="135" cy="65" r="11"/>
+        <circle cx="122" cy="69" r="8" style="fill:#c23a52"/>
+      </g>`,
+  },
+  hairShort: {
+    label: 'Pelo corto',
+    color: '#6b4428',
+    svg: `
+      <path class="f" d="M78 118 C74 80 100 50 160 48 C220 50 246 80 242 118 C244 150 230 180 206 198 C212 178 215 155 215 138 C215 108 196 82 160 78 C124 82 105 108 105 138 C105 155 108 178 114 198 C90 180 76 150 78 118 Z"/>
+      <path class="o thin" d="M160 48 V78" style="stroke:var(--ink)"/>`,
+    back: `
+      <path class="f" d="M56 185 L56 75 A130 150 0 0 1 264 75 L264 185 Z"/>`,
+  },
+  hairLong: {
+    label: 'Pelo largo',
+    color: '#6b4428',
+    svg: `
+      <path class="f" d="M78 118 C74 80 100 50 160 48 C220 50 246 80 242 118 C248 165 225 220 195 255 C208 225 212 180 212 140 C212 108 196 82 160 78 C124 82 108 108 108 140 C108 180 112 225 125 255 C95 220 72 165 78 118 Z"/>
+      <path class="o thin" d="M160 48 V78" style="stroke:var(--ink)"/>`,
+    back: `
+      <path class="f" d="M56 230 L56 75 A130 150 0 0 1 264 75 L264 230 Z"/>`,
+  },
 } satisfies Record<string, AvatarPiece>;
 
 export const FACE_PIECES = {
@@ -428,6 +478,13 @@ export const FACE_PIECES = {
         <text class="ink" x="166" y="120" text-anchor="middle">DUMB</text>
       </g>`,
   },
+  eyelashes: {
+    label: 'Pestañas',
+    color: '#1c1c1c',
+    svg: `
+      <path class="o thin" d="M118 102 Q126 94 134 98 M124 98 Q132 90 140 96" style="stroke:var(--c)"/>
+      <path class="o thin" d="M186 96 Q194 90 202 98 M180 98 Q188 94 196 102" style="stroke:var(--c)"/>`,
+  },
 } satisfies Record<string, AvatarPiece>;
 
 export const NECK_PIECES = {
@@ -473,19 +530,45 @@ export const NECK_PIECES = {
     <path class="ns" d="M149 210 Q160 201 171 210 Q160 219 149 210 Z" style="fill:#2fd07a"/>
     <circle class="k ns" cx="160" cy="210" r="3"/>`,
   },
+  necklace: {
+    label: 'Collar',
+    color: '#f2c14e',
+    svg: `
+      <path class="o" d="M116 196 Q160 246 204 196" style="stroke-width:11px"/>
+      <path class="o ns" d="M116 196 Q160 246 204 196" style="stroke:var(--c);stroke-width:5px"/>
+      <path class="f" d="M160 222 L172 234 L160 246 L148 234 Z"/>`,
+  },
+} satisfies Record<string, AvatarPiece>;
+
+export const BODY_PIECES = {
+  blouse: {
+    label: 'Blusa',
+    color: '#3d7be0',
+    svg: `
+      <path class="f" d="M63 266 Q64 204 123 184 Q160 192 197 184 Q256 204 257 266 Q257 274 249 274 L71 274 Q63 274 63 266 Z"/>`,
+  },
+  sweetheartTop: {
+    label: 'Escote corazón',
+    color: '#f08aa0',
+    svg: `
+      <path class="f" d="M63 266 Q70 248 85 232 Q95 212 122 212 Q140 224 160 250 Q180 224 198 212 Q225 212 235 232 Q250 248 257 266 Q257 274 249 274 L71 274 Q63 274 63 266 Z"/>`,
+  },
 } satisfies Record<string, AvatarPiece>;
 
 export type HeadId = keyof typeof HEAD_PIECES;
 export type FaceId = keyof typeof FACE_PIECES;
 export type NeckId = keyof typeof NECK_PIECES;
+export type BodyId = keyof typeof BODY_PIECES;
 
 export const PIECES: Record<AvatarSlot, Record<string, AvatarPiece>> = {
+  body: BODY_PIECES,
   head: HEAD_PIECES,
   face: FACE_PIECES,
   neck: NECK_PIECES,
 };
 
 export const SLOT_LABELS: Record<AvatarSlot, string> = {
+  body: 'Ropa',
   head: 'Cabeza',
   face: 'Cara',
   neck: 'Cuello',
@@ -504,10 +587,17 @@ export const AVATAR_PALETTE = [
 ];
 
 export interface Avatar {
-  head?: HeadId;
-  face?: FaceId;
-  neck?: NeckId;
-  colors?: Partial<Record<AvatarSlot, string>>;
+  body?: BodyId[];
+  head?: HeadId[];
+  face?: FaceId[];
+  neck?: NeckId[];
+  // Clave "<slot>:<id>": cada pieza seleccionada tiene su propio color (con
+  // dos piezas en el mismo slot, p. ej. corona + tiara, cada una se
+  // recolorea por separado). Se antepone el slot al id por si algún día dos
+  // slots comparten un id de pieza; hoy no pasa (los catálogos HEAD/FACE/
+  // NECK/BODY_PIECES no se solapan) pero igual conviene no depender de que
+  // los ids sean únicos en todo el catálogo.
+  colors?: Partial<Record<string, string>>;
   sticker: boolean;
 }
 
@@ -515,53 +605,105 @@ export const EMPTY_AVATAR: Avatar = { sticker: true };
 
 const HEX = /^#[0-9a-f]{6}$/i;
 
-export function pieceOf(avatar: Avatar, slot: AvatarSlot): AvatarPiece | undefined {
-  const id = avatar[slot];
-  return id ? PIECES[slot][id] : undefined;
+/** Ids seleccionados para un slot, en orden (índice 0 = atrás, último = adelante). */
+export function idsOf(avatar: Avatar, slot: AvatarSlot): string[] {
+  return avatar[slot] ?? [];
 }
 
-export function colorOf(avatar: Avatar, slot: AvatarSlot): string | undefined {
-  const own = avatar.colors?.[slot];
-  return own && HEX.test(own) ? own : pieceOf(avatar, slot)?.color;
+/** Piezas seleccionadas para un slot, en el mismo orden que idsOf. */
+export function piecesOf(avatar: Avatar, slot: AvatarSlot): AvatarPiece[] {
+  return idsOf(avatar, slot)
+    .map((id) => PIECES[slot][id])
+    .filter((piece): piece is AvatarPiece => Boolean(piece));
 }
 
-// Lo que llega de otros por socket se limpia igual que en el backend.
+export function colorKey(slot: AvatarSlot, pieceId: string): string {
+  return `${slot}:${pieceId}`;
+}
+
+/** Color de una pieza puntual: su override si tiene uno, si no el de base del catálogo. */
+export function colorOf(avatar: Avatar, slot: AvatarSlot, pieceId: string): string | undefined {
+  const own = avatar.colors?.[colorKey(slot, pieceId)];
+  if (own && HEX.test(own)) return own;
+  return PIECES[slot][pieceId]?.color;
+}
+
+// Lo que llega de otros por socket (o de cuentas viejas guardadas con un solo
+// id y un solo color por slot) se limpia igual que en el backend: descarta
+// ids que no son del catálogo, preserva el orden de los válidos, convierte un
+// string suelto en un array de un elemento, y migra colors[slot] (formato
+// viejo) a colors["slot:id"] aplicándolo a la única pieza que ese slot tenía.
 export function toAvatar(input: unknown): Avatar | null {
   if (!input || typeof input !== 'object') return null;
   const raw = input as Record<string, unknown>;
   const avatar: Avatar = { sticker: raw.sticker !== false };
   const rawColors = (raw.colors ?? {}) as Record<string, unknown>;
-  const colors: Partial<Record<AvatarSlot, string>> = {};
+  const colors: Partial<Record<string, string>> = {};
   for (const slot of AVATAR_SLOTS) {
-    const id = raw[slot];
-    if (typeof id !== 'string' || !(id in PIECES[slot])) continue;
-    (avatar as unknown as Record<string, string>)[slot] = id;
-    const color = rawColors[slot];
-    if (typeof color === 'string' && HEX.test(color)) colors[slot] = color.toLowerCase();
+    const rawValue = raw[slot];
+    const candidates = Array.isArray(rawValue)
+      ? rawValue
+      : rawValue !== undefined
+        ? [rawValue]
+        : [];
+    const ids = candidates.filter(
+      (id): id is string => typeof id === 'string' && id in PIECES[slot],
+    );
+    if (ids.length > 0) (avatar as unknown as Record<string, string[]>)[slot] = ids;
+
+    for (const id of ids) {
+      const key = colorKey(slot, id);
+      const color = rawColors[key];
+      if (typeof color === 'string' && HEX.test(color)) colors[key] = color.toLowerCase();
+    }
+    // Compat con avatares viejos guardados con un solo color por slot.
+    if (ids.length === 1 && colors[colorKey(slot, ids[0])] === undefined) {
+      const legacy = rawColors[slot];
+      if (typeof legacy === 'string' && HEX.test(legacy)) {
+        colors[colorKey(slot, ids[0])] = legacy.toLowerCase();
+      }
+    }
   }
   if (Object.keys(colors).length > 0) avatar.colors = colors;
   return avatar;
 }
 
+/** Reemplaza todo el slot por una sola pieza (o lo vacía si id es undefined). */
 export function withPiece(avatar: Avatar, slot: AvatarSlot, id: string | undefined): Avatar {
   const next: Avatar = { ...avatar, colors: { ...avatar.colors } };
-  delete next.colors![slot];
-  if (id) (next as unknown as Record<string, string>)[slot] = id;
+  for (const prevId of idsOf(avatar, slot)) delete next.colors![colorKey(slot, prevId)];
+  if (id) (next as unknown as Record<string, string[]>)[slot] = [id];
   else delete next[slot];
   if (Object.keys(next.colors!).length === 0) delete next.colors;
   return next;
 }
 
-export function withColor(avatar: Avatar, slot: AvatarSlot, color: string): Avatar {
-  return { ...avatar, colors: { ...avatar.colors, [slot]: color.toLowerCase() } };
+/** Suma o quita una pieza del slot sin tocar las demás ya seleccionadas. */
+export function togglePiece(avatar: Avatar, slot: AvatarSlot, id: string): Avatar {
+  const current = idsOf(avatar, slot);
+  const removing = current.includes(id);
+  const nextIds = removing ? current.filter((x) => x !== id) : [...current, id];
+  const next: Avatar = { ...avatar, colors: { ...avatar.colors } };
+  // Al sacar una pieza se limpia solo su propio color; las demás piezas del
+  // slot no se tocan.
+  if (removing) delete next.colors![colorKey(slot, id)];
+  if (nextIds.length > 0) (next as unknown as Record<string, string[]>)[slot] = nextIds;
+  else delete next[slot];
+  if (Object.keys(next.colors!).length === 0) delete next.colors;
+  return next;
+}
+
+export function withColor(avatar: Avatar, slot: AvatarSlot, pieceId: string, color: string): Avatar {
+  return { ...avatar, colors: { ...avatar.colors, [colorKey(slot, pieceId)]: color.toLowerCase() } };
 }
 
 export function randomAvatar(sticker: boolean, random: () => number = Math.random): Avatar {
   const pick = (ids: string[]) => ids[Math.floor(random() * ids.length)];
   return {
-    head: pick(Object.keys(HEAD_PIECES)) as HeadId,
-    face: pick(Object.keys(FACE_PIECES)) as FaceId,
-    neck: random() < 0.5 ? undefined : (pick(Object.keys(NECK_PIECES)) as NeckId),
+    body: [pick(Object.keys(BODY_PIECES)) as BodyId],
+    head: [pick(Object.keys(HEAD_PIECES)) as HeadId],
+    face: [pick(Object.keys(FACE_PIECES)) as FaceId],
+    neck: random() < 0.5 ? undefined : [pick(Object.keys(NECK_PIECES)) as NeckId],
     sticker,
   };
 }

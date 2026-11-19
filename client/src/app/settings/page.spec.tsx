@@ -82,7 +82,7 @@ describe('SettingsPage', () => {
       name: 'Daina',
       createdAt: '2026-01-01',
       nameColor: null,
-      avatar: { head: 'crown', sticker: true },
+      avatar: { head: ['crown'], sticker: true },
     });
     (updateAvatar as jest.Mock<typeof updateAvatar>).mockResolvedValue({} as never);
     const SettingsPage = (await import('./page')).default;
@@ -92,7 +92,7 @@ describe('SettingsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Guardar avatar' }));
 
     await waitFor(() =>
-      expect(updateAvatar).toHaveBeenCalledWith({ head: 'crown', sticker: true }),
+      expect(updateAvatar).toHaveBeenCalledWith({ head: ['crown'], sticker: true }),
     );
   });
 
