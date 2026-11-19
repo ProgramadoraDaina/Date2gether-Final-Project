@@ -12,7 +12,7 @@ describe('TileAvatar', () => {
   it('dibuja el avatar de esa persona en el placeholder de LiveKit y habla solo cuando habla', () => {
     const placeholder = document.createElement('div');
     document.body.append(placeholder);
-    const directory = new Map([['p-1', { head: 'egg' as const, sticker: true }]]);
+    const directory = new Map([['p-1', { head: ['egg' as const], sticker: true }]]);
     const tile = (isSpeaking: boolean) => (
       <AvatarDirectoryProvider directory={directory}>
         <TileAvatar

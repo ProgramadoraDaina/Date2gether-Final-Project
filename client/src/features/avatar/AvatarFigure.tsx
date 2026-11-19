@@ -1,8 +1,8 @@
 import { useId, type CSSProperties } from 'react';
-import { EMPTY_AVATAR, colorOf, pieceOf, type Avatar, type AvatarSlot } from './catalog';
+import { EMPTY_AVATAR, colorOf, idsOf, piecesOf, type Avatar, type AvatarSlot } from './catalog';
 import styles from './AvatarFigure.module.css';
 
-const DRAW_ORDER: AvatarSlot[] = ['neck', 'face', 'head'];
+const DRAW_ORDER: AvatarSlot[] = ['body', 'neck', 'face', 'head'];
 
 interface AvatarFigureProps {
   avatar: Avatar | null | undefined;
@@ -25,27 +25,30 @@ export function AvatarFigure({
   const look = avatar ?? EMPTY_AVATAR;
 
   function layer(slot: AvatarSlot, which: 'svg' | 'back') {
-    const piece = pieceOf(look, slot);
-    const markup = piece?.[which]?.replaceAll('url(#headClip)', `url(#${clipId})`);
-    if (!piece || !markup) return null;
-    return (
-      <g
-        key={`${which}-${slot}-${look[slot]}`}
-        className={styles.slot}
-        data-slot={slot}
-        data-piece={look[slot]}
-        data-layer={which}
-        data-talks={piece.talks || undefined}
-        style={{ '--c': colorOf(look, slot) } as CSSProperties}
-      >
-        <g className={styles.anim}>
-          {look.sticker && (
-            <g className={styles.sticker} dangerouslySetInnerHTML={{ __html: markup }} />
-          )}
-          <g className={styles.piece} dangerouslySetInnerHTML={{ __html: markup }} />
+    const ids = idsOf(look, slot);
+    const pieces = piecesOf(look, slot);
+    return pieces.map((piece, i) => {
+      const markup = piece[which]?.replaceAll('url(#headClip)', `url(#${clipId})`);
+      if (!markup) return null;
+      return (
+        <g
+          key={`${which}-${slot}-${ids[i]}-${i}`}
+          className={styles.slot}
+          data-slot={slot}
+          data-piece={ids[i]}
+          data-layer={which}
+          data-talks={piece.talks || undefined}
+          style={{ '--c': colorOf(look, slot, ids[i]) } as CSSProperties}
+        >
+          <g className={styles.anim}>
+            {look.sticker && (
+              <g className={styles.sticker} dangerouslySetInnerHTML={{ __html: markup }} />
+            )}
+            <g className={styles.piece} dangerouslySetInnerHTML={{ __html: markup }} />
+          </g>
         </g>
-      </g>
-    );
+      );
+    });
   }
 
   return (

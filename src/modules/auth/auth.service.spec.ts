@@ -220,7 +220,7 @@ describe('AuthService', () => {
 
   describe('updateAvatar', () => {
     it('guarda el avatar del usuario y lo devuelve en el perfil público', async () => {
-      const avatar = { head: 'cap' as const, face: 'mustache' as const, sticker: true };
+      const avatar = { head: ['cap'] as const, face: ['mustache'] as const, sticker: true };
       const updateChain = chain([buildUser({ avatar })]);
       db.update.mockReturnValueOnce(updateChain);
 

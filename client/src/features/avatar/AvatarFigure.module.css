@@ -64,6 +64,10 @@
 .figure :global(.spin) {
   transform-box: view-box;
 }
+.slot[data-slot='body'],
+.slot[data-slot='body'] .anim {
+  transform-origin: 160px 220px;
+}
 .slot[data-slot='head'],
 .slot[data-slot='head'] .anim {
   transform-origin: 160px 62px;
