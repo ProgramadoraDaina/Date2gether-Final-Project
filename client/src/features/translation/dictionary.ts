@@ -541,6 +541,7 @@ const en: Record<string, string> = {
   Corbata: 'Tie',
   Cadena: 'Chain',
   Bufanda: 'Scarf',
+  'Capitán América': 'Captain America',
 };
 
 export default en;
