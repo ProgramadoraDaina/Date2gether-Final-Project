@@ -16,7 +16,7 @@ describe('AvatarFigure', () => {
   });
 
   it('la capa trasera de una pieza va detrás de la silueta y el resto adelante', () => {
-    const { container } = render(<AvatarFigure avatar={{ neck: 'strange', sticker: false }} />);
+    const { container } = render(<AvatarFigure avatar={{ neck: ['strange'], sticker: false }} />);
     const svg = container.querySelector('svg')!;
     const back = svg.querySelector('[data-layer="back"]')!;
     const front = svg.querySelector('[data-layer="svg"]')!;
@@ -60,11 +60,11 @@ describe('AvatarFigure', () => {
     expect(headPieces[1]).toHaveAttribute('data-piece', 'tiara');
   });
 
-  it('dibuja el backSvg de cada pieza de cabeza que lo tenga, en orden, antes de la silueta', () => {
+  it('dibuja la capa trasera de cada pieza de cabeza que lo tenga, en orden, antes de la silueta', () => {
     const { container } = render(
       <AvatarFigure avatar={{ head: ['hairShort', 'hairLong'], sticker: false }} />,
     );
-    const backLayers = container.querySelectorAll('[data-slot="head-back"]');
+    const backLayers = container.querySelectorAll('[data-slot="head"][data-layer="back"]');
     expect(backLayers).toHaveLength(2);
   });
 });
