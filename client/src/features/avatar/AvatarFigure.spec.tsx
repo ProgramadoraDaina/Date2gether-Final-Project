@@ -14,6 +14,21 @@ describe('AvatarFigure', () => {
     expect(figure).toHaveAttribute('data-speaking');
   });
 
+  it('la capa trasera de una pieza va detrás de la silueta y el resto adelante', () => {
+    const { container } = render(<AvatarFigure avatar={{ neck: 'strange', sticker: false }} />);
+    const svg = container.querySelector('svg')!;
+    const back = svg.querySelector('[data-layer="back"]')!;
+    const front = svg.querySelector('[data-layer="svg"]')!;
+    const silhouette = svg.querySelector('circle[r="56"]:not(clipPath circle)')!;
+
+    expect(
+      back.compareDocumentPosition(silhouette) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      silhouette.compareDocumentPosition(front) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it('dibuja el borde sticker solo si la persona lo eligió', () => {
     const { container, rerender } = render(
       <AvatarFigure avatar={{ head: 'crown', sticker: true }} />,

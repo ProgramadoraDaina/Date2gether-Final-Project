@@ -54,7 +54,8 @@
 .sticker :global(.o) {
   fill: none !important;
 }
-.sticker :global(text) {
+.sticker :global(text),
+.sticker :global(.detail) {
   display: none;
 }
 
@@ -105,6 +106,15 @@
 }
 .figure[data-speaking] .slot[data-talks] .anim {
   animation: talk 0.16s linear infinite alternate;
+}
+.figure[data-speaking] :global(.blink) {
+  animation: blink 0.5s steps(2) infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.3;
+  }
 }
 
 @keyframes tilt {

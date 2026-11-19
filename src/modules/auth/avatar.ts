@@ -21,6 +21,14 @@ export const AVATAR_HEAD_IDS = [
   'cheese',
   'flamingo',
   'toiletPaper',
+  'deadpool',
+  'spiderman',
+  'ironman',
+  'captain',
+  'wolverine',
+  'loki',
+  'magneto',
+  'doom',
 ] as const;
 
 export const AVATAR_FACE_IDS = [
@@ -40,7 +48,7 @@ export const AVATAR_FACE_IDS = [
   'postit',
 ] as const;
 
-export const AVATAR_NECK_IDS = ['bowtie', 'tie', 'chain', 'scarf'] as const;
+export const AVATAR_NECK_IDS = ['bowtie', 'tie', 'chain', 'scarf', 'strange'] as const;
 
 export const AVATAR_SLOTS = ['head', 'face', 'neck'] as const;
 export type AvatarSlot = (typeof AVATAR_SLOTS)[number];
