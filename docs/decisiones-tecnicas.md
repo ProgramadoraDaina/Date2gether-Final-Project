@@ -529,3 +529,34 @@ El botón "Unirme a la música" se mostraba a todos los participantes por igual,
 - Mantiene consistencia con el resto del feature: el admin ya no interactúa con ningún gate de "pedir unirse" para algo que controla de punta a punta.
 - Evita acoplar una preferencia individual (volumen) al estado compartido de la sala, que hasta ahora solo modela lo que tiene que verse igual para todos (`tracks`, `currentIndex`, `isPlaying`, `positionSeconds`).
 - Mientras se arrastra, la UI usa un valor local de "preview" (no derivado de `musicState`) para que el drag se sienta fluido; ese valor se descarta al soltar y la barra vuelve a reflejar la posición autoritativa del servidor.
+
+---
+
+## 21. LiveKit local no conecta: `node_ip` desactualizado en `deploy/local/livekit.yaml`, y la falla persiste igual
+
+**Fecha:** 2026-11-17
+**Rama:** `develop`
+
+### Contexto
+
+Al preparar capturas de pantalla reales de la app para una presentación, se intentó completar una llamada de punta a punta en el entorno local (`docker compose up -d`). La conexión WebRTC nunca se estableció: el lobby y la UI previa a la llamada funcionan bien, pero al entrar a la reunión el cliente no llega a publicar/recibir medios.
+
+### Causa parcial identificada
+
+`deploy/local/livekit.yaml` tiene `rtc.node_ip` hardcodeado en `192.168.1.35`. Ese valor queda fijo en el archivo versionado, pero la IP LAN real de la máquina de desarrollo cambia entre sesiones (DHCP, cambio de red, etc.) — al momento de esta prueba la IP real de la máquina no coincidía con el valor del archivo. Con `use_external_ip: false`, LiveKit anuncia ese `node_ip` fijo como candidato ICE a los clientes, así que un valor desactualizado rompe el intercambio de candidatos.
+
+### Lo que se probó
+
+Se corrigió el `node_ip` a mano en una copia descartable del archivo, montada en un contenedor de LiveKit aparte (nunca se tocó el archivo versionado ni el contenedor real). Con el valor corregido, la conexión **igual** no se estableció — mismo síntoma.
+
+### Esto NO es (solo) el bug ya resuelto del backend Hyper-V
+
+Hay un hallazgo previo en memoria del proyecto (sesión del 2026-10-27) que diagnosticó un fallo con el mismo síntoma — "Llamar" solo, en el stack local, sin establecer ICE — y lo atribuyó a que Docker Desktop corría sobre el backend **Hyper-V** (sin WSL2), con el fix acordado de instalar WSL2 y cambiar el motor de Docker. Se verificó en esta sesión con `docker info` que el backend **ya es WSL2** (`Kernel Version: ...-microsoft-standard-WSL2`), no Hyper-V. Es decir: el fix de Oct-27 está aplicado, y el mismo tipo de fallo (llamada solo, en local) **volvió a ocurrir de todas formas**. Esto significa que el diagnóstico de Hyper-V no era la causa completa, o hay una causa adicional/distinta esta vez — el `node_ip` desactualizado es un sospechoso real y confirmado, pero corregirlo solo no alcanzó.
+
+### Decisión
+
+No se tocó ningún archivo del repo a partir de este hallazgo — queda documentado para no tener que re-descubrirlo, y para no volver a asumir "ya sabemos que es Hyper-V" la próxima vez que esto falle (ya no lo es). Pendiente: diagnosticar con los DevTools/WebRTC internals qué candidatos ICE se intentan y cuál falla (mismo método ya usado para el bug de Oct-27), en vez de seguir probando configuración a ciegas. Si se necesita videollamada local confiable pronto, probar directamente contra el despliegue EC2, que expone una IP pública real y ya está validado end-to-end según el README.
+
+### Nota al margen (no relacionada con LiveKit)
+
+Durante esta misma sesión, `pnpm db:migrate` fallaba porque hay dos migraciones numeradas `0012` (`0012_call_participation_timeline.sql` y `0012_room_notes.sql`) y dos numeradas `0013` (`0013_fix_call_events_id_type.sql` y `0013_room_notes_reconcile.sql`) — numeración duplicada que quedó de un merge. Se aplicó `drizzle/0016_permanent_scheduled_rooms.sql` a mano sobre el Postgres local para poder seguir probando; no se renumeró ni se tocó ninguna migración versionada. Si esto vuelve a bloquear un `pnpm db:migrate` local, hace falta decidir el orden real entre esos pares antes de renumerar.
