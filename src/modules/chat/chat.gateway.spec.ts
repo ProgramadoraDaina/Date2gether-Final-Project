@@ -180,7 +180,7 @@ describe('ChatGateway', () => {
   });
 
   it('incluye el avatar guardado de una cuenta registrada en la presencia', async () => {
-    const avatar = { head: 'crown', sticker: true };
+    const avatar = { head: ['crown'], sticker: true };
     const { gateway } = createGateway({ nameColor: null, avatar } as never);
     const participant: RoomParticipant = {
       kind: 'room-participant',
@@ -212,13 +212,18 @@ describe('ChatGateway', () => {
     const client = createSocket(participant);
     await gateway.handleJoinRoom(client as never, { code: 'abc-defg-hij' });
 
-    gateway.handleSetAvatar(client as never, {
-      head: 'cap',
-      colors: { head: '#3D7BE0', face: '#ffffff' },
-      sticker: false,
-    });
+    // Dto "viejo" (un solo id y un solo color por slot): sanitizeAvatar lo
+    // migra al array + color por pieza nuevo en vez de perder esos datos.
+    gateway.handleSetAvatar(
+      client as never,
+      {
+        head: 'cap',
+        colors: { head: '#3D7BE0', face: '#ffffff' },
+        sticker: false,
+      } as never,
+    );
 
-    const expected = { head: 'cap', colors: { head: '#3d7be0' }, sticker: false };
+    const expected = { head: ['cap'], colors: { 'head:cap': '#3d7be0' }, sticker: false };
     expect(serverTo).toHaveBeenCalledWith('abc-defg-hij');
     expect(serverEmit).toHaveBeenCalledWith('avatarChanged', {
       participantId: 'participant-9',
