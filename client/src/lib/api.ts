@@ -1,3 +1,4 @@
+import type { Avatar } from '@/features/avatar/catalog';
 import type { TranscriptEntry } from './transcripts';
 import { extractErrorMessage, getAccessToken, refreshAccessToken, type AuthUser } from './auth';
 
@@ -300,6 +301,15 @@ export async function updateNameColor(nameColor: string): Promise<AuthUser> {
     body: JSON.stringify({ nameColor }),
   });
   if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudo guardar el color'));
+  return res.json();
+}
+
+export async function updateAvatar(avatar: Avatar): Promise<AuthUser> {
+  const res = await authFetch('/auth/me/avatar', {
+    method: 'PATCH',
+    body: JSON.stringify(avatar),
+  });
+  if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudo guardar el avatar'));
   return res.json();
 }
 

@@ -1,3 +1,5 @@
+import type { Avatar } from '@/features/avatar/catalog';
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 const ACCESS_TOKEN_KEY = 'date2gether:accessToken';
@@ -9,6 +11,7 @@ export interface AuthUser {
   name: string;
   createdAt: string;
   nameColor: string | null;
+  avatar?: Avatar | null;
 }
 
 interface AuthTokens {

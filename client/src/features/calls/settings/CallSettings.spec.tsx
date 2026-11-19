@@ -17,6 +17,7 @@ describe('Ajustes de la llamada', () => {
     expect(button).toHaveAttribute('aria-expanded', 'false');
 
     fireEvent.click(button);
+    fireEvent.click(screen.getByRole('button', { name: /Tamaño de los subtítulos/ }));
     expect(screen.getByRole('radio', { name: 'Mediana' })).toBeChecked();
     fireEvent.click(screen.getByRole('radio', { name: 'Grande' }));
 
@@ -27,9 +28,30 @@ describe('Ajustes de la llamada', () => {
     });
   });
 
+  it('la subvista de subtítulos tiene flecha atrás y X, y el menú abre el modal del avatar', () => {
+    render(<CallSettingsButton buttonClassName="btn" />);
+    const gear = screen.getByRole('button', { name: 'Ajustes de la llamada' });
+    fireEvent.click(gear);
+    fireEvent.click(screen.getByRole('button', { name: /Tamaño de los subtítulos/ }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Volver' }));
+    expect(screen.queryByRole('radio', { name: 'Grande' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Personalizar avatar/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Tamaño de los subtítulos/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar' }));
+    expect(gear).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(gear);
+    fireEvent.click(screen.getByRole('button', { name: /Personalizar avatar/ }));
+    expect(gear).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('tab', { name: 'Probador', hidden: true })).toBeInTheDocument();
+  });
+
   it('se cierra con Escape', () => {
     render(<CallSettingsButton buttonClassName="btn" />);
     fireEvent.click(screen.getByRole('button', { name: 'Ajustes de la llamada' }));
+    fireEvent.click(screen.getByRole('button', { name: /Tamaño de los subtítulos/ }));
     expect(screen.getByRole('group', { name: 'Tamaño de los subtítulos' })).toBeInTheDocument();
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(

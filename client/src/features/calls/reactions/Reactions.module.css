@@ -129,6 +129,11 @@
   height: 100%;
 }
 
+/* La silueta por defecto de LiveKit queda reemplazada por el avatar (TileAvatar). */
+.tileWrap :global(.lk-participant-placeholder) > svg:not([data-testid='avatar-figure']) {
+  display: none;
+}
+
 /* Esquina opuesta a .tileBadge (top-left): visible solo al pasar el mouse
    sobre el tile, para no competir visualmente con la cara de la persona.
    focus-visible lo muestra igual por teclado. */
