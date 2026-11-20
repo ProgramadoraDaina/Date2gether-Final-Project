@@ -162,6 +162,13 @@
       "when": 1795199751212,
       "tag": "0022_call_history_retention",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1795211269969,
+      "tag": "0023_permanent_room_archive",
+      "breakpoints": true
     }
   ]
 }

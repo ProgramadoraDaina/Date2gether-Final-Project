@@ -23,6 +23,7 @@ import {
   type RoomRole,
 } from '../../db/schema';
 import { RoomResolverService } from '../rooms/room-resolver.service';
+import { isRoomSessionVisible } from '../rooms/room-history-policy';
 import { RoomsService } from '../rooms/rooms.service';
 import { CALL_HISTORY_PAGE_SIZE, callHistoryCutoff } from './call-history-retention';
 import type { ListCallHistoryDto } from './dto/list-call-history.dto';
@@ -350,6 +351,7 @@ export class CallsService {
         and(
           eq(callSessionParticipants.userId, userId),
           eq(callSessions.roomId, page.roomId),
+          isRoomSessionVisible,
           gte(callSessionParticipants.firstJoinedAt, page.startedAt),
           lte(callSessionParticipants.firstJoinedAt, sql`${page.startedAt} + interval '5 minutes'`),
         ),

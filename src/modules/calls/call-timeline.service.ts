@@ -1,5 +1,5 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, asc, eq, gte, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, lt, sql } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
 import {
   callSessionParticipants,
@@ -13,6 +13,8 @@ import {
   callHistoryCutoff,
   isSessionVisibleToParticipant,
 } from './call-history-retention';
+import { isRoomSessionVisible } from '../rooms/room-history-policy';
+import type { CallHistoryPage } from './calls.service';
 
 export interface CallSessionSummary {
   id: string;
@@ -92,6 +94,7 @@ export class CallTimelineService {
             eq(callSessionParticipants.userId, userId),
             gte(callSessionParticipants.firstJoinedAt, callHistoryCutoff()),
             isSessionVisibleToParticipant,
+            isRoomSessionVisible,
           ),
         )
         .orderBy(
@@ -114,6 +117,7 @@ export class CallTimelineService {
           eq(callSessions.id, sessionId),
           eq(callSessionParticipants.userId, userId),
           isSessionVisibleToParticipant,
+          isRoomSessionVisible,
         ),
       )
       .limit(1);
@@ -126,5 +130,53 @@ export class CallTimelineService {
       .where(eq(callSessionParticipants.sessionId, session.id));
 
     return { ...session, participants };
+  }
+
+  async listRoomArchive(roomId: string, userId: string, before?: string): Promise<CallHistoryPage> {
+    const inRoom = eq(callSessions.roomId, roomId);
+    const boundary = before
+      ? this.db
+          .select({ endedAt: callSessions.endedAt, id: callSessions.id })
+          .from(callSessions)
+          .innerJoin(
+            callSessionParticipants,
+            eq(callSessionParticipants.sessionId, callSessions.id),
+          )
+          .where(
+            and(inRoom, eq(callSessions.id, before), eq(callSessionParticipants.userId, userId)),
+          )
+          .limit(1)
+      : undefined;
+    const rows = await this.db
+      .select({
+        id: callSessions.id,
+        roomId: rooms.id,
+        roomCode: callSessions.roomCode,
+        roomName: rooms.name,
+        startedAt: callSessions.startedAt,
+        sessionId: callSessions.id,
+      })
+      .from(callSessions)
+      .innerJoin(rooms, eq(callSessions.roomId, rooms.id))
+      .innerJoin(callSessionParticipants, eq(callSessionParticipants.sessionId, callSessions.id))
+      .innerJoin(users, eq(callSessionParticipants.userId, users.id))
+      .where(
+        and(
+          inRoom,
+          eq(rooms.isPermanent, true),
+          eq(callSessionParticipants.userId, userId),
+          lt(callSessions.endedAt, callHistoryCutoff()),
+          isSessionVisibleToParticipant,
+          isRoomSessionVisible,
+          boundary && sql`(${callSessions.endedAt}, ${callSessions.id}) < (${boundary})`,
+        ),
+      )
+      .orderBy(sql`${callSessions.endedAt} desc`, sql`${callSessions.id} desc`)
+      .limit(CALL_HISTORY_PAGE_SIZE + 1);
+    return {
+      entries: rows.slice(0, CALL_HISTORY_PAGE_SIZE),
+      nextCursor: rows.length > CALL_HISTORY_PAGE_SIZE ? rows[CALL_HISTORY_PAGE_SIZE - 1].id : null,
+      hasArchived: false,
+    };
   }
 }

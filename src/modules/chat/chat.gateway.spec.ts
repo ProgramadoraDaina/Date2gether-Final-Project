@@ -60,7 +60,9 @@ describe('ChatGateway', () => {
     const resolver = { resolveJoinable, assertBound } as unknown as RoomResolverService;
     const createMessage = jest.fn<ChatService['createMessage']>();
     const chatService = {
-      getHistory: jest.fn<ChatService['getHistory']>().mockResolvedValue([]),
+      getHistory: jest
+        .fn<ChatService['getHistory']>()
+        .mockResolvedValue({ entries: [], nextCursor: null }),
       createMessage,
     } as unknown as ChatService;
     const roomEvents = {

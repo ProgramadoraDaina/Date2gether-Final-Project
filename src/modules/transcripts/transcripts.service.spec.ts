@@ -44,7 +44,7 @@ describe('TranscriptsService', () => {
   it('devuelve el acta de una llamada en orden y con tope de frases', async () => {
     const { db, service } = setup();
     const selectChain = chain([line]);
-    db.select.mockReturnValueOnce(selectChain);
+    db.select.mockReturnValueOnce(chain([])).mockReturnValueOnce(selectChain);
 
     const transcript = await service.getCall('room-1', 'RM_abc');
 

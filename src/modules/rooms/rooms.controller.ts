@@ -52,8 +52,13 @@ export class RoomsController {
   }
 
   @Get(':code')
-  findOne(@Param('code') code: string) {
-    return this.roomsService.getByCodeOrThrow(code);
+  async findOne(@Param('code') code: string) {
+    const {
+      historyDeletedBefore: _deleted,
+      historyCleanupPending: _pending,
+      ...room
+    } = await this.roomsService.getByCodeOrThrow(code);
+    return room;
   }
 
   @UseGuards(JwtAuthGuard)

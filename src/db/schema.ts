@@ -79,6 +79,8 @@ export const rooms = pgTable(
     isActive: boolean('is_active').notNull().default(true),
     // Declared at creation and immutable. Permanent rooms never expire and never recycle their code.
     isPermanent: boolean('is_permanent').notNull().default(false),
+    historyDeletedBefore: timestamp('history_deleted_before'),
+    historyCleanupPending: boolean('history_cleanup_pending').notNull().default(false),
     // Drives the rolling 24h window for non-permanent rooms. Touched on "entry".
     lastEnteredAt: timestamp('last_entered_at').notNull().defaultNow(),
     // Code-pool marker, not a joinability source of truth. NULL = this room holds its code.
@@ -97,6 +99,9 @@ export const rooms = pgTable(
     index('rooms_retirement_sweep_idx')
       .on(table.lastEnteredAt)
       .where(sql`${table.retiredAt} is null and ${table.isPermanent} = false`),
+    index('rooms_history_cleanup_pending_idx')
+      .on(table.id)
+      .where(sql`${table.historyCleanupPending}`),
   ],
 );
 
@@ -104,17 +109,21 @@ export const MESSAGE_KINDS = ['text', 'gif'] as const;
 
 export const messageKindEnum = pgEnum('message_kind', MESSAGE_KINDS);
 
-export const messages = pgTable('messages', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  roomId: uuid('room_id')
-    .notNull()
-    .references(() => rooms.id, { onDelete: 'cascade' }),
-  authorName: varchar('author_name', { length: 60 }).notNull(),
-  // En los mensajes 'gif', content es la URL del GIF.
-  kind: messageKindEnum('kind').notNull().default('text'),
-  content: text('content').notNull(),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-});
+export const messages = pgTable(
+  'messages',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    roomId: uuid('room_id')
+      .notNull()
+      .references(() => rooms.id, { onDelete: 'cascade' }),
+    authorName: varchar('author_name', { length: 60 }).notNull(),
+    // En los mensajes 'gif', content es la URL del GIF.
+    kind: messageKindEnum('kind').notNull().default('text'),
+    content: text('content').notNull(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [index('messages_room_created_id_idx').on(table.roomId, table.createdAt, table.id)],
+);
 
 // Bloc compartido de la sala. La clave única permite actualizarlo como un
 // documento único y evita exponer notas personales a otros participantes.
@@ -415,9 +424,9 @@ export const callParticipantIdentities = pgTable(
 
 // Log append-only de los webhooks de LiveKit. El PK es el id del propio
 // evento de LiveKit: la deduplicación sale gratis con
-// ON CONFLICT (id) DO NOTHING, sin índice único adicional. Sin UPDATE, sin
-// DELETE, sin FK a propósito: el log debe sobrevivir al borrado de salas y
-// usuarios para cumplir la retención indefinida (D7).
+// ON CONFLICT (id) DO NOTHING, sin índice único adicional. Sin FK para
+// conservar el log aunque exista un cambio en salas o usuarios. En salas
+// permanentes, el borrado explícito del archivo también retira sus eventos.
 export const callEvents = pgTable(
   'call_events',
   {
@@ -469,10 +478,14 @@ export const callSessions = pgTable(
     forcedCloseAt: timestamp('forced_close_at'),
     // Guard de idempotencia de la materialización ante reentregas de room_finished.
     materializedAt: timestamp('materialized_at'),
+    historyPurgedAt: timestamp('history_purged_at'),
   },
   (table) => [
     unique('call_sessions_livekit_room_sid_unique').on(table.livekitRoomSid),
     index('call_sessions_room_id_started_at_idx').on(table.roomId, table.startedAt.desc()),
+    index('call_sessions_room_ended_history_idx')
+      .on(table.roomId, table.endedAt, table.id)
+      .where(sql`${table.endedAt} is not null and ${table.historyPurgedAt} is null`),
   ],
 );
 
