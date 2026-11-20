@@ -385,8 +385,8 @@ export const callParticipantIdentities = pgTable(
     // null para invitados.
     userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
     displayName: varchar('display_name', { length: 60 }).notNull(),
-    // Snapshot del rol al emitir el token; null para invitados. Promover o
-    // transferir el rol durante la llamada está fuera de alcance (D1).
+    // Snapshot del rol al emitir el token; null para invitados. La presencia
+    // de anfitriones se determina con el rol actual de roomMembers.
     roleAtIssue: roomRoleEnum('role_at_issue'),
     issuedAt: timestamp('issued_at').notNull().defaultNow(),
   },
