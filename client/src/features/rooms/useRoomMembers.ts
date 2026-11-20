@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ApiError, getRoomMembers, joinRoom, updateMemberRole, type RoomMember } from '@/lib/api';
+import {
+  ApiError,
+  getRoomMembers,
+  joinRoom,
+  updateMemberRole,
+  type RoomMember,
+  type RoomRole,
+} from '@/lib/api';
 import { getCurrentUser, isLoggedIn } from '@/lib/auth';
 
 // Un ApiError ya trae un mensaje pensado para mostrarse; cualquier otro
@@ -48,7 +55,7 @@ export function useRoomMembers(code: string | undefined) {
     };
   }, [code, refetchMembers]);
 
-  async function changeRole(userId: string, role: 'colaborador' | 'participante') {
+  async function changeRole(userId: string, role: RoomRole) {
     if (!code) return;
     try {
       await updateMemberRole(code, userId, role);

@@ -71,27 +71,30 @@ describe('useRoomMembers', () => {
     expect(getRoomMembers).not.toHaveBeenCalled();
   });
 
-  it('cambiar el rol de alguien actualiza la lista de miembros cuando el backend lo acepta', async () => {
-    const { isLoggedIn, getCurrentUser } = await import('@/lib/auth');
-    (isLoggedIn as jest.Mock<typeof isLoggedIn>).mockReturnValue(true);
-    (getCurrentUser as jest.Mock<typeof getCurrentUser>).mockResolvedValue({
-      id: 'user-1',
-    } as never);
-    const { joinRoom, getRoomMembers, updateMemberRole } = await import('@/lib/api');
-    (joinRoom as jest.Mock<typeof joinRoom>).mockResolvedValue(undefined);
-    (getRoomMembers as jest.Mock<typeof getRoomMembers>)
-      .mockResolvedValueOnce([{ userId: 'user-2', name: 'Otro', role: 'participante' as const }])
-      .mockResolvedValueOnce([{ userId: 'user-2', name: 'Otro', role: 'colaborador' as const }]);
-    (updateMemberRole as jest.Mock<typeof updateMemberRole>).mockResolvedValue(undefined);
-    const { useRoomMembers } = await import('./useRoomMembers');
-    const { result } = renderHook(() => useRoomMembers('abc-defg-hij'));
-    await waitFor(() => expect(result.current.members).toHaveLength(1));
-    await act(async () => {
-      await result.current.changeRole('user-2', 'colaborador');
-    });
-    expect(updateMemberRole).toHaveBeenCalledWith('abc-defg-hij', 'user-2', 'colaborador');
-    expect(result.current.members[0].role).toBe('colaborador');
-  });
+  it.each(['colaborador', 'administrador'] as const)(
+    'otorgar %s actualiza la lista de miembros',
+    async (role) => {
+      const { isLoggedIn, getCurrentUser } = await import('@/lib/auth');
+      (isLoggedIn as jest.Mock<typeof isLoggedIn>).mockReturnValue(true);
+      (getCurrentUser as jest.Mock<typeof getCurrentUser>).mockResolvedValue({
+        id: 'user-1',
+      } as never);
+      const { joinRoom, getRoomMembers, updateMemberRole } = await import('@/lib/api');
+      (joinRoom as jest.Mock<typeof joinRoom>).mockResolvedValue(undefined);
+      (getRoomMembers as jest.Mock<typeof getRoomMembers>)
+        .mockResolvedValueOnce([{ userId: 'user-2', name: 'Otro', role: 'participante' as const }])
+        .mockResolvedValueOnce([{ userId: 'user-2', name: 'Otro', role }]);
+      (updateMemberRole as jest.Mock<typeof updateMemberRole>).mockResolvedValue(undefined);
+      const { useRoomMembers } = await import('./useRoomMembers');
+      const { result } = renderHook(() => useRoomMembers('abc-defg-hij'));
+      await waitFor(() => expect(result.current.members).toHaveLength(1));
+      await act(async () => {
+        await result.current.changeRole('user-2', role);
+      });
+      expect(updateMemberRole).toHaveBeenCalledWith('abc-defg-hij', 'user-2', role);
+      expect(result.current.members[0].role).toBe(role);
+    },
+  );
 
   it('cambiar el rol de alguien muestra el error y deja la lista como estaba si el backend lo rechaza', async () => {
     const { isLoggedIn, getCurrentUser } = await import('@/lib/auth');

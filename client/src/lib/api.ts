@@ -175,7 +175,7 @@ export async function getRoomMembers(code: string): Promise<RoomMember[]> {
 export async function updateMemberRole(
   code: string,
   userId: string,
-  role: 'colaborador' | 'participante',
+  role: RoomRole,
 ): Promise<void> {
   const res = await authFetch(`/rooms/${code}/members/${userId}`, {
     method: 'PATCH',
