@@ -8,11 +8,8 @@ import {
 import { SPANISH_STORAGE_STATE } from './support/env';
 import { buildTestUser } from './support/test-data';
 
-// El cambio de rol (administrador -> colaborador/participante) no tenía
-// ninguna cobertura, ni e2e ni de backend: ni el flujo feliz, ni las reglas
-// de permisos (solo el admin puede cambiar roles, y nadie puede tocar el rol
-// del admin). Ver rooms.service.ts (setMemberRole) y
-// client/src/app/room/[code]/page.tsx (canChangeRole).
+// Los cambios de permisos se realizan desde el menú junto a cada nombre.
+// Solo un admin puede usarlos y la sala debe conservar al menos uno.
 
 async function loginViaUi(
   page: import('@playwright/test').Page,
@@ -52,31 +49,47 @@ test('el administrador puede ascender y después descender a un participante, y 
   await expect(memberPage.getByRole('heading', { name: 'En la sala (2)' })).toBeVisible();
   await expect(adminPage.getByRole('heading', { name: 'En la sala (2)' })).toBeVisible();
 
-  // El admin ya había cargado su lista de roles (REST) antes de que Beto se
-  // uniera. Esa lista solo se vuelve a pedir cuando llega el evento
-  // memberRoleChanged (ver useRoomMembers.ts), no cuando aparece gente nueva
-  // por el socket de presencia. Por eso tiene que volver a entrar a la sala
-  // para que la fila de Beto tenga su rol y, con eso, el botón para cambiarlo.
-  await adminPage.reload();
-  await adminPage.getByRole('button', { name: 'Entrar a la reunión', exact: true }).click();
-  await adminPage.getByRole('button', { name: 'Presentes', exact: true }).click();
-  await expect(adminPage.getByRole('heading', { name: 'En la sala (2)' })).toBeVisible();
-
-  const betoRowOnAdmin = adminPage.getByTestId('users-panel').locator('li').filter({ hasText: 'Beto' });
-  const ownRowOnMember = memberPage.getByTestId('users-panel').locator('li').filter({ hasText: 'Beto' });
+  const betoRowOnAdmin = adminPage
+    .getByTestId('users-panel')
+    .locator('li')
+    .filter({ hasText: 'Beto' });
+  const ownRowOnMember = memberPage
+    .getByTestId('users-panel')
+    .locator('li')
+    .filter({ hasText: 'Beto' });
   await expect(betoRowOnAdmin.getByTestId('role-tag-participante')).toBeVisible();
 
-  await betoRowOnAdmin.getByRole('button', { name: 'Hacer colaborador' }).click();
+  await betoRowOnAdmin.getByRole('button', { name: 'Permisos de Beto' }).click();
+  await betoRowOnAdmin.getByRole('menuitem', { name: 'Hacer colaborador' }).click();
 
   await expect(betoRowOnAdmin.getByTestId('role-tag-colaborador')).toBeVisible();
-  await expect(betoRowOnAdmin.getByRole('button', { name: 'Quitar colaborador' })).toBeVisible();
+  await expect(betoRowOnAdmin.getByRole('menu')).toHaveCount(0);
   // El evento llega también a la pantalla de Beto, sin que él recargue.
   await expect(ownRowOnMember.getByTestId('role-tag-colaborador')).toBeVisible();
 
-  await betoRowOnAdmin.getByRole('button', { name: 'Quitar colaborador' }).click();
+  await betoRowOnAdmin.getByRole('button', { name: 'Permisos de Beto' }).click();
+  await betoRowOnAdmin.getByRole('menuitem', { name: 'Quitar colaborador' }).click();
 
   await expect(betoRowOnAdmin.getByTestId('role-tag-participante')).toBeVisible();
   await expect(ownRowOnMember.getByTestId('role-tag-participante')).toBeVisible();
+
+  await betoRowOnAdmin.getByRole('button', { name: 'Permisos de Beto' }).click();
+  await betoRowOnAdmin.getByRole('menuitem', { name: 'Hacer administrador' }).click();
+  await expect(betoRowOnAdmin.getByTestId('role-tag-administrador')).toBeVisible();
+  await expect(ownRowOnMember.getByTestId('role-tag-administrador')).toBeVisible();
+  await expect(betoRowOnAdmin.getByRole('button', { name: 'Permisos de Beto' })).toBeVisible();
+  await expect(memberPage.getByRole('button', { name: 'Administrar ingresos (0)' })).toBeVisible();
+
+  await betoRowOnAdmin.getByRole('button', { name: 'Permisos de Beto' }).click();
+  await betoRowOnAdmin.getByRole('menuitem', { name: 'Quitar administrador' }).click();
+  await expect(betoRowOnAdmin.getByTestId('role-tag-participante')).toBeVisible();
+  await expect(ownRowOnMember.getByTestId('role-tag-participante')).toBeVisible();
+  await expect(memberPage.getByTestId('role-button')).toHaveCount(0);
+
+  const ownAdminRow = adminPage.getByTestId('users-panel').locator('li').filter({ hasText: 'Ana' });
+  await ownAdminRow.getByRole('button', { name: 'Permisos de Ana' }).click();
+  await expect(ownAdminRow.getByRole('menuitem', { name: 'Quitar administrador' })).toBeDisabled();
+  await expect(ownAdminRow.getByRole('menuitem', { name: 'Hacer colaborador' })).toBeDisabled();
 
   await adminContext.close();
   await memberContext.close();
@@ -128,12 +141,7 @@ test('un colaborador no ve botones para cambiar roles, ni el suyo ni el de otra 
   await collaboratorContext.close();
 });
 
-// Rutas que antes no tenían ningún test: cambiarle el rol al propio admin
-// (prohibido por reglas de negocio, no solo por permisos), cambiarle el rol
-// a alguien que no es parte de la sala, y que un admin de OTRA sala no pueda
-// tocar roles en esta. Las tres via API directa porque lo que se prueba es
-// la respuesta del backend, no nada visual.
-test('la API rechaza cambiar el rol del administrador, de quien no es miembro, y de quien no es admin de esta sala', async ({
+test('la API protege al último admin y rechaza cambios a no miembros o solicitados por personas ajenas', async ({
   request,
 }) => {
   const { code, adminToken, adminId } = await createRoomWithAdminViaApi(
@@ -141,7 +149,13 @@ test('la API rechaza cambiar el rol del administrador, de quien no es miembro, y
     'Sala sin colaboradores',
   );
 
-  const selfChange = await updateMemberRoleViaApi(request, code, adminToken, adminId, 'colaborador');
+  const selfChange = await updateMemberRoleViaApi(
+    request,
+    code,
+    adminToken,
+    adminId,
+    'colaborador',
+  );
   expect(selfChange.status()).toBe(403);
 
   const nobodysId = '00000000-0000-0000-0000-000000000000';

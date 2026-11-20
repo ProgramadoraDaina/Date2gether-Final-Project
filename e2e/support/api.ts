@@ -105,7 +105,9 @@ export async function joinRoomAsMemberViaApi(
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!joinRes.ok()) {
-    throw new Error(`No se pudo unir a la sala de prueba: ${joinRes.status()} ${await joinRes.text()}`);
+    throw new Error(
+      `No se pudo unir a la sala de prueba: ${joinRes.status()} ${await joinRes.text()}`,
+    );
   }
   return { user, userId: createdUser.id };
 }
@@ -119,7 +121,7 @@ export function updateMemberRoleViaApi(
   code: string,
   adminToken: string,
   targetUserId: string,
-  role: 'colaborador' | 'participante',
+  role: 'administrador' | 'colaborador' | 'participante',
 ) {
   return request.patch(`${API_URL}/rooms/${code}/members/${targetUserId}`, {
     headers: { Authorization: `Bearer ${adminToken}` },
