@@ -18,6 +18,34 @@ export interface RoomAccess {
   participant: { sub: string; roomId: string; roomCode: string; name: string; userId?: string };
 }
 
+export interface ChatMessage {
+  id: string;
+  authorName: string;
+  kind: 'text' | 'gif';
+  content: string;
+  createdAt: string;
+}
+
+export interface ChatHistoryPage {
+  entries: ChatMessage[];
+  nextCursor: string | null;
+}
+
+export async function getRoomMessages(
+  code: string,
+  token: string,
+  query: URLSearchParams,
+  signal: AbortSignal,
+): Promise<ChatHistoryPage> {
+  const res = await fetch(`${API_URL}/rooms/${encodeURIComponent(code)}/messages?${query}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal,
+  });
+  if (!res.ok)
+    throw new ApiError(await extractErrorMessage(res, 'No se pudieron cargar los mensajes'));
+  return res.json();
+}
+
 export async function getRoomInfo(code: string): Promise<Room> {
   const res = await fetch(`${API_URL}/rooms/${encodeURIComponent(code)}`);
   if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se encontró la sala'));
