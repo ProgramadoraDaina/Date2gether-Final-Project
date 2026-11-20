@@ -9,16 +9,24 @@ import { RoomScheduleController } from './schedule/room-schedule.controller';
 import { RoomScheduleService } from './schedule/room-schedule.service';
 import { RoomsController } from './rooms.controller';
 import { RoomsService } from './rooms.service';
+import { RoomArchiveController } from './room-archive.controller';
+import { RoomArchiveService } from './room-archive.service';
 
 @Module({
   imports: [JwtAuthModule, RoomResolverModule],
-  controllers: [RoomsController, RoomAdmissionController, RoomScheduleController],
+  controllers: [
+    RoomsController,
+    RoomAdmissionController,
+    RoomScheduleController,
+    RoomArchiveController,
+  ],
   providers: [
     RoomAdmissionService,
     RoomsService,
     RoomRolesGuard,
     RoomEventsService,
     RoomScheduleService,
+    RoomArchiveService,
   ],
   exports: [RoomsService, RoomEventsService],
 })

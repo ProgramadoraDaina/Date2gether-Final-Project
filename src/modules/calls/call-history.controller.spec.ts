@@ -15,6 +15,7 @@ describe('CallHistoryController', () => {
   it('delega en CallsService.listHistory con el id del usuario autenticado', async () => {
     const entries = [
       {
+        id: 'entry-1',
         roomId: 'room-1',
         roomCode: 'abc-defg-hij',
         roomName: 'Reunión',
@@ -22,15 +23,17 @@ describe('CallHistoryController', () => {
         sessionId: null,
       },
     ];
-    const service = {
-      listHistory: jest.fn<CallsService['listHistory']>().mockResolvedValue(entries),
-    };
+    const page = { entries, nextCursor: null, hasArchived: false };
+    const service = { listHistory: jest.fn<CallsService['listHistory']>().mockResolvedValue(page) };
     const controller = new CallHistoryController(service as unknown as CallsService);
 
-    const result = await controller.list({ sub: 'user-1', email: 'a@example.test' });
+    const result = await controller.list(
+      { sub: 'user-1', email: 'a@example.test' },
+      { view: 'archive' },
+    );
 
-    expect(result).toEqual(entries);
-    expect(service.listHistory).toHaveBeenCalledWith('user-1');
+    expect(result).toEqual(page);
+    expect(service.listHistory).toHaveBeenCalledWith('user-1', { view: 'archive' });
   });
 
   it('delega en CallsService.getRoomNotesForHistory con el usuario y el roomId (D4-C: no el código)', async () => {

@@ -1,8 +1,18 @@
-import { Controller, Get, Param, ParseUUIDPipe, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import type { AccessTokenPayload } from '../auth/auth.types';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CallsService } from './calls.service';
+import { ListCallHistoryDto } from './dto/list-call-history.dto';
 
 // Controlador separado (en vez de agregar la ruta al CallsController) porque
 // los guards de Nest se acumulan: no se puede "reemplazar" el RoomAccessGuard
@@ -14,8 +24,14 @@ export class CallHistoryController {
   constructor(private readonly callsService: CallsService) {}
 
   @Get('history')
-  list(@CurrentUser() user: AccessTokenPayload) {
-    return this.callsService.listHistory(user.sub);
+  list(@CurrentUser() user: AccessTokenPayload, @Query() query: ListCallHistoryDto) {
+    return this.callsService.listHistory(user.sub, query);
+  }
+
+  @Delete('history/archive')
+  @HttpCode(204)
+  async clearArchive(@CurrentUser() user: AccessTokenPayload) {
+    await this.callsService.clearHistoryArchive(user.sub);
   }
 
   // Las notas propias (personales) no pasan por acá: viven solo en

@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  Header,
+  HttpCode,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -14,6 +16,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RoomRoles } from './decorators/room-roles.decorator';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
+import { SetMyRoomVisibilityDto } from './dto/set-my-room-visibility.dto';
 import { RoomRolesGuard } from './guards/room-roles.guard';
 import { RoomsService } from './rooms.service';
 import { RoomAccessGuard } from '../auth/guards/room-access.guard';
@@ -47,13 +50,30 @@ export class RoomsController {
   // Must stay above @Get(':code') or "mine" is matched as a room code.
   @UseGuards(JwtAuthGuard)
   @Get('mine')
+  @Header('Cache-Control', 'no-store')
   listMine(@CurrentUser() user: AccessTokenPayload) {
     return this.roomsService.listOwnedRooms(user.sub);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Patch('mine/:roomId/visibility')
+  @HttpCode(204)
+  setMyRoomVisibility(
+    @Param('roomId', ParseUUIDPipe) roomId: string,
+    @Body() dto: SetMyRoomVisibilityDto,
+    @CurrentUser() user: AccessTokenPayload,
+  ) {
+    return this.roomsService.setMyRoomVisibility(roomId, user.sub, dto.hidden);
+  }
+
   @Get(':code')
-  findOne(@Param('code') code: string) {
-    return this.roomsService.getByCodeOrThrow(code);
+  async findOne(@Param('code') code: string) {
+    const {
+      historyDeletedBefore: _deleted,
+      historyCleanupPending: _pending,
+      ...room
+    } = await this.roomsService.getByCodeOrThrow(code);
+    return room;
   }
 
   @UseGuards(JwtAuthGuard)

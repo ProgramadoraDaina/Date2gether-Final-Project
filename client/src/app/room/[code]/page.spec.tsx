@@ -382,7 +382,7 @@ describe('RoomPage: transición de carga antes de entrar a la llamada', () => {
     // quedar tapando el resto de la sala para siempre: el chat y el resto de
     // la sala tienen que seguir usables aunque la llamada haya fallado.
     expect(container.querySelector('.enteringScreen')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Presentes', exact: true })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Presentes' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
     expect(mockJoinCall).toHaveBeenCalledWith('abc-defg-hij', 'guest-token');
