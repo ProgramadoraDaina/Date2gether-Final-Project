@@ -185,6 +185,7 @@ export async function updateMemberRole(
 }
 
 export interface CallHistoryEntry {
+  id: string;
   roomId: string;
   roomCode: string;
   roomName: string;
@@ -192,13 +193,34 @@ export interface CallHistoryEntry {
   sessionId: string | null;
 }
 
+export interface CallHistoryPage {
+  entries: CallHistoryEntry[];
+  nextCursor: string | null;
+  hasArchived: boolean;
+}
+
 // Solo cuentas: no hay historial para invitados (no hay endpoint para ellos).
-export async function getCallHistory(): Promise<CallHistoryEntry[]> {
-  const res = await authFetch('/calls/history');
+export async function getCallHistory(
+  view: 'recent' | 'archive',
+  roomId: string | null,
+  before: string | null,
+  signal?: AbortSignal,
+): Promise<CallHistoryPage> {
+  const query = new URLSearchParams({ view });
+  if (roomId) query.set('roomId', roomId);
+  if (before) query.set('before', before);
+  const res = await authFetch(`/calls/history?${query}`, { signal });
   if (!res.ok) {
     throw new ApiError(await extractErrorMessage(res, 'No se pudo obtener el historial'));
   }
   return res.json();
+}
+
+export async function clearCallHistoryArchive(): Promise<void> {
+  const res = await authFetch('/calls/history/archive', { method: 'DELETE' });
+  if (!res.ok) {
+    throw new ApiError(await extractErrorMessage(res, 'No se pudo borrar el historial anterior'));
+  }
 }
 
 export interface OwnedRoomSlot {

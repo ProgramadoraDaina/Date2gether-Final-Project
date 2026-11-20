@@ -432,6 +432,26 @@ const en: Record<string, string> = {
   'Cargando historial…': 'Loading history…',
   'Todavía no hiciste ninguna llamada.': "You haven't made any calls yet.",
   'No se pudo obtener el historial': 'Could not fetch the history',
+  'Llamadas de los últimos 90 días': 'Calls from the last 90 days',
+  'Historial conservado': 'Archived call history',
+  'Las llamadas de hace más de 90 días se guardan en el archivo de tu cuenta.':
+    'Calls older than 90 days are kept in your account archive.',
+  'Conservar y ver el archivo': 'Keep and view archive',
+  'Volver a las llamadas recientes': 'Back to recent calls',
+  'No hay llamadas conservadas.': 'There are no archived calls.',
+  'No hay llamadas en los últimos 90 días.': 'There have been no calls in the last 90 days.',
+  'Esta sala no tiene llamadas conservadas.': 'This room has no archived calls.',
+  'Esta sala no tiene llamadas recientes.': 'This room has no recent calls.',
+  'Borrar historial anterior': 'Delete older history',
+  '¿Borrar de tu cuenta todas las llamadas de hace más de 90 días? Esta acción es permanente.':
+    'Delete all calls older than 90 days from your account? This is permanent.',
+  'Confirmar borrado': 'Confirm deletion',
+  'Borrando…': 'Deleting…',
+  'No se pudo borrar el historial anterior': 'Could not delete older history',
+  'Se borró el historial anterior de tu cuenta.':
+    'Older call history was deleted from your account.',
+  'Página anterior': 'Previous page',
+  'Página siguiente': 'Next page',
 
   // Notas desde el historial
   'Obtener notas': 'Get notes',
