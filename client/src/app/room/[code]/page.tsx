@@ -47,6 +47,7 @@ import { useCallSession } from '@/features/calls/useCallSession';
 import { TranscriptDialog } from '@/features/calls/transcription/TranscriptDialog';
 import { HangUpButton } from '@/features/calls/HangUpButton';
 import { EventTicker } from '@/features/calls/roomEvents/EventTicker';
+import { PollPanel } from '@/features/calls/roomEvents/PollPanel';
 import { RoomEventButton } from '@/features/calls/roomEvents/RoomEventButton';
 import { RouletteWheel } from '@/features/calls/roomEvents/RouletteWheel';
 import { useRoomEvents } from '@/features/calls/roomEvents/useRoomEvents';
@@ -828,6 +829,7 @@ export default function RoomPage() {
               canManage={canManageEvents}
               participants={eventParticipants}
               onStartRoulette={roomEvents.startRoulette}
+              onStartPoll={roomEvents.startPoll}
             />
           }
         />
@@ -873,43 +875,72 @@ export default function RoomPage() {
           )}
 
           <div className={styles.meetingAndChat}>
-            {/* MeetingRoom se monta apenas hay credenciales (session), aunque
-                LiveKit todavía no haya confirmado la conexión: necesita estar
-                montado para que onConnected llegue a disparar 'in-call'. Se
-                mantiene oculto (data-hidden) hasta ese momento para que la
-                transición visual sea un único spinner continuo en vez de
-                pasar por la grilla de video todavía conectando. */}
-            {callSession.session && (
-              <div
-                className={styles.meetingRoomSlot}
-                data-hidden={callSession.status !== 'in-call'}
-              >
-                <AvatarDirectoryProvider directory={avatarDirectory}>
-                  <MeetingRoom
-                    call={callSession}
-                    roomCode={code}
-                    roomToken={access.token}
-                    roomEmojis={emojis}
-                    initialDevices={initialDevices}
-                    onTranscriptAvailable={setTranscriptCallSid}
-                    onHangUp={
-                      transcriptCallSid
-                        ? () => {
-                            setCallEnded(true);
-                            setTranscriptOpen(true);
-                          }
-                        : undefined
-                    }
-                  />
-                </AvatarDirectoryProvider>
-              </div>
-            )}
-            {/* Antes de hasJoinedCall ya se ve el mismo mensaje en
-                .enteringScreen (ver abajo): no duplicarlo acá también. */}
-            {hasJoinedCall &&
-              (callSession.status === 'ended'
-                ? !callEndedDismissed && callEndedPanel
-                : callSession.status !== 'in-call' && callLoadingPanel)}
+            {/* .meetingArea es el contenedor posicionado (position:relative)
+                de los overlays de abajo (RouletteWheel/PollPanel/EventTicker):
+                al tener su propio flex:3 en vez de heredar el de .meetingRoom/
+                .callLoadingPanel, su caja nunca incluye el ancho del chat
+                (chatPanelInCallWrap, hermano fuera de este div), así que los
+                overlays la esquivan solos, con el mismo mecanismo estructural
+                (flexbox) con el que ya esquivan la sidebar izquierda. */}
+            <div className={styles.meetingArea}>
+              {/* MeetingRoom se monta apenas hay credenciales (session), aunque
+                  LiveKit todavía no haya confirmado la conexión: necesita estar
+                  montado para que onConnected llegue a disparar 'in-call'. Se
+                  mantiene oculto (data-hidden) hasta ese momento para que la
+                  transición visual sea un único spinner continuo en vez de
+                  pasar por la grilla de video todavía conectando. */}
+              {callSession.session && (
+                <div
+                  className={styles.meetingRoomSlot}
+                  data-hidden={callSession.status !== 'in-call'}
+                >
+                  <AvatarDirectoryProvider directory={avatarDirectory}>
+                    <MeetingRoom
+                      call={callSession}
+                      roomCode={code}
+                      roomToken={access.token}
+                      roomEmojis={emojis}
+                      initialDevices={initialDevices}
+                      onTranscriptAvailable={setTranscriptCallSid}
+                      onHangUp={
+                        transcriptCallSid
+                          ? () => {
+                              setCallEnded(true);
+                              setTranscriptOpen(true);
+                            }
+                          : undefined
+                      }
+                    />
+                  </AvatarDirectoryProvider>
+                </div>
+              )}
+              {/* Antes de hasJoinedCall ya se ve el mismo mensaje en
+                  .enteringScreen (ver abajo): no duplicarlo acá también. */}
+              {hasJoinedCall &&
+                (callSession.status === 'ended'
+                  ? !callEndedDismissed && callEndedPanel
+                  : callSession.status !== 'in-call' && callLoadingPanel)}
+              {roomEvents.spin && (
+                <RouletteWheel
+                  key={roomEvents.spin.startedAt}
+                  state={roomEvents.spin}
+                  onDone={roomEvents.dismissSpin}
+                />
+              )}
+              {roomEvents.settled?.type === 'poll' && (
+                <PollPanel
+                  state={roomEvents.settled}
+                  currentParticipantId={access.participant.sub}
+                  canManage={canManageEvents}
+                  onVote={roomEvents.castPollVote}
+                  onClose={roomEvents.clearSettled}
+                  onClosePoll={roomEvents.closePoll}
+                />
+              )}
+              {roomEvents.settled?.type === 'roulette' && !roomEvents.spin && (
+                <EventTicker state={roomEvents.settled} onClose={roomEvents.clearSettled} />
+              )}
+            </div>
             <button
               type="button"
               className={styles.chatToggleButton}
@@ -934,16 +965,6 @@ export default function RoomPage() {
                 </svg>
               )}
             </button>
-            {roomEvents.spin && (
-              <RouletteWheel
-                key={roomEvents.spin.startedAt}
-                state={roomEvents.spin}
-                onDone={roomEvents.dismissSpin}
-              />
-            )}
-            {roomEvents.settled && !roomEvents.spin && (
-              <EventTicker state={roomEvents.settled} onClose={roomEvents.clearSettled} />
-            )}
             {callSession.session ? (
               // Always mounted so closing the chat keeps its scroll and draft.
               <div

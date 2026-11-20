@@ -499,6 +499,22 @@
   flex-direction: row;
 }
 
+/* Contenedor posicionado de RouletteWheel/PollPanel/EventTicker (ver
+   page.tsx): toma el flex:3 que antes vivía directo en .meetingRoom/
+   .callLoadingPanel, así su caja (y la de esos overlays, position:absolute
+   contra este ancestro) nunca incluye el ancho de chatPanelInCallWrap, que
+   queda afuera como hermano. Mismo resultado que ya pasaba con la sidebar
+   izquierda (RoomSidebar), que ni roomMain ni meetingAndChat incluyen porque
+   es un hermano previo en el flex row de .roomLayout. */
+.meetingArea {
+  position: relative;
+  flex: 3;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .desktopOnly,
 .mobileOnly {
   display: flex;
