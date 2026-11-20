@@ -3,7 +3,13 @@
 import Link from 'next/link';
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ApiError, clearCallHistoryArchive, getCallHistory, type CallHistoryPage } from '@/lib/api';
+import {
+  ApiError,
+  clearCallHistoryArchive,
+  getCallHistory,
+  getRoomCallArchive,
+  type CallHistoryPage,
+} from '@/lib/api';
 import { isLoggedIn } from '@/lib/auth';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { AppShell } from '@/features/navigation/AppShell';
@@ -22,7 +28,9 @@ function HistoryContent() {
   const { t } = useTranslation();
   const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
   const onLoggedOut = useCallback(() => setLoggedIn(false), []);
-  const roomFilter = useSearchParams().get('roomId');
+  const search = useSearchParams();
+  const roomFilter = search.get('roomId');
+  const roomArchive = roomFilter && search.get('roomArchive') === '1' ? roomFilter : null;
 
   useEffect(() => {
     setLoggedIn(isLoggedIn());
@@ -47,12 +55,25 @@ function HistoryContent() {
 
   return (
     <AppShell>
-      <HistoryList key={roomFilter} roomId={roomFilter} onLoggedOut={onLoggedOut} />
+      <HistoryList
+        key={roomArchive ? `archive/${roomArchive}` : roomFilter}
+        roomId={roomFilter}
+        roomArchive={roomArchive}
+        onLoggedOut={onLoggedOut}
+      />
     </AppShell>
   );
 }
 
-function HistoryList({ roomId, onLoggedOut }: { roomId: string | null; onLoggedOut: () => void }) {
+function HistoryList({
+  roomId,
+  roomArchive,
+  onLoggedOut,
+}: {
+  roomId: string | null;
+  roomArchive: string | null;
+  onLoggedOut: () => void;
+}) {
   const { t, language } = useTranslation();
   const [view, setView] = useState<'recent' | 'archive'>('recent');
   const [cursors, setCursors] = useState<(string | null)[]>([null]);
@@ -66,7 +87,7 @@ function HistoryList({ roomId, onLoggedOut }: { roomId: string | null; onLoggedO
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleted, setDeleted] = useState(false);
   const before = cursors.at(-1) ?? null;
-  const archive = view === 'archive';
+  const archive = view === 'archive' || !!roomArchive;
   const requestKey = `${view}/${before ?? ''}/${deleted}`;
   const current = response?.key === requestKey ? response : null;
   const page = current?.page;
@@ -75,7 +96,10 @@ function HistoryList({ roomId, onLoggedOut }: { roomId: string | null; onLoggedO
 
   useEffect(() => {
     const controller = new AbortController();
-    getCallHistory(view, roomId, before, controller.signal)
+    const load = roomArchive
+      ? getRoomCallArchive(roomArchive, before, controller.signal)
+      : getCallHistory(view, roomId, before, controller.signal);
+    load
       .then((result) => {
         if (!controller.signal.aborted) setResponse({ key: requestKey, page: result });
       })
@@ -88,7 +112,7 @@ function HistoryList({ roomId, onLoggedOut }: { roomId: string | null; onLoggedO
         if (!isLoggedIn()) onLoggedOut();
       });
     return () => controller.abort();
-  }, [view, roomId, before, requestKey, onLoggedOut]);
+  }, [view, roomId, roomArchive, before, requestKey, onLoggedOut]);
 
   function showView(next: 'recent' | 'archive') {
     setView(next);
@@ -124,7 +148,20 @@ function HistoryList({ roomId, onLoggedOut }: { roomId: string | null; onLoggedO
 
   return (
     <div className={styles.card}>
-      <h1>{t(archive ? 'Historial conservado' : 'Historial')}</h1>
+      <h1>
+        {t(
+          roomArchive
+            ? 'Archivo de llamadas de la sala'
+            : archive
+              ? 'Historial conservado'
+              : 'Historial',
+        )}
+      </h1>
+      {roomArchive && (
+        <Link href={`/history?roomId=${encodeURIComponent(roomArchive)}`}>
+          {t('Ver historial de la sala')}
+        </Link>
+      )}
       {!archive && <p className={styles.filter}>{t('Llamadas de los últimos 90 días')}</p>}
       {loading && <p>{t('Cargando historial…')}</p>}
       {error && (
@@ -185,12 +222,14 @@ function HistoryList({ roomId, onLoggedOut }: { roomId: string | null; onLoggedO
                       haber sido reciclado a otra sala desde esta llamada);
                       roomCode viaja como query param, solo para la clave
                       de notas personales de este dispositivo. */}
-                <Link
-                  href={`/history/notes/${entry.roomId}?code=${encodeURIComponent(entry.roomCode)}`}
-                  className={styles.sessionLink}
-                >
-                  {t('Obtener notas')}
-                </Link>
+                {!roomArchive && (
+                  <Link
+                    href={`/history/notes/${entry.roomId}?code=${encodeURIComponent(entry.roomCode)}`}
+                    className={styles.sessionLink}
+                  >
+                    {t('Obtener notas')}
+                  </Link>
+                )}
               </div>
             </li>
           ))}
@@ -220,7 +259,7 @@ function HistoryList({ roomId, onLoggedOut }: { roomId: string | null; onLoggedO
           )}
         </div>
       )}
-      {(archive || page?.hasArchived) && (
+      {!roomArchive && (archive || page?.hasArchived) && (
         <div className={styles.archive}>
           <p>{t('Las llamadas de hace más de 90 días se guardan en el archivo de tu cuenta.')}</p>
           <div className={styles.actions}>

@@ -6,6 +6,7 @@ import { ApiError, getOwnedRooms, type OwnedRoom } from '@/lib/api';
 import { isLoggedIn } from '@/lib/auth';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { AppShell } from '@/features/navigation/AppShell';
+import { RoomHistoryMenu } from '@/features/rooms/RoomHistoryMenu';
 import styles from './page.module.css';
 
 const DAY_LABELS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -91,6 +92,7 @@ export default function MyRoomsPage() {
                   {!room.isJoinable && (
                     <span className={`${styles.badge} ${styles.badgeMuted}`}>{t('Vencida')}</span>
                   )}
+                  {room.isPermanent && <RoomHistoryMenu room={room} />}
                 </div>
                 <span className={styles.code}>{room.code}</span>
                 {room.slots.length > 0 && (

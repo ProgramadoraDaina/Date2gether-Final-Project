@@ -223,6 +223,26 @@ export async function clearCallHistoryArchive(): Promise<void> {
   }
 }
 
+export async function getRoomCallArchive(
+  roomId: string,
+  before: string | null,
+  signal: AbortSignal,
+): Promise<CallHistoryPage> {
+  const query = before ? `?before=${encodeURIComponent(before)}` : '';
+  const res = await authFetch(`/calls/rooms/${encodeURIComponent(roomId)}/archive${query}`, {
+    signal,
+  });
+  if (!res.ok)
+    throw new ApiError(await extractErrorMessage(res, 'No se pudo obtener el historial'));
+  return res.json();
+}
+
+export async function clearRoomArchive(roomId: string): Promise<void> {
+  const res = await authFetch(`/rooms/${encodeURIComponent(roomId)}/archive`, { method: 'DELETE' });
+  if (!res.ok)
+    throw new ApiError(await extractErrorMessage(res, 'No se pudo borrar el archivo de la sala'));
+}
+
 export interface OwnedRoomSlot {
   dayOfWeek: number;
   timeOfDay: string;

@@ -455,6 +455,16 @@ const en: Record<string, string> = {
     'Older call history was deleted from your account.',
   'Página anterior': 'Previous page',
   'Página siguiente': 'Next page',
+  'Ver archivo de llamadas': 'View call archive',
+  'Archivo de llamadas de la sala': 'Room call archive',
+  'Ver historial de la sala': 'View room history',
+  'Opciones del historial de': 'History options for',
+  'Borrar registros archivados': 'Delete archived records',
+  'Se borrarán los mensajes y los registros compartidos de llamadas de hace más de 90 días para todos los participantes. Esta acción es permanente.':
+    'Messages and shared call records older than 90 days will be deleted for all participants. This is permanent.',
+  'No se pudo borrar el archivo de la sala': 'Could not delete the room archive',
+  'Se retiraron los registros archivados de la sala.':
+    'The archived records were removed from the room.',
 
   // Notas desde el historial
   'Obtener notas': 'Get notes',
