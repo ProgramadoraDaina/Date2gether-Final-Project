@@ -157,6 +157,17 @@ export default function RoomPage() {
   const [users, setUsers] = useState<RoomPresence[]>([]);
   const [mentionNames, setMentionNames] = useState<string[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messageDay, setMessageDay] = useState('');
+  const visibleMessages = useMemo(() => {
+    if (!messageDay) return messages;
+    const [year, month, day] = messageDay.split('-').map(Number);
+    return messages.filter((message) => {
+      const sentAt = new Date(message.createdAt);
+      return (
+        sentAt.getFullYear() === year && sentAt.getMonth() + 1 === month && sentAt.getDate() === day
+      );
+    });
+  }, [messageDay, messages]);
   const [draft, setDraft] = useState('');
   const [notice, setNotice] = useState<Notice | null>(null);
   useEffect(() => {
@@ -425,7 +436,7 @@ export default function RoomPage() {
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
-  }, [messages]);
+  }, [visibleMessages]);
 
   function handleSend(e: FormEvent) {
     e.preventDefault();
@@ -587,8 +598,27 @@ export default function RoomPage() {
       </div>
       {chatTab === 'chat' ? (
         <>
+          <div className={styles.chatDateFilter}>
+            <label htmlFor="chat-message-day">{t('Filtrar por día')}</label>
+            <input
+              id="chat-message-day"
+              type="date"
+              value={messageDay}
+              onChange={(event) => setMessageDay(event.target.value)}
+            />
+            {messageDay && (
+              <button type="button" onClick={() => setMessageDay('')}>
+                {t('Limpiar filtro')}
+              </button>
+            )}
+          </div>
           <ul className={styles.messages} ref={listRef} data-testid="messages">
-            {messages.map((m) => {
+            {messageDay && visibleMessages.length === 0 && (
+              <li className={styles.chatFilterEmpty} role="status">
+                {t('No hay mensajes de ese día.')}
+              </li>
+            )}
+            {visibleMessages.map((m) => {
               // No hay un id de autor persistido por mensaje: el color se
               // resuelve cruzando por nombre contra la presencia actual.
               // Es una simplificación aceptada para v1 (ver comentario en
