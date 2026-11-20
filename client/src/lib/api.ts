@@ -282,6 +282,7 @@ export interface OwnedRoom {
   code: string;
   name: string;
   isPermanent: boolean;
+  hiddenFromMyRooms: boolean;
   isJoinable: boolean;
   createdAt: string;
   lastEnteredAt: string;
@@ -295,6 +296,15 @@ export async function getOwnedRooms(): Promise<OwnedRoom[]> {
     throw new ApiError(await extractErrorMessage(res, 'No se pudieron cargar tus salas'));
   }
   return res.json();
+}
+
+export async function setMyRoomVisibility(roomId: string, hidden: boolean): Promise<void> {
+  const res = await authFetch(`/rooms/mine/${encodeURIComponent(roomId)}/visibility`, {
+    method: 'PATCH',
+    body: JSON.stringify({ hidden }),
+  });
+  if (!res.ok)
+    throw new ApiError(await extractErrorMessage(res, 'No se pudo actualizar tu lista de salas'));
 }
 
 export interface CallSessionSummary {

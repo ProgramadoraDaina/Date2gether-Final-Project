@@ -15,6 +15,7 @@ jest.mock('@/lib/api', () => ({
 
 function ownedRoom(overrides: Partial<OwnedRoom> = {}): OwnedRoom {
   return {
+    hiddenFromMyRooms: false,
     id: 'room-1',
     code: 'abc-defg-hij',
     name: 'Cita de los lunes',
