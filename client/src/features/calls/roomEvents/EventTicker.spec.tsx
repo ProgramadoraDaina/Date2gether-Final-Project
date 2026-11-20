@@ -1,9 +1,9 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { EventTicker } from './EventTicker';
-import type { RoomEventState } from './useRoomEvents';
+import type { RouletteEventState } from './useRoomEvents';
 
-const state: RoomEventState = {
+const state: RouletteEventState = {
   type: 'roulette',
   participants: [{ participantId: 'p1', userName: 'Dai' }],
   winner: { participantId: 'p1', userName: 'Dai' },
