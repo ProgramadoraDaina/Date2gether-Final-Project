@@ -28,8 +28,9 @@ import { JoinRoomDto } from './dto/join-room.dto';
 import { MusicAddTrackDto } from './dto/music-add-track.dto';
 import { MusicPositionDto } from './dto/music-position.dto';
 import { MusicTrackIndexDto } from './dto/music-track-index.dto';
+import { CastPollVoteDto } from './dto/cast-poll-vote.dto';
 import { SendMessageDto } from './dto/send-message.dto';
-import { StartRoomEventDto, type RoomEventType } from './dto/start-room-event.dto';
+import { StartRoomEventDto } from './dto/start-room-event.dto';
 
 // "Hasta la próxima ruleta o evento" (lo que llegue primero: el próximo
 // startRoomEvent pisa este estado igual) además de un techo fijo en el
@@ -96,13 +97,29 @@ interface MusicState extends PlaybackState {
   updatedAt: number;
 }
 
-interface RoomEventState {
-  type: RoomEventType;
+interface RouletteEventState {
+  type: 'roulette';
   participants: RoomUser[];
   winner: RoomUser;
   startedAt: number;
   expiresAt: number;
 }
+
+interface PollEventState {
+  type: 'poll';
+  question: string;
+  options: string[];
+  multipleChoice: boolean;
+  anonymous: boolean;
+  participants: RoomUser[];
+  // participantId -> índices de opción elegidos; ausente = todavía no votó.
+  votes: Record<string, number[]>;
+  closed: boolean;
+  startedAt: number;
+  expiresAt: number;
+}
+
+type RoomEventState = RouletteEventState | PollEventState;
 
 // Clients extrapolate from updatedAt, so refreshing it requires advancing the position too.
 function livePosition(state: MusicState, now: number): number {
@@ -437,17 +454,82 @@ export class ChatGateway implements OnGatewayDisconnect {
       return;
     }
 
-    const winner = participants[Math.floor(Math.random() * participants.length)];
     const now = Date.now();
-    const state: RoomEventState = {
-      type: dto.type,
-      participants,
-      winner,
-      startedAt: now,
-      expiresAt: now + ROOM_EVENT_TTL_MS,
-    };
+    const state: RoomEventState =
+      dto.type === 'poll'
+        ? {
+            // Los ! son seguros: el ValidationPipe global ya corrió @ValidateIf
+            // + @IsString/@IsArray/@IsBoolean sobre estos campos para type 'poll'
+            // (ver start-room-event.dto.ts) antes de que el handler se ejecute.
+            type: 'poll',
+            question: dto.question!,
+            options: dto.options!,
+            multipleChoice: dto.multipleChoice!,
+            anonymous: dto.anonymous!,
+            participants,
+            votes: {},
+            closed: false,
+            startedAt: now,
+            expiresAt: now + ROOM_EVENT_TTL_MS,
+          }
+        : {
+            type: 'roulette',
+            participants,
+            winner: participants[Math.floor(Math.random() * participants.length)],
+            startedAt: now,
+            expiresAt: now + ROOM_EVENT_TTL_MS,
+          };
     this.eventStateByRoom.set(user.roomCode, state);
     this.server.to(user.roomCode).emit('eventStarted', state);
+  }
+
+  @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage('castPollVote')
+  handleCastPollVote(@ConnectedSocket() client: Socket, @MessageBody() dto: CastPollVoteDto) {
+    const user = this.connectedUsers.get(client.id);
+    if (!user) {
+      client.emit('error', { message: 'Tenés que unirte a una sala antes de votar' });
+      return;
+    }
+
+    const state = this.eventStateByRoom.get(user.roomCode);
+    if (!state || state.type !== 'poll' || state.closed) {
+      client.emit('error', { message: 'No hay ninguna encuesta abierta en esta sala' });
+      return;
+    }
+    if (!state.participants.some((p) => p.participantId === user.participantId)) {
+      client.emit('error', { message: 'No estás participando en esta encuesta' });
+      return;
+    }
+    const inRange = dto.optionIndexes.every((index) => index < state.options.length);
+    if (!inRange) {
+      client.emit('error', { message: 'Esa opción no existe en la encuesta' });
+      return;
+    }
+    if (!state.multipleChoice && dto.optionIndexes.length > 1) {
+      client.emit('error', { message: 'Esta encuesta solo permite elegir una opción' });
+      return;
+    }
+
+    if (dto.optionIndexes.length === 0) {
+      delete state.votes[user.participantId];
+    } else {
+      state.votes[user.participantId] = [...new Set(dto.optionIndexes)];
+    }
+    this.server.to(user.roomCode).emit('eventState', state);
+  }
+
+  @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage('closePollEvent')
+  async handleClosePollEvent(@ConnectedSocket() client: Socket) {
+    const user = await this.requireEventModerator(client);
+    if (!user) return;
+
+    const state = this.eventStateByRoom.get(user.roomCode);
+    if (!state || state.type !== 'poll' || state.closed) return;
+
+    state.closed = true;
+    this.server.to(user.roomCode).emit('eventState', state);
   }
 
   handleDisconnect(client: Socket) {

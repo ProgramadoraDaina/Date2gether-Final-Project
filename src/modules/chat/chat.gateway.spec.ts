@@ -1,4 +1,4 @@
-import { describe, expect, it, jest } from '@jest/globals';
+import { describe, expect, it, vi } from 'vitest';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import type { DrizzleDb } from '../../db/drizzle.module';
 import { WsJwtAuthGuard } from '../auth/guards/ws-jwt-auth.guard';
@@ -23,12 +23,12 @@ describe('ChatGateway', () => {
     getMemberRole?: RoomsService['getMemberRole'],
     roomOptions: { isPermanent?: boolean; stored?: StoredPlaylist | null } = {},
   ) {
-    const limit = jest
+    const limit = vi
       .fn<() => Promise<{ nameColor: string | null }[]>>()
       .mockResolvedValue(nameColorRow ? [nameColorRow] : []);
-    const where = jest.fn().mockReturnValue({ limit });
-    const from = jest.fn().mockReturnValue({ where });
-    const select = jest.fn().mockReturnValue({ from });
+    const where = vi.fn().mockReturnValue({ limit });
+    const from = vi.fn().mockReturnValue({ where });
+    const select = vi.fn().mockReturnValue({ from });
     const db = { select } as unknown as DrizzleDb;
 
     const room = {
@@ -38,19 +38,19 @@ describe('ChatGateway', () => {
       isPermanent: roomOptions.isPermanent ?? false,
     };
     const playlists = {
-      load: jest.fn<RoomPlaylistsService['load']>().mockResolvedValue(roomOptions.stored ?? null),
-      save: jest.fn<RoomPlaylistsService['save']>().mockResolvedValue(undefined),
+      load: vi.fn<RoomPlaylistsService['load']>().mockResolvedValue(roomOptions.stored ?? null),
+      save: vi.fn<RoomPlaylistsService['save']>().mockResolvedValue(undefined),
     };
     const roomsService = {
-      getMemberRole: getMemberRole ?? jest.fn<RoomsService['getMemberRole']>(),
+      getMemberRole: getMemberRole ?? vi.fn<RoomsService['getMemberRole']>(),
     } as unknown as RoomsService;
     // resolveJoinable/assertBound replican la lógica real (D4, Categoría E):
     // 404 si el código no resuelve (chain().resolveJoinable configurable por
     // test), 403 si el roomId del participante no coincide con el de la sala.
-    const resolveJoinable = jest
+    const resolveJoinable = vi
       .fn<RoomResolverService['resolveJoinable']>()
       .mockResolvedValue(room as never);
-    const assertBound = jest
+    const assertBound = vi
       .fn<RoomResolverService['assertBound']>()
       .mockImplementation((participant, resolvedRoom) => {
         if (participant.roomId !== resolvedRoom.id) {
@@ -58,14 +58,14 @@ describe('ChatGateway', () => {
         }
       });
     const resolver = { resolveJoinable, assertBound } as unknown as RoomResolverService;
-    const createMessage = jest.fn<ChatService['createMessage']>();
+    const createMessage = vi.fn<ChatService['createMessage']>();
     const chatService = {
-      getHistory: jest.fn<ChatService['getHistory']>().mockResolvedValue([]),
+      getHistory: vi.fn<ChatService['getHistory']>().mockResolvedValue([]),
       createMessage,
     } as unknown as ChatService;
     const roomEvents = {
-      onMemberRoleChanged: jest.fn(),
-      onRoomEmojisChanged: jest.fn(),
+      onMemberRoleChanged: vi.fn(),
+      onRoomEmojisChanged: vi.fn(),
     } as unknown as RoomEventsService;
 
     const gateway = new ChatGateway(
@@ -76,8 +76,8 @@ describe('ChatGateway', () => {
       resolver,
       playlists as unknown as RoomPlaylistsService,
     );
-    const serverEmit = jest.fn();
-    const serverTo = jest.fn().mockReturnValue({ emit: serverEmit });
+    const serverEmit = vi.fn();
+    const serverTo = vi.fn().mockReturnValue({ emit: serverEmit });
     gateway.server = { to: serverTo } as unknown as ChatGateway['server'];
     return {
       gateway,
@@ -95,14 +95,14 @@ describe('ChatGateway', () => {
   }
 
   function createSocket(participant: RoomParticipant, id = 'socket-1') {
-    const toEmit = jest.fn();
+    const toEmit = vi.fn();
     return {
       id,
       data: { participant },
-      join: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
-      leave: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
-      emit: jest.fn(),
-      to: jest.fn().mockReturnValue({ emit: toEmit }),
+      join: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+      leave: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+      emit: vi.fn(),
+      to: vi.fn().mockReturnValue({ emit: toEmit }),
       toEmit,
     };
   }
@@ -303,7 +303,7 @@ describe('ChatGateway', () => {
       role: 'administrador' | 'colaborador' | 'participante',
       roomOptions: { isPermanent?: boolean; stored?: StoredPlaylist | null } = {},
     ) {
-      const getMemberRole = jest.fn<RoomsService['getMemberRole']>().mockResolvedValue(role);
+      const getMemberRole = vi.fn<RoomsService['getMemberRole']>().mockResolvedValue(role);
       const setup = createGateway(undefined, getMemberRole, roomOptions);
       const client = createSocket(admin);
       await setup.gateway.handleJoinRoom(client as never, { code: 'abc-defg-hij' });
@@ -432,7 +432,7 @@ describe('ChatGateway', () => {
     });
 
     it('si falla la base al recuperar la playlist, la persona entra igual sin música', async () => {
-      const getMemberRole = jest
+      const getMemberRole = vi
         .fn<RoomsService['getMemberRole']>()
         .mockResolvedValue('administrador');
       const setup = createGateway(undefined, getMemberRole, { isPermanent: true });
@@ -459,7 +459,7 @@ describe('ChatGateway', () => {
 
     it('cambiar aleatorio o repetición no reinicia la canción que está sonando', async () => {
       const { gateway, client, serverEmit } = await joinedAdmin('administrador');
-      const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
       await gateway.handleMusicAddTrack(client as never, { videoId: 'aaaaaaaaaaa', title: 'Uno' });
       await gateway.handleMusicPlay(client as never, { positionSeconds: 30 });
 
@@ -483,7 +483,7 @@ describe('ChatGateway', () => {
 
     it('al terminar una canción avanza una sola vez aunque avisen varios oyentes', async () => {
       const { gateway, client, serverEmit } = await joinedAdmin('administrador');
-      const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1_000);
+      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_000);
       await gateway.handleMusicAddTrack(client as never, { videoId: 'aaaaaaaaaaa', title: 'Uno' });
       await gateway.handleMusicAddTrack(client as never, { videoId: 'bbbbbbbbbbb', title: 'Dos' });
       await gateway.handleMusicAddTrack(client as never, { videoId: 'ccccccccccc', title: 'Tres' });
@@ -505,13 +505,13 @@ describe('ChatGateway', () => {
     it('un invitado que escucha también puede avisar que terminó la canción', async () => {
       const setup = createGateway(
         undefined,
-        jest.fn<RoomsService['getMemberRole']>().mockResolvedValue('administrador'),
+        vi.fn<RoomsService['getMemberRole']>().mockResolvedValue('administrador'),
       );
       const adminClient = createSocket(admin);
       const guestClient = createSocket(guest, 'socket-2');
       await setup.gateway.handleJoinRoom(adminClient as never, { code: 'abc-defg-hij' });
       await setup.gateway.handleJoinRoom(guestClient as never, { code: 'abc-defg-hij' });
-      const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(5_000);
+      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(5_000);
       await setup.gateway.handleMusicAddTrack(adminClient as never, {
         videoId: 'aaaaaaaaaaa',
         title: 'Uno',
@@ -557,7 +557,7 @@ describe('ChatGateway', () => {
 
     it('agregar una canción mientras suena otra no la reinicia ni cambia lo que se escucha', async () => {
       const { gateway, client, serverEmit } = await joinedAdmin('administrador');
-      const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
       await gateway.handleMusicAddTrack(client as never, { videoId: 'aaaaaaaaaaa', title: 'Uno' });
       await gateway.handleMusicPlay(client as never, { positionSeconds: 30 });
 
@@ -833,7 +833,7 @@ describe('ChatGateway', () => {
     });
 
     it('a quien se une después, se le manda el estado de música actual de la sala', async () => {
-      const getMemberRole = jest
+      const getMemberRole = vi
         .fn<RoomsService['getMemberRole']>()
         .mockResolvedValue('administrador');
       const setup = createGateway(undefined, getMemberRole);
@@ -892,7 +892,7 @@ describe('ChatGateway', () => {
       role: 'administrador' | 'colaborador' | 'participante',
       socketId = 'socket-1',
     ) {
-      const getMemberRole = jest.fn<RoomsService['getMemberRole']>().mockResolvedValue(role);
+      const getMemberRole = vi.fn<RoomsService['getMemberRole']>().mockResolvedValue(role);
       const setup = createGateway(undefined, getMemberRole);
       const client = createSocket(participant, socketId);
       await setup.gateway.handleJoinRoom(client as never, { code: 'abc-defg-hij' });
@@ -1002,12 +1002,174 @@ describe('ChatGateway', () => {
       });
 
       const realNow = Date.now;
-      jest.spyOn(Date, 'now').mockImplementation(() => realNow() + 15 * 60 * 1000 + 1);
+      vi.spyOn(Date, 'now').mockImplementation(() => realNow() + 15 * 60 * 1000 + 1);
       const lateClient = createSocket(guest, 'socket-guest');
       await gateway.handleJoinRoom(lateClient as never, { code: 'abc-defg-hij' });
-      jest.restoreAllMocks();
+      vi.restoreAllMocks();
 
       expect(lateClient.emit).not.toHaveBeenCalledWith('eventState', expect.anything());
+    });
+
+    describe('evento de sala (encuesta)', () => {
+      it('un admin puede crear una encuesta single-choice, votos propios en 0/N', async () => {
+        const { gateway, client, serverTo, serverEmit } = await joinedAs(admin, 'administrador');
+        const guestClient = createSocket(guest, 'socket-guest');
+        await gateway.handleJoinRoom(guestClient as never, { code: 'abc-defg-hij' });
+
+        await gateway.handleStartRoomEvent(client as never, {
+          type: 'poll',
+          participantIds: ['participant-admin', 'participant-guest'],
+          question: '¿Pizza o sushi?',
+          options: ['Pizza', 'Sushi'],
+          multipleChoice: false,
+          anonymous: false,
+        });
+
+        expect(serverTo).toHaveBeenCalledWith('abc-defg-hij');
+        expect(serverEmit).toHaveBeenCalledWith(
+          'eventStarted',
+          expect.objectContaining({
+            type: 'poll',
+            question: '¿Pizza o sushi?',
+            options: ['Pizza', 'Sushi'],
+            multipleChoice: false,
+            anonymous: false,
+            votes: {},
+            closed: false,
+          }),
+        );
+      });
+
+      it('un voto válido actualiza el tally y se re-emite eventState a toda la sala', async () => {
+        const { gateway, client, serverTo, serverEmit } = await joinedAs(admin, 'administrador');
+        await gateway.handleStartRoomEvent(client as never, {
+          type: 'poll',
+          participantIds: ['participant-admin'],
+          question: '¿Pizza o sushi?',
+          options: ['Pizza', 'Sushi'],
+          multipleChoice: false,
+          anonymous: false,
+        });
+        serverEmit.mockClear();
+
+        gateway.handleCastPollVote(client as never, { optionIndexes: [1] });
+
+        expect(serverTo).toHaveBeenCalledWith('abc-defg-hij');
+        expect(serverEmit).toHaveBeenCalledWith(
+          'eventState',
+          expect.objectContaining({ votes: { 'participant-admin': [1] } }),
+        );
+      });
+
+      it('votar de nuevo reemplaza el voto anterior en vez de acumularlo', async () => {
+        const { gateway, client, serverEmit } = await joinedAs(admin, 'administrador');
+        await gateway.handleStartRoomEvent(client as never, {
+          type: 'poll',
+          participantIds: ['participant-admin'],
+          question: '¿Pizza o sushi?',
+          options: ['Pizza', 'Sushi', 'Empanadas'],
+          multipleChoice: true,
+          anonymous: false,
+        });
+        gateway.handleCastPollVote(client as never, { optionIndexes: [0, 2] });
+
+        gateway.handleCastPollVote(client as never, { optionIndexes: [1] });
+
+        expect(serverEmit).toHaveBeenLastCalledWith(
+          'eventState',
+          expect.objectContaining({ votes: { 'participant-admin': [1] } }),
+        );
+      });
+
+      it('un array vacío retira el voto', async () => {
+        const { gateway, client, serverEmit } = await joinedAs(admin, 'administrador');
+        await gateway.handleStartRoomEvent(client as never, {
+          type: 'poll',
+          participantIds: ['participant-admin'],
+          question: '¿Pizza o sushi?',
+          options: ['Pizza', 'Sushi'],
+          multipleChoice: false,
+          anonymous: false,
+        });
+        gateway.handleCastPollVote(client as never, { optionIndexes: [0] });
+
+        gateway.handleCastPollVote(client as never, { optionIndexes: [] });
+
+        expect(serverEmit).toHaveBeenLastCalledWith(
+          'eventState',
+          expect.objectContaining({ votes: {} }),
+        );
+      });
+
+      it('rechaza más de una opción en una encuesta single-choice', async () => {
+        const { gateway, client, serverEmit } = await joinedAs(admin, 'administrador');
+        await gateway.handleStartRoomEvent(client as never, {
+          type: 'poll',
+          participantIds: ['participant-admin'],
+          question: '¿Pizza o sushi?',
+          options: ['Pizza', 'Sushi'],
+          multipleChoice: false,
+          anonymous: false,
+        });
+        serverEmit.mockClear();
+
+        gateway.handleCastPollVote(client as never, { optionIndexes: [0, 1] });
+
+        expect(client.emit).toHaveBeenCalledWith('error', {
+          message: 'Esta encuesta solo permite elegir una opción',
+        });
+        expect(serverEmit).not.toHaveBeenCalled();
+      });
+
+      it('solo un moderador puede cerrar la encuesta', async () => {
+        const { gateway, client, serverEmit } = await joinedAs(admin, 'administrador');
+        await gateway.handleStartRoomEvent(client as never, {
+          type: 'poll',
+          participantIds: ['participant-admin', 'participant-guest'],
+          question: '¿Pizza o sushi?',
+          options: ['Pizza', 'Sushi'],
+          multipleChoice: false,
+          anonymous: false,
+        });
+        const guestClient = createSocket(guest, 'socket-guest');
+        await gateway.handleJoinRoom(guestClient as never, { code: 'abc-defg-hij' });
+        serverEmit.mockClear();
+
+        await gateway.handleClosePollEvent(guestClient as never);
+
+        expect(guestClient.emit).toHaveBeenCalledWith('error', {
+          message: 'Necesitás una cuenta para armar un evento en la sala',
+        });
+        expect(serverEmit).not.toHaveBeenCalled();
+
+        await gateway.handleClosePollEvent(client as never);
+
+        expect(serverEmit).toHaveBeenCalledWith(
+          'eventState',
+          expect.objectContaining({ closed: true }),
+        );
+      });
+
+      it('rechaza un voto después de que la encuesta se cerró', async () => {
+        const { gateway, client, serverEmit } = await joinedAs(admin, 'administrador');
+        await gateway.handleStartRoomEvent(client as never, {
+          type: 'poll',
+          participantIds: ['participant-admin'],
+          question: '¿Pizza o sushi?',
+          options: ['Pizza', 'Sushi'],
+          multipleChoice: false,
+          anonymous: false,
+        });
+        await gateway.handleClosePollEvent(client as never);
+        serverEmit.mockClear();
+
+        gateway.handleCastPollVote(client as never, { optionIndexes: [0] });
+
+        expect(client.emit).toHaveBeenCalledWith('error', {
+          message: 'No hay ninguna encuesta abierta en esta sala',
+        });
+        expect(serverEmit).not.toHaveBeenCalled();
+      });
     });
   });
 });
