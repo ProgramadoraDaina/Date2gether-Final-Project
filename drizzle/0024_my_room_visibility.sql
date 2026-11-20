@@ -1,0 +1,1 @@
+ALTER TABLE "room_members" ADD COLUMN "hidden_from_my_rooms" boolean DEFAULT false NOT NULL;

@@ -149,6 +149,7 @@ export const roomMembers = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     role: roomRoleEnum('role').notNull().default('participante'),
+    hiddenFromMyRooms: boolean('hidden_from_my_rooms').notNull().default(false),
     joinedAt: timestamp('joined_at').notNull().defaultNow(),
   },
   (table) => [primaryKey({ columns: [table.roomId, table.userId] })],
