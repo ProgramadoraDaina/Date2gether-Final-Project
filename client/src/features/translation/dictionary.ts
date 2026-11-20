@@ -360,6 +360,7 @@ const en: Record<string, string> = {
   'Hacer colaborador': 'Make collaborator',
   'Hacer administrador': 'Make administrator',
   'Quitar administrador': 'Remove administrator',
+  Propietario: 'Owner',
   'Permisos de': 'Permissions for',
   'La sala debe conservar al menos un administrador':
     'The room must keep at least one administrator',

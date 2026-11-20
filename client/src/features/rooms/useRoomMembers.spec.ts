@@ -46,7 +46,9 @@ describe('useRoomMembers', () => {
     } as never);
     const { joinRoom, getRoomMembers } = await import('@/lib/api');
     (joinRoom as jest.Mock<typeof joinRoom>).mockResolvedValue(undefined);
-    const members = [{ userId: 'user-1', name: 'Daina', role: 'administrador' as const }];
+    const members = [
+      { userId: 'user-1', name: 'Daina', role: 'administrador' as const, isOwner: true },
+    ];
     (getRoomMembers as jest.Mock<typeof getRoomMembers>).mockResolvedValue(members);
     const { useRoomMembers } = await import('./useRoomMembers');
     const { result } = renderHook(() => useRoomMembers('abc-defg-hij'));
@@ -82,8 +84,10 @@ describe('useRoomMembers', () => {
       const { joinRoom, getRoomMembers, updateMemberRole } = await import('@/lib/api');
       (joinRoom as jest.Mock<typeof joinRoom>).mockResolvedValue(undefined);
       (getRoomMembers as jest.Mock<typeof getRoomMembers>)
-        .mockResolvedValueOnce([{ userId: 'user-2', name: 'Otro', role: 'participante' as const }])
-        .mockResolvedValueOnce([{ userId: 'user-2', name: 'Otro', role }]);
+        .mockResolvedValueOnce([
+          { userId: 'user-2', name: 'Otro', role: 'participante', isOwner: false },
+        ])
+        .mockResolvedValueOnce([{ userId: 'user-2', name: 'Otro', role, isOwner: false }]);
       (updateMemberRole as jest.Mock<typeof updateMemberRole>).mockResolvedValue(undefined);
       const { useRoomMembers } = await import('./useRoomMembers');
       const { result } = renderHook(() => useRoomMembers('abc-defg-hij'));
@@ -104,7 +108,9 @@ describe('useRoomMembers', () => {
     } as never);
     const { joinRoom, getRoomMembers, updateMemberRole, ApiError } = await import('@/lib/api');
     (joinRoom as jest.Mock<typeof joinRoom>).mockResolvedValue(undefined);
-    const original = [{ userId: 'user-2', name: 'Otro', role: 'administrador' as const }];
+    const original = [
+      { userId: 'user-2', name: 'Otro', role: 'administrador' as const, isOwner: true },
+    ];
     (getRoomMembers as jest.Mock<typeof getRoomMembers>).mockResolvedValue(original);
     (updateMemberRole as jest.Mock<typeof updateMemberRole>).mockRejectedValue(
       new ApiError('No se puede cambiar el rol del administrador de la sala'),

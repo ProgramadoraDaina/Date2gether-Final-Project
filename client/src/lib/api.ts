@@ -97,6 +97,7 @@ export interface RoomMember {
   userId: string;
   name: string;
   role: RoomRole;
+  isOwner: boolean;
 }
 
 // Errores pensados para mostrarse tal cual al usuario (sesión vencida, validación

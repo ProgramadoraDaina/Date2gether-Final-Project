@@ -9,7 +9,7 @@ import { SPANISH_STORAGE_STATE } from './support/env';
 import { buildTestUser } from './support/test-data';
 
 // Los cambios de permisos se realizan desde el menú junto a cada nombre.
-// Solo un admin puede usarlos y la sala debe conservar al menos uno.
+// Solo un admin puede usarlos y el rol del propietario está protegido.
 
 async function loginViaUi(
   page: import('@playwright/test').Page,
@@ -79,17 +79,15 @@ test('el administrador puede ascender y después descender a un participante, y 
   await expect(ownRowOnMember.getByTestId('role-tag-administrador')).toBeVisible();
   await expect(betoRowOnAdmin.getByRole('button', { name: 'Permisos de Beto' })).toBeVisible();
   await expect(memberPage.getByRole('button', { name: 'Administrar ingresos (0)' })).toBeVisible();
+  const ownerRow = memberPage.getByTestId('users-panel').locator('li').filter({ hasText: 'Ana' });
+  await expect(ownerRow.getByText('Propietario')).toBeVisible();
+  await expect(ownerRow.getByRole('button', { name: 'Permisos de Ana' })).toHaveCount(0);
 
   await betoRowOnAdmin.getByRole('button', { name: 'Permisos de Beto' }).click();
   await betoRowOnAdmin.getByRole('menuitem', { name: 'Quitar administrador' }).click();
   await expect(betoRowOnAdmin.getByTestId('role-tag-participante')).toBeVisible();
   await expect(ownRowOnMember.getByTestId('role-tag-participante')).toBeVisible();
   await expect(memberPage.getByTestId('role-button')).toHaveCount(0);
-
-  const ownAdminRow = adminPage.getByTestId('users-panel').locator('li').filter({ hasText: 'Ana' });
-  await ownAdminRow.getByRole('button', { name: 'Permisos de Ana' }).click();
-  await expect(ownAdminRow.getByRole('menuitem', { name: 'Quitar administrador' })).toBeDisabled();
-  await expect(ownAdminRow.getByRole('menuitem', { name: 'Hacer colaborador' })).toBeDisabled();
 
   await adminContext.close();
   await memberContext.close();
@@ -141,7 +139,7 @@ test('un colaborador no ve botones para cambiar roles, ni el suyo ni el de otra 
   await collaboratorContext.close();
 });
 
-test('la API protege al último admin y rechaza cambios a no miembros o solicitados por personas ajenas', async ({
+test('la API protege al propietario y rechaza cambios a no miembros o solicitados por personas ajenas', async ({
   request,
 }) => {
   const { code, adminToken, adminId } = await createRoomWithAdminViaApi(

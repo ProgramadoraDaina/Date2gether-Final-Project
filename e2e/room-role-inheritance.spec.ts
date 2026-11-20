@@ -80,6 +80,14 @@ test('solo un nuevo admin puede conceder ambos roles y entrar sin esperar al cre
   expect(
     (await updateMemberRoleViaApi(request, code, adminToken, heir.userId, 'administrador')).ok(),
   ).toBe(true);
+  const revokeOwner = await updateMemberRoleViaApi(
+    request,
+    code,
+    accessToken,
+    adminId,
+    'participante',
+  );
+  expect(revokeOwner.status()).toBe(403);
   expect(
     (await updateMemberRoleViaApi(request, code, accessToken, other.userId, 'colaborador')).ok(),
   ).toBe(true);
@@ -103,9 +111,9 @@ test('solo un nuevo admin puede conceder ambos roles y entrar sin esperar al cre
   });
   expect(await members.json()).toEqual(
     expect.arrayContaining([
-      expect.objectContaining({ userId: adminId, role: 'administrador' }),
-      expect.objectContaining({ userId: heir.userId, role: 'administrador' }),
-      expect.objectContaining({ userId: other.userId, role: 'administrador' }),
+      expect.objectContaining({ userId: adminId, role: 'administrador', isOwner: true }),
+      expect.objectContaining({ userId: heir.userId, role: 'administrador', isOwner: false }),
+      expect.objectContaining({ userId: other.userId, role: 'administrador', isOwner: false }),
     ]),
   );
 

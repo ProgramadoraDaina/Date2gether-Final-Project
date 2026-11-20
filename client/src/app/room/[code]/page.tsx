@@ -673,14 +673,19 @@ export default function RoomPage() {
               // pueden escribir el mismo userName y antes eso mezclaba sus
               // roles y botones de permisos.
               const member = userId ? members.find((m) => m.userId === userId) : undefined;
-              const canChangeRole = isCurrentUserAdmin && member;
+              const canChangeRole = isCurrentUserAdmin && member && !member.isOwner;
               const color = nameColorHex(nameColor);
               return (
                 <li key={participantId}>
                   <div className={styles.memberIdentity}>
                     <span style={color ? { color } : undefined}>{userName}</span>
                     {!userId && <span> ({t('Invitado')})</span>}
-                    {member && <RoleTag role={member.role} />}
+                    {member && (
+                      <RoleTag
+                        role={member.role}
+                        ownerLabel={member.isOwner ? t('Propietario') : undefined}
+                      />
+                    )}
                   </div>
                   {canChangeRole && (
                     <MemberRoleMenu

@@ -654,8 +654,8 @@ describe('RoomPage: concesión de permisos', () => {
     mockError = null;
     mockSession = null;
     mockRoomMembersState.members = [
-      { userId: 'member-1', name: 'Beto', role: 'participante' },
-      { userId: 'admin-1', name: 'Ana', role: 'administrador' },
+      { userId: 'member-1', name: 'Beto', role: 'participante', isOwner: false },
+      { userId: 'admin-1', name: 'Ana', role: 'administrador', isOwner: true },
     ];
     mockRoomMembersState.isCurrentUserAdmin = true;
   });
@@ -723,12 +723,17 @@ describe('RoomPage: concesión de permisos', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Permisos de Beto' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Hacer administrador' }));
     expect(mockRoomMembersState.changeRole).toHaveBeenCalledWith('member-1', 'administrador');
-    expect(screen.getAllByTestId('role-button')).toHaveLength(2);
+    expect(screen.getAllByTestId('role-button')).toHaveLength(1);
     await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
   });
 
   it('también permite ascender a admin a un colaborador', async () => {
-    mockRoomMembersState.members[0] = { userId: 'member-1', name: 'Beto', role: 'colaborador' };
+    mockRoomMembersState.members[0] = {
+      userId: 'member-1',
+      name: 'Beto',
+      role: 'colaborador',
+      isOwner: false,
+    };
     await enter();
     fireEvent.click(screen.getByRole('button', { name: 'Permisos de Beto' }));
     expect(screen.getByRole('menuitem', { name: 'Quitar colaborador' })).toBeVisible();
@@ -738,8 +743,15 @@ describe('RoomPage: concesión de permisos', () => {
   });
 
   it('permite quitar admin desde el menú cuando queda otro administrador', async () => {
-    mockRoomMembersState.members[0] = { userId: 'member-1', name: 'Beto', role: 'administrador' };
+    mockRoomMembersState.members[0] = {
+      userId: 'member-1',
+      name: 'Beto',
+      role: 'administrador',
+      isOwner: false,
+    };
     await enter();
+    expect(screen.getByText('Propietario')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Permisos de Ana' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Permisos de Beto' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Quitar administrador' }));
     expect(mockRoomMembersState.changeRole).toHaveBeenCalledWith('member-1', 'participante');

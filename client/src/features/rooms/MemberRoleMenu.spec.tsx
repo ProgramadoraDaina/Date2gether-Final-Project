@@ -12,7 +12,7 @@ async function setup(role: RoomRole = 'participante', isLastAdmin = false) {
   const { MemberRoleMenu } = await import('./MemberRoleMenu');
   render(
     <MemberRoleMenu
-      member={{ userId: 'user-1', name: 'Beto', role }}
+      member={{ userId: 'user-1', name: 'Beto', role, isOwner: false }}
       name="Beto"
       isLastAdmin={isLastAdmin}
       onChangeRole={onChangeRole}
