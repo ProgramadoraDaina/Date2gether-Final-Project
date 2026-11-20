@@ -1,4 +1,4 @@
-import { describe, expect, it, jest } from '@jest/globals';
+import { describe, expect, it, vi } from 'vitest';
 import { AuthController } from './auth.controller';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import type { AuthService } from './auth.service';
@@ -16,7 +16,7 @@ describe('AuthController', () => {
   it('delega la actualización de color en AuthService con el id del usuario autenticado', async () => {
     const updatedUser = { id: 'user-1', nameColor: 'teal' };
     const service = {
-      updateNameColor: jest
+      updateNameColor: vi
         .fn<AuthService['updateNameColor']>()
         .mockResolvedValue(updatedUser as never),
     };

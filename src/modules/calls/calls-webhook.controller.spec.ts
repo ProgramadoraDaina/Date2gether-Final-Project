@@ -1,4 +1,4 @@
-import { describe, expect, it, jest } from '@jest/globals';
+import { describe, expect, it, vi } from 'vitest';
 import type { RawBodyRequest } from '@nestjs/common';
 import type { Request } from 'express';
 import { CallsWebhookController } from './calls-webhook.controller';
@@ -7,7 +7,7 @@ import type { CallsWebhookService } from './calls-webhook.service';
 describe('CallsWebhookController', () => {
   it('lee el rawBody y el header Authorization solo vía @Req(), y delega en el servicio', async () => {
     const webhookService = {
-      handle: jest.fn<CallsWebhookService['handle']>().mockResolvedValue(undefined),
+      handle: vi.fn<CallsWebhookService['handle']>().mockResolvedValue(undefined),
     };
     const controller = new CallsWebhookController(webhookService as unknown as CallsWebhookService);
     const req = {

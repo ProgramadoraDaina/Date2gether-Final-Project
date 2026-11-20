@@ -1,4 +1,4 @@
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it } from 'vitest';
 import { afterTrackEnded, skipToNext, type PlaybackState } from './music-playback';
 
 const tracks = [

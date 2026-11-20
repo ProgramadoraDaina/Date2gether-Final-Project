@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import type { DrizzleDb } from '../../db/drizzle.module';
 import type { Room } from '../../db/schema';
@@ -26,35 +26,35 @@ function makeRoom(overrides: Partial<Room> = {}): Room {
 describe('RoomAdmissionService', () => {
   let db: FakeDb;
   let access: {
-    authenticateAccount: ReturnType<typeof jest.fn>;
-    issueParticipant: ReturnType<typeof jest.fn>;
-    createAdmissionTicket: ReturnType<typeof jest.fn>;
-    verifyAdmissionTicket: ReturnType<typeof jest.fn>;
+    authenticateAccount: ReturnType<typeof vi.fn>;
+    issueParticipant: ReturnType<typeof vi.fn>;
+    createAdmissionTicket: ReturnType<typeof vi.fn>;
+    verifyAdmissionTicket: ReturnType<typeof vi.fn>;
   };
   let resolver: {
-    lockJoinable: ReturnType<typeof jest.fn>;
-    resolveJoinable: ReturnType<typeof jest.fn>;
-    touchEntry: ReturnType<typeof jest.fn>;
+    lockJoinable: ReturnType<typeof vi.fn>;
+    resolveJoinable: ReturnType<typeof vi.fn>;
+    touchEntry: ReturnType<typeof vi.fn>;
   };
   let service: RoomAdmissionService;
   let tx: {
-    select: ReturnType<typeof jest.fn>;
-    insert: ReturnType<typeof jest.fn>;
-    update: ReturnType<typeof jest.fn>;
+    select: ReturnType<typeof vi.fn>;
+    insert: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
     db = createFakeDb();
     access = {
-      authenticateAccount: jest.fn().mockResolvedValue(undefined),
-      issueParticipant: jest.fn().mockResolvedValue({ token: 'tok', participant: {} }),
-      createAdmissionTicket: jest.fn().mockResolvedValue('ticket'),
-      verifyAdmissionTicket: jest.fn().mockResolvedValue(undefined),
+      authenticateAccount: vi.fn().mockResolvedValue(undefined),
+      issueParticipant: vi.fn().mockResolvedValue({ token: 'tok', participant: {} }),
+      createAdmissionTicket: vi.fn().mockResolvedValue('ticket'),
+      verifyAdmissionTicket: vi.fn().mockResolvedValue(undefined),
     };
     resolver = {
-      lockJoinable: jest.fn(),
-      resolveJoinable: jest.fn(),
-      touchEntry: jest.fn().mockResolvedValue(undefined),
+      lockJoinable: vi.fn(),
+      resolveJoinable: vi.fn(),
+      touchEntry: vi.fn().mockResolvedValue(undefined),
     };
     service = new RoomAdmissionService(
       db as unknown as DrizzleDb,
@@ -62,9 +62,9 @@ describe('RoomAdmissionService', () => {
       resolver as unknown as RoomResolverService,
     );
     tx = {
-      select: jest.fn().mockReturnValue(chain([])),
-      insert: jest.fn().mockReturnValue(chain([])),
-      update: jest.fn().mockReturnValue(chain([])),
+      select: vi.fn().mockReturnValue(chain([])),
+      insert: vi.fn().mockReturnValue(chain([])),
+      update: vi.fn().mockReturnValue(chain([])),
     };
     db.transaction.mockImplementation(async (cb: unknown) => {
       return (cb as (t: typeof tx) => Promise<unknown>)(tx);
@@ -190,10 +190,10 @@ describe('RoomAdmissionService', () => {
       const room = makeRoom({ isPermanent: true, waitingRoomEnabled: true });
       resolver.lockJoinable.mockResolvedValueOnce(room);
       const updateChain = chain([]);
-      (tx as unknown as { update: ReturnType<typeof jest.fn> }).update = jest
+      (tx as unknown as { update: ReturnType<typeof vi.fn> }).update = vi
         .fn()
         .mockReturnValue(updateChain);
-      (tx as unknown as { select: ReturnType<typeof jest.fn> }).select = jest
+      (tx as unknown as { select: ReturnType<typeof vi.fn> }).select = vi
         .fn()
         .mockReturnValue(chain([]));
 
@@ -206,10 +206,10 @@ describe('RoomAdmissionService', () => {
       const room = makeRoom({ isPermanent: false, waitingRoomEnabled: true });
       resolver.lockJoinable.mockResolvedValueOnce(room);
       const updateChain = chain([]);
-      (tx as unknown as { update: ReturnType<typeof jest.fn> }).update = jest
+      (tx as unknown as { update: ReturnType<typeof vi.fn> }).update = vi
         .fn()
         .mockReturnValue(updateChain);
-      (tx as unknown as { select: ReturnType<typeof jest.fn> }).select = jest
+      (tx as unknown as { select: ReturnType<typeof vi.fn> }).select = vi
         .fn()
         .mockReturnValue(chain([]));
 
@@ -302,7 +302,7 @@ describe('RoomAdmissionService', () => {
       };
       tx.select.mockReturnValueOnce(chain([oldRequest]));
       const updateChain = chain([]);
-      (tx as unknown as { update: ReturnType<typeof jest.fn> }).update = jest
+      (tx as unknown as { update: ReturnType<typeof vi.fn> }).update = vi
         .fn()
         .mockReturnValue(updateChain);
 

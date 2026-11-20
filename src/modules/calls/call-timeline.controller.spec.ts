@@ -1,4 +1,4 @@
-import { describe, expect, it, jest } from '@jest/globals';
+import { describe, expect, it, vi } from 'vitest';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CallTimelineController } from './call-timeline.controller';
 import type { CallTimelineService } from './call-timeline.service';
@@ -21,7 +21,7 @@ describe('CallTimelineController', () => {
       },
     ];
     const service = {
-      listSessions: jest.fn<CallTimelineService['listSessions']>().mockResolvedValue(sessions),
+      listSessions: vi.fn<CallTimelineService['listSessions']>().mockResolvedValue(sessions),
     };
     const controller = new CallTimelineController(service as unknown as CallTimelineService);
 
@@ -41,7 +41,7 @@ describe('CallTimelineController', () => {
       participants: [],
     };
     const service = {
-      getSessionTimeline: jest
+      getSessionTimeline: vi
         .fn<CallTimelineService['getSessionTimeline']>()
         .mockResolvedValue(timeline),
     };

@@ -1,9 +1,9 @@
-import { afterEach, describe, expect, it, jest } from '@jest/globals';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MusicSearchService } from './music-search.service';
 
-const fetchMock = jest.fn<typeof fetch>();
+const fetchMock = vi.fn<typeof fetch>();
 
 function serviceWithKey() {
   return new MusicSearchService(new ConfigService({ YOUTUBE_API_KEY: 'test-key' }));

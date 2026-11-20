@@ -1,4 +1,4 @@
-import { describe, expect, it, jest } from '@jest/globals';
+import { describe, expect, it, vi } from 'vitest';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CallHistoryController } from './call-history.controller';
 import type { CallsService } from './calls.service';
@@ -23,7 +23,7 @@ describe('CallHistoryController', () => {
       },
     ];
     const service = {
-      listHistory: jest.fn<CallsService['listHistory']>().mockResolvedValue(entries),
+      listHistory: vi.fn<CallsService['listHistory']>().mockResolvedValue(entries),
     };
     const controller = new CallHistoryController(service as unknown as CallsService);
 
@@ -36,7 +36,7 @@ describe('CallHistoryController', () => {
   it('delega en CallsService.getRoomNotesForHistory con el usuario y el roomId (D4-C: no el código)', async () => {
     const notes = { roomId: 'room-1', content: 'hola', revision: 1, updatedAt: new Date() };
     const service = {
-      getRoomNotesForHistory: jest
+      getRoomNotesForHistory: vi
         .fn<CallsService['getRoomNotesForHistory']>()
         .mockResolvedValue(notes),
     };

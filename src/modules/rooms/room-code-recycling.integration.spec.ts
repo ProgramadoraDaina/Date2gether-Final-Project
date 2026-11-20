@@ -6,8 +6,8 @@ import {
   describe,
   expect,
   it,
-  jest,
-} from '@jest/globals';
+  vi,
+} from 'vitest';
 import { ForbiddenException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -19,9 +19,11 @@ import { RoomEventsService } from './room-events.service';
 import { RoomResolverService } from './room-resolver.service';
 
 // Real-Postgres mocking of generateRoomCode (ESM named exports are
-// read-only, see rooms.service.create-room.integration.spec.ts).
-const generateRoomCodeMock = jest.fn<() => string>();
-jest.unstable_mockModule('../../common/generate-room-code', () => ({
+// read-only, see rooms.service.create-room.integration.spec.ts). vi.hoisted
+// keeps this mock reachable both from the vi.mock factory below (which is
+// hoisted above all imports) and from beforeEach/the test bodies further down.
+const generateRoomCodeMock = vi.hoisted(() => vi.fn<() => string>());
+vi.mock('../../common/generate-room-code', () => ({
   generateRoomCode: generateRoomCodeMock,
 }));
 const { RoomsService } = await import('./rooms.service');
