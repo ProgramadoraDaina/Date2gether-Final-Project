@@ -139,9 +139,19 @@ export const roomMembers = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     role: roomRoleEnum('role').notNull().default('participante'),
+    isOwner: boolean('is_owner').notNull().default(false),
     joinedAt: timestamp('joined_at').notNull().defaultNow(),
   },
-  (table) => [primaryKey({ columns: [table.roomId, table.userId] })],
+  (table) => [
+    primaryKey({ columns: [table.roomId, table.userId] }),
+    uniqueIndex('room_members_one_owner_per_room')
+      .on(table.roomId)
+      .where(sql`${table.isOwner}`),
+    check(
+      'room_members_owner_is_admin',
+      sql`not ${table.isOwner} or ${table.role} = 'administrador'`,
+    ),
+  ],
 );
 
 export const admissionStatusEnum = pgEnum('admission_status', [

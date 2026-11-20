@@ -70,9 +70,12 @@ describe('RoomsService', () => {
       expect(inserts[0].values).toHaveBeenCalledWith(
         expect.objectContaining({ name: 'Reunión de Daina' }),
       );
-      expect(inserts[1].values).toHaveBeenCalledWith(
-        expect.objectContaining({ roomId: room.id, userId: 'owner-1', role: 'administrador' }),
-      );
+      expect(inserts[1].values).toHaveBeenCalledWith({
+        roomId: room.id,
+        userId: 'owner-1',
+        role: 'administrador',
+        isOwner: true,
+      });
     });
 
     it('[4.11] corre el sweep de retiro (retireExpired) antes del probe de colisión, dentro de la misma transacción', async () => {
@@ -199,7 +202,9 @@ describe('RoomsService', () => {
 
   describe('listMembers', () => {
     it('devuelve la lista de miembros con su nombre y rol', async () => {
-      const membersView = [{ userId: 'user-1', name: 'Alex', role: 'administrador' as const }];
+      const membersView = [
+        { userId: 'user-1', name: 'Alex', role: 'administrador' as const, isOwner: true },
+      ];
       db.select.mockReturnValueOnce(chain(membersView));
 
       const result = await service.listMembers(room.code);
@@ -247,6 +252,24 @@ describe('RoomsService', () => {
       expect(db.update).not.toHaveBeenCalled();
       expect(roomEvents.emitMemberRoleChanged).not.toHaveBeenCalled();
     });
+
+    it.each(['participante', 'colaborador'] as const)(
+      'protege al propietario de un cambio a %s incluso si hay otros admins',
+      async (role) => {
+        db.select.mockReturnValueOnce(
+          chain([
+            { userId: 'owner-1', role: 'administrador', isOwner: true },
+            { userId: 'user-2', role: 'administrador', isOwner: false },
+          ]),
+        );
+
+        await expect(service.setMemberRole(room.code, 'owner-1', role, 'user-2')).rejects.toThrow(
+          'No se pueden quitar los permisos del propietario de la sala',
+        );
+        expect(db.update).not.toHaveBeenCalled();
+        expect(roomEvents.emitMemberRoleChanged).not.toHaveBeenCalled();
+      },
+    );
 
     it.each([
       ['participante', 'colaborador'],
