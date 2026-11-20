@@ -113,7 +113,7 @@ export class RoomsService {
     return this.resolver.resolveJoinable(code);
   }
 
-  // The creator is the room's only administrador (UpdateMemberRoleDto never grants it).
+  // Incluye las salas creadas y las heredadas al recibir el rol de administrador.
   async listOwnedRooms(userId: string, now: Date = new Date()): Promise<OwnedRoomView[]> {
     const owned = await this.db
       .select({
@@ -208,28 +208,38 @@ export class RoomsService {
   async setMemberRole(
     code: string,
     targetUserId: string,
-    role: 'colaborador' | 'participante',
+    role: RoomRole,
+    requestedByUserId: string,
   ): Promise<void> {
-    const room = await this.getByCodeOrThrow(code);
-    const [target] = await this.db
-      .select({ role: roomMembers.role })
-      .from(roomMembers)
-      .where(and(eq(roomMembers.roomId, room.id), eq(roomMembers.userId, targetUserId)))
-      .limit(1);
-
-    if (!target) {
-      throw new NotFoundException('Esa persona todavía no es parte de la sala');
-    }
-    if (target.role === 'administrador') {
-      throw new ForbiddenException('No se puede cambiar el rol del administrador de la sala');
-    }
-
-    await this.db
-      .update(roomMembers)
-      .set({ role })
-      .where(and(eq(roomMembers.roomId, room.id), eq(roomMembers.userId, targetUserId)));
-
-    this.roomEvents.emitMemberRoleChanged({ roomCode: code });
+    const changed = await this.db.transaction(async (tx) => {
+      // Serializa los cambios de rol para no quitar dos últimos admins a la vez.
+      const room = await this.resolver.lockJoinable(tx, code);
+      const members = await tx
+        .select({ userId: roomMembers.userId, role: roomMembers.role })
+        .from(roomMembers)
+        .where(eq(roomMembers.roomId, room.id));
+      // El guard pudo autorizar la petición antes de que otro admin le quitara el rol.
+      if (members.find((member) => member.userId === requestedByUserId)?.role !== 'administrador') {
+        throw new ForbiddenException('Tu rol en la sala no permite esta acción');
+      }
+      const target = members.find((member) => member.userId === targetUserId);
+      if (!target) {
+        throw new NotFoundException('Esa persona todavía no es parte de la sala');
+      }
+      if (target.role === role) return false;
+      if (
+        target.role === 'administrador' &&
+        members.filter((member) => member.role === 'administrador').length === 1
+      ) {
+        throw new ForbiddenException('La sala debe conservar al menos un administrador');
+      }
+      await tx
+        .update(roomMembers)
+        .set({ role })
+        .where(and(eq(roomMembers.roomId, room.id), eq(roomMembers.userId, targetUserId)));
+      return true;
+    });
+    if (changed) this.roomEvents.emitMemberRoleChanged({ roomCode: code });
   }
 
   async getRoomNotes(code: string) {

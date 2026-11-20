@@ -26,6 +26,7 @@ describe('RoomsService', () => {
   let roomEvents: { emitMemberRoleChanged: ReturnType<typeof jest.fn> };
   let resolver: {
     resolveJoinable: ReturnType<typeof jest.fn>;
+    lockJoinable: jest.Mock<RoomResolverService['lockJoinable']>;
     touchEntry: ReturnType<typeof jest.fn>;
     findPoolOccupant: ReturnType<typeof jest.fn>;
     retireExpired: ReturnType<typeof jest.fn>;
@@ -37,6 +38,7 @@ describe('RoomsService', () => {
     roomEvents = { emitMemberRoleChanged: jest.fn() };
     resolver = {
       resolveJoinable: jest.fn().mockResolvedValue(room),
+      lockJoinable: jest.fn<RoomResolverService['lockJoinable']>().mockResolvedValue(room),
       touchEntry: jest.fn().mockResolvedValue(undefined),
       findPoolOccupant: jest.fn().mockResolvedValue(undefined),
       retireExpired: jest.fn().mockResolvedValue(undefined),
@@ -221,34 +223,80 @@ describe('RoomsService', () => {
   });
 
   describe('setMemberRole', () => {
-    it('lanza NotFoundException si el destino todavía no es miembro de la sala', async () => {
-      db.select.mockReturnValueOnce(chain([]));
-
-      await expect(service.setMemberRole(room.code, 'ajeno', 'colaborador')).rejects.toThrow(
-        NotFoundException,
+    beforeEach(() => {
+      db.transaction.mockImplementation(async (cb: unknown) =>
+        (cb as (tx: FakeDb) => Promise<unknown>)(db),
       );
+    });
+
+    it('lanza NotFoundException si el destino todavía no es miembro de la sala', async () => {
+      db.select.mockReturnValueOnce(chain([{ userId: 'owner-1', role: 'administrador' }]));
+
+      await expect(
+        service.setMemberRole(room.code, 'ajeno', 'colaborador', 'owner-1'),
+      ).rejects.toThrow(NotFoundException);
       expect(roomEvents.emitMemberRoleChanged).not.toHaveBeenCalled();
     });
 
-    it('impide cambiar el rol de quien es administrador de la sala', async () => {
-      db.select.mockReturnValueOnce(chain([{ role: 'administrador' }]));
+    it('impide quitar o cambiar el rol del último administrador', async () => {
+      db.select.mockReturnValueOnce(chain([{ userId: 'owner-1', role: 'administrador' }]));
 
-      await expect(service.setMemberRole(room.code, 'owner-1', 'participante')).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(
+        service.setMemberRole(room.code, 'owner-1', 'participante', 'owner-1'),
+      ).rejects.toThrow('La sala debe conservar al menos un administrador');
       expect(db.update).not.toHaveBeenCalled();
       expect(roomEvents.emitMemberRoleChanged).not.toHaveBeenCalled();
     });
 
-    it('actualiza el rol y notifica el cambio vía RoomEventsService', async () => {
-      db.select.mockReturnValueOnce(chain([{ role: 'participante' }]));
-      const updateChain = chain([]);
+    it.each([
+      ['participante', 'colaborador'],
+      ['participante', 'administrador'],
+      ['colaborador', 'administrador'],
+      ['colaborador', 'participante'],
+      ['administrador', 'participante'],
+      ['administrador', 'colaborador'],
+    ] as const)('cambia de %s a %s y notifica el cambio', async (previousRole, role) => {
+      db.select.mockReturnValueOnce(
+        chain([
+          { userId: 'owner-1', role: 'administrador' },
+          { userId: 'user-2', role: previousRole },
+        ]),
+      );
+      const updateChain = chain([{ userId: 'user-2' }]);
       db.update.mockReturnValueOnce(updateChain);
 
-      await service.setMemberRole(room.code, 'user-2', 'colaborador');
+      await service.setMemberRole(room.code, 'user-2', role, 'owner-1');
 
-      expect(updateChain.set).toHaveBeenCalledWith({ role: 'colaborador' });
+      expect(updateChain.set).toHaveBeenCalledWith({ role });
+      expect(resolver.lockJoinable.mock.calls).toEqual([[db, room.code]]);
       expect(roomEvents.emitMemberRoleChanged).toHaveBeenCalledWith({ roomCode: room.code });
+    });
+
+    it.each(['colaborador', 'participante', undefined])(
+      'rechaza a quien ya no tiene permisos admin (%s)',
+      async (role) => {
+        db.select.mockReturnValueOnce(
+          chain([
+            { userId: 'owner-1', role: 'administrador' },
+            { userId: 'user-2', role },
+          ]),
+        );
+
+        await expect(
+          service.setMemberRole(room.code, 'owner-1', 'participante', 'user-2'),
+        ).rejects.toThrow(ForbiddenException);
+        expect(db.update).not.toHaveBeenCalled();
+        expect(roomEvents.emitMemberRoleChanged).not.toHaveBeenCalled();
+      },
+    );
+
+    it('mantener el rol actual no modifica la membresía ni emite un cambio', async () => {
+      db.select.mockReturnValueOnce(chain([{ userId: 'owner-1', role: 'administrador' }]));
+
+      await service.setMemberRole(room.code, 'owner-1', 'administrador', 'owner-1');
+
+      expect(db.update).not.toHaveBeenCalled();
+      expect(roomEvents.emitMemberRoleChanged).not.toHaveBeenCalled();
     });
   });
 });
