@@ -12,6 +12,7 @@ describe('RoomsController', () => {
     createRoom: jest.Mock<(...args: unknown[]) => Promise<unknown>>;
     getByCodeOrThrow: jest.Mock<(...args: unknown[]) => Promise<unknown>>;
     listOwnedRooms: jest.Mock<(...args: unknown[]) => Promise<unknown>>;
+    setMemberRole: jest.Mock<(...args: unknown[]) => Promise<unknown>>;
   };
 
   beforeEach(async () => {
@@ -19,6 +20,7 @@ describe('RoomsController', () => {
       createRoom: jest.fn(),
       getByCodeOrThrow: jest.fn(),
       listOwnedRooms: jest.fn(),
+      setMemberRole: jest.fn(),
     };
 
     const module = await Test.createTestingModule({
@@ -46,6 +48,25 @@ describe('RoomsController', () => {
 
     await expect(controller.listMine({ sub: 'user-1' } as never)).resolves.toBe(owned);
     expect(roomsService.listOwnedRooms).toHaveBeenCalledWith('user-1');
+  });
+
+  it('reenvía el usuario autenticado para volver a verificar sus permisos dentro de la transacción', async () => {
+    await controller.updateMemberRole(
+      'abc-defg-hij',
+      'member-1',
+      { role: 'participante' },
+      {
+        sub: 'admin-1',
+        email: 'admin@example.test',
+      },
+    );
+
+    expect(roomsService.setMemberRole).toHaveBeenCalledWith(
+      'abc-defg-hij',
+      'member-1',
+      'participante',
+      'admin-1',
+    );
   });
 
   it('declara /rooms/mine antes de /rooms/:code para que "mine" no se tome como código de sala', () => {

@@ -117,9 +117,9 @@ export class CallsService {
     // sala vive 24h con un participant.sub FIJO, así que este POST puede
     // reenviarse con el MISMO identity (reintento, re-montaje del cliente):
     // por eso es un upsert por livekitIdentity y no un insert simple.
-    // roleAtIssue guarda el snapshot de rol resuelto arriba: es lo que el
-    // gate de futuros solicitantes y el cierre forzado del PR7 usan para
-    // reconocer admins conectados sin volver a consultar roomMembers.
+    // roleAtIssue guarda el rol al entrar como registro histórico.
+    // Las comprobaciones de anfitrión
+    // consultan el rol actual para reconocer administradores recién promovidos.
     await this.db
       .insert(callParticipantIdentities)
       .values({
@@ -218,11 +218,18 @@ export class CallsService {
       const [admin] = await this.db
         .select({ id: callParticipantIdentities.id })
         .from(callParticipantIdentities)
+        .innerJoin(
+          roomMembers,
+          and(
+            eq(roomMembers.roomId, callParticipantIdentities.roomId),
+            eq(roomMembers.userId, callParticipantIdentities.userId),
+          ),
+        )
         .where(
           and(
             eq(callParticipantIdentities.roomId, roomId),
             inArray(callParticipantIdentities.livekitIdentity, connectedIdentities),
-            eq(callParticipantIdentities.roleAtIssue, 'administrador'),
+            eq(roomMembers.role, 'administrador'),
           ),
         )
         .limit(1);

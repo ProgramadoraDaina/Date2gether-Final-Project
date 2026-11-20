@@ -1,7 +1,7 @@
 // Puertos y URLs compartidos entre playwright.config.ts y los specs, para que
 // no queden "mágicamente" repetidos en varios archivos.
-export const API_PORT = 3001;
-export const CLIENT_PORT = 3002;
+export const API_PORT = Number(process.env.E2E_API_PORT ?? 3001);
+export const CLIENT_PORT = Number(process.env.E2E_CLIENT_PORT ?? 3002);
 
 export const API_URL = `http://localhost:${API_PORT}`;
 export const CLIENT_URL = `http://localhost:${CLIENT_PORT}`;

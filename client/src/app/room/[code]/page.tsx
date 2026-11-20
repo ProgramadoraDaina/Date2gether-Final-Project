@@ -26,7 +26,7 @@ import { AppShell } from '@/features/navigation/AppShell';
 import { RoomEmojisDialog } from '@/features/room-emojis/RoomEmojisDialog';
 import { useRoomEmojis } from '@/features/room-emojis/useRoomEmojis';
 import { RoleTag } from '@/features/rooms/RoleTag';
-import roleTagStyles from '@/features/rooms/RoleTag.module.css';
+import { MemberRoleMenu } from '@/features/rooms/MemberRoleMenu';
 import { RoomSidebar } from '@/features/rooms/RoomSidebar';
 import { useResizablePanel } from '@/features/rooms/useResizablePanel';
 import { AdmissionControl } from '@/features/rooms/AdmissionControl';
@@ -367,10 +367,12 @@ export default function RoomPage() {
     socket.on('roomUsers', (list: RoomPresence[]) => {
       setUsers(list);
       rememberNames(list.map((user) => user.userName));
+      void refetchMembers();
     });
 
     socket.on('userJoined', (joined: RoomPresence) => {
       rememberNames([joined.userName]);
+      if (joined.userId) void refetchMembers();
       setUsers((prev) =>
         prev.some((u) => u.participantId === joined.participantId) ? prev : [...prev, joined],
       );
@@ -671,29 +673,30 @@ export default function RoomPage() {
               // pueden escribir el mismo userName y antes eso mezclaba sus
               // roles y botones de permisos.
               const member = userId ? members.find((m) => m.userId === userId) : undefined;
-              const canChangeRole = isCurrentUserAdmin && member && member.role !== 'administrador';
+              const canChangeRole = isCurrentUserAdmin && member && !member.isOwner;
               const color = nameColorHex(nameColor);
               return (
                 <li key={participantId}>
-                  <span style={color ? { color } : undefined}>{userName}</span>
-                  {!userId && <span> ({t('Invitado')})</span>}
-                  {member && <RoleTag role={member.role} />}
+                  <div className={styles.memberIdentity}>
+                    <span style={color ? { color } : undefined}>{userName}</span>
+                    {!userId && <span> ({t('Invitado')})</span>}
+                    {member && (
+                      <RoleTag
+                        role={member.role}
+                        ownerLabel={member.isOwner ? t('Propietario') : undefined}
+                      />
+                    )}
+                  </div>
                   {canChangeRole && (
-                    <button
-                      type="button"
-                      className={roleTagStyles.roleButton}
-                      data-testid="role-button"
-                      onClick={() =>
-                        changeRole(
-                          member.userId,
-                          member.role === 'participante' ? 'colaborador' : 'participante',
-                        )
+                    <MemberRoleMenu
+                      member={member}
+                      name={userName}
+                      isLastAdmin={
+                        member.role === 'administrador' &&
+                        members.filter((m) => m.role === 'administrador').length === 1
                       }
-                    >
-                      {member.role === 'participante'
-                        ? t('Hacer colaborador')
-                        : t('Quitar colaborador')}
-                    </button>
+                      onChangeRole={changeRole}
+                    />
                   )}
                 </li>
               );

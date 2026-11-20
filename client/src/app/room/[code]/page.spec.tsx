@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 jest.mock('next/navigation', () => ({
   useParams: () => ({ code: 'abc-defg-hij' }),
@@ -382,7 +382,7 @@ describe('RoomPage: transición de carga antes de entrar a la llamada', () => {
     // quedar tapando el resto de la sala para siempre: el chat y el resto de
     // la sala tienen que seguir usables aunque la llamada haya fallado.
     expect(container.querySelector('.enteringScreen')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Presentes', exact: true })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Presentes' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
     expect(mockJoinCall).toHaveBeenCalledWith('abc-defg-hij', 'guest-token');
@@ -643,5 +643,133 @@ describe('RoomPage: notas y menciones', () => {
     expect(screen.getByTestId('messages').querySelector('mark')).toHaveTextContent('@Ana');
     expect(input).toHaveValue('');
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  });
+});
+
+describe('RoomPage: concesión de permisos', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    jest.clearAllMocks();
+    mockStatus = 'in-call';
+    mockError = null;
+    mockSession = null;
+    mockRoomMembersState.members = [
+      { userId: 'member-1', name: 'Beto', role: 'participante', isOwner: false },
+      { userId: 'admin-1', name: 'Ana', role: 'administrador', isOwner: true },
+    ];
+    mockRoomMembersState.isCurrentUserAdmin = true;
+  });
+
+  afterEach(() => {
+    mockRoomMembersState.members = [];
+    mockRoomMembersState.isCurrentUserAdmin = false;
+  });
+
+  async function enter() {
+    const { requestRoomAccess } = await import('@/lib/api');
+    const { createRoomSocket } = await import('@/lib/socket');
+    (requestRoomAccess as jest.Mock<typeof requestRoomAccess>).mockResolvedValue({
+      token: 'token',
+      participant: {
+        sub: 'self',
+        roomId: 'room-1',
+        roomCode: 'abc-defg-hij',
+        name: 'Ana',
+        userId: 'admin-1',
+      },
+    });
+    const callbacks: Record<string, (...args: unknown[]) => void> = {};
+    (createRoomSocket as jest.Mock<typeof createRoomSocket>).mockReturnValue({
+      on: jest.fn((event: string, callback: (...args: unknown[]) => void) => {
+        const previous = callbacks[event];
+        callbacks[event] = previous
+          ? (...args) => {
+              previous(...args);
+              callback(...args);
+            }
+          : callback;
+      }),
+      connect: jest.fn(),
+      emit: jest.fn(),
+      disconnect: jest.fn(),
+      off: jest.fn(),
+      removeAllListeners: jest.fn(),
+    } as never);
+    const Page = (await import('./page')).default;
+    render(<Page />);
+    fireEvent.change(screen.getByLabelText('Tu nombre en la reunión'), {
+      target: { value: 'Ana' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar a la reunión' }));
+    await waitFor(() => expect(createRoomSocket).toHaveBeenCalled());
+    act(() =>
+      callbacks.roomUsers([
+        { participantId: 'self', userName: 'Ana', userId: 'admin-1' },
+        { participantId: 'other', userName: 'Beto', userId: 'member-1' },
+        { participantId: 'guest', userName: 'Invitado' },
+      ]),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Presentes' }));
+    return callbacks;
+  }
+
+  it('ofrece otorgar colaborador y admin a un participante registrado', async () => {
+    await enter();
+    expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Permisos de Beto' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Hacer colaborador' }));
+    expect(mockRoomMembersState.changeRole).toHaveBeenCalledWith('member-1', 'colaborador');
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Permisos de Beto' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Hacer administrador' }));
+    expect(mockRoomMembersState.changeRole).toHaveBeenCalledWith('member-1', 'administrador');
+    expect(screen.getAllByTestId('role-button')).toHaveLength(1);
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+  });
+
+  it('también permite ascender a admin a un colaborador', async () => {
+    mockRoomMembersState.members[0] = {
+      userId: 'member-1',
+      name: 'Beto',
+      role: 'colaborador',
+      isOwner: false,
+    };
+    await enter();
+    fireEvent.click(screen.getByRole('button', { name: 'Permisos de Beto' }));
+    expect(screen.getByRole('menuitem', { name: 'Quitar colaborador' })).toBeVisible();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Hacer administrador' }));
+    expect(mockRoomMembersState.changeRole).toHaveBeenCalledWith('member-1', 'administrador');
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+  });
+
+  it('permite quitar admin desde el menú cuando queda otro administrador', async () => {
+    mockRoomMembersState.members[0] = {
+      userId: 'member-1',
+      name: 'Beto',
+      role: 'administrador',
+      isOwner: false,
+    };
+    await enter();
+    expect(screen.getByText('Propietario')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Permisos de Ana' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Permisos de Beto' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Quitar administrador' }));
+    expect(mockRoomMembersState.changeRole).toHaveBeenCalledWith('member-1', 'participante');
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+  });
+
+  it('un colaborador no puede otorgar ninguno de los roles', async () => {
+    mockRoomMembersState.isCurrentUserAdmin = false;
+    await enter();
+    expect(screen.queryByTestId('role-button')).not.toBeInTheDocument();
+  });
+
+  it('actualiza los roles cuando entra un participante registrado para poder darle permisos sin recargar', async () => {
+    const callbacks = await enter();
+    mockRoomMembersState.refetchMembers.mockClear();
+    act(() =>
+      callbacks.userJoined({ participantId: 'new', userName: 'Nueva', userId: 'user-new' }),
+    );
+    expect(mockRoomMembersState.refetchMembers).toHaveBeenCalled();
   });
 });

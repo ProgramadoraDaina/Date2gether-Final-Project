@@ -97,6 +97,7 @@ export interface RoomMember {
   userId: string;
   name: string;
   role: RoomRole;
+  isOwner: boolean;
 }
 
 // Errores pensados para mostrarse tal cual al usuario (sesión vencida, validación
@@ -175,7 +176,7 @@ export async function getRoomMembers(code: string): Promise<RoomMember[]> {
 export async function updateMemberRole(
   code: string,
   userId: string,
-  role: 'colaborador' | 'participante',
+  role: RoomRole,
 ): Promise<void> {
   const res = await authFetch(`/rooms/${code}/members/${userId}`, {
     method: 'PATCH',
