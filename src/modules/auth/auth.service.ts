@@ -21,7 +21,7 @@ import type { RegisterDto } from './dto/register.dto';
 const PASSWORD_SALT_ROUNDS = 12;
 const REFRESH_TOKEN_HASH_ROUNDS = 10;
 
-type PublicUser = Omit<User, 'passwordHash'>;
+type PublicUser = Omit<User, 'passwordHash' | 'callHistoryDeletedBefore'>;
 
 @Injectable()
 export class AuthService {
@@ -204,7 +204,11 @@ export class AuthService {
   }
 
   private toPublicUser(user: User): PublicUser {
-    const { passwordHash: _passwordHash, ...publicUser } = user;
+    const {
+      passwordHash: _passwordHash,
+      callHistoryDeletedBefore: _deletedBefore,
+      ...publicUser
+    } = user;
     return publicUser;
   }
 }

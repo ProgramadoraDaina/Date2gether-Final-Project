@@ -45,6 +45,7 @@ export const users = pgTable('users', {
   name: varchar('name', { length: 100 }).notNull(),
   nameColor: nameColorEnum('name_color'),
   avatar: jsonb('avatar').$type<UserAvatar>(),
+  callHistoryDeletedBefore: timestamp('call_history_deleted_before'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -228,16 +229,32 @@ export type RoomPlaylist = typeof roomPlaylists.$inferSelect;
 
 // Historial de llamadas: una fila por cada vez que una cuenta registrada
 // se une exitosamente a una sala. Los invitados sin cuenta no generan fila.
-export const callHistory = pgTable('call_history', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  roomId: uuid('room_id')
-    .notNull()
-    .references(() => rooms.id, { onDelete: 'cascade' }),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  startedAt: timestamp('started_at').notNull().defaultNow(),
-});
+export const callHistory = pgTable(
+  'call_history',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    roomId: uuid('room_id')
+      .notNull()
+      .references(() => rooms.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    startedAt: timestamp('started_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('call_history_user_started_id_idx').on(
+      table.userId,
+      table.startedAt.desc(),
+      table.id.desc(),
+    ),
+    index('call_history_user_room_started_id_idx').on(
+      table.userId,
+      table.roomId,
+      table.startedAt.desc(),
+      table.id.desc(),
+    ),
+  ],
+);
 
 export const CALL_MODES = ['reaction', 'sticker'] as const;
 export const STICKER_POSITIONS = [
@@ -511,6 +528,11 @@ export const callSessionParticipants = pgTable(
       table.participantKey,
     ),
     index('call_session_participants_session_id_idx').on(table.sessionId),
+    index('call_session_participants_user_joined_idx').on(
+      table.userId,
+      table.firstJoinedAt.desc(),
+      table.sessionId,
+    ),
   ],
 );
 

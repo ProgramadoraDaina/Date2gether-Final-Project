@@ -155,6 +155,13 @@
       "when": 1795046766660,
       "tag": "0021_user_avatar",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1795199751212,
+      "tag": "0022_call_history_retention",
+      "breakpoints": true
     }
   ]
 }

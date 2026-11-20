@@ -1,12 +1,18 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, gte, sql } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
 import {
   callSessionParticipants,
   callSessions,
   rooms,
+  users,
   type CallSessionParticipant,
 } from '../../db/schema';
+import {
+  CALL_HISTORY_PAGE_SIZE,
+  callHistoryCutoff,
+  isSessionVisibleToParticipant,
+} from './call-history-retention';
 
 export interface CallSessionSummary {
   id: string;
@@ -65,64 +71,59 @@ export class CallTimelineService {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleDb) {}
 
   async listSessions(userId: string): Promise<CallSessionSummary[]> {
-    const participated = await this.db
-      .select({ sessionId: callSessionParticipants.sessionId })
-      .from(callSessionParticipants)
-      .where(eq(callSessionParticipants.userId, userId));
-
-    const sessionIds = [...new Set(participated.map((row) => row.sessionId))];
-    if (sessionIds.length === 0) return [];
-
-    const sessions = await this.db
-      .select(SESSION_HEADER_COLUMNS)
-      .from(callSessions)
-      // leftJoin (no innerJoin): si la sala fue borrada, roomId queda null
-      // (ON DELETE SET NULL) pero la sesión materializada debe seguir
-      // listándose, solo con roomName en null.
-      .leftJoin(rooms, eq(callSessions.roomId, rooms.id))
-      .where(inArray(callSessions.id, sessionIds))
-      .orderBy(desc(callSessions.startedAt));
-
-    // Conteo en memoria en vez de GROUP BY: evita acoplar este PR a un
-    // helper de agregación SQL nuevo para un cálculo que ya es trivial sobre
-    // un puñado de filas (una sesión de llamada tiene, como mucho, unas
-    // pocas decenas de participantes).
-    const allParticipants = await this.db
-      .select({ sessionId: callSessionParticipants.sessionId })
-      .from(callSessionParticipants)
-      .where(inArray(callSessionParticipants.sessionId, sessionIds));
-
-    const countBySession = new Map<string, number>();
-    for (const row of allParticipants) {
-      countBySession.set(row.sessionId, (countBySession.get(row.sessionId) ?? 0) + 1);
-    }
-
-    return sessions.map((session) => ({
-      ...session,
-      participantCount: countBySession.get(session.id) ?? 0,
-    }));
+    return (
+      this.db
+        .select({
+          ...SESSION_HEADER_COLUMNS,
+          participantCount: this.db.$count(
+            callSessionParticipants,
+            eq(callSessionParticipants.sessionId, callSessions.id),
+          ),
+        })
+        .from(callSessionParticipants)
+        .innerJoin(callSessions, eq(callSessionParticipants.sessionId, callSessions.id))
+        .innerJoin(users, eq(callSessionParticipants.userId, users.id))
+        // leftJoin (no innerJoin): si la sala fue borrada, roomId queda null
+        // (ON DELETE SET NULL) pero la sesión materializada debe seguir
+        // listándose, solo con roomName en null.
+        .leftJoin(rooms, eq(callSessions.roomId, rooms.id))
+        .where(
+          and(
+            eq(callSessionParticipants.userId, userId),
+            gte(callSessionParticipants.firstJoinedAt, callHistoryCutoff()),
+            isSessionVisibleToParticipant,
+          ),
+        )
+        .orderBy(
+          sql`${callSessionParticipants.firstJoinedAt} desc nulls last`,
+          asc(callSessionParticipants.sessionId),
+        )
+        .limit(CALL_HISTORY_PAGE_SIZE)
+    );
   }
 
   async getSessionTimeline(sessionId: string, userId: string): Promise<CallSessionTimeline> {
-    const participants = await this.db
-      .select(PARTICIPANT_SUMMARY_COLUMNS)
-      .from(callSessionParticipants)
-      .where(eq(callSessionParticipants.sessionId, sessionId));
-
-    // La misma rama de 404 cubre "la sesión no existe" y "el solicitante no
-    // participó": no hay forma de distinguirlas desde afuera, a propósito
-    // (design.md: "404 y no 403, para no filtrar si la sesión existe").
-    const participated = participants.some((participant) => participant.userId === userId);
-    if (!participated) {
-      throw new NotFoundException('Sesión no encontrada');
-    }
-
     const [session] = await this.db
       .select(SESSION_HEADER_COLUMNS)
       .from(callSessions)
       .leftJoin(rooms, eq(callSessions.roomId, rooms.id))
-      .where(eq(callSessions.id, sessionId))
+      .innerJoin(callSessionParticipants, eq(callSessionParticipants.sessionId, callSessions.id))
+      .innerJoin(users, eq(callSessionParticipants.userId, users.id))
+      .where(
+        and(
+          eq(callSessions.id, sessionId),
+          eq(callSessionParticipants.userId, userId),
+          isSessionVisibleToParticipant,
+        ),
+      )
       .limit(1);
+    // Same response for a missing session and one the account cannot see.
+    if (!session) throw new NotFoundException('Sesión no encontrada');
+
+    const participants = await this.db
+      .select(PARTICIPANT_SUMMARY_COLUMNS)
+      .from(callSessionParticipants)
+      .where(eq(callSessionParticipants.sessionId, session.id));
 
     return { ...session, participants };
   }
