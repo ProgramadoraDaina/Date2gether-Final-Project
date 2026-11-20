@@ -19,6 +19,7 @@ export default function HomePage() {
   const [name, setName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [isPermanent, setIsPermanent] = useState(false);
+  const [roomName, setRoomName] = useState('');
   const [slots, setSlots] = useState<CreateScheduleSlot[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,7 +68,11 @@ export default function HomePage() {
     setLoading(true);
     setError(null);
     try {
-      const room = await createRoom(`Reunión de ${name.trim()}`, {
+      // Las temporales se recuperan en 24h (D5): no tiene sentido pedirles un
+      // nombre propio, se quedan con el autogenerado de siempre.
+      const roomTitle =
+        isPermanent && roomName.trim() ? roomName.trim() : `Reunión de ${name.trim()}`;
+      const room = await createRoom(roomTitle, {
         isPermanent,
         slots: isPermanent ? slots : undefined,
       });
@@ -143,6 +148,18 @@ export default function HomePage() {
             />
             {t('Sala permanente (enlace fijo, con sala de espera siempre activa)')}
           </label>
+          {isPermanent && (
+            <>
+              <label htmlFor="room-name">{t('Nombre de la sala')}</label>
+              <input
+                id="room-name"
+                value={roomName}
+                onChange={(e) => setRoomName(e.target.value)}
+                placeholder={t('Opcional: ej. "Grupo de los jueves"')}
+                maxLength={100}
+              />
+            </>
+          )}
           {isPermanent && <ScheduleSlotEditor slots={slots} onChange={setSlots} />}
           <button type="submit" disabled={loading || !loggedIn}>
             {loading ? t('Creando…') : t('Crear reunión')}

@@ -250,6 +250,11 @@ const en: Record<string, string> = {
   Editando: 'Editing',
   'Cancelar edición': 'Cancel editing',
   'Guardar cambios': 'Save changes',
+  'Nombre de la sala': 'Room name',
+  'Opcional: ej. "Grupo de los jueves"': 'Optional: e.g. "Thursday group"',
+  'Renombrar sala': 'Rename room',
+  'Nuevo nombre de la sala': 'New room name',
+  'No se pudo renombrar la sala': 'Could not rename the room',
   'Imagen nueva (opcional: si no, se mantiene la actual)':
     'New image (optional: otherwise the current one is kept)',
   'Quitar el sonido actual': 'Remove the current sound',

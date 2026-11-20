@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { ApiError, getOwnedRooms, type OwnedRoom } from '@/lib/api';
+import { ApiError, getOwnedRooms, renameRoom, type OwnedRoom } from '@/lib/api';
 import { isLoggedIn } from '@/lib/auth';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { AppShell } from '@/features/navigation/AppShell';
@@ -18,6 +18,9 @@ export default function MyRoomsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [renameError, setRenameError] = useState<string | null>(null);
 
   // Runs once on mount; `t` is left out so changing language does not refetch.
   useEffect(() => {
@@ -49,6 +52,29 @@ export default function MyRoomsPage() {
   async function copyLink(room: OwnedRoom) {
     await navigator.clipboard.writeText(`${window.location.origin}/room/${room.code}`);
     setCopiedId(room.id);
+  }
+
+  function startEditing(room: OwnedRoom) {
+    setEditingId(room.id);
+    setEditValue(room.name);
+    setRenameError(null);
+  }
+
+  function cancelEditing() {
+    setEditingId(null);
+    setRenameError(null);
+  }
+
+  async function saveRename(room: OwnedRoom) {
+    const newName = editValue.trim();
+    if (!newName) return;
+    try {
+      await renameRoom(room.code, newName);
+      setRooms((prev) => prev.map((r) => (r.id === room.id ? { ...r, name: newName } : r)));
+      setEditingId(null);
+    } catch (err) {
+      setRenameError(err instanceof ApiError ? err.message : t('No se pudo renombrar la sala'));
+    }
   }
 
   if (checking) return null;
@@ -86,12 +112,54 @@ export default function MyRoomsPage() {
             {rooms.map((room) => (
               <li key={room.id} className={styles.room}>
                 <div className={styles.roomHead}>
-                  <strong className={styles.roomName}>{room.name}</strong>
+                  {editingId === room.id ? (
+                    <span className={styles.renameRow}>
+                      <input
+                        className={styles.renameInput}
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        maxLength={100}
+                        aria-label={t('Nuevo nombre de la sala')}
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        className={styles.action}
+                        onClick={() => void saveRename(room)}
+                        disabled={!editValue.trim()}
+                      >
+                        {t('Guardar cambios')}
+                      </button>
+                      <button type="button" className={styles.action} onClick={cancelEditing}>
+                        {t('Cancelar edición')}
+                      </button>
+                    </span>
+                  ) : (
+                    <>
+                      <strong className={styles.roomName}>{room.name}</strong>
+                      {room.isPermanent && (
+                        <button
+                          type="button"
+                          className={styles.renameButton}
+                          onClick={() => startEditing(room)}
+                          aria-label={t('Renombrar sala')}
+                          title={t('Renombrar sala')}
+                        >
+                          ✏️
+                        </button>
+                      )}
+                    </>
+                  )}
                   {room.isPermanent && <span className={styles.badge}>{t('Permanente')}</span>}
                   {!room.isJoinable && (
                     <span className={`${styles.badge} ${styles.badgeMuted}`}>{t('Vencida')}</span>
                   )}
                 </div>
+                {editingId === room.id && renameError && (
+                  <p className={styles.error} role="alert">
+                    {renameError}
+                  </p>
+                )}
                 <span className={styles.code}>{room.code}</span>
                 {room.slots.length > 0 && (
                   <p className={styles.slots}>
