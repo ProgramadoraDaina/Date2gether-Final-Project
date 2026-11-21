@@ -31,6 +31,7 @@ import { MusicTrackIndexDto } from './dto/music-track-index.dto';
 import { CastPollVoteDto } from './dto/cast-poll-vote.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 import { StartRoomEventDto } from './dto/start-room-event.dto';
+import { SetMediaLockDto } from './dto/set-media-lock.dto';
 
 // "Hasta la próxima ruleta o evento" (lo que llegue primero: el próximo
 // startRoomEvent pisa este estado igual) además de un techo fijo en el
@@ -121,6 +122,11 @@ interface PollEventState {
 
 type RoomEventState = RouletteEventState | PollEventState;
 
+interface MediaLockState {
+  audioLocked: boolean;
+  videoLocked: boolean;
+}
+
 // Clients extrapolate from updatedAt, so refreshing it requires advancing the position too.
 function livePosition(state: MusicState, now: number): number {
   if (!state.isPlaying) return state.positionSeconds;
@@ -139,6 +145,7 @@ export class ChatGateway implements OnGatewayDisconnect {
   private readonly connectedUsers = new Map<string, ConnectedUser>();
   private readonly musicStateByRoom = new Map<string, MusicState>();
   private readonly eventStateByRoom = new Map<string, RoomEventState>();
+  private readonly mediaLockByRoom = new Map<string, MediaLockState>();
   private readonly permanentRoomIds = new Set<string>();
   private readonly playlistSaves = new Map<string, Promise<void>>();
   private readonly logger = new Logger(ChatGateway.name);
@@ -214,6 +221,9 @@ export class ChatGateway implements OnGatewayDisconnect {
     // recién se une: solo le muestra el cartel de resultado si ya corresponde.
     const eventState = this.eventStateByRoom.get(dto.code);
     if (eventState && eventState.expiresAt > Date.now()) client.emit('eventState', eventState);
+
+    const mediaLockState = this.mediaLockByRoom.get(dto.code);
+    if (mediaLockState) client.emit('mediaLockState', mediaLockState);
 
     client.to(dto.code).emit('userJoined', presence);
   }
@@ -334,6 +344,27 @@ export class ChatGateway implements OnGatewayDisconnect {
     };
     this.setMusicState(user, state);
     this.server.to(user.roomCode).emit('musicState', state);
+  }
+
+  @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage('setMediaLock')
+  async handleSetMediaLock(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() dto: SetMediaLockDto,
+  ) {
+    const user = await this.requireMediaLockAdmin(client);
+    if (!user) return;
+
+    const current = this.mediaLockByRoom.get(user.roomCode) ?? {
+      audioLocked: false,
+      videoLocked: false,
+    };
+    const state: MediaLockState = {
+      audioLocked: dto.target === 'audio' ? dto.locked : current.audioLocked,
+      videoLocked: dto.target === 'video' ? dto.locked : current.videoLocked,
+    };
+    this.mediaLockByRoom.set(user.roomCode, state);
+    this.server.to(user.roomCode).emit('mediaLockState', state);
   }
 
   @UseGuards(WsJwtAuthGuard)
@@ -553,6 +584,7 @@ export class ChatGateway implements OnGatewayDisconnect {
     if (this.getUsersInRoom(user.roomCode).length === 0) {
       this.musicStateByRoom.delete(user.roomCode);
       this.eventStateByRoom.delete(user.roomCode);
+      this.mediaLockByRoom.delete(user.roomCode);
       this.permanentRoomIds.delete(user.roomId);
     }
   }
@@ -598,6 +630,29 @@ export class ChatGateway implements OnGatewayDisconnect {
     if (role !== 'administrador') {
       client.emit('error', {
         message: 'Solo el administrador de la sala puede controlar la música',
+      });
+      return undefined;
+    }
+    return user;
+  }
+
+  // Misma regla que requireMusicAdmin (administrador exclusivo), pero con
+  // mensajes propios: reusar requireMusicAdmin tal cual le mostraba al
+  // participante errores de "música" al tocar un switch de mic/cámara.
+  private async requireMediaLockAdmin(client: Socket): Promise<ConnectedUser | undefined> {
+    const user = this.connectedUsers.get(client.id);
+    if (!user) {
+      client.emit('error', { message: 'Tenés que unirte a una sala antes de silenciar a los demás' });
+      return undefined;
+    }
+    if (!user.userId) {
+      client.emit('error', { message: 'Necesitás una cuenta para silenciar a los demás en la sala' });
+      return undefined;
+    }
+    const role = await this.roomsService.getMemberRole(user.roomCode, user.userId);
+    if (role !== 'administrador') {
+      client.emit('error', {
+        message: 'Solo el administrador de la sala puede silenciar a los demás',
       });
       return undefined;
     }

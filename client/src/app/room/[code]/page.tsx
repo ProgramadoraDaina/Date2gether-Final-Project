@@ -51,6 +51,7 @@ import { PollPanel } from '@/features/calls/roomEvents/PollPanel';
 import { RoomEventButton } from '@/features/calls/roomEvents/RoomEventButton';
 import { RouletteWheel } from '@/features/calls/roomEvents/RouletteWheel';
 import { useRoomEvents } from '@/features/calls/roomEvents/useRoomEvents';
+import { useRoomMediaLock } from '@/features/calls/useRoomMediaLock';
 import { createRoomSocket } from '@/lib/socket';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { NAME_COLOR_HEX, isNameColorId } from '@/lib/nameColors';
@@ -282,6 +283,7 @@ export default function RoomPage() {
   // liviana de la sala, no exclusiva del admin.
   const canManageEvents = currentUserRole === 'administrador' || currentUserRole === 'colaborador';
   const roomEvents = useRoomEvents(roomSocket);
+  const mediaLock = useRoomMediaLock(roomSocket);
   useShareMyAvatar(roomSocket);
   const avatarDirectory = useMemo(() => buildAvatarDirectory(users), [users]);
   const eventParticipants = useMemo(
@@ -910,6 +912,11 @@ export default function RoomPage() {
                             }
                           : undefined
                       }
+                      isCurrentUserAdmin={isCurrentUserAdmin}
+                      audioLocked={mediaLock.audioLocked}
+                      videoLocked={mediaLock.videoLocked}
+                      onSetAudioLock={mediaLock.setAudioLock}
+                      onSetVideoLock={mediaLock.setVideoLock}
                     />
                   </AvatarDirectoryProvider>
                 </div>

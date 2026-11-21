@@ -862,6 +862,114 @@ describe('ChatGateway', () => {
     });
   });
 
+  describe('bloqueo de medios (mutear/apagar cámara a todos)', () => {
+    const admin: RoomParticipant = {
+      kind: 'room-participant',
+      roomId: 'room-1',
+      sub: 'participant-admin',
+      roomCode: 'abc-defg-hij',
+      name: 'Ana',
+      userId: 'user-admin',
+    };
+    const member: RoomParticipant = {
+      kind: 'room-participant',
+      roomId: 'room-1',
+      sub: 'participant-member',
+      roomCode: 'abc-defg-hij',
+      name: 'Miembro',
+      userId: 'user-member',
+    };
+    const guest: RoomParticipant = {
+      kind: 'room-participant',
+      roomId: 'room-1',
+      sub: 'participant-guest',
+      roomCode: 'abc-defg-hij',
+      name: 'Invitado',
+    };
+
+    it('rechaza setMediaLock de alguien que no es administrador, sin mutar el mapa ni emitir', async () => {
+      const getMemberRole = vi
+        .fn<RoomsService['getMemberRole']>()
+        .mockResolvedValue('participante');
+      const setup = createGateway(undefined, getMemberRole);
+      const client = createSocket(member);
+      await setup.gateway.handleJoinRoom(client as never, { code: 'abc-defg-hij' });
+
+      await setup.gateway.handleSetMediaLock(client as never, { target: 'audio', locked: true });
+
+      expect(client.emit).toHaveBeenCalledWith('error', {
+        message: 'Solo el administrador de la sala puede silenciar a los demás',
+      });
+      expect(setup.serverEmit).not.toHaveBeenCalledWith('mediaLockState', expect.anything());
+    });
+
+    it('el admin activa un lock y lo difunde a toda la sala sin pisar el otro lock', async () => {
+      const getMemberRole = vi
+        .fn<RoomsService['getMemberRole']>()
+        .mockResolvedValue('administrador');
+      const setup = createGateway(undefined, getMemberRole);
+      const client = createSocket(admin);
+      await setup.gateway.handleJoinRoom(client as never, { code: 'abc-defg-hij' });
+
+      await setup.gateway.handleSetMediaLock(client as never, { target: 'video', locked: true });
+      await setup.gateway.handleSetMediaLock(client as never, { target: 'audio', locked: true });
+
+      expect(setup.serverTo).toHaveBeenCalledWith('abc-defg-hij');
+      expect(setup.serverEmit).toHaveBeenLastCalledWith('mediaLockState', {
+        audioLocked: true,
+        videoLocked: true,
+      });
+    });
+
+    it('desactivar un lock no toca el valor del otro', async () => {
+      const getMemberRole = vi
+        .fn<RoomsService['getMemberRole']>()
+        .mockResolvedValue('administrador');
+      const setup = createGateway(undefined, getMemberRole);
+      const client = createSocket(admin);
+      await setup.gateway.handleJoinRoom(client as never, { code: 'abc-defg-hij' });
+      await setup.gateway.handleSetMediaLock(client as never, { target: 'audio', locked: true });
+      await setup.gateway.handleSetMediaLock(client as never, { target: 'video', locked: true });
+
+      await setup.gateway.handleSetMediaLock(client as never, { target: 'audio', locked: false });
+
+      expect(setup.serverEmit).toHaveBeenLastCalledWith('mediaLockState', {
+        audioLocked: false,
+        videoLocked: true,
+      });
+    });
+
+    it('a quien se une después, se le manda el estado de bloqueo de medios actual de la sala', async () => {
+      const getMemberRole = vi
+        .fn<RoomsService['getMemberRole']>()
+        .mockResolvedValue('administrador');
+      const setup = createGateway(undefined, getMemberRole);
+      const adminClient = createSocket(admin, 'socket-admin');
+      await setup.gateway.handleJoinRoom(adminClient as never, { code: 'abc-defg-hij' });
+      await setup.gateway.handleSetMediaLock(adminClient as never, {
+        target: 'audio',
+        locked: true,
+      });
+
+      const lateClient = createSocket(guest, 'socket-guest');
+      await setup.gateway.handleJoinRoom(lateClient as never, { code: 'abc-defg-hij' });
+
+      expect(lateClient.emit).toHaveBeenCalledWith('mediaLockState', {
+        audioLocked: true,
+        videoLocked: false,
+      });
+    });
+
+    it('no manda mediaLockState a quien se une si nunca se activó ningún bloqueo', async () => {
+      const setup = createGateway();
+      const client = createSocket(guest);
+
+      await setup.gateway.handleJoinRoom(client as never, { code: 'abc-defg-hij' });
+
+      expect(client.emit).not.toHaveBeenCalledWith('mediaLockState', expect.anything());
+    });
+  });
+
   describe('evento de sala (ruleta)', () => {
     const admin: RoomParticipant = {
       kind: 'room-participant',
