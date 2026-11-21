@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from '@jest/globals';
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { useLanguageStore } from '../../translation/store';
 import { CallSettingsButton } from './CallSettings';
@@ -12,7 +12,16 @@ describe('Ajustes de la llamada', () => {
   });
 
   it('abre el panel, cambia el tamaño de los subtítulos y lo recuerda para la próxima llamada', () => {
-    render(<CallSettingsButton buttonClassName="btn" />);
+    render(
+      <CallSettingsButton
+        buttonClassName="btn"
+        isAdmin={false}
+        audioLocked={false}
+        videoLocked={false}
+        onSetAudioLock={jest.fn()}
+        onSetVideoLock={jest.fn()}
+      />,
+    );
     const button = screen.getByRole('button', { name: 'Ajustes de la llamada' });
     expect(button).toHaveAttribute('aria-expanded', 'false');
 
@@ -29,7 +38,16 @@ describe('Ajustes de la llamada', () => {
   });
 
   it('la subvista de subtítulos tiene flecha atrás y X, y el menú abre el modal del avatar', () => {
-    render(<CallSettingsButton buttonClassName="btn" />);
+    render(
+      <CallSettingsButton
+        buttonClassName="btn"
+        isAdmin={false}
+        audioLocked={false}
+        videoLocked={false}
+        onSetAudioLock={jest.fn()}
+        onSetVideoLock={jest.fn()}
+      />,
+    );
     const gear = screen.getByRole('button', { name: 'Ajustes de la llamada' });
     fireEvent.click(gear);
     fireEvent.click(screen.getByRole('button', { name: /Tamaño de los subtítulos/ }));
@@ -49,7 +67,16 @@ describe('Ajustes de la llamada', () => {
   });
 
   it('se cierra con Escape', () => {
-    render(<CallSettingsButton buttonClassName="btn" />);
+    render(
+      <CallSettingsButton
+        buttonClassName="btn"
+        isAdmin={false}
+        audioLocked={false}
+        videoLocked={false}
+        onSetAudioLock={jest.fn()}
+        onSetVideoLock={jest.fn()}
+      />,
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Ajustes de la llamada' }));
     fireEvent.click(screen.getByRole('button', { name: /Tamaño de los subtítulos/ }));
     expect(screen.getByRole('group', { name: 'Tamaño de los subtítulos' })).toBeInTheDocument();

@@ -1,4 +1,5 @@
-import { beforeEach, afterEach, describe, expect, it, jest } from '@jest/globals';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import type { Mock, MockInstance } from 'vitest';
 import { ConfigService } from '@nestjs/config';
 import { ForbiddenException, ServiceUnavailableException } from '@nestjs/common';
 import { RoomServiceClient, TokenVerifier, type ParticipantInfo } from 'livekit-server-sdk';
@@ -32,52 +33,52 @@ const config = {
 };
 
 function createDbMock() {
-  const insertValues = jest
+  const insertValues = vi
     .fn<(values: { roomId: string; userId: string }) => Promise<void>>()
     .mockResolvedValue(undefined);
-  const historyInsert = jest.fn().mockReturnValue({ values: insertValues });
+  const historyInsert = vi.fn().mockReturnValue({ values: insertValues });
   // La correlación de identidad usa un upsert: insert().values().onConflictDoUpdate().
-  const identityOnConflictDoUpdate = jest
+  const identityOnConflictDoUpdate = vi
     .fn<(config: unknown) => Promise<void>>()
     .mockResolvedValue(undefined);
-  const identityValues = jest
+  const identityValues = vi
     .fn()
     .mockReturnValue({ onConflictDoUpdate: identityOnConflictDoUpdate });
-  const identityInsert = jest.fn().mockReturnValue({ values: identityValues });
+  const identityInsert = vi.fn().mockReturnValue({ values: identityValues });
   // Un solo db.insert(table) real: distingue por la tabla recibida, como hace Drizzle.
-  const insert = jest.fn((table: unknown) =>
+  const insert = vi.fn((table: unknown) =>
     table === callParticipantIdentities ? identityInsert() : historyInsert(),
   );
 
   // select(...).from(callHistory).innerJoin(rooms, ...).where(...).orderBy(...).limit(...)
   // — primera mitad de listHistory(): ahora selecciona roomId también.
-  const limit = jest
+  const limit = vi
     .fn<
       (
         n: number,
       ) => Promise<{ roomId: string; roomCode: string; roomName: string; startedAt: Date }[]>
     >()
     .mockResolvedValue([]);
-  const orderBy = jest.fn().mockReturnValue({ limit });
-  const historyWhere = jest.fn().mockReturnValue({ orderBy, limit });
-  const innerJoin = jest.fn().mockReturnValue({ where: historyWhere });
+  const orderBy = vi.fn().mockReturnValue({ limit });
+  const historyWhere = vi.fn().mockReturnValue({ orderBy, limit });
+  const innerJoin = vi.fn().mockReturnValue({ where: historyWhere });
   // getRoomNotesForHistory() post-fix (D4-C): select({roomId}).from(callHistory)
   // .where(...).limit(1) -- SIN join a rooms, un solo identificador.
-  const notesLimit = jest.fn<() => Promise<{ roomId: string }[]>>().mockResolvedValue([]);
-  const notesWhere = jest.fn().mockReturnValue({ limit: notesLimit });
-  const historyFrom = jest.fn().mockReturnValue({ innerJoin, where: notesWhere });
+  const notesLimit = vi.fn<() => Promise<{ roomId: string }[]>>().mockResolvedValue([]);
+  const notesWhere = vi.fn().mockReturnValue({ limit: notesLimit });
+  const historyFrom = vi.fn().mockReturnValue({ innerJoin, where: notesWhere });
 
   // select(...).from(callSessionParticipants).innerJoin(callSessions, ...).where(...)
   // — segunda mitad de listHistory(): candidatos de sesión materializada
   // para correlacionar por sala + cercanía temporal. Sin .orderBy/.limit,
   // a diferencia de la cadena de arriba.
-  const participantSessionsWhere = jest
+  const participantSessionsWhere = vi
     .fn<() => Promise<{ sessionId: string; firstJoinedAt: Date; roomId: string | null }[]>>()
     .mockResolvedValue([]);
-  const participantSessionsInnerJoin = jest
+  const participantSessionsInnerJoin = vi
     .fn()
     .mockReturnValue({ where: participantSessionsWhere });
-  const participantSessionsFrom = jest
+  const participantSessionsFrom = vi
     .fn()
     .mockReturnValue({ innerJoin: participantSessionsInnerJoin });
 
@@ -85,28 +86,28 @@ function createDbMock() {
   // Default: ninguna fila (invitado, o cuenta sin rol admin/colaborador
   // registrado todavía) para no asumir admin por accidente en los tests
   // que no son del gate.
-  const roleLimit = jest.fn<() => Promise<{ role: string }[]>>().mockResolvedValue([]);
-  const roleWhere = jest.fn().mockReturnValue({ limit: roleLimit });
-  const roleFrom = jest.fn().mockReturnValue({ where: roleWhere });
+  const roleLimit = vi.fn<() => Promise<{ role: string }[]>>().mockResolvedValue([]);
+  const roleWhere = vi.fn().mockReturnValue({ limit: roleLimit });
+  const roleFrom = vi.fn().mockReturnValue({ where: roleWhere });
 
   // select({id}).from(callParticipantIdentities).where(...).limit(1) —
   // cruce de identities conectadas contra roleAtIssue='administrador' en
   // assertHostConnected(). Default: SÍ hay un admin conectado, para que los
   // tests de join() preexistentes (que no ejercitan el gate en sí) sigan
   // emitiendo token sin tener que mockear un anfitrión por separado.
-  const adminLimit = jest
+  const adminLimit = vi
     .fn<() => Promise<{ id: string }[]>>()
     .mockResolvedValue([{ id: 'already-connected-admin-identity' }]);
-  const adminWhere = jest.fn().mockReturnValue({ limit: adminLimit });
-  const adminFrom = jest.fn().mockReturnValue({ where: adminWhere });
+  const adminWhere = vi.fn().mockReturnValue({ limit: adminLimit });
+  const adminFrom = vi.fn().mockReturnValue({ where: adminWhere });
 
-  const from = jest.fn((table: unknown) => {
+  const from = vi.fn((table: unknown) => {
     if (table === roomMembers) return roleFrom();
     if (table === callParticipantIdentities) return adminFrom();
     if (table === callSessionParticipants) return participantSessionsFrom();
     return historyFrom();
   });
-  const select = jest.fn().mockReturnValue({ from });
+  const select = vi.fn().mockReturnValue({ from });
   return {
     insert,
     insertValues,
@@ -127,17 +128,17 @@ function createDbMock() {
 }
 
 describe('CallsService: LiveKit', () => {
-  let rooms: { getByCodeOrThrow: jest.Mock<RoomsService['getByCodeOrThrow']> };
-  let resolver: { touchEntry: ReturnType<typeof jest.fn> };
-  let createRoom: jest.SpiedFunction<RoomServiceClient['createRoom']>;
+  let rooms: { getByCodeOrThrow: Mock<RoomsService['getByCodeOrThrow']> };
+  let resolver: { touchEntry: ReturnType<typeof vi.fn> };
+  let createRoom: MockInstance<RoomServiceClient['createRoom']>;
   let db: ReturnType<typeof createDbMock>;
   let service: CallsService;
   beforeEach(() => {
     rooms = {
-      getByCodeOrThrow: jest.fn<RoomsService['getByCodeOrThrow']>().mockResolvedValue(room),
+      getByCodeOrThrow: vi.fn<RoomsService['getByCodeOrThrow']>().mockResolvedValue(room),
     };
-    resolver = { touchEntry: jest.fn().mockResolvedValue(undefined) };
-    createRoom = jest
+    resolver = { touchEntry: vi.fn().mockResolvedValue(undefined) };
+    createRoom = vi
       .spyOn(RoomServiceClient.prototype, 'createRoom')
       .mockResolvedValue({} as Awaited<ReturnType<RoomServiceClient['createRoom']>>);
     // Gate de anfitrión (Fase 5): estos tests no son sobre el gate en sí,
@@ -145,7 +146,7 @@ describe('CallsService: LiveKit', () => {
     // el adminLimit por defecto de createDbMock) para que el invitado de
     // estos escenarios preexistentes pueda unirse sin tener que mockear la
     // presencia de un admin en cada test.
-    jest
+    vi
       .spyOn(RoomServiceClient.prototype, 'listParticipants')
       .mockResolvedValue([{ identity: 'already-connected-admin' } as ParticipantInfo]);
     db = createDbMock();
@@ -157,7 +158,7 @@ describe('CallsService: LiveKit', () => {
     );
   });
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('firma un token de invitado limitado a su sala, con permisos de solo unirse (sin admin ni grabación)', async () => {
@@ -285,22 +286,22 @@ describe('CallsService: LiveKit', () => {
 });
 
 describe('CallsService: correlación de identidad', () => {
-  let rooms: { getByCodeOrThrow: jest.Mock<RoomsService['getByCodeOrThrow']> };
-  let resolver: { touchEntry: ReturnType<typeof jest.fn> };
+  let rooms: { getByCodeOrThrow: Mock<RoomsService['getByCodeOrThrow']> };
+  let resolver: { touchEntry: ReturnType<typeof vi.fn> };
   let db: ReturnType<typeof createDbMock>;
   let service: CallsService;
   beforeEach(() => {
     rooms = {
-      getByCodeOrThrow: jest.fn<RoomsService['getByCodeOrThrow']>().mockResolvedValue(room),
+      getByCodeOrThrow: vi.fn<RoomsService['getByCodeOrThrow']>().mockResolvedValue(room),
     };
-    resolver = { touchEntry: jest.fn().mockResolvedValue(undefined) };
-    jest
+    resolver = { touchEntry: vi.fn().mockResolvedValue(undefined) };
+    vi
       .spyOn(RoomServiceClient.prototype, 'createRoom')
       .mockResolvedValue({} as Awaited<ReturnType<RoomServiceClient['createRoom']>>);
     // Ver el comentario equivalente en 'CallsService: LiveKit': estos tests
     // son sobre la correlación de identidad, no sobre el gate de admin en
     // sí, así que se asume un anfitrión ya conectado por defecto.
-    jest
+    vi
       .spyOn(RoomServiceClient.prototype, 'listParticipants')
       .mockResolvedValue([{ identity: 'already-connected-admin' } as ParticipantInfo]);
     db = createDbMock();
@@ -312,7 +313,7 @@ describe('CallsService: correlación de identidad', () => {
     );
   });
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('usuario registrado se une: persiste la correlación identity↔userId,roomId antes de emitir el token', async () => {
@@ -404,21 +405,21 @@ describe('CallsService: correlación de identidad', () => {
 });
 
 describe('CallsService: gate de administrador (host-gate)', () => {
-  let rooms: { getByCodeOrThrow: jest.Mock<RoomsService['getByCodeOrThrow']> };
-  let resolver: { touchEntry: ReturnType<typeof jest.fn> };
+  let rooms: { getByCodeOrThrow: Mock<RoomsService['getByCodeOrThrow']> };
+  let resolver: { touchEntry: ReturnType<typeof vi.fn> };
   let db: ReturnType<typeof createDbMock>;
   let service: CallsService;
-  let listParticipants: jest.SpiedFunction<RoomServiceClient['listParticipants']>;
+  let listParticipants: MockInstance<RoomServiceClient['listParticipants']>;
 
   beforeEach(() => {
     rooms = {
-      getByCodeOrThrow: jest.fn<RoomsService['getByCodeOrThrow']>().mockResolvedValue(room),
+      getByCodeOrThrow: vi.fn<RoomsService['getByCodeOrThrow']>().mockResolvedValue(room),
     };
-    resolver = { touchEntry: jest.fn().mockResolvedValue(undefined) };
-    jest
+    resolver = { touchEntry: vi.fn().mockResolvedValue(undefined) };
+    vi
       .spyOn(RoomServiceClient.prototype, 'createRoom')
       .mockResolvedValue({} as Awaited<ReturnType<RoomServiceClient['createRoom']>>);
-    listParticipants = jest.spyOn(RoomServiceClient.prototype, 'listParticipants');
+    listParticipants = vi.spyOn(RoomServiceClient.prototype, 'listParticipants');
     db = createDbMock();
     service = new CallsService(
       rooms as unknown as RoomsService,
@@ -428,7 +429,7 @@ describe('CallsService: gate de administrador (host-gate)', () => {
     );
   });
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('administrador se une a una sala vacía: se emite el token sin consultar listParticipants (spec host-gate/admin-siempre)', async () => {
@@ -510,19 +511,19 @@ describe('CallsService: gate de administrador (host-gate)', () => {
 
 describe('CallsService: historial', () => {
   let rooms: {
-    getByCodeOrThrow: jest.Mock<RoomsService['getByCodeOrThrow']>;
-    getRoomNotesById: jest.Mock<RoomsService['getRoomNotesById']>;
+    getByCodeOrThrow: Mock<RoomsService['getByCodeOrThrow']>;
+    getRoomNotesById: Mock<RoomsService['getRoomNotesById']>;
   };
-  let resolver: { touchEntry: ReturnType<typeof jest.fn> };
+  let resolver: { touchEntry: ReturnType<typeof vi.fn> };
   let db: ReturnType<typeof createDbMock>;
   let service: CallsService;
 
   beforeEach(() => {
     rooms = {
-      getByCodeOrThrow: jest.fn<RoomsService['getByCodeOrThrow']>().mockResolvedValue(room),
-      getRoomNotesById: jest.fn<RoomsService['getRoomNotesById']>(),
+      getByCodeOrThrow: vi.fn<RoomsService['getByCodeOrThrow']>().mockResolvedValue(room),
+      getRoomNotesById: vi.fn<RoomsService['getRoomNotesById']>(),
     };
-    resolver = { touchEntry: jest.fn().mockResolvedValue(undefined) };
+    resolver = { touchEntry: vi.fn().mockResolvedValue(undefined) };
     db = createDbMock();
     service = new CallsService(
       rooms as unknown as RoomsService,
@@ -655,30 +656,30 @@ describe('CallsService: historial', () => {
 });
 
 describe('CallsService: reportTrackState (mute/unmute reportado por el cliente)', () => {
-  let rooms: { getByCodeOrThrow: jest.Mock<RoomsService['getByCodeOrThrow']> };
-  let resolver: { touchEntry: ReturnType<typeof jest.fn> };
+  let rooms: { getByCodeOrThrow: Mock<RoomsService['getByCodeOrThrow']> };
+  let resolver: { touchEntry: ReturnType<typeof vi.fn> };
   let service: CallsService;
-  let listRooms: jest.SpiedFunction<RoomServiceClient['listRooms']>;
-  let onConflictDoNothing: jest.Mock<() => Promise<void>>;
-  let insertValues: jest.Mock<
+  let listRooms: MockInstance<RoomServiceClient['listRooms']>;
+  let onConflictDoNothing: Mock<() => Promise<void>>;
+  let insertValues: Mock<
     (values: unknown) => { onConflictDoNothing: typeof onConflictDoNothing }
   >;
-  let insert: jest.Mock<(table: unknown) => { values: typeof insertValues }>;
+  let insert: Mock<(table: unknown) => { values: typeof insertValues }>;
   let db: { insert: typeof insert };
 
   beforeEach(() => {
     rooms = {
-      getByCodeOrThrow: jest.fn<RoomsService['getByCodeOrThrow']>().mockResolvedValue(room),
+      getByCodeOrThrow: vi.fn<RoomsService['getByCodeOrThrow']>().mockResolvedValue(room),
     };
-    resolver = { touchEntry: jest.fn().mockResolvedValue(undefined) };
-    listRooms = jest
+    resolver = { touchEntry: vi.fn().mockResolvedValue(undefined) };
+    listRooms = vi
       .spyOn(RoomServiceClient.prototype, 'listRooms')
       .mockResolvedValue([{ sid: 'RM_live_sid' }] as Awaited<
         ReturnType<RoomServiceClient['listRooms']>
       >);
-    onConflictDoNothing = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
-    insertValues = jest.fn().mockReturnValue({ onConflictDoNothing });
-    insert = jest.fn().mockReturnValue({ values: insertValues });
+    onConflictDoNothing = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    insertValues = vi.fn().mockReturnValue({ onConflictDoNothing });
+    insert = vi.fn().mockReturnValue({ values: insertValues });
     db = { insert };
     service = new CallsService(
       rooms as unknown as RoomsService,
@@ -689,7 +690,7 @@ describe('CallsService: reportTrackState (mute/unmute reportado por el cliente)'
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('inserta un evento track_unmuted con la identity del pase y el sid real de LiveKit', async () => {

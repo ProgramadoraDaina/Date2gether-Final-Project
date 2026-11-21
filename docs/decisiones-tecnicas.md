@@ -529,3 +529,38 @@ El botón "Unirme a la música" se mostraba a todos los participantes por igual,
 - Mantiene consistencia con el resto del feature: el admin ya no interactúa con ningún gate de "pedir unirse" para algo que controla de punta a punta.
 - Evita acoplar una preferencia individual (volumen) al estado compartido de la sala, que hasta ahora solo modela lo que tiene que verse igual para todos (`tracks`, `currentIndex`, `isPlaying`, `positionSeconds`).
 - Mientras se arrastra, la UI usa un valor local de "preview" (no derivado de `musicState`) para que el drag se sienta fluido; ese valor se descarta al soltar y la barra vuelve a reflejar la posición autoritativa del servidor.
+
+---
+
+## 21. Nombre editable para salas permanentes (al crear y después)
+
+**Fecha:** 2026-11-20
+**Rama:** `feature/room-poll-event`
+
+### Contexto
+
+`rooms.name` ya existía como columna `notNull` y `CreateRoomDto.name` ya era obligatorio, pero el cliente nunca dejaba escribirlo: `app/page.tsx` siempre mandaba `Reunión de ${name}`, donde `name` es el nombre de usuario de quien crea la sala, no un nombre de sala. Para una sala efímera (TTL 24h) eso no importa, pero para una permanente — pensada para reusarse en el tiempo, a veces por un grupo entero — quedar pegada para siempre al nombre de quien la creó una vez no tiene sentido de producto.
+
+### Alternativas consideradas
+
+- **Nombrar solo al crear.** Cambio más chico (un input nuevo en el form), pero no resuelve salas permanentes ya existentes ni errores de tipeo.
+- **Nombrar al crear + permitir renombrar después (elegida).** Agrega un endpoint de escritura nuevo, pero cubre el caso real: el nombre de una sala de uso recurrente puede necesitar ajustarse con el tiempo.
+
+### Decisión
+
+Se implementaron ambas puntas:
+
+- El nombre de sala es **opcional** en el form de creación (`app/page.tsx`), y solo se muestra cuando `isPermanent` está activo. Si se deja vacío, se mantiene el comportamiento actual (`Reunión de {nombre del usuario}`).
+- Nuevo endpoint `PATCH /rooms/:code/name` (`UpdateRoomNameDto`, mismo guard stack que `PATCH /rooms/:code/members/:userId`: `JwtAuthGuard` + `RoomRolesGuard` + `@RoomRoles('administrador')`), y `RoomsService.renameRoom`.
+- **El renombre queda restringido a salas permanentes, validado en el servidor** (`renameRoom` lanza `ForbiddenException` si `!room.isPermanent`), no solo ocultando el botón en el cliente — así no se puede saltear llamando al endpoint directo. Las salas temporales se recuperan en 24h (D5); darles un nombre persistente no aporta nada y complica el modelo mental.
+- UI de renombre en "Mis salas" (`app/rooms/page.tsx`): un botón ✏️ visible solo en filas `isPermanent`, que abre un input inline con Guardar/Cancelar.
+
+### Resolución aplicada
+
+- Backend: `dto/update-room-name.dto.ts` (nuevo), `rooms.controller.ts` (+`renameRoom`), `rooms.service.ts` (+`renameRoom`).
+- Frontend: `lib/api.ts` (+`renameRoom`), `app/page.tsx` (input opcional de nombre de sala), `app/rooms/page.tsx` + `page.module.css` (UI de edición inline), `features/translation/dictionary.ts` (claves nuevas en inglés).
+- No se tocó el schema (la columna ya existía) ni la inmutabilidad de `isPermanent`.
+
+### Verificación
+
+Backend: `pnpm vitest run modules/rooms/rooms.controller.spec.ts modules/rooms/rooms.service.spec.ts` — 29/29. Frontend: `pnpm jest` en `client/` — 62 suites / 399 tests, todo verde. `tsc --noEmit` sin errores nuevos en los archivos tocados (los errores preexistentes en `page.spec.tsx` de `room/[code]` y en `calls-webhook.service.spec.ts` son de otro trabajo en esta misma rama, no de este cambio).

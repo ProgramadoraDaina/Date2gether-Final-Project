@@ -1,4 +1,4 @@
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it } from 'vitest';
 import type { DrizzleDb } from '../../db/drizzle.module';
 import type { Message } from '../../db/schema';
 import { chain, createFakeDb } from '../../test-support/fake-drizzle';

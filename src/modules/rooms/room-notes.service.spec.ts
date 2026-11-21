@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Mock } from 'vitest';
 import { ConflictException } from '@nestjs/common';
 import { drizzle, type RemoteCallback } from 'drizzle-orm/pg-proxy';
 import { validate } from 'class-validator';
@@ -10,17 +11,17 @@ import { RoomsService } from './rooms.service';
 
 describe('RoomsService: revisión de notas', () => {
   const room = { id: 'room-1', code: 'abc-defg-hij' } as Room;
-  let query: jest.Mock<RemoteCallback>;
+  let query: Mock<RemoteCallback>;
   let service: RoomsService;
   beforeEach(() => {
     // El proxy ejecuta los constructores SQL reales de Drizzle sin conectar a una BD.
-    query = jest.fn<RemoteCallback>().mockResolvedValue({ rows: [] });
+    query = vi.fn<RemoteCallback>().mockResolvedValue({ rows: [] });
     service = new RoomsService(
       drizzle(query) as unknown as DrizzleDb,
       new RoomEventsService(),
       {} as never,
     );
-    jest.spyOn(service, 'getByCodeOrThrow').mockResolvedValue(room);
+    vi.spyOn(service, 'getByCodeOrThrow').mockResolvedValue(room);
   });
 
   it('una nota inexistente devuelve la revisión inicial sin crear una fila', async () => {

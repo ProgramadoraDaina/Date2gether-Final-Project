@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from '@jest/globals';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { DrizzleDb } from '../../../db/drizzle.module';
 import type { RoomScheduleSlot } from '../../../db/schema';
 import { chain, createFakeDb, type FakeDb } from '../../../test-support/fake-drizzle';

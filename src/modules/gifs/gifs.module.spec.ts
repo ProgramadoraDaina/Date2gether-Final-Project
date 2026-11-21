@@ -1,4 +1,4 @@
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it } from 'vitest';
 import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { DRIZZLE, DrizzleModule } from '../../db/drizzle.module';

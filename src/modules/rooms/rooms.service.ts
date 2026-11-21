@@ -232,6 +232,18 @@ export class RoomsService {
     this.roomEvents.emitMemberRoleChanged({ roomCode: code });
   }
 
+  // Solo permanentes: las temporales se recuperan en 24h (ver D5), un nombre
+  // persistente sobre algo que se descarta solo no tiene valor y complica el
+  // mental model. La restricción se valida acá, no solo en el cliente, para
+  // que no se pueda saltear llamando al endpoint directo.
+  async renameRoom(code: string, name: string): Promise<void> {
+    const room = await this.getByCodeOrThrow(code);
+    if (!room.isPermanent) {
+      throw new ForbiddenException('Solo las salas permanentes se pueden renombrar');
+    }
+    await this.db.update(rooms).set({ name }).where(eq(rooms.id, room.id));
+  }
+
   async getRoomNotes(code: string) {
     const room = await this.getByCodeOrThrow(code);
     return this.getRoomNotesById(room.id);

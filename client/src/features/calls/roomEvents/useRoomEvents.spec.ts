@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
 import { act, renderHook } from '@testing-library/react';
 import type { Socket } from 'socket.io-client';
-import { useRoomEvents, type RoomEventState } from './useRoomEvents';
+import {
+  useRoomEvents,
+  type PollEventState,
+  type RouletteEventState,
+} from './useRoomEvents';
 
 function createFakeSocket() {
   const callbacks: Record<string, (...args: unknown[]) => void> = {};
@@ -15,7 +19,7 @@ function createFakeSocket() {
   };
 }
 
-const baseState: RoomEventState = {
+const baseState: RouletteEventState = {
   type: 'roulette',
   participants: [
     { participantId: 'p1', userName: 'Ana' },
@@ -93,7 +97,7 @@ describe('useRoomEvents', () => {
     jest.useFakeTimers();
     const socket = createFakeSocket();
     const { result } = renderHook(() => useRoomEvents(socket as unknown as Socket));
-    const state: RoomEventState = {
+    const state: RouletteEventState = {
       ...baseState,
       startedAt: Date.now(),
       expiresAt: Date.now() + 5000,
@@ -117,5 +121,82 @@ describe('useRoomEvents', () => {
 
     expect(socket.off).toHaveBeenCalledWith('eventState', expect.any(Function));
     expect(socket.off).toHaveBeenCalledWith('eventStarted', expect.any(Function));
+  });
+
+  const pollState: PollEventState = {
+    type: 'poll',
+    question: '¿Pizza o sushi?',
+    options: ['Pizza', 'Sushi'],
+    multipleChoice: false,
+    anonymous: false,
+    participants: [
+      { participantId: 'p1', userName: 'Ana' },
+      { participantId: 'p2', userName: 'Beto' },
+    ],
+    votes: {},
+    closed: false,
+    startedAt: Date.now(),
+    expiresAt: Date.now() + 15 * 60 * 1000,
+  };
+
+  it('startPoll emite startRoomEvent con los datos de la encuesta', () => {
+    const socket = createFakeSocket();
+    const { result } = renderHook(() => useRoomEvents(socket as unknown as Socket));
+
+    act(() =>
+      result.current.startPoll(['p1', 'p2'], '¿Pizza o sushi?', ['Pizza', 'Sushi'], {
+        multipleChoice: false,
+        anonymous: false,
+      }),
+    );
+
+    expect(socket.emit).toHaveBeenCalledWith('startRoomEvent', {
+      type: 'poll',
+      participantIds: ['p1', 'p2'],
+      question: '¿Pizza o sushi?',
+      options: ['Pizza', 'Sushi'],
+      multipleChoice: false,
+      anonymous: false,
+    });
+  });
+
+  it('castPollVote emite castPollVote con los índices elegidos', () => {
+    const socket = createFakeSocket();
+    const { result } = renderHook(() => useRoomEvents(socket as unknown as Socket));
+
+    act(() => result.current.castPollVote([1]));
+
+    expect(socket.emit).toHaveBeenCalledWith('castPollVote', { optionIndexes: [1] });
+  });
+
+  it('closePoll emite closePollEvent sin payload', () => {
+    const socket = createFakeSocket();
+    const { result } = renderHook(() => useRoomEvents(socket as unknown as Socket));
+
+    act(() => result.current.closePoll());
+
+    expect(socket.emit).toHaveBeenCalledWith('closePollEvent');
+  });
+
+  it('eventStarted de una encuesta setea settled pero nunca dispara spin (es solo de la ruleta)', () => {
+    const socket = createFakeSocket();
+    const { result } = renderHook(() => useRoomEvents(socket as unknown as Socket));
+
+    act(() => socket.callbacks.eventStarted(pollState));
+
+    expect(result.current.settled).toEqual(pollState);
+    expect(result.current.spin).toBeNull();
+  });
+
+  it('eventState con una encuesta actualizada (voto o cierre) solo pisa settled', () => {
+    const socket = createFakeSocket();
+    const { result } = renderHook(() => useRoomEvents(socket as unknown as Socket));
+    act(() => socket.callbacks.eventStarted(pollState));
+
+    const updated: PollEventState = { ...pollState, votes: { p1: [0] } };
+    act(() => socket.callbacks.eventState(updated));
+
+    expect(result.current.settled).toEqual(updated);
+    expect(result.current.spin).toBeNull();
   });
 });

@@ -1,4 +1,4 @@
-import { jest } from '@jest/globals';
+import { vi } from 'vitest';
 
 const CHAIN_METHODS = [
   'from',
@@ -16,7 +16,7 @@ const CHAIN_METHODS = [
 ] as const;
 
 type ChainMethodName = (typeof CHAIN_METHODS)[number];
-type AnyMock = ReturnType<typeof jest.fn>;
+type AnyMock = ReturnType<typeof vi.fn>;
 
 // Cadena fake de Drizzle: cada método encadenable devuelve la misma cadena, y
 // awaitearla en cualquier punto (el código de producción no siempre llama a
@@ -26,7 +26,7 @@ export function chain<T>(result: T) {
     then: Promise<T>['then'];
   };
   for (const method of CHAIN_METHODS) {
-    self[method] = jest.fn(() => self);
+    self[method] = vi.fn(() => self);
   }
   self.then = (onFulfilled, onRejected) => Promise.resolve(result).then(onFulfilled, onRejected);
   return self;
@@ -34,11 +34,11 @@ export function chain<T>(result: T) {
 
 export function createFakeDb() {
   return {
-    select: jest.fn(),
-    insert: jest.fn(),
-    update: jest.fn(),
-    delete: jest.fn(),
-    transaction: jest.fn(),
+    select: vi.fn(),
+    insert: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    transaction: vi.fn(),
   };
 }
 

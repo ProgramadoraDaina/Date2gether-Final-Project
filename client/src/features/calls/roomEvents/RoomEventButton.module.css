@@ -161,3 +161,69 @@
 .dialogActions button {
   width: auto;
 }
+
+/* --- formulario de encuesta --- */
+.pollForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) 16px 0;
+}
+
+.pollLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.pollOptionRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pollOptionRow input {
+  flex: 1;
+}
+
+.pollRemoveOption {
+  width: auto;
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.pollRemoveOption:hover:not(:disabled) {
+  background: var(--color-chip-bg);
+  color: var(--color-accent);
+}
+
+.pollAddOption {
+  width: auto;
+  align-self: flex-start;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--color-chip-bg);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pollAddOption:hover:not(:disabled) {
+  color: var(--color-accent);
+}
+
+.pollCheckbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.pollCheckbox input {
+  width: auto;
+  margin: 0;
+}

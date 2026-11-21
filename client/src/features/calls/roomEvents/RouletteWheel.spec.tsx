@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
 import { act, render, screen } from '@testing-library/react';
 import { RouletteWheel } from './RouletteWheel';
-import type { RoomEventState } from './useRoomEvents';
+import type { RouletteEventState } from './useRoomEvents';
 
-const state: RoomEventState = {
+const state: RouletteEventState = {
   type: 'roulette',
   participants: [
     { participantId: 'p1', userName: 'Ana' },

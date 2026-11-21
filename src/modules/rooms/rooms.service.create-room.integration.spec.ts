@@ -6,8 +6,8 @@ import {
   describe,
   expect,
   it,
-  jest,
-} from '@jest/globals';
+  vi,
+} from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { rooms, roomScheduleSlots, users, type NewUser } from '../../db/schema';
@@ -15,13 +15,14 @@ import { connectTestDb } from '../../test-support/test-database';
 import { RoomEventsService } from './room-events.service';
 import { RoomResolverService } from './room-resolver.service';
 
-// ESM named exports are live, read-only bindings -- jest.spyOn cannot patch
+// ESM named exports are live, read-only bindings -- vi.spyOn cannot patch
 // generateRoomCode in place ("Cannot assign to read only property").
-// jest.unstable_mockModule + a dynamic import of the module under test is
-// the supported way to control it for these real-Postgres collision tests
-// (4.11, 6.1).
-const generateRoomCodeMock = jest.fn<() => string>();
-jest.unstable_mockModule('../../common/generate-room-code', () => ({
+// vi.mock + a dynamic import of the module under test is the supported way
+// to control it for these real-Postgres collision tests (4.11, 6.1).
+// vi.hoisted keeps the mock reachable both from the vi.mock factory (which
+// is hoisted above all imports) and from beforeEach/the test bodies below.
+const generateRoomCodeMock = vi.hoisted(() => vi.fn<() => string>());
+vi.mock('../../common/generate-room-code', () => ({
   generateRoomCode: generateRoomCodeMock,
 }));
 const { RoomsService } = await import('./rooms.service');
