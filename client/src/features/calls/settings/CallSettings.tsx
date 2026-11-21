@@ -42,6 +42,8 @@ interface CallSettingsButtonProps {
   videoLocked: boolean;
   onSetAudioLock: (locked: boolean) => void;
   onSetVideoLock: (locked: boolean) => void;
+  nameFocusEnabled: boolean;
+  onSetNameFocus: (enabled: boolean) => void;
 }
 
 export function CallSettingsButton({
@@ -51,6 +53,8 @@ export function CallSettingsButton({
   videoLocked,
   onSetAudioLock,
   onSetVideoLock,
+  nameFocusEnabled,
+  onSetNameFocus,
 }: CallSettingsButtonProps) {
   const { t } = useTranslation();
   const { captionSize, setCaptionSize } = useCallSettingsStore();
@@ -124,6 +128,14 @@ export function CallSettingsButton({
                       checked={videoLocked}
                       onChange={onSetVideoLock}
                       aria-label={t('Apagar cámaras de todos')}
+                    />
+                  </li>
+                  <li className={styles.menuItem}>
+                    <span>{t('Enfocar automáticamente al nombrar a alguien')}</span>
+                    <ToggleSwitch
+                      checked={nameFocusEnabled}
+                      onChange={onSetNameFocus}
+                      aria-label={t('Enfocar automáticamente al nombrar a alguien')}
                     />
                   </li>
                 </>
