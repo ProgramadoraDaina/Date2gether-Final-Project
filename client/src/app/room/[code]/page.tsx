@@ -52,6 +52,7 @@ import { RoomEventButton } from '@/features/calls/roomEvents/RoomEventButton';
 import { RouletteWheel } from '@/features/calls/roomEvents/RouletteWheel';
 import { useRoomEvents } from '@/features/calls/roomEvents/useRoomEvents';
 import { useRoomMediaLock } from '@/features/calls/useRoomMediaLock';
+import { useNameFocusSetting } from '@/features/calls/useNameFocusSetting';
 import { createRoomSocket } from '@/lib/socket';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { NAME_COLOR_HEX, isNameColorId } from '@/lib/nameColors';
@@ -284,6 +285,7 @@ export default function RoomPage() {
   const canManageEvents = currentUserRole === 'administrador' || currentUserRole === 'colaborador';
   const roomEvents = useRoomEvents(roomSocket);
   const mediaLock = useRoomMediaLock(roomSocket);
+  const nameFocus = useNameFocusSetting(roomSocket);
   useShareMyAvatar(roomSocket);
   const avatarDirectory = useMemo(() => buildAvatarDirectory(users), [users]);
   const eventParticipants = useMemo(
@@ -917,6 +919,8 @@ export default function RoomPage() {
                       videoLocked={mediaLock.videoLocked}
                       onSetAudioLock={mediaLock.setAudioLock}
                       onSetVideoLock={mediaLock.setVideoLock}
+                      nameFocusEnabled={nameFocus.enabled}
+                      onSetNameFocus={nameFocus.setEnabled}
                     />
                   </AvatarDirectoryProvider>
                 </div>

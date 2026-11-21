@@ -32,6 +32,8 @@ import { CastPollVoteDto } from './dto/cast-poll-vote.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 import { StartRoomEventDto } from './dto/start-room-event.dto';
 import { SetMediaLockDto } from './dto/set-media-lock.dto';
+import { SetNameFocusDto } from './dto/set-name-focus.dto';
+import { MEDIA_LOCK_EVENTS, NAME_FOCUS_EVENTS, type MediaLockState } from '@date2gether/shared';
 
 // "Hasta la próxima ruleta o evento" (lo que llegue primero: el próximo
 // startRoomEvent pisa este estado igual) además de un techo fijo en el
@@ -122,11 +124,6 @@ interface PollEventState {
 
 type RoomEventState = RouletteEventState | PollEventState;
 
-interface MediaLockState {
-  audioLocked: boolean;
-  videoLocked: boolean;
-}
-
 // Clients extrapolate from updatedAt, so refreshing it requires advancing the position too.
 function livePosition(state: MusicState, now: number): number {
   if (!state.isPlaying) return state.positionSeconds;
@@ -146,6 +143,7 @@ export class ChatGateway implements OnGatewayDisconnect {
   private readonly musicStateByRoom = new Map<string, MusicState>();
   private readonly eventStateByRoom = new Map<string, RoomEventState>();
   private readonly mediaLockByRoom = new Map<string, MediaLockState>();
+  private readonly nameFocusByRoom = new Map<string, boolean>();
   private readonly permanentRoomIds = new Set<string>();
   private readonly playlistSaves = new Map<string, Promise<void>>();
   private readonly logger = new Logger(ChatGateway.name);
@@ -223,7 +221,11 @@ export class ChatGateway implements OnGatewayDisconnect {
     if (eventState && eventState.expiresAt > Date.now()) client.emit('eventState', eventState);
 
     const mediaLockState = this.mediaLockByRoom.get(dto.code);
-    if (mediaLockState) client.emit('mediaLockState', mediaLockState);
+    if (mediaLockState) client.emit(MEDIA_LOCK_EVENTS.state, mediaLockState);
+
+    // A diferencia de mediaLockState (dos flags, ausente = "sin lock
+    // todavía"), acá false YA es el default válido: siempre se emite.
+    client.emit(NAME_FOCUS_EVENTS.state, { enabled: this.nameFocusByRoom.get(dto.code) ?? false });
 
     client.to(dto.code).emit('userJoined', presence);
   }
@@ -347,11 +349,8 @@ export class ChatGateway implements OnGatewayDisconnect {
   }
 
   @UseGuards(WsJwtAuthGuard)
-  @SubscribeMessage('setMediaLock')
-  async handleSetMediaLock(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() dto: SetMediaLockDto,
-  ) {
+  @SubscribeMessage(MEDIA_LOCK_EVENTS.set)
+  async handleSetMediaLock(@ConnectedSocket() client: Socket, @MessageBody() dto: SetMediaLockDto) {
     const user = await this.requireMediaLockAdmin(client);
     if (!user) return;
 
@@ -364,7 +363,17 @@ export class ChatGateway implements OnGatewayDisconnect {
       videoLocked: dto.target === 'video' ? dto.locked : current.videoLocked,
     };
     this.mediaLockByRoom.set(user.roomCode, state);
-    this.server.to(user.roomCode).emit('mediaLockState', state);
+    this.server.to(user.roomCode).emit(MEDIA_LOCK_EVENTS.state, state);
+  }
+
+  @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage(NAME_FOCUS_EVENTS.set)
+  async handleSetNameFocus(@ConnectedSocket() client: Socket, @MessageBody() dto: SetNameFocusDto) {
+    const user = await this.requireNameFocusAdmin(client);
+    if (!user) return;
+
+    this.nameFocusByRoom.set(user.roomCode, dto.enabled);
+    this.server.to(user.roomCode).emit(NAME_FOCUS_EVENTS.state, { enabled: dto.enabled });
   }
 
   @UseGuards(WsJwtAuthGuard)
@@ -585,6 +594,7 @@ export class ChatGateway implements OnGatewayDisconnect {
       this.musicStateByRoom.delete(user.roomCode);
       this.eventStateByRoom.delete(user.roomCode);
       this.mediaLockByRoom.delete(user.roomCode);
+      this.nameFocusByRoom.delete(user.roomCode);
       this.permanentRoomIds.delete(user.roomId);
     }
   }
@@ -642,17 +652,47 @@ export class ChatGateway implements OnGatewayDisconnect {
   private async requireMediaLockAdmin(client: Socket): Promise<ConnectedUser | undefined> {
     const user = this.connectedUsers.get(client.id);
     if (!user) {
-      client.emit('error', { message: 'Tenés que unirte a una sala antes de silenciar a los demás' });
+      client.emit('error', {
+        message: 'Tenés que unirte a una sala antes de silenciar a los demás',
+      });
       return undefined;
     }
     if (!user.userId) {
-      client.emit('error', { message: 'Necesitás una cuenta para silenciar a los demás en la sala' });
+      client.emit('error', {
+        message: 'Necesitás una cuenta para silenciar a los demás en la sala',
+      });
       return undefined;
     }
     const role = await this.roomsService.getMemberRole(user.roomCode, user.userId);
     if (role !== 'administrador') {
       client.emit('error', {
         message: 'Solo el administrador de la sala puede silenciar a los demás',
+      });
+      return undefined;
+    }
+    return user;
+  }
+
+  // Misma regla que requireMediaLockAdmin (administrador exclusivo), pero con
+  // mensajes propios para el enfoque automático al nombrar.
+  private async requireNameFocusAdmin(client: Socket): Promise<ConnectedUser | undefined> {
+    const user = this.connectedUsers.get(client.id);
+    if (!user) {
+      client.emit('error', {
+        message: 'Tenés que unirte a una sala antes de activar el enfoque automático',
+      });
+      return undefined;
+    }
+    if (!user.userId) {
+      client.emit('error', {
+        message: 'Necesitás una cuenta para activar el enfoque automático en la sala',
+      });
+      return undefined;
+    }
+    const role = await this.roomsService.getMemberRole(user.roomCode, user.userId);
+    if (role !== 'administrador') {
+      client.emit('error', {
+        message: 'Solo el administrador de la sala puede activar el enfoque automático',
       });
       return undefined;
     }

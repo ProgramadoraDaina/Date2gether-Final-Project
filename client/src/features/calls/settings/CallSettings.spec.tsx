@@ -20,6 +20,8 @@ describe('Ajustes de la llamada', () => {
         videoLocked={false}
         onSetAudioLock={jest.fn()}
         onSetVideoLock={jest.fn()}
+        nameFocusEnabled={false}
+        onSetNameFocus={jest.fn()}
       />,
     );
     const button = screen.getByRole('button', { name: 'Ajustes de la llamada' });
@@ -46,6 +48,8 @@ describe('Ajustes de la llamada', () => {
         videoLocked={false}
         onSetAudioLock={jest.fn()}
         onSetVideoLock={jest.fn()}
+        nameFocusEnabled={false}
+        onSetNameFocus={jest.fn()}
       />,
     );
     const gear = screen.getByRole('button', { name: 'Ajustes de la llamada' });
@@ -75,6 +79,8 @@ describe('Ajustes de la llamada', () => {
         videoLocked={false}
         onSetAudioLock={jest.fn()}
         onSetVideoLock={jest.fn()}
+        nameFocusEnabled={false}
+        onSetNameFocus={jest.fn()}
       />,
     );
     fireEvent.click(screen.getByRole('button', { name: 'Ajustes de la llamada' }));
@@ -83,6 +89,51 @@ describe('Ajustes de la llamada', () => {
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(
       screen.queryByRole('group', { name: 'Tamaño de los subtítulos' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('el admin ve el toggle de enfoque automático y activarlo llama a onSetNameFocus', () => {
+    const onSetNameFocus = jest.fn();
+    render(
+      <CallSettingsButton
+        buttonClassName="btn"
+        isAdmin
+        audioLocked={false}
+        videoLocked={false}
+        onSetAudioLock={jest.fn()}
+        onSetVideoLock={jest.fn()}
+        nameFocusEnabled={false}
+        onSetNameFocus={onSetNameFocus}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Ajustes de la llamada' }));
+
+    const toggle = screen.getByRole('checkbox', {
+      name: 'Enfocar automáticamente al nombrar a alguien',
+    });
+    expect(toggle).not.toBeChecked();
+    fireEvent.click(toggle);
+
+    expect(onSetNameFocus).toHaveBeenCalledWith(true);
+  });
+
+  it('un participante sin rol de admin no ve los toggles de sala', () => {
+    render(
+      <CallSettingsButton
+        buttonClassName="btn"
+        isAdmin={false}
+        audioLocked={false}
+        videoLocked={false}
+        onSetAudioLock={jest.fn()}
+        onSetVideoLock={jest.fn()}
+        nameFocusEnabled={false}
+        onSetNameFocus={jest.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Ajustes de la llamada' }));
+
+    expect(
+      screen.queryByRole('checkbox', { name: 'Enfocar automáticamente al nombrar a alguien' }),
     ).not.toBeInTheDocument();
   });
 });
