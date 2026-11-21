@@ -31,6 +31,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_CALL_DEVICES, type CallDevices } from './callDevices';
 import { HangUpButton } from './HangUpButton';
+import { findMentionedParticipant } from './nameFocus';
 import type { RoomEmoji } from '@/lib/api';
 import { useTranslation } from '../translation/useTranslation';
 import { reportTrackState } from '@/lib/calls';
@@ -280,6 +281,11 @@ interface MeetingRoomProps {
   videoLocked: boolean;
   onSetAudioLock: (locked: boolean) => void;
   onSetVideoLock: (locked: boolean) => void;
+  // Enfocar automáticamente el video de quien es nombrado en voz (ver
+  // nameFocus.ts): activable/desactivable solo por el admin, sincronizado a
+  // toda la sala por el mismo gateway que mediaLock (ver useNameFocusSetting).
+  nameFocusEnabled: boolean;
+  onSetNameFocus: (enabled: boolean) => void;
 }
 
 // Un permiso revocado después del lobby no debe hacer fallar la llamada.
@@ -322,6 +328,8 @@ function MeetingContent({
   videoLocked,
   onSetAudioLock,
   onSetVideoLock,
+  nameFocusEnabled,
+  onSetNameFocus,
 }: Omit<MeetingRoomProps, 'call' | 'onHangUp'>) {
   const { t } = useTranslation();
   const [deviceError, setDeviceError] = useState(false);
@@ -346,6 +354,22 @@ function MeetingContent({
   const layoutContext = useCreateLayoutContext();
   const pinnedTracks = usePinnedTracks(layoutContext);
   const focusTrack = pinnedTracks[0];
+  // Misma frase final de transcripción llega a todas las pantallas por el
+  // data channel que ya usa TranscriptionProvider (ver TRANSCRIPT_TOPIC): al
+  // correr este mismo matching en cada cliente, el pineo termina viéndose
+  // igual en todos sin necesidad de un mensaje de foco aparte.
+  const cameraTracks = useMemo(
+    () => tracks.filter((track) => track.source === Track.Source.Camera),
+    [tracks],
+  );
+  const handleFinalPhrase = useCallback(
+    (phrase: { identity: string; name: string; text: string }) => {
+      if (!nameFocusEnabled) return;
+      const match = findMentionedParticipant(phrase.text, cameraTracks, phrase.identity);
+      if (match) layoutContext?.pin.dispatch?.({ msg: 'set_pin', trackReference: match });
+    },
+    [nameFocusEnabled, cameraTracks, layoutContext],
+  );
   const carouselTracks = focusTrack
     ? tracks.filter(
         (track) =>
@@ -361,6 +385,7 @@ function MeetingContent({
         roomCode={roomCode}
         roomToken={roomToken}
         onTranscriptAvailable={onTranscriptAvailable}
+        onFinalPhrase={handleFinalPhrase}
       >
         <LayoutContextProvider value={layoutContext}>
           <InitialCallDevices devices={initialDevices} onDeviceError={showDeviceError} />
@@ -433,6 +458,8 @@ function MeetingContent({
               videoLocked={videoLocked}
               onSetAudioLock={onSetAudioLock}
               onSetVideoLock={onSetVideoLock}
+              nameFocusEnabled={nameFocusEnabled}
+              onSetNameFocus={onSetNameFocus}
             />
             <ConnectedHangUpButton />
           </div>
@@ -455,6 +482,8 @@ export default function MeetingRoom({
   videoLocked,
   onSetAudioLock,
   onSetVideoLock,
+  nameFocusEnabled,
+  onSetNameFocus,
 }: MeetingRoomProps) {
   const router = useRouter();
   const roomOptions = useMemo(
@@ -510,6 +539,8 @@ export default function MeetingRoom({
         videoLocked={videoLocked}
         onSetAudioLock={onSetAudioLock}
         onSetVideoLock={onSetVideoLock}
+        nameFocusEnabled={nameFocusEnabled}
+        onSetNameFocus={onSetNameFocus}
       />
     </LiveKitRoom>
   );
