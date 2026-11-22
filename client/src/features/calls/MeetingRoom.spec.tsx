@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import type { CallSessionState } from './useCallSession';
 import { useLanguageStore } from '../translation/store';
 
@@ -74,6 +74,7 @@ function state(): CallSessionState {
     connected: jest.fn(),
     failed: jest.fn(),
     endedByHost: jest.fn(),
+    switchRoom: jest.fn(),
   };
 }
 function defaultUseTrackToggle({ onDeviceError }: { onDeviceError?: (error: Error) => void } = {}) {
@@ -525,5 +526,118 @@ describe('MeetingRoom', () => {
     act(() => props.onDisconnected?.(DisconnectReason.ROOM_CLOSED));
     expect(call.endedByHost).toHaveBeenCalledTimes(1);
     expect(call.failed).not.toHaveBeenCalled();
+  });
+
+  it('ignora onDisconnected mientras la llamada está en medio de un traslado de sala (status "switching", breakout-rooms)', async () => {
+    const { LiveKitRoom } = await import('@livekit/components-react');
+    const MeetingRoom = (await import('./MeetingRoom')).default;
+    const call = { ...state(), status: 'switching' as const };
+    render(
+      <MeetingRoom
+        call={call}
+        roomCode="abc-defg-hij"
+        roomToken="test-room-token"
+        roomEmojis={[]}
+        isCurrentUserAdmin={false}
+        audioLocked={false}
+        videoLocked={false}
+        onSetAudioLock={jest.fn()}
+        onSetVideoLock={jest.fn()}
+      />,
+    );
+    const props = jest.mocked(LiveKitRoom).mock.calls[0][0];
+    act(() => props.onDisconnected?.(1));
+    act(() => props.onDisconnected?.(undefined));
+    expect(call.leaveCall).not.toHaveBeenCalled();
+    expect(call.failed).not.toHaveBeenCalled();
+    expect(call.endedByHost).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('cambia la key de LiveKitRoom con roomName para forzar un remount completo en un traslado a mini sala', async () => {
+    const { LiveKitRoom } = await import('@livekit/components-react');
+    const original = jest.mocked(LiveKitRoom).getMockImplementation();
+    jest.mocked(LiveKitRoom).mockImplementation(({ children }: { children?: ReactNode }) => {
+      const idRef = useRef(Math.random());
+      return (
+        <div data-testid="mount-id" data-mount-id={idRef.current}>
+          {children}
+        </div>
+      );
+    });
+    try {
+      const MeetingRoom = (await import('./MeetingRoom')).default;
+      const mainCall = {
+        ...state(),
+        session: {
+          url: 'wss://media.example.com',
+          token: 'main-token',
+          roomName: 'abc-defg-hij',
+          participantLimit: 6,
+        },
+      };
+      const { rerender } = render(
+        <MeetingRoom
+          call={mainCall}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin={false}
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+        />,
+      );
+      const firstMountId = screen.getByTestId('mount-id').getAttribute('data-mount-id');
+
+      const breakoutCall = {
+        ...mainCall,
+        status: 'switching' as const,
+        session: {
+          url: 'wss://media.example.com',
+          token: 'breakout-token',
+          roomName: 'abc-defg-hij::breakout-1',
+          participantLimit: 6,
+        },
+      };
+      rerender(
+        <MeetingRoom
+          call={breakoutCall}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin={false}
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+        />,
+      );
+      const secondMountId = screen.getByTestId('mount-id').getAttribute('data-mount-id');
+
+      expect(secondMountId).not.toBe(firstMountId);
+
+      // Un segundo render con el MISMO roomName no debe forzar otro remount.
+      rerender(
+        <MeetingRoom
+          call={{ ...breakoutCall }}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin={false}
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+        />,
+      );
+      const thirdMountId = screen.getByTestId('mount-id').getAttribute('data-mount-id');
+      expect(thirdMountId).toBe(secondMountId);
+    } finally {
+      jest.mocked(LiveKitRoom).mockImplementation(
+        original ?? (({ children }: { children?: ReactNode }) => <div>{children}</div>),
+      );
+    }
   });
 });

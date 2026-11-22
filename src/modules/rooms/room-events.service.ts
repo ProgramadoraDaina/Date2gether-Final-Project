@@ -9,8 +9,32 @@ export interface RoomEmojisChangedEvent {
   roomCode: string;
 }
 
-// Puente desacoplado entre RoomsService (REST) y ChatGateway (sockets):
-// evita que RoomsModule importe ChatModule (ChatModule ya importa RoomsModule).
+// Mini salas (breakout-rooms, D12 del design.md): señal de traslado y de
+// cierre, nunca el token de LiveKit (ese se emite por HTTP autenticado,
+// issueBreakoutToken). roomCode es siempre el código de la sala PADRE: el
+// socket de sala es por `roomCode` de la app, no por sala de LiveKit, así
+// que un occupant trasladado a una mini sala sigue unido al mismo socket
+// room del padre durante todo el traslado.
+export interface BreakoutAssignedEvent {
+  roomCode: string;
+  // El identity del pase de la sala principal (participant.sub == la
+  // identity de LiveKit en la principal) con el que ChatGateway ya indexa
+  // su connectedUsers: es personal, no se hace broadcast a toda la sala.
+  targetIdentity: string;
+  breakoutId: string;
+  label: string;
+  leavePolicy: string;
+}
+
+export interface BreakoutClosedEvent {
+  roomCode: string;
+  breakoutId: string;
+}
+
+// Puente desacoplado entre RoomsService/CallsModule (REST) y ChatGateway
+// (sockets): evita que RoomsModule importe ChatModule (ChatModule ya importa
+// RoomsModule) y, para breakout-rooms, evita un import circular entre
+// CallsModule y ChatModule (CallsModule ya importa RoomsModule).
 @Injectable()
 export class RoomEventsService {
   private readonly emitter = new EventEmitter();
@@ -29,5 +53,21 @@ export class RoomEventsService {
 
   emitRoomEmojisChanged(event: RoomEmojisChangedEvent): void {
     this.emitter.emit('roomEmojisChanged', event);
+  }
+
+  onBreakoutAssigned(listener: (event: BreakoutAssignedEvent) => void): void {
+    this.emitter.on('breakoutAssigned', listener);
+  }
+
+  emitBreakoutAssigned(event: BreakoutAssignedEvent): void {
+    this.emitter.emit('breakoutAssigned', event);
+  }
+
+  onBreakoutClosed(listener: (event: BreakoutClosedEvent) => void): void {
+    this.emitter.on('breakoutClosed', listener);
+  }
+
+  emitBreakoutClosed(event: BreakoutClosedEvent): void {
+    this.emitter.emit('breakoutClosed', event);
   }
 }

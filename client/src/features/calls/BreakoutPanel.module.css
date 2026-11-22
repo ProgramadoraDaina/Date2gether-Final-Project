@@ -1,0 +1,40 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+
+.error {
+  color: #e53935;
+  margin: 0;
+}
+
+.createRow {
+  display: flex;
+  gap: 8px;
+}
+
+.roomList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.roomRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.roomLabel {
+  font-weight: 600;
+}
+
+.empty {
+  opacity: 0.7;
+}

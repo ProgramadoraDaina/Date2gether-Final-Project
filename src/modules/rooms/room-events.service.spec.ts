@@ -34,4 +34,37 @@ describe('RoomEventsService', () => {
     expect(first).toHaveBeenCalledWith({ roomCode: 'xyz-abcd-efg' });
     expect(second).toHaveBeenCalledWith({ roomCode: 'xyz-abcd-efg' });
   });
+
+  // Mini salas (D12, design.md breakout-rooms): mismo puente, canal propio.
+  it('entrega a cada listener registrado el payload exacto de un traslado a mini sala', () => {
+    const events = new RoomEventsService();
+    const listener = vi.fn();
+    events.onBreakoutAssigned(listener);
+
+    events.emitBreakoutAssigned({
+      roomCode: 'abc-defg-hij',
+      targetIdentity: 'participant-sub-1',
+      breakoutId: 'breakout-1',
+      label: 'Mini sala 1',
+      leavePolicy: 'locked',
+    });
+
+    expect(listener).toHaveBeenCalledWith({
+      roomCode: 'abc-defg-hij',
+      targetIdentity: 'participant-sub-1',
+      breakoutId: 'breakout-1',
+      label: 'Mini sala 1',
+      leavePolicy: 'locked',
+    });
+  });
+
+  it('entrega a cada listener registrado el payload exacto del cierre de una mini sala', () => {
+    const events = new RoomEventsService();
+    const listener = vi.fn();
+    events.onBreakoutClosed(listener);
+
+    events.emitBreakoutClosed({ roomCode: 'abc-defg-hij', breakoutId: 'breakout-1' });
+
+    expect(listener).toHaveBeenCalledWith({ roomCode: 'abc-defg-hij', breakoutId: 'breakout-1' });
+  });
 });

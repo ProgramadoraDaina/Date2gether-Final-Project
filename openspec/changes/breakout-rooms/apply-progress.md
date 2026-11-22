@@ -207,3 +207,84 @@ Dado el volumen de esta fase (60 sub-tareas, ~1300 líneas de producción+test e
 ### Próximo lote: Fase 6
 
 Fase 6 (cliente: `lib/breakouts.ts`, `useCallSession.switchRoom`, `MeetingRoom` key por sala, `useRoomSocket` (`breakout:assigned`/`breakout:closed`), `chat.gateway.ts` emitiendo esas señales, `BreakoutBanner.tsx`, `BreakoutPanel.tsx`) depende de esta fase y queda pendiente. No se tocó ningún archivo de cliente en esta fase.
+
+## Batch 6 — Fase 6 (cliente: UI de mini salas + manejo de cambio de sala)
+
+Estado: **completa**. Tareas 6.1–6.11 marcadas `[x]` en `tasks.md`.
+
+### Qué se hizo
+
+- **6.1** — Creado `client/src/lib/breakouts.ts`: cliente HTTP de las 8 operaciones de `BreakoutRoomsController` (verificadas leyendo el controlador y `breakout-rooms.service.ts` directamente, no asumidas):
+  - `POST /calls/:roomCode/breakouts` → `createBreakoutRoom(roomCode, roomToken, { label?, leavePolicy?, autoCloseInMinutes? })` → `BreakoutRoom`.
+  - `GET /calls/:roomCode/breakouts` → `listBreakoutRooms(roomCode, roomToken)` → `BreakoutRoom[]`.
+  - `PATCH /calls/:roomCode/breakouts/:breakoutId` → `updateBreakoutRoomPolicy(..., { leavePolicy?, autoCloseInMinutes? })` → `BreakoutRoom`.
+  - `POST /calls/:roomCode/breakouts/:breakoutId/participants` → `moveToBreakoutRoom(..., livekitIdentity)` → `{ targetIdentity }`.
+  - `POST /calls/:roomCode/breakouts/:breakoutId/token` → `issueBreakoutToken(...)` → `{ url, token, roomName, participantLimit }`.
+  - `POST /calls/:roomCode/breakouts/:breakoutId/return` → `returnFromBreakoutRoom(..., livekitIdentity?)` → `void` (204). Mapea el código `BREAKOUT_RETURN_LOCKED` (no el texto) a un mensaje propio del cliente, mismo precedente que `NO_HOST_CONNECTED` en `lib/calls.ts`.
+  - `DELETE /calls/:roomCode/breakouts/:breakoutId` → `closeBreakoutRoom(...)` → `void` (204).
+  - `DELETE /calls/:roomCode/breakouts` → `closeAllBreakoutRooms(...)` → `void` (204).
+- **6.2/6.3** — `useCallSession.ts`: agregado `switchRoom(session)` — cancela cualquier `joinCall` pendiente (mismo criterio que `leaveCall`), reemplaza `current.current`/`session` de forma atómica y pone `status: 'switching'` sin tocar `error`/pasar por `'error'`. `CallStatus` ganó el literal `'switching'`. `EndReason` ganó el literal `'breakout-closed'` por completitud de tipo según el diseño — **sin productor propio en este lote** (ningún camino de esta fase dispara un `'ended'` por cierre de mini sala; el retorno normal usa `switchRoom`, no un estado terminal). Se deja documentado para que no se asuma un wiring que no existe todavía.
+- **6.4/6.5** — `MeetingRoom.tsx`: `<LiveKitRoom key={call.session.roomName}>` fuerza desmonte/montaje completo en cada cambio de sala. `onDisconnected` ahora empieza con `if (call.status === 'switching') return;` antes de cualquier otra rama, así el desmonte de la sala VIEJA que el propio cambio de `key` dispara no se interpreta como `leaveCall()` ni `failed()`.
+- **6.6/6.7** — Creado `client/src/features/chat/useRoomSocket.ts` (**deviación**: no existía en el repo, ver nota en `tasks.md` 6.7). Expone `{ breakoutAssignment, breakoutReturnSignal }`: `breakout:assigned` setea `breakoutAssignment`; `breakout:closed` solo limpia la asignación e incrementa `breakoutReturnSignal` si el `breakoutId` del evento coincide con la asignación actual (el cierre se transmite a toda la sala — ver 6.8 — así que hay que filtrar del lado del cliente). Un `assignmentRef` espeja el estado dentro del mismo efecto para no depender de `breakoutAssignment` en el array de dependencias ni leer un valor stale.
+- **6.8** — `chat.gateway.ts`: el constructor ahora escucha `roomEvents.onBreakoutAssigned` (reenvía `breakout:assigned` **solo al socket del participante trasladado**, buscado por `participantId` dentro del mismo `roomCode` vía el nuevo helper privado `emitToParticipant`) y `roomEvents.onBreakoutClosed` (`breakout:closed` por broadcast a todo `roomCode`, igual que `memberRoleChanged`). **Deviación documentada** (ver `tasks.md` 6.8): para que `BreakoutRoomsService` (HTTP, en `CallsModule`) pueda disparar esas señales sin que `CallsModule` importe `ChatModule` (que ya importa `RoomsModule`), se extendió `RoomEventsService` (`rooms/room-events.service.ts`) con `emitBreakoutAssigned`/`onBreakoutAssigned` y `emitBreakoutClosed`/`onBreakoutClosed` — el mismo puente ya usado por `memberRoleChanged`/`roomEmojisChanged`, sin inventar un mecanismo nuevo. `BreakoutRoomsService` ganó `RoomEventsService` como cuarto parámetro de constructor (sin cambios de módulo: `CallsModule` ya importa `RoomsModule`, que ya exporta `RoomEventsService`) y emite:
+  - en `moveIn()`, `emitBreakoutAssigned({ roomCode: parentCode, targetIdentity: target.livekitIdentity, breakoutId, label, leavePolicy })` **antes** de `removeParticipant` (orden del Flujo 1 de `design.md`); `targetIdentity` es la identity VIEJA (la del pase de la sala principal, `participant.sub`), no la nueva de LiveKit — es la que `ChatGateway.connectedUsers` indexa.
+  - en `closeRow()` (el único choke point de `close()`/`closeAll()`/`closeGroupBreakouts()`/`reconcileGroup()`), `emitBreakoutClosed({ roomCode: parentCode, breakoutId })` justo después del compare-and-set exitoso — así las cuatro vías de cierre, no solo las dos que pedía la tarea, avisan al cliente sin lógica duplicada.
+  - En ambos casos `parentCode` sale de `parseBreakoutRoomName(breakout.livekitRoomName)?.parentCode` (ya se calculaba o es trivial de calcular en ese punto); si no resuelve (no debería pasar para una fila que es realmente una mini sala), no se emite nada en vez de emitir con un código roto.
+- **6.9** — Creado `BreakoutBanner.tsx` (+ `.module.css`): etiqueta siempre visible; botón "Volver" solo si `leavePolicy === 'free_return'` (deshabilitable vía prop `returning`); texto explícito ("El host te va a devolver a la sala principal.") cuando es `locked`, en vez del botón.
+- **6.10** — Creado `BreakoutPanel.tsx` (+ `.module.css`), solo-admin: carga la lista al montar (`listBreakoutRooms`), formulario de creación con minutos opcionales (muestra el error real del backend — 409 de tope alcanzado, 503 de configuración fuera de rango — en vez de duplicar `MAX_BREAKOUT_ROOMS` del lado del cliente), toggle de política por mini sala, `<select>` de participante + botón "Trasladar" (deshabilitado sin selección), "Cerrar" por mini sala y "Cerrar todas", y "Devolver a todos" (itera cada ocupante de cada mini sala y llama `returnFromBreakoutRoom` con el `livekitIdentity` puntual — el camino admin de `selfReturn`, que bypasea `locked` — sin cerrar las salas). Recibe `participants` (lista de `{livekitIdentity, displayName}`) por prop: el cableado real contra la lista de presentes de `RoomPage` queda para cuando se integre el panel a la UI (fuera del alcance literal de 6.1–6.11).
+- **6.11** — Pendiente de confirmación del usuario para el commit (el agente de apply no commitea sin instrucción explícita); mensaje preparado: `feat(calls): add breakout rooms client UI and room-switch handling`.
+
+### Archivos nuevos/modificados de esta fase
+
+| Archivo | Acción |
+|---|---|
+| `client/src/lib/breakouts.ts` | Creado |
+| `client/src/lib/breakouts.spec.ts` | Creado (12 tests) |
+| `client/src/features/calls/useCallSession.ts` | Modificado (`switchRoom`, `CallStatus`/`EndReason` nuevos literales) |
+| `client/src/features/calls/useCallSession.spec.ts` | Modificado (4 tests nuevos de `switchRoom`) |
+| `client/src/features/calls/MeetingRoom.tsx` | Modificado (`key` por `roomName`, ignore de `onDisconnected` en `switching`) |
+| `client/src/features/calls/MeetingRoom.spec.tsx` | Modificado (2 tests nuevos) |
+| `client/src/features/chat/useRoomSocket.ts` | Creado (deviación: no existía) |
+| `client/src/features/chat/useRoomSocket.spec.ts` | Creado (6 tests) |
+| `client/src/features/calls/BreakoutBanner.tsx` | Creado |
+| `client/src/features/calls/BreakoutBanner.module.css` | Creado |
+| `client/src/features/calls/BreakoutBanner.spec.tsx` | Creado (4 tests) |
+| `client/src/features/calls/BreakoutPanel.tsx` | Creado |
+| `client/src/features/calls/BreakoutPanel.module.css` | Creado |
+| `client/src/features/calls/BreakoutPanel.spec.tsx` | Creado (9 tests) |
+| `src/modules/rooms/room-events.service.ts` | Modificado (eventos `BreakoutAssigned`/`BreakoutClosed`, deviación de 6.8) |
+| `src/modules/rooms/room-events.service.spec.ts` | Modificado (2 tests nuevos) |
+| `src/modules/calls/breakout-rooms.service.ts` | Modificado (inyecta `RoomEventsService`, emite en `moveIn()`/`closeRow()`, deviación de 6.8) |
+| `src/modules/calls/breakout-rooms.service.spec.ts` | Modificado (4 constructores actualizados + describe nuevo `6.8` con 4 tests) |
+| `src/modules/chat/chat.gateway.ts` | Modificado (listeners de las dos señales + `emitToParticipant`) |
+| `src/modules/chat/chat.gateway.spec.ts` | Modificado (describe nuevo con 3 tests) |
+
+Ningún archivo de Fase 7/8 (E2E, despliegue) aparece en este diff.
+
+### Gotchas confirmados / nuevos
+
+- **El mismo gotcha de `pnpm lint --fix` + CRLF/LF de Batches 4/5 se reprodujo de nuevo, con los mismos dos archivos exactos**: cada corrida de `pnpm lint` (backend) tocó `src/modules/rooms/room-code-recycling.integration.spec.ts` y `src/modules/rooms/rooms.service.create-room.integration.spec.ts` con cambios de formato (wrap de líneas) sin relación con Fase 6. Revertidos con `git checkout --` después de **cada** corrida de `pnpm lint` (se corrió dos veces en esta sesión), confirmando con `git diff --stat` que después del revert esos dos archivos vuelven a diff vacío. `chat.gateway.ts` también aparece en el diff de `pnpm lint --fix`, pero ese sí es legítimo: es un archivo de esta misma fase.
+- **`git status` muestra decenas de archivos no tocados por este batch como `M`,** pero es ruido puro de normalización CRLF/LF (`core.autocrlf=true` en este checkout): `git diff` (sin overrides) sobre cualquiera de esos archivos devuelve diff vacío, solo el warning "LF will be replaced by CRLF the next time Git touches it". Confirmado explícitamente para no confundirlo con una regresión real. **Para quien revise el commit**: estos archivos no deben incluirse (`git add` explícito, nunca `git add -A`).
+- **`useLanguageStore` (traducción) tiene su propio estado persistido y el default no es 'es'**: un test de `BreakoutBanner.spec.tsx` falló al principio porque "Volver" se tradujo a "Back" (`t()` traduce Español→Inglés cuando `language === 'en'`, y ese parece ser el estado inicial/persistido en el entorno de test si no se fija explícitamente). Solución: `useLanguageStore.setState({ language: 'es' })` en el `beforeEach`, mismo patrón ya usado en `MeetingRoom.spec.tsx`. Cualquier componente nuevo que renderice texto traducido y lo compare contra el string en español literal necesita este mismo `beforeEach`.
+- **Verificar el `key` de un elemento JSX no es directamente observable vía Testing Library** (React nunca lo pasa como prop al componente): para probar que `key={call.session.roomName}` fuerza un remount real de `<LiveKitRoom>`, el test de 6.5 reemplaza temporalmente el mock de `LiveKitRoom` con una implementación que guarda un `useRef(Math.random())` y lo expone en un `data-mount-id`; el mock original se restaura en un `finally` para no filtrar la sobreescritura a los demás tests del archivo (`jest.clearAllMocks()` no resetea `mockImplementation`, solo `mock.calls`/`mock.results`).
+- **`BreakoutRoomsService` ganó un cuarto parámetro de constructor** (`RoomEventsService`): los 4 `new BreakoutRoomsService(...)` del spec (uno por cada `ConfigService` distinto que prueba el fail-fast de `MAX_BREAKOUT_ROOMS`) tuvieron que actualizarse. Cualquier fase futura que vuelva a instanciar el servicio a mano en un test tiene que pasar este cuarto argumento.
+
+### Resultado final de la fase
+
+- `pnpm test` (backend, vitest): **501/501** en verde (60 archivos) — 492 previos + 9 nuevos (`room-events.service.spec.ts` +2, `breakout-rooms.service.spec.ts` +4, `chat.gateway.spec.ts` +3).
+- `pnpm build` (backend, `nest build`): sin errores.
+- `pnpm lint` (backend): **13 problemas** (12 errores + 1 warning), los mismos 13 preexistentes desde antes de Fase 6 (0 nuevos) — confirmado contra el mismo listado exacto de archivos/líneas documentado en Batch 5.
+- `pnpm test` (client, jest): **436/436** en verde (66 archivos) — 393 previos + 43 nuevos (`breakouts.spec.ts` 12, `useCallSession.spec.ts` +4, `MeetingRoom.spec.tsx` +2, `useRoomSocket.spec.ts` 6, `BreakoutBanner.spec.tsx` 4, `BreakoutPanel.spec.tsx` 9; más los que ya existían).
+- `pnpm typecheck` (client): limpio salvo un error preexistente y no relacionado en `src/app/room/[code]/page.spec.tsx:385` (`exact` no es una opción válida de `ByRoleOptions` en esta versión de Testing Library) — confirmado con `git status` que ese archivo no forma parte del diff de esta sesión.
+- `pnpm lint` (client, oxlint): limpio, 0 errores — solo warnings `react(set-state-in-effect)`/`react-hooks(exhaustive-deps)` del mismo patrón ya tolerado en el resto del repo (uno de ellos, esperado, en el `useEffect` de carga de `BreakoutPanel.tsx`).
+
+### Deviaciones respecto de `tasks.md`/`design.md` (declaradas explícitamente, no silenciosas)
+
+1. **`useRoomSocket` (6.7) no existía en el repo** — el texto de la tarea y de `design.md` (tabla de Cliente, fila `useRoomSocket | client/src/features/chat/ | Modificar`) asumían un hook ya existente. Se creó desde cero, mismo patrón que `useRoomMediaLock.ts`.
+2. **6.8 tocó 3 archivos de backend, no 1** (`chat.gateway.ts` + `room-events.service.ts` + `breakout-rooms.service.ts`) — necesario para que la señal viaje desde el módulo HTTP (`CallsModule`) al módulo de sockets (`ChatModule`) sin un import circular; se reusó el puente `RoomEventsService` ya existente para `memberRoleChanged`/`roomEmojisChanged` en vez de inventar un mecanismo nuevo o un acoplamiento directo entre servicios de módulos distintos.
+3. **`EndReason: 'breakout-closed'` se agregó sin productor** — es un literal de tipo por completitud con el diseño; ningún camino de este lote lo dispara (el retorno normal usa `switchRoom`, no un estado `'ended'`). Si una fase futura necesita un cierre terminal de mini sala distinto del retorno normal, el literal ya está disponible.
+4. **`BreakoutPanel.tsx` recibe `participants` por prop, sin cablear a `RoomPage`** — la tarea 6.10 pide el componente con sus tests (RTL), no su integración en `app/room/[code]/page.tsx`; ese cableado (de dónde sale la lista de participantes elegibles, dónde se monta el panel/banner en la UI real) queda para una fase posterior o para un pedido explícito, ya que no estaba en el alcance literal de 6.1–6.11 y el diseño tampoco lo detalla.
+
+### Próximo lote: Fase 7
+
+Fase 7 (E2E con Playwright: aislamiento de medios entre mini salas, rechazo de autosalida `locked`, cierre de todas devuelve a todos; más la prueba de carga manual bloqueante) depende de esta fase y queda pendiente. No se tocó ningún archivo de Fase 7 en esta fase.

@@ -471,6 +471,11 @@ export default function MeetingRoom({
   if (!call.session) return null;
   return (
     <LiveKitRoom
+      // Traslado a/desde una mini sala (breakout-rooms, Flujo 1 de su
+      // design.md): cambiar solo `token` sobre un <LiveKitRoom> ya montado
+      // no reconecta de forma confiable. La `key` por roomName fuerza un
+      // desmonte/montaje completo cada vez que switchRoom() cambia de sala.
+      key={call.session.roomName}
       token={call.session.token}
       serverUrl={call.session.url}
       connect
@@ -481,6 +486,11 @@ export default function MeetingRoom({
       onConnected={call.connected}
       onError={call.failed}
       onDisconnected={(reason) => {
+        // El desmonte de la sala VIEJA que el propio cambio de `key` dispara
+        // llega acá como un onDisconnected más: mientras el traslado está en
+        // curso (status 'switching'), no es ni un "me fui" ni un fallo de
+        // red, así que no hay que interpretarlo como ninguno de los dos.
+        if (call.status === 'switching') return;
         if (reason === undefined || reason === DisconnectReason.CLIENT_INITIATED) {
           call.leaveCall();
           if (onHangUp) onHangUp();

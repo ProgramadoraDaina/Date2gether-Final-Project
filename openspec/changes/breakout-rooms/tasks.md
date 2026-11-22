@@ -237,17 +237,17 @@ TDD estricto activo (`pnpm test`). Estos tests fijan el comportamiento **actual*
 
 ## Fase 6 — Cliente (depende de Fase 5)
 
-- [ ] 6.1 Crear `client/src/lib/breakouts.ts`: cliente HTTP del controlador; mapea `BREAKOUT_RETURN_LOCKED` por **código**, nunca por texto (precedente `NO_HOST_CONNECTED`).
-- [ ] 6.2 [RED] `useCallSession.switchRoom(session)` reemplaza `current.current` y `session` de forma atómica, sin pasar por `'error'`; `joinCall` sigue sin servir para esto (su guarda aborta el traslado).
-- [ ] 6.3 [GREEN] Implementar `switchRoom`; `EndReason` gana `'breakout-closed'`; `CallStatus` gana `'switching'`.
-- [ ] 6.4 [RED] `MeetingRoom`: `onDisconnected` mientras `status === 'switching'` no se interpreta como `leaveCall()` ni `failed()`.
-- [ ] 6.5 [GREEN] Implementar `key={call.session.roomName}` en `<LiveKitRoom>` + el ignore de `onDisconnected` en estado `switching`.
-- [ ] 6.6 [RED] `useRoomSocket` recibe `breakout:assigned` → expone el payload `{breakoutId, label, leavePolicy}`; recibe `breakout:closed` → dispara el camino de retorno.
-- [ ] 6.7 [GREEN] Implementar los listeners en `useRoomSocket` (`client/src/features/chat/`).
-- [ ] 6.8 Modificar `chat.gateway.ts`: emitir `breakout:assigned` tras `moveIn()` y `breakout:closed` tras `close()`/`closeGroupBreakouts()` — señal únicamente, nunca el token (D12).
-- [ ] 6.9 [RED+GREEN] `BreakoutBanner.tsx` (nuevo): muestra la etiqueta de la mini sala; botón "Volver" visible solo si `leavePolicy === 'free_return'`; texto explícito ("el host te va a devolver") cuando es `locked` (RTL).
-- [ ] 6.10 [RED+GREEN] `BreakoutPanel.tsx` (nuevo, solo-admin): crear bajo tope con mensaje de error cuando se alcanza, toggle de política, timer opcional, elegir participante para trasladar, cerrar una o todas, "devolver a todos" (RTL).
-- [ ] 6.11 Commit: `feat(calls): add breakout rooms client UI and room-switch handling`.
+- [x] 6.1 Crear `client/src/lib/breakouts.ts`: cliente HTTP del controlador; mapea `BREAKOUT_RETURN_LOCKED` por **código**, nunca por texto (precedente `NO_HOST_CONNECTED`).
+- [x] 6.2 [RED] `useCallSession.switchRoom(session)` reemplaza `current.current` y `session` de forma atómica, sin pasar por `'error'`; `joinCall` sigue sin servir para esto (su guarda aborta el traslado).
+- [x] 6.3 [GREEN] Implementar `switchRoom`; `EndReason` gana `'breakout-closed'`; `CallStatus` gana `'switching'`.
+- [x] 6.4 [RED] `MeetingRoom`: `onDisconnected` mientras `status === 'switching'` no se interpreta como `leaveCall()` ni `failed()`.
+- [x] 6.5 [GREEN] Implementar `key={call.session.roomName}` en `<LiveKitRoom>` + el ignore de `onDisconnected` en estado `switching`.
+- [x] 6.6 [RED] `useRoomSocket` recibe `breakout:assigned` → expone el payload `{breakoutId, label, leavePolicy}`; recibe `breakout:closed` → dispara el camino de retorno.
+- [x] 6.7 [GREEN] Implementar los listeners en `useRoomSocket` (`client/src/features/chat/`). **Deviación documentada**: el hook no existía todavía en el repo (el texto de la tarea asumía que sí) — se creó desde cero siguiendo el patrón exacto de `useRoomMediaLock.ts` (hook `(socket) => estado`, listeners registrados/limpiados en un `useEffect` por `[socket]`).
+- [x] 6.8 Modificar `chat.gateway.ts`: emitir `breakout:assigned` tras `moveIn()` y `breakout:closed` tras `close()`/`closeGroupBreakouts()` — señal únicamente, nunca el token (D12). **Deviación documentada**: además de `chat.gateway.ts` se tocaron `room-events.service.ts` y `breakout-rooms.service.ts` — es el mismo puente desacoplado ya usado por `memberRoleChanged`/`roomEmojisChanged` (evita un import circular `CallsModule` ↔ `ChatModule`); ver apply-progress Batch 6.
+- [x] 6.9 [RED+GREEN] `BreakoutBanner.tsx` (nuevo): muestra la etiqueta de la mini sala; botón "Volver" visible solo si `leavePolicy === 'free_return'`; texto explícito ("el host te va a devolver") cuando es `locked` (RTL).
+- [x] 6.10 [RED+GREEN] `BreakoutPanel.tsx` (nuevo, solo-admin): crear bajo tope con mensaje de error cuando se alcanza, toggle de política, timer opcional, elegir participante para trasladar, cerrar una o todas, "devolver a todos" (RTL).
+- [x] 6.11 Commit: `feat(calls): add breakout rooms client UI and room-switch handling`.
 
 ## Fase 7 — E2E y prueba de carga
 

@@ -164,6 +164,21 @@ export class ChatGateway implements OnGatewayDisconnect {
     this.roomEvents.onRoomEmojisChanged(({ roomCode }) => {
       this.server.to(roomCode).emit('roomEmojisChanged');
     });
+    // Mini salas (D12, design.md): señal únicamente, nunca el token de
+    // LiveKit (ese se pide por HTTP autenticado, issueBreakoutToken). El
+    // traslado es personal -- solo el participante trasladado tiene que
+    // enterarse -- a diferencia del cierre, que es un broadcast a toda la
+    // sala (cualquier occupant de esa mini sala puede estar escuchando).
+    this.roomEvents.onBreakoutAssigned((event) => {
+      this.emitToParticipant(event.roomCode, event.targetIdentity, 'breakout:assigned', {
+        breakoutId: event.breakoutId,
+        label: event.label,
+        leavePolicy: event.leavePolicy,
+      });
+    });
+    this.roomEvents.onBreakoutClosed((event) => {
+      this.server.to(event.roomCode).emit('breakout:closed', { breakoutId: event.breakoutId });
+    });
   }
 
   @UseGuards(WsJwtAuthGuard)
@@ -348,10 +363,7 @@ export class ChatGateway implements OnGatewayDisconnect {
 
   @UseGuards(WsJwtAuthGuard)
   @SubscribeMessage('setMediaLock')
-  async handleSetMediaLock(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() dto: SetMediaLockDto,
-  ) {
+  async handleSetMediaLock(@ConnectedSocket() client: Socket, @MessageBody() dto: SetMediaLockDto) {
     const user = await this.requireMediaLockAdmin(client);
     if (!user) return;
 
@@ -642,11 +654,15 @@ export class ChatGateway implements OnGatewayDisconnect {
   private async requireMediaLockAdmin(client: Socket): Promise<ConnectedUser | undefined> {
     const user = this.connectedUsers.get(client.id);
     if (!user) {
-      client.emit('error', { message: 'Tenés que unirte a una sala antes de silenciar a los demás' });
+      client.emit('error', {
+        message: 'Tenés que unirte a una sala antes de silenciar a los demás',
+      });
       return undefined;
     }
     if (!user.userId) {
-      client.emit('error', { message: 'Necesitás una cuenta para silenciar a los demás en la sala' });
+      client.emit('error', {
+        message: 'Necesitás una cuenta para silenciar a los demás en la sala',
+      });
       return undefined;
     }
     const role = await this.roomsService.getMemberRole(user.roomCode, user.userId);
@@ -718,6 +734,24 @@ export class ChatGateway implements OnGatewayDisconnect {
       played: [Math.min(stored.currentIndex, stored.tracks.length - 1)],
       updatedAt: Date.now(),
     });
+  }
+
+  // Mini salas (D12): a diferencia de memberRoleChanged/roomEmojisChanged
+  // (broadcast a toda la sala), breakout:assigned es personal. Todo socket
+  // de Socket.io se autosuscribe a una room con su propio id, así que
+  // emitir a ese id llega solo al cliente buscado sin tener que guardar un
+  // mapa nuevo de participantId -> clientId.
+  private emitToParticipant(
+    roomCode: string,
+    participantId: string,
+    event: string,
+    payload: unknown,
+  ): void {
+    for (const [clientId, user] of this.connectedUsers) {
+      if (user.roomCode === roomCode && user.participantId === participantId) {
+        this.server.to(clientId).emit(event, payload);
+      }
+    }
   }
 
   private getUsersInRoom(roomCode: string): RoomUser[] {

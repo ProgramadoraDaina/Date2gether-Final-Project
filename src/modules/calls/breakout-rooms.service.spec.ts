@@ -19,6 +19,7 @@ import {
 } from '../../db/schema';
 import { chain } from '../../test-support/fake-drizzle';
 import type { RoomParticipant } from '../auth/room-access.service';
+import type { RoomEventsService } from '../rooms/room-events.service';
 import type { CallGroupResolverService } from './call-group-resolver.service';
 import { BreakoutRoomsService } from './breakout-rooms.service';
 
@@ -155,9 +156,20 @@ function createGroupResolverMock() {
   };
 }
 
+// Puente hacia ChatGateway (D12, design.md): se verifica que el servicio
+// emita la señal, no que ChatGateway la reciba (eso lo cubre
+// chat.gateway.spec.ts).
+function createRoomEventsMock() {
+  return {
+    emitBreakoutAssigned: vi.fn(),
+    emitBreakoutClosed: vi.fn(),
+  };
+}
+
 describe('BreakoutRoomsService', () => {
   let db: ReturnType<typeof createDbMock>;
   let groupResolver: ReturnType<typeof createGroupResolverMock>;
+  let roomEvents: ReturnType<typeof createRoomEventsMock>;
   let service: BreakoutRoomsService;
   let createRoom: MockInstance<RoomServiceClient['createRoom']>;
   let listParticipants: MockInstance<RoomServiceClient['listParticipants']>;
@@ -167,10 +179,12 @@ describe('BreakoutRoomsService', () => {
   beforeEach(() => {
     db = createDbMock();
     groupResolver = createGroupResolverMock();
+    roomEvents = createRoomEventsMock();
     service = new BreakoutRoomsService(
       new ConfigService(config),
       db as unknown as DrizzleDb,
       groupResolver as unknown as CallGroupResolverService,
+      roomEvents as unknown as RoomEventsService,
     );
     vi.spyOn(RoomServiceClient.prototype, 'listRooms').mockResolvedValue([
       { sid: 'RM_parent', name: roomCode },
@@ -205,6 +219,7 @@ describe('BreakoutRoomsService', () => {
         bare,
         db as unknown as DrizzleDb,
         groupResolver as unknown as CallGroupResolverService,
+        roomEvents as unknown as RoomEventsService,
       );
       asAdmin();
       db.breakoutRoomsSelectWhere.mockReturnValueOnce(
@@ -224,6 +239,7 @@ describe('BreakoutRoomsService', () => {
           bad,
           db as unknown as DrizzleDb,
           groupResolver as unknown as CallGroupResolverService,
+          roomEvents as unknown as RoomEventsService,
         );
         asAdmin();
 
@@ -240,6 +256,7 @@ describe('BreakoutRoomsService', () => {
         zero,
         db as unknown as DrizzleDb,
         groupResolver as unknown as CallGroupResolverService,
+        roomEvents as unknown as RoomEventsService,
       );
       asAdmin();
 
@@ -671,6 +688,78 @@ describe('BreakoutRoomsService', () => {
       groupResolver.findExpiredBreakouts.mockRejectedValueOnce(new Error('db unreachable'));
 
       await expect(service.reconcileGroup(roomId)).resolves.toBeUndefined();
+    });
+  });
+
+  // --- Fase 6: señal breakout:assigned / breakout:closed hacia ChatGateway
+  // vía RoomEventsService (D12, design.md) -----------------------------
+
+  describe('6.8 — señal hacia ChatGateway vía RoomEventsService (D12)', () => {
+    it('[6.8.1] moveIn() emite breakoutAssigned con el código PADRE, la identity VIEJA y los datos de la mini sala, antes de removeParticipant', async () => {
+      asAdmin();
+      const row = buildBreakoutRow();
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
+      listParticipants.mockResolvedValueOnce([]);
+      db.identitiesSelectWhere.mockReturnValueOnce(
+        chain([{ roomId, userId: 'guest-user-1', displayName: 'Invitado', roleAtIssue: null }]),
+      );
+      const callOrder: string[] = [];
+      roomEvents.emitBreakoutAssigned.mockImplementationOnce(() => {
+        callOrder.push('emitBreakoutAssigned');
+      });
+      removeParticipant.mockImplementationOnce(() => {
+        callOrder.push('removeParticipant');
+        return Promise.resolve(undefined);
+      });
+
+      await service.moveIn(row.id, roomId, admin, { livekitIdentity: 'guest-sub' });
+
+      expect(roomEvents.emitBreakoutAssigned).toHaveBeenCalledWith({
+        roomCode,
+        targetIdentity: 'guest-sub',
+        breakoutId: row.id,
+        label: row.label,
+        leavePolicy: row.leavePolicy,
+      });
+      expect(callOrder).toEqual(['emitBreakoutAssigned', 'removeParticipant']);
+    });
+
+    it('[6.8.2] close() emite breakoutClosed con el código PADRE y el id de la mini sala', async () => {
+      asAdmin();
+      const row = buildBreakoutRow();
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
+      db.breakoutRoomsUpdateReturning.mockResolvedValueOnce([row]);
+
+      await service.close(row.id, roomId, admin, 'manual');
+
+      expect(roomEvents.emitBreakoutClosed).toHaveBeenCalledWith({
+        roomCode,
+        breakoutId: row.id,
+      });
+    });
+
+    it('[6.8.3] closeGroupBreakouts() emite breakoutClosed por cada mini sala cerrada de la cascada', async () => {
+      const rowA = buildBreakoutRow({ id: 'b1', livekitRoomName: `${roomCode}::breakout-1` });
+      const rowB = buildBreakoutRow({ id: 'b2', livekitRoomName: `${roomCode}::breakout-2` });
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([rowA, rowB]));
+      db.breakoutRoomsUpdateReturning.mockResolvedValueOnce([rowA]).mockResolvedValueOnce([rowB]);
+
+      await service.closeGroupBreakouts(roomId, roomCode);
+
+      expect(roomEvents.emitBreakoutClosed).toHaveBeenCalledWith({ roomCode, breakoutId: 'b1' });
+      expect(roomEvents.emitBreakoutClosed).toHaveBeenCalledWith({ roomCode, breakoutId: 'b2' });
+    });
+
+    it('[6.8.4] cierre ya reclamado (compare-and-set en 0 filas): no emite ninguna señal', async () => {
+      asAdmin();
+      const row = buildBreakoutRow();
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
+      db.breakoutRoomsUpdateReturning.mockResolvedValueOnce([]);
+
+      await expect(service.close(row.id, roomId, admin, 'manual')).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(roomEvents.emitBreakoutClosed).not.toHaveBeenCalled();
     });
   });
 });

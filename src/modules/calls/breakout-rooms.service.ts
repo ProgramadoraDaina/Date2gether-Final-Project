@@ -13,6 +13,7 @@ import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
 import { randomUUID } from 'node:crypto';
 import type { RoomParticipant } from '../auth/room-access.service';
+import { RoomEventsService } from '../rooms/room-events.service';
 import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
 import {
   callBreakoutOccupants,
@@ -83,6 +84,11 @@ export class BreakoutRoomsService {
     private readonly config: ConfigService,
     @Inject(DRIZZLE) private readonly db: DrizzleDb,
     private readonly groupResolver: CallGroupResolverService,
+    // Puente desacoplado hacia ChatGateway (D12, design.md): la señal viaja
+    // por RoomEventsService, el mismo mecanismo que memberRoleChanged /
+    // roomEmojisChanged, para no crear un import circular entre CallsModule
+    // y ChatModule (ambos ya importan RoomsModule, que exporta este bridge).
+    private readonly roomEvents: RoomEventsService,
   ) {
     const wsUrl = config.get<string>('LIVEKIT_URL') ?? '';
     const apiUrl = config.get<string>('LIVEKIT_API_URL') || wsUrl.replace(/^ws/, 'http');
@@ -264,6 +270,16 @@ export class BreakoutRoomsService {
 
     const parentCode = parseBreakoutRoomName(breakout.livekitRoomName)?.parentCode;
     if (parentCode) {
+      // Señal antes del removeParticipant (orden del Flujo 1, design.md):
+      // el cliente se entera del traslado antes de perder la conexión a la
+      // principal. Nunca el token -- D12.
+      this.roomEvents.emitBreakoutAssigned({
+        roomCode: parentCode,
+        targetIdentity: target.livekitIdentity,
+        breakoutId: breakout.id,
+        label: breakout.label,
+        leavePolicy: breakout.leavePolicy,
+      });
       await this.client.removeParticipant(parentCode, target.livekitIdentity);
     }
 
@@ -459,6 +475,14 @@ export class BreakoutRoomsService {
           isNull(callBreakoutOccupants.returnedAt),
         ),
       );
+
+    // Señal de cierre (D12): un solo choke point para las cuatro vías de
+    // cierre (close/closeAll/closeGroupBreakouts/reconcileGroup), así cada
+    // occupant se entera sin importar qué disparó el cierre.
+    const parentCode = parseBreakoutRoomName(row.livekitRoomName)?.parentCode;
+    if (parentCode) {
+      this.roomEvents.emitBreakoutClosed({ roomCode: parentCode, breakoutId: row.id });
+    }
 
     try {
       await this.client.deleteRoom(row.livekitRoomName);

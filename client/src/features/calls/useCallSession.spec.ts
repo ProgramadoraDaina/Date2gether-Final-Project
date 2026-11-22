@@ -103,4 +103,70 @@ describe('useCallSession: LiveKit', () => {
     await act(() => fake.result.current.joinCall('abc', 'room-token'));
     expect(fake.result.current.endReason).toBeNull();
   });
+
+  describe('switchRoom (breakout-rooms, Flujo 1 de su design.md)', () => {
+    const breakoutSession = {
+      url: 'wss://media.example.com',
+      token: 'breakout-token',
+      roomName: 'abc::breakout-1',
+      participantLimit: 6,
+    };
+
+    it('reemplaza session de forma atómica y deja status en "switching", sin pasar por "error"', async () => {
+      const fake = await setup();
+      await act(() => fake.result.current.joinCall('abc', 'room-token'));
+      act(() => fake.result.current.connected());
+
+      act(() => fake.result.current.switchRoom(breakoutSession));
+
+      expect(fake.result.current.session).toEqual(breakoutSession);
+      expect(fake.result.current.status).toBe('switching');
+      expect(fake.result.current.error).toBeNull();
+    });
+
+    it('connected() tras el remonte de LiveKit confirma la mini sala como "in-call"', async () => {
+      const fake = await setup();
+      await act(() => fake.result.current.joinCall('abc', 'room-token'));
+      act(() => fake.result.current.connected());
+      act(() => fake.result.current.switchRoom(breakoutSession));
+
+      act(() => fake.result.current.connected());
+
+      expect(fake.result.current.status).toBe('in-call');
+    });
+
+    it('cancela un joinCall en curso en vez de dejarlo pisar la sesión nueva', async () => {
+      const fake = await setup();
+      let resolve!: (session: typeof credentials) => void;
+      (fake.startCall as jest.Mock<typeof fake.startCall>).mockReturnValueOnce(
+        new Promise((done) => {
+          resolve = done;
+        }),
+      );
+      let joining!: Promise<void>;
+      act(() => {
+        joining = fake.result.current.joinCall('abc', 'token');
+      });
+
+      act(() => fake.result.current.switchRoom(breakoutSession));
+
+      await act(async () => {
+        resolve(credentials);
+        await joining;
+      });
+      expect(fake.result.current.session).toEqual(breakoutSession);
+      const signal = (fake.startCall as jest.Mock<typeof fake.startCall>).mock.calls[0][2];
+      expect(signal?.aborted).toBe(true);
+    });
+
+    it('limpia un endReason previo (no deja "host-left" pegado tras un traslado)', async () => {
+      const fake = await setup();
+      await act(() => fake.result.current.joinCall('abc', 'room-token'));
+      act(() => fake.result.current.endedByHost());
+
+      act(() => fake.result.current.switchRoom(breakoutSession));
+
+      expect(fake.result.current.endReason).toBeNull();
+    });
+  });
 });
