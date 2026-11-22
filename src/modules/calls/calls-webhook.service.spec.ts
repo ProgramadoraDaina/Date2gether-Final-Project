@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { WebhookReceiver, type WebhookEvent } from 'livekit-server-sdk';
 import type { DrizzleDb } from '../../db/drizzle.module';
 import {
+  callBreakoutRooms,
   callEvents,
   callHistory,
   callParticipantIdentities,
@@ -85,10 +86,15 @@ function createMaterializationTxMock(opts: {
     roomId?: string | null;
   }>;
   claimed?: { id: string }[];
+  // Fase 4 (D5.3, D6): filas de call_breakout_rooms que resuelven la
+  // atribución de grupo del roomCode del evento (vacío por defecto -- sin
+  // mini sala conocida, callGroupId queda null).
+  breakoutRows?: Array<{ parentLivekitRoomSid: string | null }>;
 }) {
   const sessionEvents = opts.sessionEvents ?? [];
   const identities = opts.identities ?? [];
   const claimed = opts.claimed ?? [{ id: 'session-1' }];
+  const breakoutRows = opts.breakoutRows ?? [];
 
   const participantsInsertValues = vi
     .fn<(values: unknown) => Promise<void>>()
@@ -109,6 +115,7 @@ function createMaterializationTxMock(opts: {
     from: vi.fn().mockImplementation((table: unknown) => {
       if (table === callEvents) return chain(sessionEvents);
       if (table === callParticipantIdentities) return chain(identities);
+      if (table === callBreakoutRooms) return chain(breakoutRows);
       return chain([]);
     }),
   }));
@@ -409,6 +416,96 @@ describe('CallsWebhookService: materialización en room_finished', () => {
     expect(tx.insert).not.toHaveBeenCalledWith(callHistory);
     expect(tx.update).not.toHaveBeenCalledWith(callHistory);
   });
+
+  // Fase 4 (design.md D5.3/D6; spec call-participation-timeline ADDED
+  // "Vínculo de grupo..."; spec call-webhook-ingestion ADDED "Atribución de
+  // eventos de mini sala..."): callGroupId stampeado en room_finished.
+
+  it('[4.5.1/4.6.2] roomCode sin "::" (sala principal sin mini salas): callGroupId queda null, cero consultas nuevas a call_breakout_rooms', async () => {
+    const sessionEvents = [
+      {
+        eventType: 'participant_joined',
+        livekitIdentity: 'id-a',
+        trackSource: null,
+        occurredAt: new Date('2026-11-06T10:00:00Z'),
+      },
+    ];
+    const identities = [{ livekitIdentity: 'id-a', userId: 'user-a', displayName: 'Ana' }];
+    const tx = createMaterializationTxMock({ sessionEvents, identities });
+    db.transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(tx));
+    receive.mockResolvedValue(
+      buildEvent({ event: 'room_finished', room: { sid: 'RM_session-A', name: 'abc-defg-hij' } }),
+    );
+
+    await service.handle(Buffer.from('{}'), 'valid-sig');
+
+    expect(tx.sessionInsertValues).toHaveBeenCalledWith(
+      expect.objectContaining({ callGroupId: null }),
+    );
+    // Sin '::' en el roomCode, parseBreakoutRoomName corta antes de
+    // cualquier select a callBreakoutRooms (D6: cero consultas nuevas).
+    expect(tx.select).not.toHaveBeenCalledWith(callBreakoutRooms);
+  });
+
+  it('[4.5.2/4.6.1] roomCode con "::" que resuelve a un grupo conocido: callGroupId = parent_livekit_room_sid (atribución a la sala padre)', async () => {
+    const sessionEvents = [
+      {
+        eventType: 'participant_joined',
+        livekitIdentity: 'id-a',
+        trackSource: null,
+        occurredAt: new Date('2026-11-06T10:00:00Z'),
+      },
+    ];
+    const identities = [{ livekitIdentity: 'id-a', userId: 'user-a', displayName: 'Ana' }];
+    const tx = createMaterializationTxMock({
+      sessionEvents,
+      identities,
+      breakoutRows: [{ parentLivekitRoomSid: 'RM_parent-A' }],
+    });
+    db.transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(tx));
+    receive.mockResolvedValue(
+      buildEvent({
+        event: 'room_finished',
+        room: { sid: 'RM_breakout-A', name: 'abc-defg-hij::breakout-1' },
+      }),
+    );
+
+    await service.handle(Buffer.from('{}'), 'valid-sig');
+
+    expect(tx.sessionInsertValues).toHaveBeenCalledWith(
+      expect.objectContaining({ callGroupId: 'RM_parent-A', roomCode: 'abc-defg-hij::breakout-1' }),
+    );
+  });
+
+  it('[4.5.3] roomCode con "::" que no corresponde a ningún grupo conocido: se acepta sin error, callGroupId queda null (sin efecto de negocio)', async () => {
+    const sessionEvents = [
+      {
+        eventType: 'participant_joined',
+        livekitIdentity: 'id-a',
+        trackSource: null,
+        occurredAt: new Date('2026-11-06T10:00:00Z'),
+      },
+    ];
+    const identities = [{ livekitIdentity: 'id-a', userId: 'user-a', displayName: 'Ana' }];
+    const tx = createMaterializationTxMock({
+      sessionEvents,
+      identities,
+      breakoutRows: [],
+    });
+    db.transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(tx));
+    receive.mockResolvedValue(
+      buildEvent({
+        event: 'room_finished',
+        room: { sid: 'RM_orphan-A', name: 'ghost-code::breakout-1' },
+      }),
+    );
+
+    await expect(service.handle(Buffer.from('{}'), 'valid-sig')).resolves.toBeUndefined();
+
+    expect(tx.sessionInsertValues).toHaveBeenCalledWith(
+      expect.objectContaining({ callGroupId: null }),
+    );
+  });
 });
 
 describe('CallsWebhookService: cierre forzado en participant_left (tasks.md 6.10)', () => {
@@ -432,8 +529,10 @@ describe('CallsWebhookService: cierre forzado en participant_left (tasks.md 6.10
     vi.restoreAllMocks();
   });
 
-  it('participant_left de un identity con roleAtIssue=administrador invoca a CallSessionCloseService.onAdminLeft', async () => {
-    db.select.mockReturnValue(chain([{ roleAtIssue: 'administrador' }]));
+  it('participant_left de un identity con roleAtIssue=administrador invoca a CallSessionCloseService.onAdminLeft con el roomId ya conocido (tasks.md 4.4.8: cero consultas nuevas)', async () => {
+    // Fase 4 (4.4.8): el roomId viaja en la MISMA fila que ya se
+    // consultaba -- ninguna consulta nueva se agrega para obtenerlo.
+    db.select.mockReturnValue(chain([{ roleAtIssue: 'administrador', roomId: 'room-parent-1' }]));
     receive.mockResolvedValue(
       buildEvent({
         event: 'participant_left',
@@ -444,7 +543,11 @@ describe('CallsWebhookService: cierre forzado en participant_left (tasks.md 6.10
 
     await service.handle(Buffer.from('{}'), 'valid-sig');
 
-    expect(closeService.onAdminLeft).toHaveBeenCalledWith('RM_session-A', 'abc-defg-hij');
+    expect(closeService.onAdminLeft).toHaveBeenCalledWith(
+      'RM_session-A',
+      'abc-defg-hij',
+      'room-parent-1',
+    );
   });
 
   it('participant_left de un identity sin roleAtIssue=administrador (invitado o no-admin) no invoca el cierre', async () => {

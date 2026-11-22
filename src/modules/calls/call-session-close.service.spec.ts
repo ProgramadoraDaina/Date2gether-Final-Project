@@ -2,10 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MockInstance } from 'vitest';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { RoomServiceClient, type ParticipantInfo } from 'livekit-server-sdk';
 import type { DrizzleDb } from '../../db/drizzle.module';
-import { callEvents, callSessions } from '../../db/schema';
+import { callEvents, callParticipantIdentities, callSessions } from '../../db/schema';
 import { chain } from '../../test-support/fake-drizzle';
+import type { CallGroupResolverService } from './call-group-resolver.service';
 import { CallSessionCloseService } from './call-session-close.service';
 
 const config = {
@@ -51,6 +53,26 @@ function createDbMock() {
   return { select, insert, insertValues, update, updateSet, updateWhere, updateReturning };
 }
 
+// Resolución de grupo (Fase 4): mockeada acá, igual que el db -- la lógica
+// de CallGroupResolverService tiene su propia suite
+// (call-group-resolver.service.spec.ts). Default: degenera EXACTAMENTE al
+// camino de hoy (un solo nombre, ancla = self, sin consultas), para que
+// ningún test preexistente de este archivo necesite saber que esta pieza
+// existe.
+function createGroupResolverMock() {
+  return {
+    resolveCallGroupRoomNames: vi
+      .fn<(roomId: string | null, roomCode: string) => Promise<string[]>>()
+      .mockImplementation((_roomId, roomCode) => Promise.resolve([roomCode])),
+    resolveGroupAnchor: vi
+      .fn<(sid: string, roomCode: string) => Promise<{ parentSid: string; parentCode: string }>>()
+      .mockImplementation((sid, roomCode) =>
+        Promise.resolve({ parentSid: sid, parentCode: roomCode }),
+      ),
+    findExpiredBreakouts: vi.fn(),
+  };
+}
+
 // Jest resuelve timers falsos y promesas mockeadas en microtasks separados;
 // advanceTimersByTimeAsync ya se encarga de dejarlos correr, pero una vuelta
 // extra de microtask queda documentada acá por si algún entorno de CI más
@@ -62,6 +84,7 @@ async function flushMicrotasks(): Promise<void> {
 
 describe('CallSessionCloseService', () => {
   let db: ReturnType<typeof createDbMock>;
+  let groupResolver: ReturnType<typeof createGroupResolverMock>;
   let service: CallSessionCloseService;
   let listParticipants: MockInstance<RoomServiceClient['listParticipants']>;
   let deleteRoom: MockInstance<RoomServiceClient['deleteRoom']>;
@@ -69,7 +92,12 @@ describe('CallSessionCloseService', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     db = createDbMock();
-    service = new CallSessionCloseService(new ConfigService(config), db as unknown as DrizzleDb);
+    groupResolver = createGroupResolverMock();
+    service = new CallSessionCloseService(
+      new ConfigService(config),
+      db as unknown as DrizzleDb,
+      groupResolver as unknown as CallGroupResolverService,
+    );
     listParticipants = vi.spyOn(RoomServiceClient.prototype, 'listParticipants');
     deleteRoom = vi.spyOn(RoomServiceClient.prototype, 'deleteRoom').mockResolvedValue(undefined);
   });
@@ -240,5 +268,170 @@ describe('CallSessionCloseService', () => {
     await flushMicrotasks();
 
     expect(deleteRoom).not.toHaveBeenCalled();
+  });
+
+  // Caracterización (Fase 3, design.md "Tests de caracterización obligatorios"):
+  // fija el comportamiento ACTUAL de hasConnectedAdmin/onAdminLeft/claimAndClose
+  // antes de generalizarlos a grupo en la Fase 4. Ningún assert de arriba se
+  // tocó para agregar estos.
+
+  it('[C4] hasConnectedAdmin hoy NO filtra por roomId: solo por identity + roleAtIssue (fija el alcance antes del filtro de grupo de la Fase 4)', async () => {
+    listParticipants.mockResolvedValue([{ identity: 'admin-sub' } as ParticipantInfo]);
+    const whereSpy = vi.fn().mockReturnValue(chain([{ id: 'identity-row-1' }]));
+    db.select.mockReturnValueOnce({
+      from: vi.fn().mockReturnValue({ where: whereSpy }),
+    });
+
+    const target = service as unknown as {
+      hasConnectedAdmin(roomCode: string): Promise<boolean>;
+    };
+    const result = await target.hasConnectedAdmin('abc-defg-hij');
+
+    expect(result).toBe(true);
+    expect(whereSpy).toHaveBeenCalledWith(
+      and(
+        inArray(callParticipantIdentities.livekitIdentity, ['admin-sub']),
+        eq(callParticipantIdentities.roleAtIssue, 'administrador'),
+      ),
+    );
+  });
+
+  describe('[C5] las tres ramas de hasConnectedAdmin', () => {
+    let target: { hasConnectedAdmin(roomCode: string): Promise<boolean> };
+
+    beforeEach(() => {
+      target = service as unknown as { hasConnectedAdmin(roomCode: string): Promise<boolean> };
+    });
+
+    it('lista vacía de participantes -> false, sin consultar la base', async () => {
+      listParticipants.mockResolvedValue([]);
+
+      await expect(target.hasConnectedAdmin('abc-defg-hij')).resolves.toBe(false);
+      expect(db.select).not.toHaveBeenCalled();
+    });
+
+    it('admin presente entre los conectados -> true', async () => {
+      listParticipants.mockResolvedValue([{ identity: 'admin-sub' } as ParticipantInfo]);
+      db.select.mockReturnValueOnce(chain([{ id: 'identity-row-1' }]));
+
+      await expect(target.hasConnectedAdmin('abc-defg-hij')).resolves.toBe(true);
+    });
+
+    it('listParticipants tira -> true (fail-safe: no se fuerza el cierre sin poder verificar)', async () => {
+      listParticipants.mockRejectedValue(new Error('livekit unreachable'));
+
+      await expect(target.hasConnectedAdmin('abc-defg-hij')).resolves.toBe(true);
+    });
+  });
+
+  it('[C6] onAdminLeft usa el roomCode recibido tal cual, sin normalizar ni derivar ningún otro valor', async () => {
+    listParticipants.mockResolvedValue([]);
+    const roomCode = 'abc-defg-hij';
+
+    await service.onAdminLeft('RM_session-A', roomCode);
+    await vi.advanceTimersByTimeAsync(15_000);
+    await flushMicrotasks();
+
+    // listParticipants (dentro de hasConnectedAdmin) y deleteRoom (dentro de
+    // claimAndClose) reciben el MISMO string que entró por parámetro: ningún
+    // parseo, split ni resolución de ancla ocurre todavía en este punto.
+    expect(listParticipants).toHaveBeenCalledWith(roomCode);
+    expect(deleteRoom).toHaveBeenCalledWith(roomCode);
+  });
+
+  it('[C7] claimAndClose llama a deleteRoom con un solo nombre, y reclama sobre el livekit_room_sid recibido como parámetro', async () => {
+    listParticipants.mockResolvedValue([]);
+    const sid = 'RM_session-A';
+    const roomCode = 'abc-defg-hij';
+
+    await service.onAdminLeft(sid, roomCode);
+    await vi.advanceTimersByTimeAsync(15_000);
+    await flushMicrotasks();
+
+    expect(deleteRoom).toHaveBeenCalledTimes(1);
+    expect(deleteRoom).toHaveBeenCalledWith(roomCode);
+    expect(db.updateWhere).toHaveBeenCalledWith(
+      and(eq(callSessions.livekitRoomSid, sid), isNull(callSessions.forcedCloseAt)),
+    );
+  });
+
+  // Fase 4 (design.md D3/D4/D7): generalización a grupo de
+  // hasConnectedAdmin/onAdminLeft/claimAndClose. Ningún assert de arriba
+  // (incluidos C4-C7) se tocó para agregar lo de abajo.
+
+  it('[4.4.1] con más de un nombre en el grupo, hasConnectedAdmin también filtra por roomId (D7) sin romper C4', async () => {
+    const names = ['abc-defg-hij', 'abc-defg-hij::breakout-1'];
+    groupResolver.resolveCallGroupRoomNames.mockResolvedValueOnce(names);
+    const listRooms = vi
+      .spyOn(RoomServiceClient.prototype, 'listRooms')
+      .mockResolvedValue(
+        names.map((name) => ({ name })) as Awaited<ReturnType<RoomServiceClient['listRooms']>>,
+      );
+    listParticipants.mockImplementation((name: string) =>
+      Promise.resolve(
+        name === names[0]
+          ? ([{ identity: 'guest-x' } as ParticipantInfo] as Awaited<
+              ReturnType<RoomServiceClient['listParticipants']>
+            >)
+          : ([{ identity: 'admin-sub' } as ParticipantInfo] as Awaited<
+              ReturnType<RoomServiceClient['listParticipants']>
+            >),
+      ),
+    );
+    const whereSpy = vi.fn().mockReturnValue(chain([{ id: 'identity-row-1' }]));
+    db.select.mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: whereSpy }) });
+
+    const target = service as unknown as {
+      hasConnectedAdmin(roomCode: string, roomId: string | null): Promise<boolean>;
+    };
+    const result = await target.hasConnectedAdmin('abc-defg-hij', 'room-1');
+
+    expect(result).toBe(true);
+    expect(listRooms).toHaveBeenCalledWith(names);
+    expect(whereSpy).toHaveBeenCalledWith(
+      and(
+        inArray(callParticipantIdentities.livekitIdentity, ['guest-x', 'admin-sub']),
+        eq(callParticipantIdentities.roleAtIssue, 'administrador'),
+        eq(callParticipantIdentities.roomId, 'room-1'),
+      ),
+    );
+  });
+
+  it('[4.4.3] onAdminLeft gana el parámetro roomId y lo pasa a resolveCallGroupRoomNames; con un roomCode sin "::" resolveGroupAnchor no agrega ninguna consulta', async () => {
+    listParticipants.mockResolvedValue([]);
+
+    await service.onAdminLeft('RM_session-A', 'abc-defg-hij', 'room-1');
+
+    expect(groupResolver.resolveGroupAnchor).toHaveBeenCalledWith('RM_session-A', 'abc-defg-hij');
+    expect(groupResolver.resolveCallGroupRoomNames).toHaveBeenCalledWith('room-1', 'abc-defg-hij');
+  });
+
+  it('[4.4.4] pendingCloses se indexa por el sid del PADRE (parentSid): dos admins de dos salas distintas del mismo grupo producen un solo timer', async () => {
+    listParticipants.mockResolvedValue([]);
+    groupResolver.resolveGroupAnchor.mockImplementation(() =>
+      Promise.resolve({ parentSid: 'RM_parent', parentCode: 'abc-defg-hij' }),
+    );
+
+    await Promise.all([
+      service.onAdminLeft('RM_breakout-1', 'abc-defg-hij::breakout-1', 'room-1'),
+      service.onAdminLeft('RM_breakout-2', 'abc-defg-hij::breakout-2', 'room-1'),
+    ]);
+
+    await vi.advanceTimersByTimeAsync(15_000);
+    await flushMicrotasks();
+
+    expect(deleteRoom).toHaveBeenCalledTimes(1);
+    expect(deleteRoom).toHaveBeenCalledWith('abc-defg-hij');
+  });
+
+  it('[4.4.6] claimAndClose(parentSid, parentCode, roomId) con grupo de un solo nombre sigue llamando a deleteRoom una sola vez (C7 no se rompe)', async () => {
+    const close = service as unknown as {
+      claimAndClose(sid: string, code: string, roomId: string | null): Promise<void>;
+    };
+
+    await close.claimAndClose('RM_session-A', 'abc-defg-hij', 'room-1');
+
+    expect(deleteRoom).toHaveBeenCalledTimes(1);
+    expect(deleteRoom).toHaveBeenCalledWith('abc-defg-hij');
   });
 });

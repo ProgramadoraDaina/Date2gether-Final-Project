@@ -4,6 +4,7 @@ import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { RoomServiceClient } from 'livekit-server-sdk';
 import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
 import { callEvents, callParticipantIdentities, callSessions } from '../../db/schema';
+import { CallGroupResolverService } from './call-group-resolver.service';
 
 // Ventana de gracia (D3, design.md): 15s. No es un sleep ciego antes de
 // cerrar: es una RE-VERIFICACIÓN agendada. Un admin que se reconecta vuelve
@@ -35,6 +36,7 @@ export class CallSessionCloseService {
   constructor(
     config: ConfigService,
     @Inject(DRIZZLE) private readonly db: DrizzleDb,
+    private readonly groupResolver: CallGroupResolverService,
   ) {
     const wsUrl = config.get<string>('LIVEKIT_URL') ?? '';
     const apiUrl = config.get<string>('LIVEKIT_API_URL') || wsUrl.replace(/^ws/, 'http');
@@ -48,25 +50,42 @@ export class CallSessionCloseService {
   /**
    * Se invoca desde el dispatcher de webhooks cuando el identity que generó
    * un `participant_left` tenía `roleAtIssue = 'administrador'`. No cierra
-   * de inmediato: si en este instante ya no queda ningún admin conectado,
-   * agenda un re-chequeo a T+15s (D3) en vez de forzar el cierre ya mismo.
+   * de inmediato: si en este instante ya no queda ningún admin conectado EN
+   * NINGUNA sala del grupo (principal + mini salas activas, D1/D3), agenda
+   * un re-chequeo a T+15s (D3) en vez de forzar el cierre ya mismo.
+   *
+   * `roomCode`/`livekitRoomSid` llegan tal cual los reportó LiveKit -- si
+   * pertenecen a una mini sala (contienen '::'), `resolveGroupAnchor` los
+   * traduce al ancla del grupo (sid y código de la sala PADRE) antes de
+   * cualquier otra cosa; para un roomCode sin '::' esa resolución es un
+   * no-op sin consultas (D6), así que el camino sin mini salas queda
+   * bit a bit igual que antes de esta generalización.
+   *
+   * `roomId` (D7): el roomId del PADRE, ya resuelto por el llamador desde
+   * `call_participant_identities` -- todas las identities del grupo,
+   * incluidas las de mini sala, comparten ese mismo roomId.
    */
-  async onAdminLeft(livekitRoomSid: string, roomCode: string): Promise<void> {
-    if (this.pendingCloses.has(livekitRoomSid)) return;
+  async onAdminLeft(
+    livekitRoomSid: string,
+    roomCode: string,
+    roomId: string | null = null,
+  ): Promise<void> {
+    const anchor = await this.groupResolver.resolveGroupAnchor(livekitRoomSid, roomCode);
+    if (this.pendingCloses.has(anchor.parentSid)) return;
 
-    const hasAdmin = await this.hasConnectedAdmin(roomCode);
+    const hasAdmin = await this.hasConnectedAdmin(anchor.parentCode, roomId);
     if (hasAdmin) return;
 
     // Re-chequeo tras el await de arriba: una segunda llamada casi
     // simultánea (otro admin desconectándose del mismo sid) puede haber
     // agendado el timer mientras esperábamos la respuesta de LiveKit.
-    if (this.pendingCloses.has(livekitRoomSid)) return;
+    if (this.pendingCloses.has(anchor.parentSid)) return;
 
     const timer = setTimeout(() => {
-      this.pendingCloses.delete(livekitRoomSid);
-      void this.recheckAndClose(livekitRoomSid, roomCode);
+      this.pendingCloses.delete(anchor.parentSid);
+      void this.recheckAndClose(anchor.parentSid, anchor.parentCode, roomId);
     }, GRACE_WINDOW_MS);
-    this.pendingCloses.set(livekitRoomSid, timer);
+    this.pendingCloses.set(anchor.parentSid, timer);
   }
 
   /**
@@ -82,33 +101,48 @@ export class CallSessionCloseService {
     this.pendingCloses.delete(livekitRoomSid);
   }
 
-  private async recheckAndClose(livekitRoomSid: string, roomCode: string): Promise<void> {
-    const hasAdmin = await this.hasConnectedAdmin(roomCode);
-    // El admin volvió (el mismo u otro) dentro de la ventana: se cancela el
-    // cierre sin tocar nada más.
+  private async recheckAndClose(
+    livekitRoomSid: string,
+    roomCode: string,
+    roomId: string | null,
+  ): Promise<void> {
+    const hasAdmin = await this.hasConnectedAdmin(roomCode, roomId);
+    // El admin volvió (el mismo u otro, en cualquier sala del grupo) dentro
+    // de la ventana: se cancela el cierre sin tocar nada más.
     if (hasAdmin) return;
-    await this.claimAndClose(livekitRoomSid, roomCode);
+    await this.claimAndClose(livekitRoomSid, roomCode, roomId);
   }
 
-  // Estado EN VIVO de LiveKit (D1), igual que en CallsService.join(): el
-  // log de eventos es una proyección rezagada, no sirve para esta decisión.
-  private async hasConnectedAdmin(roomCode: string): Promise<boolean> {
+  // Estado EN VIVO de LiveKit a nivel GRUPO (D1/D3), igual criterio que
+  // CallsService.assertHostConnected: el log de eventos es una proyección
+  // rezagada, no sirve para esta decisión.
+  //
+  // D2: con un solo nombre en el grupo (sin mini salas abiertas, o roomId
+  // desconocido) se recorre el camino de HOY, intacto -- sin el filtro de
+  // roomId que C4 fija como el comportamiento actual. El filtro de roomId
+  // solo se agrega cuando el grupo tiene más de una sala (D7: todas las
+  // identities del grupo comparten el roomId del padre).
+  private async hasConnectedAdmin(
+    roomCode: string,
+    roomId: string | null = null,
+  ): Promise<boolean> {
     try {
-      const participants = await this.client.listParticipants(roomCode);
-      const identities = participants
-        .map((p) => p.identity)
-        .filter((identity): identity is string => !!identity);
+      const groupRoomNames = await this.groupResolver.resolveCallGroupRoomNames(roomId, roomCode);
+      const identities = await this.listGroupIdentities(groupRoomNames);
       if (identities.length === 0) return false;
+
+      const conditions = [
+        inArray(callParticipantIdentities.livekitIdentity, identities),
+        eq(callParticipantIdentities.roleAtIssue, 'administrador'),
+      ];
+      if (groupRoomNames.length > 1 && roomId) {
+        conditions.push(eq(callParticipantIdentities.roomId, roomId));
+      }
 
       const [admin] = await this.db
         .select({ id: callParticipantIdentities.id })
         .from(callParticipantIdentities)
-        .where(
-          and(
-            inArray(callParticipantIdentities.livekitIdentity, identities),
-            eq(callParticipantIdentities.roleAtIssue, 'administrador'),
-          ),
-        )
+        .where(and(...conditions))
         .limit(1);
       return !!admin;
     } catch {
@@ -121,7 +155,38 @@ export class CallSessionCloseService {
     }
   }
 
-  private async claimAndClose(livekitRoomSid: string, roomCode: string): Promise<void> {
+  // D2 (fast path, código de hoy) + D3 (multi-sala: existencia por
+  // listRooms, presencia por listParticipants solo sobre las existentes).
+  // Mismo criterio que CallsService.listGroupParticipantIdentities -- acá
+  // separado porque este servicio usa su propio `this.client` ya
+  // configurado en el constructor, en vez de recibirlo por parámetro.
+  private async listGroupIdentities(groupRoomNames: string[]): Promise<string[]> {
+    if (groupRoomNames.length === 1) {
+      const participants = await this.client.listParticipants(groupRoomNames[0]);
+      return participants
+        .map((p) => p.identity)
+        .filter((identity): identity is string => !!identity);
+    }
+
+    const existingRooms = await this.client.listRooms(groupRoomNames);
+    const existingNames = new Set(existingRooms.map((r) => r.name));
+    const participantLists = await Promise.all(
+      groupRoomNames
+        .filter((name) => existingNames.has(name))
+        .map((name) => this.client.listParticipants(name)),
+    );
+    return participantLists
+      .flat()
+      .map((p) => p.identity)
+      .filter((identity): identity is string => !!identity);
+  }
+
+  private async claimAndClose(
+    livekitRoomSid: string,
+    roomCode: string,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    roomId: string | null = null,
+  ): Promise<void> {
     // BUG CORREGIDO: el camino de cierre forzado llega ANTES de que exista
     // room_finished (de hecho, deleteRoom() más abajo es lo que lo provoca),
     // así que la fila de call_sessions para este sid casi nunca existe
@@ -130,6 +195,12 @@ export class CallSessionCloseService {
     // sino porque la fila jamás fue creada -- y deleteRoom() nunca se
     // llamaría.
     await this.ensureSessionRow(livekitRoomSid, roomCode);
+
+    // TODO(Fase 5): invocar closeGroupBreakouts(roomId, roomCode) ANTES del
+    // deleteRoom de la principal de abajo (Flujo 3, design.md: mini salas
+    // primero, principal al final). BreakoutRoomsService todavía no existe
+    // en esta fase -- el punto de extensión queda documentado y el
+    // parámetro roomId ya disponible para cuando se conecte.
 
     // Capa 2 (D4): compare-and-set persistido, atómico en Postgres — la
     // garantía real de exclusión, incluso entre procesos o reinicios.

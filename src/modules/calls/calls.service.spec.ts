@@ -2,9 +2,11 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import type { Mock, MockInstance } from 'vitest';
 import { ConfigService } from '@nestjs/config';
 import { ForbiddenException, ServiceUnavailableException } from '@nestjs/common';
+import { and, eq, inArray } from 'drizzle-orm';
 import { RoomServiceClient, TokenVerifier, type ParticipantInfo } from 'livekit-server-sdk';
 import type { DrizzleDb } from '../../db/drizzle.module';
 import {
+  callBreakoutRooms,
   callParticipantIdentities,
   callSessionParticipants,
   roomMembers,
@@ -13,6 +15,7 @@ import {
 import type { RoomParticipant } from '../auth/room-access.service';
 import type { RoomResolverService } from '../rooms/room-resolver.service';
 import { RoomsService } from '../rooms/rooms.service';
+import type { CallGroupResolverService } from './call-group-resolver.service';
 import { CallsService } from './calls.service';
 
 const participant: RoomParticipant = {
@@ -75,9 +78,7 @@ function createDbMock() {
   const participantSessionsWhere = vi
     .fn<() => Promise<{ sessionId: string; firstJoinedAt: Date; roomId: string | null }[]>>()
     .mockResolvedValue([]);
-  const participantSessionsInnerJoin = vi
-    .fn()
-    .mockReturnValue({ where: participantSessionsWhere });
+  const participantSessionsInnerJoin = vi.fn().mockReturnValue({ where: participantSessionsWhere });
   const participantSessionsFrom = vi
     .fn()
     .mockReturnValue({ innerJoin: participantSessionsInnerJoin });
@@ -101,10 +102,16 @@ function createDbMock() {
   const adminWhere = vi.fn().mockReturnValue({ limit: adminLimit });
   const adminFrom = vi.fn().mockReturnValue({ where: adminWhere });
 
+  // select(...).from(callBreakoutRooms)... -- no existe todavía ningún
+  // consumidor de producción (Fase 3, C3/C8): este branch solo deja un
+  // espía para confirmar, por ahora, que NADA lo toca.
+  const breakoutRoomsFrom = vi.fn().mockReturnValue({ where: vi.fn() });
+
   const from = vi.fn((table: unknown) => {
     if (table === roomMembers) return roleFrom();
     if (table === callParticipantIdentities) return adminFrom();
     if (table === callSessionParticipants) return participantSessionsFrom();
+    if (table === callBreakoutRooms) return breakoutRoomsFrom();
     return historyFrom();
   });
   const select = vi.fn().mockReturnValue({ from });
@@ -123,7 +130,22 @@ function createDbMock() {
     limit,
     roleLimit,
     adminLimit,
+    adminWhere,
     participantSessionsWhere,
+    breakoutRoomsFrom,
+  };
+}
+
+// Resolución de grupo (Fase 4): mockeada en TODOS los describe de este
+// archivo, igual que rooms/resolver/db. Default: sin mini salas abiertas,
+// degenera a [roomCode] -- así ningún test preexistente que no sea sobre el
+// gate de grupo necesita saber que esta pieza existe. Los tests de grupo
+// (más abajo) sobrescriben resolveCallGroupRoomNames puntualmente.
+function createGroupResolverMock() {
+  return {
+    resolveCallGroupRoomNames: vi.fn().mockResolvedValue([room.code]),
+    resolveGroupAnchor: vi.fn(),
+    findExpiredBreakouts: vi.fn(),
   };
 }
 
@@ -146,15 +168,16 @@ describe('CallsService: LiveKit', () => {
     // el adminLimit por defecto de createDbMock) para que el invitado de
     // estos escenarios preexistentes pueda unirse sin tener que mockear la
     // presencia de un admin en cada test.
-    vi
-      .spyOn(RoomServiceClient.prototype, 'listParticipants')
-      .mockResolvedValue([{ identity: 'already-connected-admin' } as ParticipantInfo]);
+    vi.spyOn(RoomServiceClient.prototype, 'listParticipants').mockResolvedValue([
+      { identity: 'already-connected-admin' } as ParticipantInfo,
+    ]);
     db = createDbMock();
     service = new CallsService(
       rooms as unknown as RoomsService,
       new ConfigService(config),
       db as unknown as DrizzleDb,
       resolver as unknown as RoomResolverService,
+      createGroupResolverMock() as unknown as CallGroupResolverService,
     );
   });
   afterEach(() => {
@@ -237,6 +260,7 @@ describe('CallsService: LiveKit', () => {
       new ConfigService({}),
       db as unknown as DrizzleDb,
       resolver as unknown as RoomResolverService,
+      createGroupResolverMock() as unknown as CallGroupResolverService,
     );
     await expect(service.join(room.code, participant)).rejects.toThrow(
       'Las llamadas todavía no están configuradas',
@@ -250,6 +274,7 @@ describe('CallsService: LiveKit', () => {
       new ConfigService({ ...config, MAX_ROOM_PARTICIPANTS: '0' }),
       db as unknown as DrizzleDb,
       resolver as unknown as RoomResolverService,
+      createGroupResolverMock() as unknown as CallGroupResolverService,
     );
     await expect(service.join(room.code, participant)).rejects.toBeInstanceOf(
       ServiceUnavailableException,
@@ -295,21 +320,22 @@ describe('CallsService: correlación de identidad', () => {
       getByCodeOrThrow: vi.fn<RoomsService['getByCodeOrThrow']>().mockResolvedValue(room),
     };
     resolver = { touchEntry: vi.fn().mockResolvedValue(undefined) };
-    vi
-      .spyOn(RoomServiceClient.prototype, 'createRoom')
-      .mockResolvedValue({} as Awaited<ReturnType<RoomServiceClient['createRoom']>>);
+    vi.spyOn(RoomServiceClient.prototype, 'createRoom').mockResolvedValue(
+      {} as Awaited<ReturnType<RoomServiceClient['createRoom']>>,
+    );
     // Ver el comentario equivalente en 'CallsService: LiveKit': estos tests
     // son sobre la correlación de identidad, no sobre el gate de admin en
     // sí, así que se asume un anfitrión ya conectado por defecto.
-    vi
-      .spyOn(RoomServiceClient.prototype, 'listParticipants')
-      .mockResolvedValue([{ identity: 'already-connected-admin' } as ParticipantInfo]);
+    vi.spyOn(RoomServiceClient.prototype, 'listParticipants').mockResolvedValue([
+      { identity: 'already-connected-admin' } as ParticipantInfo,
+    ]);
     db = createDbMock();
     service = new CallsService(
       rooms as unknown as RoomsService,
       new ConfigService(config),
       db as unknown as DrizzleDb,
       resolver as unknown as RoomResolverService,
+      createGroupResolverMock() as unknown as CallGroupResolverService,
     );
   });
   afterEach(() => {
@@ -410,22 +436,28 @@ describe('CallsService: gate de administrador (host-gate)', () => {
   let db: ReturnType<typeof createDbMock>;
   let service: CallsService;
   let listParticipants: MockInstance<RoomServiceClient['listParticipants']>;
+  let createRoom: MockInstance<RoomServiceClient['createRoom']>;
+  let listRooms: MockInstance<RoomServiceClient['listRooms']>;
+  let groupResolver: ReturnType<typeof createGroupResolverMock>;
 
   beforeEach(() => {
     rooms = {
       getByCodeOrThrow: vi.fn<RoomsService['getByCodeOrThrow']>().mockResolvedValue(room),
     };
     resolver = { touchEntry: vi.fn().mockResolvedValue(undefined) };
-    vi
+    createRoom = vi
       .spyOn(RoomServiceClient.prototype, 'createRoom')
       .mockResolvedValue({} as Awaited<ReturnType<RoomServiceClient['createRoom']>>);
     listParticipants = vi.spyOn(RoomServiceClient.prototype, 'listParticipants');
+    listRooms = vi.spyOn(RoomServiceClient.prototype, 'listRooms');
     db = createDbMock();
+    groupResolver = createGroupResolverMock();
     service = new CallsService(
       rooms as unknown as RoomsService,
       new ConfigService(config),
       db as unknown as DrizzleDb,
       resolver as unknown as RoomResolverService,
+      groupResolver as unknown as CallGroupResolverService,
     );
   });
   afterEach(() => {
@@ -507,6 +539,180 @@ describe('CallsService: gate de administrador (host-gate)', () => {
       expect.objectContaining({ roleAtIssue: 'administrador' }),
     );
   });
+
+  // Caracterización (Fase 3, design.md "Tests de caracterización obligatorios"):
+  // fija el comportamiento ACTUAL de assertHostConnected antes de generalizarlo
+  // a grupo en la Fase 4. Ningún assert de arriba se tocó para agregar estos.
+
+  it('[C1] assertHostConnected llama a listParticipants exactamente una vez, con el roomCode de la sala principal', async () => {
+    listParticipants.mockResolvedValue([{ identity: 'admin-sub' } as ParticipantInfo]);
+    db.adminLimit.mockResolvedValueOnce([{ id: 'identity-row-1' }]);
+
+    await service.join(room.code, participant);
+
+    expect(listParticipants).toHaveBeenCalledTimes(1);
+    expect(listParticipants).toHaveBeenCalledWith(room.code);
+  });
+
+  it('[C2] la consulta a call_participant_identities del gate filtra por roomId Y por roleAtIssue="administrador"', async () => {
+    listParticipants.mockResolvedValue([{ identity: 'admin-sub' } as ParticipantInfo]);
+    db.adminLimit.mockResolvedValueOnce([{ id: 'identity-row-1' }]);
+
+    await service.join(room.code, participant);
+
+    expect(db.adminWhere).toHaveBeenCalledWith(
+      and(
+        eq(callParticipantIdentities.roomId, room.id),
+        inArray(callParticipantIdentities.livekitIdentity, ['admin-sub']),
+        eq(callParticipantIdentities.roleAtIssue, 'administrador'),
+      ),
+    );
+  });
+
+  it('[C3] un administrador dispara cero consultas de presencia y cero lecturas de call_breakout_rooms (spec host-gate/equivalencia-exacta, mitad admin)', async () => {
+    db.roleLimit.mockResolvedValueOnce([{ role: 'administrador' }]);
+    const adminParticipant = { ...participant, sub: 'admin-sub', userId: 'admin-1' };
+
+    await service.join(room.code, adminParticipant);
+
+    expect(listParticipants).not.toHaveBeenCalled();
+    expect(db.breakoutRoomsFrom).not.toHaveBeenCalled();
+  });
+
+  it('[C9] con cero filas en call_breakout_rooms, un no-admin produce la misma secuencia de llamadas a LiveKit que hoy (ancla de regresión para la Fase 4)', async () => {
+    listParticipants.mockResolvedValue([{ identity: 'admin-sub' } as ParticipantInfo]);
+    db.adminLimit.mockResolvedValueOnce([{ id: 'identity-row-1' }]);
+
+    const session = await service.join(room.code, participant);
+
+    expect(session.token).toBeDefined();
+    expect(createRoom).toHaveBeenCalledTimes(1);
+    expect(listParticipants).toHaveBeenCalledTimes(1);
+    expect(listParticipants).toHaveBeenCalledWith(room.code);
+    expect(db.breakoutRoomsFrom).not.toHaveBeenCalled();
+    // Orden observable: createRoom (preparar la sala) antes que
+    // listParticipants (gate de presencia) -- ningún camino nuevo se
+    // intercala todavía.
+    expect(createRoom.mock.invocationCallOrder[0]).toBeLessThan(
+      listParticipants.mock.invocationCallOrder[0],
+    );
+  });
+
+  // Fase 4 (design.md D3/D9): camino multi-sala de assertHostConnected,
+  // ejercitado inyectando directamente la lista de nombres de grupo vía el
+  // mock de groupResolver -- CallGroupResolverService tiene su propia
+  // suite (call-group-resolver.service.spec.ts); acá solo importa cómo
+  // CallsService consume esa lista.
+
+  it('[4.3.3] grupo con varias salas, todas existen en listRooms: se consulta listParticipants de cada una y se unen los identities antes de la consulta a call_participant_identities', async () => {
+    const breakoutName = `${room.code}::breakout-1`;
+    groupResolver.resolveCallGroupRoomNames.mockResolvedValueOnce([room.code, breakoutName]);
+    listRooms.mockResolvedValue([{ name: room.code }, { name: breakoutName }] as Awaited<
+      ReturnType<RoomServiceClient['listRooms']>
+    >);
+    listParticipants.mockImplementation((name: string) =>
+      Promise.resolve(
+        name === room.code
+          ? ([{ identity: 'guest-x' } as ParticipantInfo] as Awaited<
+              ReturnType<RoomServiceClient['listParticipants']>
+            >)
+          : ([{ identity: 'admin-sub' } as ParticipantInfo] as Awaited<
+              ReturnType<RoomServiceClient['listParticipants']>
+            >),
+      ),
+    );
+    db.adminLimit.mockResolvedValueOnce([{ id: 'identity-row-1' }]);
+
+    const session = await service.join(room.code, participant);
+
+    expect(session.token).toBeDefined();
+    expect(listRooms).toHaveBeenCalledWith([room.code, breakoutName]);
+    expect(listParticipants).toHaveBeenCalledWith(room.code);
+    expect(listParticipants).toHaveBeenCalledWith(breakoutName);
+    expect(db.adminWhere).toHaveBeenCalledWith(
+      and(
+        eq(callParticipantIdentities.roomId, room.id),
+        inArray(callParticipantIdentities.livekitIdentity, ['guest-x', 'admin-sub']),
+        eq(callParticipantIdentities.roleAtIssue, 'administrador'),
+      ),
+    );
+  });
+
+  it('[4.3.4] una mini sala ausente de listRooms se trata como vacía, sin llamarle listParticipants (D3)', async () => {
+    const breakoutName = `${room.code}::breakout-1`;
+    groupResolver.resolveCallGroupRoomNames.mockResolvedValueOnce([room.code, breakoutName]);
+    listRooms.mockResolvedValue([{ name: room.code }] as Awaited<
+      ReturnType<RoomServiceClient['listRooms']>
+    >);
+    listParticipants.mockResolvedValue([{ identity: 'admin-sub' } as ParticipantInfo]);
+    db.adminLimit.mockResolvedValueOnce([{ id: 'identity-row-1' }]);
+
+    await service.join(room.code, participant);
+
+    expect(listParticipants).toHaveBeenCalledTimes(1);
+    expect(listParticipants).toHaveBeenCalledWith(room.code);
+    expect(listParticipants).not.toHaveBeenCalledWith(breakoutName);
+  });
+
+  it('[4.3.5] listParticipants tira sobre una sala que sí existe en el camino multi-sala: se propaga igual que hoy (503, sin cambios)', async () => {
+    const breakoutName = `${room.code}::breakout-1`;
+    groupResolver.resolveCallGroupRoomNames.mockResolvedValueOnce([room.code, breakoutName]);
+    listRooms.mockResolvedValue([{ name: room.code }, { name: breakoutName }] as Awaited<
+      ReturnType<RoomServiceClient['listRooms']>
+    >);
+    listParticipants.mockRejectedValue(new Error('livekit unreachable'));
+
+    await expect(service.join(room.code, participant)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+  });
+
+  it('[4.3.6] listRooms tira en el camino multi-sala: mismo fail-safe (503)', async () => {
+    const breakoutName = `${room.code}::breakout-1`;
+    groupResolver.resolveCallGroupRoomNames.mockResolvedValueOnce([room.code, breakoutName]);
+    listRooms.mockRejectedValue(new Error('livekit unreachable'));
+
+    await expect(service.join(room.code, participant)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+    expect(listParticipants).not.toHaveBeenCalled();
+  });
+
+  it('[4.3.8] el wiring de resolveCallGroupRoomNames ocurre en el camino no-admin, con (roomId, roomCode)', async () => {
+    listParticipants.mockResolvedValue([{ identity: 'admin-sub' } as ParticipantInfo]);
+    db.adminLimit.mockResolvedValueOnce([{ id: 'identity-row-1' }]);
+
+    await service.join(room.code, participant);
+
+    expect(groupResolver.resolveCallGroupRoomNames).toHaveBeenCalledWith(room.id, room.code);
+  });
+
+  it('[4.3.8] un administrador nunca invoca resolveCallGroupRoomNames (cortocircuito intacto)', async () => {
+    db.roleLimit.mockResolvedValueOnce([{ role: 'administrador' }]);
+    const adminParticipant = { ...participant, sub: 'admin-sub', userId: 'admin-1' };
+
+    await service.join(room.code, adminParticipant);
+
+    expect(groupResolver.resolveCallGroupRoomNames).not.toHaveBeenCalled();
+  });
+
+  it('[4.8] el filtro por roomId del gate sigue intacto sobre una identity que en Fase 5 llevará el roomId del padre (D7, fixture directa por anticipación)', async () => {
+    listParticipants.mockResolvedValue([
+      { identity: 'breakout-admin-identity' } as ParticipantInfo,
+    ]);
+    db.adminLimit.mockResolvedValueOnce([{ id: 'identity-row-breakout' }]);
+
+    const session = await service.join(room.code, participant);
+
+    expect(session.token).toBeDefined();
+    expect(db.adminWhere).toHaveBeenCalledWith(
+      and(
+        eq(callParticipantIdentities.roomId, room.id),
+        inArray(callParticipantIdentities.livekitIdentity, ['breakout-admin-identity']),
+        eq(callParticipantIdentities.roleAtIssue, 'administrador'),
+      ),
+    );
+  });
 });
 
 describe('CallsService: historial', () => {
@@ -530,6 +736,7 @@ describe('CallsService: historial', () => {
       new ConfigService(config),
       db as unknown as DrizzleDb,
       resolver as unknown as RoomResolverService,
+      createGroupResolverMock() as unknown as CallGroupResolverService,
     );
   });
 
@@ -661,9 +868,7 @@ describe('CallsService: reportTrackState (mute/unmute reportado por el cliente)'
   let service: CallsService;
   let listRooms: MockInstance<RoomServiceClient['listRooms']>;
   let onConflictDoNothing: Mock<() => Promise<void>>;
-  let insertValues: Mock<
-    (values: unknown) => { onConflictDoNothing: typeof onConflictDoNothing }
-  >;
+  let insertValues: Mock<(values: unknown) => { onConflictDoNothing: typeof onConflictDoNothing }>;
   let insert: Mock<(table: unknown) => { values: typeof insertValues }>;
   let db: { insert: typeof insert };
 
@@ -686,6 +891,7 @@ describe('CallsService: reportTrackState (mute/unmute reportado por el cliente)'
       new ConfigService(config),
       db as unknown as DrizzleDb,
       resolver as unknown as RoomResolverService,
+      createGroupResolverMock() as unknown as CallGroupResolverService,
     );
   });
 

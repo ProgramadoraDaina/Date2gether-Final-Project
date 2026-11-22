@@ -15,12 +15,14 @@ import {
 } from 'livekit-server-sdk';
 import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
 import {
+  callBreakoutRooms,
   callEvents,
   callParticipantIdentities,
   callSessionParticipants,
   callSessions,
 } from '../../db/schema';
 import { aggregateSession, type SessionEvent } from './aggregate-session';
+import { parseBreakoutRoomName } from './call-group';
 import { CallSessionCloseService } from './call-session-close.service';
 
 // Los 6 tipos de evento que esta fase sabe identificar y despachar (spec
@@ -181,14 +183,22 @@ export class CallsWebhookService {
     const identity = event.participant?.identity;
     if (!livekitRoomSid || !identity) return;
 
+    // roomId se lee de la MISMA fila que ya se consultaba (cero consultas
+    // nuevas en el camino de webhook, tasks.md 4.4.8): es el roomId de la
+    // sala PADRE (D7) incluso para una identity de mini sala -- la
+    // atribución de grupo que CallSessionCloseService necesita para su
+    // propio gate ya está resuelta acá sin tener que volver a preguntarla.
     const [row] = await this.db
-      .select({ roleAtIssue: callParticipantIdentities.roleAtIssue })
+      .select({
+        roleAtIssue: callParticipantIdentities.roleAtIssue,
+        roomId: callParticipantIdentities.roomId,
+      })
       .from(callParticipantIdentities)
       .where(eq(callParticipantIdentities.livekitIdentity, identity))
       .limit(1);
-    if (row?.roleAtIssue !== 'administrador') return;
+    if (!row || row.roleAtIssue !== 'administrador') return;
 
-    await this.closeService.onAdminLeft(livekitRoomSid, event.room?.name ?? '');
+    await this.closeService.onAdminLeft(livekitRoomSid, event.room?.name ?? '', row.roomId);
   }
 
   /**
@@ -256,9 +266,28 @@ export class CallsWebhookService {
         : [];
       const roomId = identities[0]?.roomId ?? null;
 
+      // Vínculo de grupo (design.md D5.3, D6; spec call-participation-timeline
+      // ADDED "Vínculo de grupo en la sesión de una mini sala"). Atribución
+      // en el dispatcher: un roomCode sin '::' no dispara ninguna consulta
+      // nueva (cero costo para toda llamada sin mini salas, spec
+      // webhook-ingestion/verificación-sin-cambios); un roomCode con '::'
+      // resuelve call_breakout_rooms.livekit_room_name -> parent_livekit_room_sid.
+      // Si no hay match (grupo desconocido), degrada a null -- mismo
+      // tratamiento que una sala sin mini salas (spec
+      // webhook-ingestion/roomCode-sin-grupo): sin efecto de negocio.
+      let callGroupId: string | null = null;
+      if (parseBreakoutRoomName(roomCode)) {
+        const [breakout] = await tx
+          .select({ parentLivekitRoomSid: callBreakoutRooms.parentLivekitRoomSid })
+          .from(callBreakoutRooms)
+          .where(eq(callBreakoutRooms.livekitRoomName, roomCode))
+          .limit(1);
+        callGroupId = breakout?.parentLivekitRoomSid ?? null;
+      }
+
       await tx
         .insert(callSessions)
-        .values({ livekitRoomSid, roomId, roomCode, startedAt })
+        .values({ livekitRoomSid, roomId, roomCode, startedAt, callGroupId })
         .onConflictDoNothing();
 
       const claimed = await tx

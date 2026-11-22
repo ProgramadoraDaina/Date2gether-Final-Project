@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { JwtAuthModule } from '../auth/jwt-auth.module';
 import { RoomResolverModule } from '../rooms/room-resolver.module';
 import { RoomsModule } from '../rooms/rooms.module';
+import { CallGroupResolverService } from './call-group-resolver.service';
 import { CallHistoryController } from './call-history.controller';
 import { CallSessionCloseService } from './call-session-close.service';
 import { CallTimelineController } from './call-timeline.controller';
@@ -20,6 +21,12 @@ import { CallsWebhookService } from './calls-webhook.service';
     CallsWebhookController,
     CallTimelineController,
   ],
-  providers: [CallsService, CallsWebhookService, CallTimelineService, CallSessionCloseService],
+  providers: [
+    CallsService,
+    CallsWebhookService,
+    CallTimelineService,
+    CallSessionCloseService,
+    CallGroupResolverService,
+  ],
 })
 export class CallsModule {}
