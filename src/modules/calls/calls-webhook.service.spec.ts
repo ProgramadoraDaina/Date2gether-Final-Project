@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MockInstance } from 'vitest';
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { WebhookReceiver, type WebhookEvent } from 'livekit-server-sdk';
+import { RoomServiceClient, WebhookReceiver, type WebhookEvent } from 'livekit-server-sdk';
 import type { DrizzleDb } from '../../db/drizzle.module';
 import {
   callBreakoutRooms,
@@ -577,5 +577,89 @@ describe('CallsWebhookService: cierre forzado en participant_left (tasks.md 6.10
 
     await expect(service.handle(Buffer.from('{}'), 'valid-sig')).resolves.toBeUndefined();
     expect(closeService.onAdminLeft).not.toHaveBeenCalled();
+  });
+});
+
+describe('CallsWebhookService: expulsión de ocupante locked en participant_joined (tasks.md 5.5.8/5.5.9)', () => {
+  let db: ReturnType<typeof createDbMock>;
+  let closeService: ReturnType<typeof createCloseServiceMock>;
+  let service: CallsWebhookService;
+  let receive: MockInstance<WebhookReceiver['receive']>;
+  let removeParticipant: MockInstance<RoomServiceClient['removeParticipant']>;
+
+  beforeEach(() => {
+    db = createDbMock();
+    closeService = createCloseServiceMock();
+    service = new CallsWebhookService(
+      new ConfigService(config),
+      db as unknown as DrizzleDb,
+      closeService as unknown as CallSessionCloseService,
+    );
+    receive = vi.spyOn(WebhookReceiver.prototype, 'receive');
+    removeParticipant = vi
+      .spyOn(RoomServiceClient.prototype, 'removeParticipant')
+      .mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('[5.5.8] participant_joined de la principal con una asignación abierta locked: expulsa al ocupante (D8 punto 2, ventana de fuga aceptada)', async () => {
+    db.select.mockReturnValue(chain([{ breakoutRoomId: 'breakout-1' }]));
+    receive.mockResolvedValue(
+      buildEvent({
+        event: 'participant_joined',
+        room: { sid: 'RM_session-A', name: 'abc-defg-hij' },
+        participant: { identity: 'guest-locked' },
+      }),
+    );
+
+    await service.handle(Buffer.from('{}'), 'valid-sig');
+
+    expect(removeParticipant).toHaveBeenCalledWith('abc-defg-hij', 'guest-locked');
+  });
+
+  it('participant_joined de la principal sin ninguna asignación abierta locked no expulsa a nadie', async () => {
+    db.select.mockReturnValue(chain([]));
+    receive.mockResolvedValue(
+      buildEvent({
+        event: 'participant_joined',
+        room: { sid: 'RM_session-A', name: 'abc-defg-hij' },
+        participant: { identity: 'guest-free' },
+      }),
+    );
+
+    await service.handle(Buffer.from('{}'), 'valid-sig');
+
+    expect(removeParticipant).not.toHaveBeenCalled();
+  });
+
+  it('participant_joined de una MINI SALA (nombre con "::") nunca dispara esta regla, ni siquiera consulta la base', async () => {
+    receive.mockResolvedValue(
+      buildEvent({
+        event: 'participant_joined',
+        room: { sid: 'RM_breakout-1', name: 'abc-defg-hij::breakout-1' },
+        participant: { identity: 'new-identity' },
+      }),
+    );
+
+    await service.handle(Buffer.from('{}'), 'valid-sig');
+
+    expect(removeParticipant).not.toHaveBeenCalled();
+  });
+
+  it('removeParticipant falla: no relanza, el webhook sigue resolviendo en 200', async () => {
+    db.select.mockReturnValue(chain([{ breakoutRoomId: 'breakout-1' }]));
+    removeParticipant.mockRejectedValue(new Error('participant not found'));
+    receive.mockResolvedValue(
+      buildEvent({
+        event: 'participant_joined',
+        room: { sid: 'RM_session-A', name: 'abc-defg-hij' },
+        participant: { identity: 'guest-locked' },
+      }),
+    );
+
+    await expect(service.handle(Buffer.from('{}'), 'valid-sig')).resolves.toBeUndefined();
   });
 });

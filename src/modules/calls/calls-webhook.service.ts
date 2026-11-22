@@ -8,6 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import {
+  RoomServiceClient,
   TrackSource,
   WebhookReceiver,
   trackSourceToString,
@@ -15,6 +16,7 @@ import {
 } from 'livekit-server-sdk';
 import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
 import {
+  callBreakoutOccupants,
   callBreakoutRooms,
   callEvents,
   callParticipantIdentities,
@@ -22,7 +24,7 @@ import {
   callSessions,
 } from '../../db/schema';
 import { aggregateSession, type SessionEvent } from './aggregate-session';
-import { parseBreakoutRoomName } from './call-group';
+import { isBreakoutRoomName, parseBreakoutRoomName } from './call-group';
 import { CallSessionCloseService } from './call-session-close.service';
 
 // Los 6 tipos de evento que esta fase sabe identificar y despachar (spec
@@ -51,6 +53,7 @@ type SupportedEventType = (typeof SUPPORTED_EVENT_TYPES)[number];
 export class CallsWebhookService {
   private readonly logger = new Logger(CallsWebhookService.name);
   private readonly receiver: WebhookReceiver;
+  private readonly client: RoomServiceClient;
 
   constructor(
     config: ConfigService,
@@ -58,6 +61,13 @@ export class CallsWebhookService {
     private readonly closeService: CallSessionCloseService,
   ) {
     this.receiver = new WebhookReceiver(
+      config.get<string>('LIVEKIT_API_KEY', ''),
+      config.get<string>('LIVEKIT_API_SECRET', ''),
+    );
+    const wsUrl = config.get<string>('LIVEKIT_URL') ?? '';
+    const apiUrl = config.get<string>('LIVEKIT_API_URL') || wsUrl.replace(/^ws/, 'http');
+    this.client = new RoomServiceClient(
+      apiUrl,
       config.get<string>('LIVEKIT_API_KEY', ''),
       config.get<string>('LIVEKIT_API_SECRET', ''),
     );
@@ -141,7 +151,7 @@ export class CallsWebhookService {
         await this.onRoomFinished(event);
         break;
       case 'participant_joined':
-        this.onParticipantJoined(event);
+        await this.onParticipantJoined(event);
         break;
       case 'participant_left':
         await this.onParticipantLeft(event);
@@ -160,18 +170,52 @@ export class CallsWebhookService {
   }
 
   // --- Huecos para PR7 (ver design.md), deliberadamente vacíos aquí ---
-  // Solo participant_left se conecta en este PR (tasks.md 6.10): es el único
-  // punto de enganche que Fase 6 pide. room_started/participant_joined/
-  // track_* quedan vacíos a propósito — nada en Fase 5/6 de este cambio los
-  // necesita.
+  // room_started/track_* quedan vacíos a propósito — nada en este cambio
+  // los necesita. participant_joined se conecta en la Fase 5 (ver abajo).
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private onRoomStarted(event: WebhookEvent): void {}
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  private onParticipantJoined(event: WebhookEvent): void {}
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private onTrackPublished(event: WebhookEvent): void {}
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private onTrackUnpublished(event: WebhookEvent): void {}
+
+  /**
+   * Expulsión de un ocupante `locked` que reconecta a la principal con su
+   * token previo todavía vigente (D8 punto 2, design.md): el rechazo en
+   * join() no alcanza por sí solo porque ese token sigue siendo
+   * técnicamente válido. Ventana de fuga de 1-2s declarada y aceptada (spec
+   * breakout-rooms/expulsión-locked) -- es el techo de lo que LiveKit
+   * permite sin un hook de admisión del lado servidor.
+   *
+   * Solo aplica a `participant_joined` de la sala PRINCIPAL: un join a una
+   * mini sala (identity NUEVA, D7) no está sujeto a esta regla.
+   */
+  private async onParticipantJoined(event: WebhookEvent): Promise<void> {
+    const identity = event.participant?.identity;
+    const roomCode = event.room?.name;
+    if (!identity || !roomCode || isBreakoutRoomName(roomCode)) return;
+
+    const [openLockedAssignment] = await this.db
+      .select({ breakoutRoomId: callBreakoutOccupants.breakoutRoomId })
+      .from(callBreakoutOccupants)
+      .innerJoin(callBreakoutRooms, eq(callBreakoutOccupants.breakoutRoomId, callBreakoutRooms.id))
+      .where(
+        and(
+          eq(callBreakoutOccupants.sourceIdentity, identity),
+          isNull(callBreakoutOccupants.returnedAt),
+          eq(callBreakoutRooms.leavePolicy, 'locked'),
+          isNull(callBreakoutRooms.closedAt),
+        ),
+      )
+      .limit(1);
+    if (!openLockedAssignment) return;
+
+    try {
+      await this.client.removeParticipant(roomCode, identity);
+    } catch {
+      this.logger.warn('No se pudo expulsar a un ocupante locked reconectado a la sala principal');
+    }
+  }
 
   /**
    * Cierre forzado idempotente (Fase 6, design.md D3/D4): si el identity que

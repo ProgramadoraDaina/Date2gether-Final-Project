@@ -7,6 +7,7 @@ import { RoomServiceClient, type ParticipantInfo } from 'livekit-server-sdk';
 import type { DrizzleDb } from '../../db/drizzle.module';
 import { callEvents, callParticipantIdentities, callSessions } from '../../db/schema';
 import { chain } from '../../test-support/fake-drizzle';
+import type { BreakoutRoomsService } from './breakout-rooms.service';
 import type { CallGroupResolverService } from './call-group-resolver.service';
 import { CallSessionCloseService } from './call-session-close.service';
 
@@ -73,6 +74,19 @@ function createGroupResolverMock() {
   };
 }
 
+// Fase 5 (tasks.md 5.7.7): BreakoutRoomsService.closeGroupBreakouts se
+// invoca desde claimAndClose, ANTES del deleteRoom de la principal. Mock
+// degenerado por defecto -- no-op, así que ningún test preexistente de este
+// archivo (que no ejercita la cascada en sí) necesita saber que esta pieza
+// existe. Ver breakout-rooms.service.spec.ts para su propia suite.
+function createBreakoutRoomsMock() {
+  return {
+    closeGroupBreakouts: vi
+      .fn<(roomId: string | null, parentCode: string) => Promise<void>>()
+      .mockResolvedValue(undefined),
+  };
+}
+
 // Jest resuelve timers falsos y promesas mockeadas en microtasks separados;
 // advanceTimersByTimeAsync ya se encarga de dejarlos correr, pero una vuelta
 // extra de microtask queda documentada acá por si algún entorno de CI más
@@ -85,6 +99,7 @@ async function flushMicrotasks(): Promise<void> {
 describe('CallSessionCloseService', () => {
   let db: ReturnType<typeof createDbMock>;
   let groupResolver: ReturnType<typeof createGroupResolverMock>;
+  let breakoutRooms: ReturnType<typeof createBreakoutRoomsMock>;
   let service: CallSessionCloseService;
   let listParticipants: MockInstance<RoomServiceClient['listParticipants']>;
   let deleteRoom: MockInstance<RoomServiceClient['deleteRoom']>;
@@ -93,10 +108,12 @@ describe('CallSessionCloseService', () => {
     vi.useFakeTimers();
     db = createDbMock();
     groupResolver = createGroupResolverMock();
+    breakoutRooms = createBreakoutRoomsMock();
     service = new CallSessionCloseService(
       new ConfigService(config),
       db as unknown as DrizzleDb,
       groupResolver as unknown as CallGroupResolverService,
+      breakoutRooms as unknown as BreakoutRoomsService,
     );
     listParticipants = vi.spyOn(RoomServiceClient.prototype, 'listParticipants');
     deleteRoom = vi.spyOn(RoomServiceClient.prototype, 'deleteRoom').mockResolvedValue(undefined);
@@ -432,6 +449,41 @@ describe('CallSessionCloseService', () => {
     await close.claimAndClose('RM_session-A', 'abc-defg-hij', 'room-1');
 
     expect(deleteRoom).toHaveBeenCalledTimes(1);
+    expect(deleteRoom).toHaveBeenCalledWith('abc-defg-hij');
+  });
+
+  // Fase 5 (tasks.md 5.7.7, design.md Flujo 3): wiring diferido de la Fase 4
+  // -- claimAndClose invoca closeGroupBreakouts ANTES del deleteRoom de la
+  // principal. Aditivo: ningún assert de arriba se tocó.
+
+  it('[5.7.7] claimAndClose invoca closeGroupBreakouts(roomId, parentCode) antes de deleteRoom de la principal', async () => {
+    const callOrder: string[] = [];
+    breakoutRooms.closeGroupBreakouts.mockImplementation(() => {
+      callOrder.push('closeGroupBreakouts');
+      return Promise.resolve(undefined);
+    });
+    deleteRoom.mockImplementation(() => {
+      callOrder.push('deleteRoom');
+      return Promise.resolve(undefined);
+    });
+    listParticipants.mockResolvedValue([]);
+
+    await service.onAdminLeft('RM_session-A', 'abc-defg-hij', 'room-1');
+    await vi.advanceTimersByTimeAsync(15_000);
+    await flushMicrotasks();
+
+    expect(breakoutRooms.closeGroupBreakouts).toHaveBeenCalledWith('room-1', 'abc-defg-hij');
+    expect(callOrder).toEqual(['closeGroupBreakouts', 'deleteRoom']);
+  });
+
+  it('[5.7.7] con roomId null, closeGroupBreakouts se invoca igual (no-op tolerante, D-sin-correlación)', async () => {
+    listParticipants.mockResolvedValue([]);
+
+    await service.onAdminLeft('RM_session-A', 'abc-defg-hij');
+    await vi.advanceTimersByTimeAsync(15_000);
+    await flushMicrotasks();
+
+    expect(breakoutRooms.closeGroupBreakouts).toHaveBeenCalledWith(null, 'abc-defg-hij');
     expect(deleteRoom).toHaveBeenCalledWith('abc-defg-hij');
   });
 });

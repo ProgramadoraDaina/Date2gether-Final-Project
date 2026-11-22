@@ -6,6 +6,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { RoomServiceClient, TokenVerifier, type ParticipantInfo } from 'livekit-server-sdk';
 import type { DrizzleDb } from '../../db/drizzle.module';
 import {
+  callBreakoutOccupants,
   callBreakoutRooms,
   callParticipantIdentities,
   callSessionParticipants,
@@ -107,11 +108,24 @@ function createDbMock() {
   // espía para confirmar, por ahora, que NADA lo toca.
   const breakoutRoomsFrom = vi.fn().mockReturnValue({ where: vi.fn() });
 
-  const from = vi.fn((table: unknown) => {
+  // select({leavePolicy}).from(callBreakoutOccupants).innerJoin(callBreakoutRooms, ...)
+  // .where(...).limit(1) -- assertBreakoutReturnAllowed() (Fase 5, D8 punto
+  // 1). Default: sin asignación abierta (lista vacía), así que ningún test
+  // preexistente de este describe necesita saber que esta pieza existe --
+  // solo se ejercita cuando groupRoomNames.length > 1 (D9).
+  const breakoutOccupantsLimit = vi
+    .fn<() => Promise<{ leavePolicy: string }[]>>()
+    .mockResolvedValue([]);
+  const breakoutOccupantsWhere = vi.fn().mockReturnValue({ limit: breakoutOccupantsLimit });
+  const breakoutOccupantsInnerJoin = vi.fn().mockReturnValue({ where: breakoutOccupantsWhere });
+  const breakoutOccupantsFrom = vi.fn().mockReturnValue({ innerJoin: breakoutOccupantsInnerJoin });
+
+  const from = vi.fn((table: unknown): unknown => {
     if (table === roomMembers) return roleFrom();
     if (table === callParticipantIdentities) return adminFrom();
     if (table === callSessionParticipants) return participantSessionsFrom();
     if (table === callBreakoutRooms) return breakoutRoomsFrom();
+    if (table === callBreakoutOccupants) return breakoutOccupantsFrom();
     return historyFrom();
   });
   const select = vi.fn().mockReturnValue({ from });
@@ -133,6 +147,10 @@ function createDbMock() {
     adminWhere,
     participantSessionsWhere,
     breakoutRoomsFrom,
+    breakoutOccupantsFrom,
+    breakoutOccupantsInnerJoin,
+    breakoutOccupantsWhere,
+    breakoutOccupantsLimit,
   };
 }
 
@@ -712,6 +730,62 @@ describe('CallsService: gate de administrador (host-gate)', () => {
         eq(callParticipantIdentities.roleAtIssue, 'administrador'),
       ),
     );
+  });
+
+  // Fase 5 (design.md D8/D9, tasks.md 5.5.5-5.5.7): enforcement de `locked`
+  // en join() -- un no-admin con una asignación abierta `locked` no puede
+  // volver a la principal por su cuenta. Ningún assert de arriba se tocó
+  // para agregar estos.
+
+  it('[5.5.5] no-admin con asignación abierta locked: 403 BREAKOUT_RETURN_LOCKED, sin emitir token de la principal', async () => {
+    const breakoutName = `${room.code}::breakout-1`;
+    groupResolver.resolveCallGroupRoomNames.mockResolvedValueOnce([room.code, breakoutName]);
+    db.breakoutOccupantsLimit.mockResolvedValueOnce([{ leavePolicy: 'locked' }]);
+
+    const error = await service.join(room.code, participant).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ForbiddenException);
+    expect((error as ForbiddenException).getResponse()).toMatchObject({
+      code: 'BREAKOUT_RETURN_LOCKED',
+    });
+    expect(listParticipants).not.toHaveBeenCalled();
+    expect(db.identityValues).not.toHaveBeenCalled();
+  });
+
+  it('[5.5.6] un administrador nunca se bloquea por locked, aunque tenga una asignación abierta (D8: locked no aplica a admin)', async () => {
+    db.roleLimit.mockResolvedValueOnce([{ role: 'administrador' }]);
+    db.breakoutOccupantsLimit.mockResolvedValueOnce([{ leavePolicy: 'locked' }]);
+    const adminParticipant = { ...participant, sub: 'admin-sub', userId: 'admin-1' };
+
+    const session = await service.join(room.code, adminParticipant);
+
+    expect(session.token).toBeDefined();
+    expect(db.breakoutOccupantsFrom).not.toHaveBeenCalled();
+  });
+
+  it('[5.5.7] sin asignación abierta, un no-admin con mini salas activas en el grupo se une normalmente (free_return implícito por ausencia de asignación)', async () => {
+    const breakoutName = `${room.code}::breakout-1`;
+    groupResolver.resolveCallGroupRoomNames.mockResolvedValueOnce([room.code, breakoutName]);
+    listRooms.mockResolvedValue([{ name: room.code }, { name: breakoutName }] as Awaited<
+      ReturnType<RoomServiceClient['listRooms']>
+    >);
+    listParticipants.mockResolvedValue([{ identity: 'admin-sub' } as ParticipantInfo]);
+    db.adminLimit.mockResolvedValueOnce([{ id: 'identity-row-1' }]);
+    // db.breakoutOccupantsLimit por defecto: [] -- sin asignación abierta.
+
+    const session = await service.join(room.code, participant);
+
+    expect(session.token).toBeDefined();
+    expect(db.breakoutOccupantsFrom).toHaveBeenCalled();
+  });
+
+  it('[5.5.7] sin mini salas abiertas (groupRoomNames.length === 1), nunca se consulta call_breakout_occupants (D9: mismo costo que hoy)', async () => {
+    listParticipants.mockResolvedValue([{ identity: 'admin-sub' } as ParticipantInfo]);
+    db.adminLimit.mockResolvedValueOnce([{ id: 'identity-row-1' }]);
+
+    await service.join(room.code, participant);
+
+    expect(db.breakoutOccupantsFrom).not.toHaveBeenCalled();
   });
 });
 

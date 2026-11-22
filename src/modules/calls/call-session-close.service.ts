@@ -4,6 +4,7 @@ import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { RoomServiceClient } from 'livekit-server-sdk';
 import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
 import { callEvents, callParticipantIdentities, callSessions } from '../../db/schema';
+import { BreakoutRoomsService } from './breakout-rooms.service';
 import { CallGroupResolverService } from './call-group-resolver.service';
 
 // Ventana de gracia (D3, design.md): 15s. No es un sleep ciego antes de
@@ -37,6 +38,7 @@ export class CallSessionCloseService {
     config: ConfigService,
     @Inject(DRIZZLE) private readonly db: DrizzleDb,
     private readonly groupResolver: CallGroupResolverService,
+    private readonly breakoutRooms: BreakoutRoomsService,
   ) {
     const wsUrl = config.get<string>('LIVEKIT_URL') ?? '';
     const apiUrl = config.get<string>('LIVEKIT_API_URL') || wsUrl.replace(/^ws/, 'http');
@@ -184,7 +186,6 @@ export class CallSessionCloseService {
   private async claimAndClose(
     livekitRoomSid: string,
     roomCode: string,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     roomId: string | null = null,
   ): Promise<void> {
     // BUG CORREGIDO: el camino de cierre forzado llega ANTES de que exista
@@ -196,11 +197,11 @@ export class CallSessionCloseService {
     // llamaría.
     await this.ensureSessionRow(livekitRoomSid, roomCode);
 
-    // TODO(Fase 5): invocar closeGroupBreakouts(roomId, roomCode) ANTES del
-    // deleteRoom de la principal de abajo (Flujo 3, design.md: mini salas
-    // primero, principal al final). BreakoutRoomsService todavía no existe
-    // en esta fase -- el punto de extensión queda documentado y el
-    // parámetro roomId ya disponible para cuando se conecte.
+    // Fase 5 (Flujo 3, design.md): mini salas primero, principal al final.
+    // closeGroupBreakouts es tolerante por diseño (nunca tira, nunca
+    // logger.error) -- un roomId null (grupo sin correlación conocida) es
+    // un no-op, así que el camino sin mini salas queda bit a bit igual.
+    await this.breakoutRooms.closeGroupBreakouts(roomId, roomCode);
 
     // Capa 2 (D4): compare-and-set persistido, atómico en Postgres — la
     // garantía real de exclusión, incluso entre procesos o reinicios.

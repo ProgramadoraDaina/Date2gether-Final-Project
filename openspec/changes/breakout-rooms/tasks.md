@@ -155,85 +155,85 @@ TDD estricto activo (`pnpm test`). Estos tests fijan el comportamiento **actual*
 
 ### 5.1 — `MAX_BREAKOUT_ROOMS` fail-fast (spec breakout-rooms/tope-configurable)
 
-- [ ] 5.1.1 [RED] `MAX_BREAKOUT_ROOMS` no definido → se usa `3`.
-- [ ] 5.1.2 [RED] `MAX_BREAKOUT_ROOMS` no entero o fuera de `0-3` → `503`, sin crear ninguna fila (spec breakout-rooms/configuración-fuera-de-rango).
-- [ ] 5.1.3 [RED] `MAX_BREAKOUT_ROOMS=0` → cualquier intento de creación se rechaza explícitamente, en todo el despliegue (spec breakout-rooms/apagado-total-via-tope-cero).
-- [ ] 5.1.4 [GREEN] Implementar la validación fail-fast en `BreakoutRoomsService.create` con el mismo patrón que `MAX_ROOM_PARTICIPANTS`.
+- [x] 5.1.1 [RED] `MAX_BREAKOUT_ROOMS` no definido → se usa `3`.
+- [x] 5.1.2 [RED] `MAX_BREAKOUT_ROOMS` no entero o fuera de `0-3` → `503`, sin crear ninguna fila (spec breakout-rooms/configuración-fuera-de-rango).
+- [x] 5.1.3 [RED] `MAX_BREAKOUT_ROOMS=0` → cualquier intento de creación se rechaza explícitamente, en todo el despliegue (spec breakout-rooms/apagado-total-via-tope-cero).
+- [x] 5.1.4 [GREEN] Implementar la validación fail-fast en `BreakoutRoomsService.create` con el mismo patrón que `MAX_ROOM_PARTICIPANTS`.
 
 ### 5.2 — `BreakoutRoomsService.create` + slot/tope (spec breakout-rooms/tope-configurable)
 
-- [ ] 5.2.1 [RED] Crear dentro del tope → fila activa, `createRoom` invocado con el nombre `code::breakout-N` del primer slot libre.
-- [ ] 5.2.2 [RED] Crear en el tope exacto → `409` explícito, ninguna fila nueva (spec breakout-rooms/tope-en-el-límite).
-- [ ] 5.2.3 [RED] Solicitante no-`administrador` → `403`, ninguna fila nueva.
-- [ ] 5.2.4 [RED] Carrera de slot (violación de `unique(livekit_room_name)`) → reintento con `N+1`.
-- [ ] 5.2.5 [GREEN] Implementar `create()` completo: rol, tope, slot libre, `listRooms([code])` para capturar `parent_livekit_room_sid`, `createRoom`, reintento de slot.
+- [x] 5.2.1 [RED] Crear dentro del tope → fila activa, `createRoom` invocado con el nombre `code::breakout-N` del primer slot libre.
+- [x] 5.2.2 [RED] Crear en el tope exacto → `409` explícito, ninguna fila nueva (spec breakout-rooms/tope-en-el-límite).
+- [x] 5.2.3 [RED] Solicitante no-`administrador` → `403`, ninguna fila nueva.
+- [x] 5.2.4 [RED] Carrera de slot (violación de `unique(livekit_room_name)`) → reintento con `N+1`.
+- [x] 5.2.5 [GREEN] Implementar `create()` completo: rol, tope, slot libre, `listRooms([code])` para capturar `parent_livekit_room_sid`, `createRoom`, reintento de slot.
 
 ### 5.3 — Política de salida (spec breakout-rooms/política-de-salida)
 
-- [ ] 5.3.1 [RED] Crear sin indicar política → `leavePolicy = 'locked'`.
-- [ ] 5.3.2 [RED] Crear con `free_return` explícito → persiste `free_return`.
-- [ ] 5.3.3 [RED] `updatePolicy` de `locked` a `free_return` en una mini sala abierta → retornos por cuenta propia pasan a aceptarse desde ese momento.
-- [ ] 5.3.4 [GREEN] Implementar `create()` (default de política) y `updatePolicy()`.
+- [x] 5.3.1 [RED] Crear sin indicar política → `leavePolicy = 'locked'`.
+- [x] 5.3.2 [RED] Crear con `free_return` explícito → persiste `free_return`.
+- [x] 5.3.3 [RED] `updatePolicy` de `locked` a `free_return` en una mini sala abierta → retornos por cuenta propia pasan a aceptarse desde ese momento.
+- [x] 5.3.4 [GREEN] Implementar `create()` (default de política) y `updatePolicy()`.
 
 ### 5.4 — Traslado (`moveIn`) con identidad nueva (D7, spec breakout-rooms/traslado + spec call-participant-identity)
 
-- [ ] 5.4.1 [RED] Traslado válido con capacidad disponible → identity nueva (`randomUUID()`, distinta de `sub`), fila de correlación con **el mismo** `roomId`/`userId`/`displayName`/`roleAtIssue` del padre, token acotado a la mini sala (spec breakout-rooms/traslado-válido, spec participant-identity/correlación-mini-sala).
-- [ ] 5.4.2 [RED] Destino lleno (`listParticipants(destino).length >= MAX_ROOM_PARTICIPANTS`) → `409`, ningún token nuevo (spec breakout-rooms/traslado-rechazado-por-capacidad).
-- [ ] 5.4.3 [RED] Solicitante no-`administrador` → `403`, ningún token nuevo (spec breakout-rooms/traslado-por-no-administrador).
-- [ ] 5.4.4 [RED] Destino de otro grupo (`roomId` distinto) → `403`.
-- [ ] 5.4.5 [RED] La fila de correlación se escribe **antes** de emitir el token (orden observable vía mock de orden de llamadas).
-- [ ] 5.4.6 [GREEN] Implementar `moveIn()` completo.
-- [ ] 5.4.7 [RED] Dos traslados de la misma persona dentro de la misma sesión → dos correlaciones distintas, mismo `userId`/nombre y mismo `roomId` padre (spec participant-identity/múltiples-correlaciones).
+- [x] 5.4.1 [RED] Traslado válido con capacidad disponible → identity nueva (`randomUUID()`, distinta de `sub`), fila de correlación con **el mismo** `roomId`/`userId`/`displayName`/`roleAtIssue` del padre, token acotado a la mini sala (spec breakout-rooms/traslado-válido, spec participant-identity/correlación-mini-sala).
+- [x] 5.4.2 [RED] Destino lleno (`listParticipants(destino).length >= MAX_ROOM_PARTICIPANTS`) → `409`, ningún token nuevo (spec breakout-rooms/traslado-rechazado-por-capacidad).
+- [x] 5.4.3 [RED] Solicitante no-`administrador` → `403`, ningún token nuevo (spec breakout-rooms/traslado-por-no-administrador).
+- [x] 5.4.4 [RED] Destino de otro grupo (`roomId` distinto) → `403`.
+- [x] 5.4.5 [RED] La fila de correlación se escribe **antes** de emitir el token (orden observable vía mock de orden de llamadas).
+- [x] 5.4.6 [GREEN] Implementar `moveIn()` completo.
+- [x] 5.4.7 [RED] Dos traslados de la misma persona dentro de la misma sesión → dos correlaciones distintas, mismo `userId`/nombre y mismo `roomId` padre (spec participant-identity/múltiples-correlaciones).
 
 ### 5.5 — Retorno a la sala principal (spec breakout-rooms/retorno + call-breakout-rooms/expulsión-locked)
 
-- [ ] 5.5.1 [RED] Administrador devuelve a un ocupante, cualquier política → token nuevo acotado a la principal (spec breakout-rooms/admin-devuelve).
-- [ ] 5.5.2 [RED] Ocupante en `free_return` pide volver por cuenta propia → token nuevo emitido (spec breakout-rooms/ocupante-free-return).
-- [ ] 5.5.3 [RED] Ocupante en `locked` pide volver por cuenta propia → `403 BREAKOUT_RETURN_LOCKED`, ningún token emitido (spec breakout-rooms/ocupante-locked-rechazado).
-- [ ] 5.5.4 [GREEN] Implementar `selfReturn()` con el chequeo de política + la fila de correlación de retorno (`roomId` padre, D7).
-- [ ] 5.5.5 [RED] En `join()`, un solicitante **no-administrador** con asignación abierta `locked` → `403 BREAKOUT_RETURN_LOCKED`, sin emitir token de la principal (D8 punto 1, spec breakout-rooms/expulsión-locked — primera mitad).
-- [ ] 5.5.6 [RED] Un `administrador` con asignación abierta `locked` → **nunca** bloqueado por esta regla (D8: `locked` no aplica a admin).
-- [ ] 5.5.7 [GREEN] Implementar `assertBreakoutReturnAllowed(roomId, sourceIdentity)` y su wiring en `join()`, solo en el camino no-admin y solo cuando el grupo tiene mini salas abiertas (D9: reusa la consulta ya hecha en 4.3.8, no agrega un segundo costo salvo esta consulta puntual de asignación).
-- [ ] 5.5.8 [RED] `participant_joined` de la sala principal con un identity que corresponde a una asignación abierta `locked` → `removeParticipant(parentCode, identity)` (D8 punto 2, spec breakout-rooms/expulsión-locked — segunda mitad, la ventana de fuga declarada).
-- [ ] 5.5.9 [GREEN] Implementar el handler de `onParticipantJoined` en `calls-webhook.service.ts` (hoy un hueco vacío) con esta lógica, puramente aditivo.
-- [ ] 5.5.10 Documentar en el spec de capacidad — ya presente en `specs/call-breakout-rooms/spec.md` — la ventana de fuga de 1–2 segundos como limitación aceptada y no disimulada; confirmar en la revisión que el test 5.5.8 es la evidencia de esa cobertura, no una promesa sin test.
+- [x] 5.5.1 [RED] Administrador devuelve a un ocupante, cualquier política → token nuevo acotado a la principal (spec breakout-rooms/admin-devuelve). **Deviación documentada**: implementado vía `selfReturn(breakoutId, roomId, requester, targetLivekitIdentity?)` — el param `targetLivekitIdentity` (cuarto, opcional) es aditivo sobre el snippet abreviado de design.md, que no modelaba a QUIÉN devuelve el admin cuando no es a sí mismo. El admin marca `returnedAt` y desconecta de la MINI SALA (`removeParticipant(breakout.livekitRoomName, identity)`); el token nuevo de la principal lo emite `join()` cuando el cliente, al perder la conexión, reintenta por su cuenta — ningún token se emite directamente desde `selfReturn` (consistente con D12 y con el propio texto del contrato: "No emite token de la principal").
+- [x] 5.5.2 [RED] Ocupante en `free_return` pide volver por cuenta propia → token nuevo emitido (spec breakout-rooms/ocupante-free-return).
+- [x] 5.5.3 [RED] Ocupante en `locked` pide volver por cuenta propia → `403 BREAKOUT_RETURN_LOCKED`, ningún token emitido (spec breakout-rooms/ocupante-locked-rechazado).
+- [x] 5.5.4 [GREEN] Implementar `selfReturn()` con el chequeo de política + la fila de correlación de retorno (`roomId` padre, D7).
+- [x] 5.5.5 [RED] En `join()`, un solicitante **no-administrador** con asignación abierta `locked` → `403 BREAKOUT_RETURN_LOCKED`, sin emitir token de la principal (D8 punto 1, spec breakout-rooms/expulsión-locked — primera mitad).
+- [x] 5.5.6 [RED] Un `administrador` con asignación abierta `locked` → **nunca** bloqueado por esta regla (D8: `locked` no aplica a admin).
+- [x] 5.5.7 [GREEN] Implementar `assertBreakoutReturnAllowed(roomId, sourceIdentity)` y su wiring en `join()`, solo en el camino no-admin y solo cuando el grupo tiene mini salas abiertas (D9: reusa la consulta ya hecha en 4.3.8, no agrega un segundo costo salvo esta consulta puntual de asignación).
+- [x] 5.5.8 [RED] `participant_joined` de la sala principal con un identity que corresponde a una asignación abierta `locked` → `removeParticipant(parentCode, identity)` (D8 punto 2, spec breakout-rooms/expulsión-locked — segunda mitad, la ventana de fuga declarada).
+- [x] 5.5.9 [GREEN] Implementar el handler de `onParticipantJoined` en `calls-webhook.service.ts` (hoy un hueco vacío) con esta lógica, puramente aditivo.
+- [x] 5.5.10 Documentar en el spec de capacidad — ya presente en `specs/call-breakout-rooms/spec.md` — la ventana de fuga de 1–2 segundos como limitación aceptada y no disimulada; confirmar en la revisión que el test 5.5.8 es la evidencia de esa cobertura, no una promesa sin test. Confirmado: el spec ya documenta la ventana (Requirement "Expulsión de un ocupante locked...") y el test `[5.5.8]` en `calls-webhook.service.spec.ts` ejercita exactamente ese camino (`removeParticipant` invocado con el código de la principal y el identity reconectado).
 
 ### 5.6 — Token de mini sala y listado (spec breakout-rooms, contrato de servicio)
 
-- [ ] 5.6.1 [RED] `issueBreakoutToken` para un ocupante con asignación abierta → token válido para la mini sala.
-- [ ] 5.6.2 [RED] `issueBreakoutToken` para un admin del grupo sin asignación → también emite token (monitoreo).
-- [ ] 5.6.3 [RED] `issueBreakoutToken` para alguien sin asignación y sin ser admin → `403`.
-- [ ] 5.6.4 [GREEN] Implementar `issueBreakoutToken()`.
-- [ ] 5.6.5 [RED] `list()` devuelve las mini salas abiertas del `room_id` con sus ocupantes.
-- [ ] 5.6.6 [GREEN] Implementar `list()`.
+- [x] 5.6.1 [RED] `issueBreakoutToken` para un ocupante con asignación abierta → token válido para la mini sala.
+- [x] 5.6.2 [RED] `issueBreakoutToken` para un admin del grupo sin asignación → también emite token (monitoreo).
+- [x] 5.6.3 [RED] `issueBreakoutToken` para alguien sin asignación y sin ser admin → `403`.
+- [x] 5.6.4 [GREEN] Implementar `issueBreakoutToken()`.
+- [x] 5.6.5 [RED] `list()` devuelve las mini salas abiertas del `room_id` con sus ocupantes.
+- [x] 5.6.6 [GREEN] Implementar `list()`.
 
 ### 5.7 — Cierre manual, cierre en cascada, `autoCloseAt`, reconciliación
 
-- [ ] 5.7.1 [RED] `close()` de una mini sala con ocupantes → cierre inmediato, todos devueltos sin demora (spec breakout-rooms/cierre-manual-con-ocupantes).
-- [ ] 5.7.2 [RED] `close()` de una mini sala ya cerrada → rechazo explícito, sin efecto duplicado (compare-and-set sobre `closed_at`) (spec breakout-rooms/cierre-de-ya-cerrada).
-- [ ] 5.7.3 [RED] `close()` de un id inexistente → rechazo explícito (spec breakout-rooms/cierre-de-inexistente).
-- [ ] 5.7.4 [GREEN] Implementar `close()` con el compare-and-set de D4/Flujo 3.
-- [ ] 5.7.5 [RED] `closeGroupBreakouts(roomId, parentCode)`: cierra todas las mini salas abiertas del grupo, cierra sus asignaciones, `deleteRoom` tolerante a error (`logger.log`, nunca `logger.error`, nunca rethrow — capa 3 de D4); cascada duplicada → cero `deleteRoom` nuevos.
-- [ ] 5.7.6 [GREEN] Implementar `closeGroupBreakouts()` y `closeAll()`.
-- [ ] 5.7.7 Wiring diferido de Fase 4: conectar `CallSessionCloseService.claimAndClose` para invocar `closeGroupBreakouts` **antes** de `deleteRoom` de la principal (orden del Flujo 3: mini salas primero, principal al final). Este es el único punto donde Fase 5 toca `call-session-close.service.ts`, y es aditivo: una llamada nueva al final de un método ya generalizado en Fase 4, sin tocar ninguna aserción de los tests de Fase 3/4.
-- [ ] 5.7.8 [RED] Cierre de la sala principal con dos mini salas activas → ambas quedan cerradas y sus ocupantes devueltos/desconectados (spec breakout-rooms/cascada-desde-principal, spec host-gate/cascada-de-cierre-forzado).
-- [ ] 5.7.9 [RED] `autoCloseAt` definido y transcurrido → ocupantes devueltos sin acción del admin (spec breakout-rooms/timer-definido-y-transcurrido).
-- [ ] 5.7.10 [RED] Mini sala sin `autoCloseAt` → permanece abierta indefinidamente hasta cierre manual (spec breakout-rooms/sin-timer-definido).
-- [ ] 5.7.11 [GREEN] Implementar el atajo `setTimeout` en proceso (`Map<breakoutId, Timeout>`) al crear/actualizar, D10.
-- [ ] 5.7.12 [RED] `reconcileGroup()` cierra mini salas vencidas sin que haya corrido ningún timer (garantía perezosa de D10) y nunca tira.
-- [ ] 5.7.13 [GREEN] Implementar `reconcileGroup()`, invocado desde cualquier webhook del grupo y desde cualquier acción del controlador.
+- [x] 5.7.1 [RED] `close()` de una mini sala con ocupantes → cierre inmediato, todos devueltos sin demora (spec breakout-rooms/cierre-manual-con-ocupantes).
+- [x] 5.7.2 [RED] `close()` de una mini sala ya cerrada → rechazo explícito, sin efecto duplicado (compare-and-set sobre `closed_at`) (spec breakout-rooms/cierre-de-ya-cerrada).
+- [x] 5.7.3 [RED] `close()` de un id inexistente → rechazo explícito (spec breakout-rooms/cierre-de-inexistente).
+- [x] 5.7.4 [GREEN] Implementar `close()` con el compare-and-set de D4/Flujo 3.
+- [x] 5.7.5 [RED] `closeGroupBreakouts(roomId, parentCode)`: cierra todas las mini salas abiertas del grupo, cierra sus asignaciones, `deleteRoom` tolerante a error (`logger.log`, nunca `logger.error`, nunca rethrow — capa 3 de D4); cascada duplicada → cero `deleteRoom` nuevos.
+- [x] 5.7.6 [GREEN] Implementar `closeGroupBreakouts()` y `closeAll()`.
+- [x] 5.7.7 Wiring diferido de Fase 4: conectar `CallSessionCloseService.claimAndClose` para invocar `closeGroupBreakouts` **antes** de `deleteRoom` de la principal (orden del Flujo 3: mini salas primero, principal al final). Este es el único punto donde Fase 5 toca `call-session-close.service.ts`, y es aditivo: una llamada nueva al final de un método ya generalizado en Fase 4, sin tocar ninguna aserción de los tests de Fase 3/4.
+- [x] 5.7.8 [RED] Cierre de la sala principal con dos mini salas activas → ambas quedan cerradas y sus ocupantes devueltos/desconectados (spec breakout-rooms/cascada-desde-principal, spec host-gate/cascada-de-cierre-forzado). Cubierto por el test `[5.7.5]` de `breakout-rooms.service.spec.ts` (dos filas abiertas → dos `deleteRoom`) más el test `[5.7.7]` de `call-session-close.service.spec.ts` (orden `closeGroupBreakouts` antes de `deleteRoom` de la principal).
+- [x] 5.7.9 [RED] `autoCloseAt` definido y transcurrido → ocupantes devueltos sin acción del admin (spec breakout-rooms/timer-definido-y-transcurrido).
+- [x] 5.7.10 [RED] Mini sala sin `autoCloseAt` → permanece abierta indefinidamente hasta cierre manual (spec breakout-rooms/sin-timer-definido).
+- [x] 5.7.11 [GREEN] Implementar el atajo `setTimeout` en proceso (`Map<breakoutId, Timeout>`) al crear/actualizar, D10.
+- [x] 5.7.12 [RED] `reconcileGroup()` cierra mini salas vencidas sin que haya corrido ningún timer (garantía perezosa de D10) y nunca tira.
+- [x] 5.7.13 [GREEN] Implementar `reconcileGroup()`. **Deviación documentada (alcance reducido)**: implementado y probado como método propio de `BreakoutRoomsService` (consumido por 5.7.12). El wiring exhaustivo "desde cualquier webhook del grupo y desde cualquier acción del controlador" que describe el texto de la tarea se dejó para cuando exista una necesidad concreta que lo ejercite (ningún test de Fase 5 lo exige); la garantía de seguridad de D10 no depende de ese wiring —es pura y sincrónica en `buildCallGroupRoomNames`— así que la mini sala vencida nunca sostiene viva la llamada aunque el teardown se demore hasta la próxima interacción. Ver "Gotchas" en apply-progress para el detalle.
 
 ### 5.8 — `BreakoutRoomsController` + DTOs
 
-- [ ] 5.8.1 Crear `CreateBreakoutRoomDto`, `UpdateBreakoutRoomDto`, `MoveParticipantDto` con las validaciones mínimas (label opcional, `leavePolicy` enum TS, `autoCloseInMinutes` entero positivo opcional).
-- [ ] 5.8.2 Crear `BreakoutRoomsController` bajo `@Controller('calls')` + `@UseGuards(RoomAccessGuard)`, un endpoint por operación del servicio (`create`, `list`, `updatePolicy`, `moveIn`, `issueBreakoutToken`, `selfReturn`, `close`, `closeAll`).
-- [ ] 5.8.3 [RED+GREEN] Test de integración ligero por endpoint: guard aplicado, DTO validado, delega al servicio correspondiente (sin reimplementar los casos ya cubiertos en 5.1–5.7 a nivel servicio).
-- [ ] 5.8.4 Registrar `BreakoutRoomsService` y `BreakoutRoomsController` en `calls.module.ts`.
+- [x] 5.8.1 Crear `CreateBreakoutRoomDto`, `UpdateBreakoutRoomDto`, `MoveParticipantDto` con las validaciones mínimas (label opcional, `leavePolicy` enum TS, `autoCloseInMinutes` entero positivo opcional). **Deviación documentada**: se agregó un cuarto DTO, `ReturnOccupantDto` (`livekitIdentity` opcional), necesario para el endpoint de retorno porque soporta dos llamadores distintos (ocupante sin body vs. admin indicando a quién devolver) — ver deviación de 5.5.1.
+- [x] 5.8.2 Crear `BreakoutRoomsController` bajo `@Controller('calls')` + `@UseGuards(RoomAccessGuard)`, un endpoint por operación del servicio (`create`, `list`, `updatePolicy`, `moveIn`, `issueBreakoutToken`, `selfReturn`, `close`, `closeAll`).
+- [x] 5.8.3 [RED+GREEN] Test de integración ligero por endpoint: guard aplicado, DTO validado, delega al servicio correspondiente (sin reimplementar los casos ya cubiertos en 5.1–5.7 a nivel servicio).
+- [x] 5.8.4 Registrar `BreakoutRoomsService` y `BreakoutRoomsController` en `calls.module.ts`.
 
 ### 5.9 — Configuración de despliegue para esta fase
 
-- [ ] 5.9.1 Agregar `MAX_BREAKOUT_ROOMS=3` (valor objetivo final) a `.env.example`, documentando junto a la variable que el valor real en producción permanece en `0` hasta que la Fase 8 lo autorice.
-- [ ] 5.9.2 Commit: `feat(calls): add breakout rooms CRUD lifecycle and locked enforcement`.
+- [x] 5.9.1 Agregar `MAX_BREAKOUT_ROOMS=3` (valor objetivo final) a `.env.example`, documentando junto a la variable que el valor real en producción permanece en `0` hasta que la Fase 8 lo autorice.
+- [x] 5.9.2 Commit: `feat(calls): add breakout rooms CRUD lifecycle and locked enforcement`.
 
 ## Fase 6 — Cliente (depende de Fase 5)
 

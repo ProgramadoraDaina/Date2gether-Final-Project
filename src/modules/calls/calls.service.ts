@@ -6,12 +6,14 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
 import { randomUUID } from 'node:crypto';
 import type { RoomParticipant } from '../auth/room-access.service';
 import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
 import {
+  callBreakoutOccupants,
+  callBreakoutRooms,
   callEvents,
   callHistory,
   callParticipantIdentities,
@@ -23,6 +25,7 @@ import {
 } from '../../db/schema';
 import { RoomResolverService } from '../rooms/room-resolver.service';
 import { RoomsService } from '../rooms/rooms.service';
+import { BREAKOUT_RETURN_LOCKED_CODE } from './breakout-rooms.service';
 import { CallGroupResolverService } from './call-group-resolver.service';
 import type { ReportTrackStateDto } from './dto/report-track-state.dto';
 
@@ -30,6 +33,11 @@ import type { ReportTrackStateDto } from './dto/report-track-state.dto';
 // cliente se acopla a este código, no al texto del mensaje.
 const NO_HOST_CONNECTED_CODE = 'NO_HOST_CONNECTED';
 const NO_HOST_CONNECTED_MESSAGE = 'Esperá a que se conecte un anfitrión para unirte a la llamada.';
+
+// D8, design.md: mismo código que BreakoutRoomsService.selfReturn usa para
+// el rechazo del lado servidor -- este es el enforcement del OTRO punto (el
+// gate de join() sobre la sala principal), así que comparten el código.
+const BREAKOUT_RETURN_LOCKED_MESSAGE = 'El host te va a devolver a la sala principal.';
 
 const HISTORY_LIMIT = 50;
 
@@ -115,6 +123,14 @@ export class CallsService {
     // cambio de comportamiento para una llamada sin mini salas.
     if (role !== 'administrador') {
       const groupRoomNames = await this.groupResolver.resolveCallGroupRoomNames(room.id, roomCode);
+      // D8/D9: solo cuando el grupo tiene mini salas abiertas (length > 1,
+      // la misma condición que ya distingue el fast path de D2 un poco más
+      // abajo) se consulta si el solicitante tiene una asignación abierta
+      // `locked` -- reusa la lista ya resuelta arriba, sin costo nuevo para
+      // una llamada sin mini salas.
+      if (groupRoomNames.length > 1) {
+        await this.assertBreakoutReturnAllowed(room.id, participant.sub);
+      }
       await this.assertHostConnected(client, groupRoomNames, room.id);
     }
 
@@ -294,6 +310,33 @@ export class CallsService {
       )
       .limit(1);
     return !!admin;
+  }
+
+  // D8 punto 1 (design.md): un no-admin con una asignación abierta a una
+  // mini sala `locked` no puede volver a la principal por su cuenta --
+  // rechazo del lado servidor ANTES de emitir el token, sin importar que su
+  // JWT de 24h siga siendo técnicamente válido. `administrador` nunca pasa
+  // por acá (D8: `locked` no aplica a admin, y el llamador en join() solo
+  // invoca esto en el camino no-admin).
+  private async assertBreakoutReturnAllowed(roomId: string, sourceIdentity: string): Promise<void> {
+    const [openAssignment] = await this.db
+      .select({ leavePolicy: callBreakoutRooms.leavePolicy })
+      .from(callBreakoutOccupants)
+      .innerJoin(callBreakoutRooms, eq(callBreakoutOccupants.breakoutRoomId, callBreakoutRooms.id))
+      .where(
+        and(
+          eq(callBreakoutOccupants.sourceIdentity, sourceIdentity),
+          isNull(callBreakoutOccupants.returnedAt),
+          eq(callBreakoutRooms.roomId, roomId),
+        ),
+      )
+      .limit(1);
+    if (openAssignment?.leavePolicy === 'locked') {
+      throw new ForbiddenException({
+        message: BREAKOUT_RETURN_LOCKED_MESSAGE,
+        code: BREAKOUT_RETURN_LOCKED_CODE,
+      });
+    }
   }
 
   /**
