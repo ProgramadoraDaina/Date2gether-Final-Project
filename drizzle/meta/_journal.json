@@ -162,6 +162,13 @@
       "when": 1795266805245,
       "tag": "0022_widen_room_code",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1795267068191,
+      "tag": "0023_breakout_rooms",
+      "breakpoints": true
     }
   ]
 }
