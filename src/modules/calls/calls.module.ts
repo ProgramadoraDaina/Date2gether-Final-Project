@@ -14,6 +14,7 @@ import { CallsController } from './calls.controller';
 import { CallsService } from './calls.service';
 import { CallsWebhookController } from './calls-webhook.controller';
 import { CallsWebhookService } from './calls-webhook.service';
+import { TestSupportController } from './test-support.controller';
 
 @Module({
   imports: [ConfigModule, JwtAuthModule, RoomsModule, RoomResolverModule],
@@ -23,6 +24,7 @@ import { CallsWebhookService } from './calls-webhook.service';
     CallsWebhookController,
     CallTimelineController,
     BreakoutRoomsController,
+    TestSupportController,
   ],
   providers: [
     CallsService,
