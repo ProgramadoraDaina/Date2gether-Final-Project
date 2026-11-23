@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useRef, type ReactNode } from 'react';
+import type { Socket } from 'socket.io-client';
 import type { CallSessionState } from './useCallSession';
 import { useLanguageStore } from '../translation/store';
 
@@ -58,6 +59,16 @@ jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
 }));
 jest.mock('@/lib/calls', () => ({ reportTrackState: jest.fn() }));
+jest.mock('@/lib/breakouts', () => ({
+  createBreakoutRoom: jest.fn(),
+  listBreakoutRooms: jest.fn(),
+  updateBreakoutRoomPolicy: jest.fn(),
+  moveToBreakoutRoom: jest.fn(),
+  issueBreakoutToken: jest.fn(),
+  closeBreakoutRoom: jest.fn(),
+  closeAllBreakoutRooms: jest.fn(),
+  returnFromBreakoutRoom: jest.fn(),
+}));
 function state(): CallSessionState {
   return {
     status: 'connecting',
@@ -88,6 +99,19 @@ function defaultUseTrackToggle({ onDeviceError }: { onDeviceError?: (error: Erro
     },
   };
 }
+// Mismo helper que useRoomSocket.spec.ts: un fake de socket.io-client que
+// guarda los callbacks registrados por evento para poder dispararlos a mano.
+function createFakeSocket() {
+  const callbacks: Record<string, (...args: unknown[]) => void> = {};
+  return {
+    on: jest.fn((event: string, cb: (...args: unknown[]) => void) => {
+      callbacks[event] = cb;
+    }),
+    off: jest.fn(),
+    emit: jest.fn(),
+    callbacks,
+  };
+}
 describe('MeetingRoom', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -107,6 +131,8 @@ describe('MeetingRoom', () => {
     const { useTrackToggle } = await import('@livekit/components-react');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     jest.mocked(useTrackToggle).mockImplementation(defaultUseTrackToggle as any);
+    const { listBreakoutRooms } = await import('@/lib/breakouts');
+    (listBreakoutRooms as jest.Mock<typeof listBreakoutRooms>).mockResolvedValue([]);
   });
   it('al tocar micrófono o cámara en la llamada recuerda la elección para la próxima vez', async () => {
     const { useCallSettingsStore } = await import('./settings/store');
@@ -639,5 +665,176 @@ describe('MeetingRoom', () => {
         original ?? (({ children }: { children?: ReactNode }) => <div>{children}</div>),
       );
     }
+  });
+
+  describe('mini salas (breakout-rooms, Fase 6.12 — montaje en la UI real)', () => {
+    it('el botón de "Mini salas" solo aparece para el admin, mismo gate que mute-all/cámara-off', async () => {
+      const MeetingRoom = (await import('./MeetingRoom')).default;
+      render(
+        <MeetingRoom
+          call={state()}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin={false}
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+          participants={[]}
+        />,
+      );
+      expect(screen.queryByRole('button', { name: 'Mini salas' })).toBeNull();
+    });
+
+    it('para el admin, clickear "Mini salas" abre el panel alimentado con los participantes recibidos', async () => {
+      const { moveToBreakoutRoom, listBreakoutRooms } = await import('@/lib/breakouts');
+      (listBreakoutRooms as jest.Mock<typeof listBreakoutRooms>).mockResolvedValue([
+        {
+          id: 'breakout-1',
+          livekitRoomName: 'abc-defg-hij::breakout-1',
+          label: 'Mini sala 1',
+          leavePolicy: 'locked',
+          autoCloseAt: null,
+          occupants: [],
+        },
+      ]);
+      const MeetingRoom = (await import('./MeetingRoom')).default;
+      render(
+        <MeetingRoom
+          call={state()}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+          participants={[{ livekitIdentity: 'guest-sub', displayName: 'Invitado' }]}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Mini salas' }));
+
+      expect(listBreakoutRooms).toHaveBeenCalledWith('abc-defg-hij', 'test-room-token');
+      await waitFor(() =>
+        expect(screen.getByRole('option', { name: 'Invitado' })).toBeInTheDocument(),
+      );
+      expect(moveToBreakoutRoom).not.toHaveBeenCalled();
+    });
+
+    it('breakout:assigned muestra el banner; breakout:closed de esa mini sala lo oculta', async () => {
+      const MeetingRoom = (await import('./MeetingRoom')).default;
+      const socket = createFakeSocket();
+      render(
+        <MeetingRoom
+          call={state()}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin={false}
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+          participants={[]}
+          roomSocket={socket as unknown as Socket}
+        />,
+      );
+      expect(screen.queryByText('Mini sala 1')).toBeNull();
+
+      act(() =>
+        socket.callbacks['breakout:assigned']({
+          breakoutId: 'breakout-1',
+          label: 'Mini sala 1',
+          leavePolicy: 'locked',
+        }),
+      );
+      expect(screen.getByText('Mini sala 1')).toBeInTheDocument();
+
+      act(() => socket.callbacks['breakout:closed']({ breakoutId: 'breakout-1' }));
+      expect(screen.queryByText('Mini sala 1')).toBeNull();
+    });
+
+    it('clickear "Volver" en el banner (free_return) llama returnFromBreakoutRoom y oculta el banner sin esperar otra señal', async () => {
+      const { returnFromBreakoutRoom } = await import('@/lib/breakouts');
+      (returnFromBreakoutRoom as jest.Mock<typeof returnFromBreakoutRoom>).mockResolvedValue(
+        undefined,
+      );
+      const MeetingRoom = (await import('./MeetingRoom')).default;
+      const socket = createFakeSocket();
+      render(
+        <MeetingRoom
+          call={state()}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin={false}
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+          participants={[]}
+          roomSocket={socket as unknown as Socket}
+        />,
+      );
+      act(() =>
+        socket.callbacks['breakout:assigned']({
+          breakoutId: 'breakout-1',
+          label: 'Mini sala 1',
+          leavePolicy: 'free_return',
+        }),
+      );
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Volver' }));
+      });
+
+      expect(returnFromBreakoutRoom).toHaveBeenCalledWith(
+        'abc-defg-hij',
+        'test-room-token',
+        'breakout-1',
+      );
+      expect(screen.queryByText('Mini sala 1')).toBeNull();
+    });
+
+    it('si returnFromBreakoutRoom falla, muestra el error y conserva el banner visible', async () => {
+      const { returnFromBreakoutRoom } = await import('@/lib/breakouts');
+      (returnFromBreakoutRoom as jest.Mock<typeof returnFromBreakoutRoom>).mockRejectedValue(
+        new Error('No se pudo volver a la sala principal'),
+      );
+      const MeetingRoom = (await import('./MeetingRoom')).default;
+      const socket = createFakeSocket();
+      render(
+        <MeetingRoom
+          call={state()}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin={false}
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+          participants={[]}
+          roomSocket={socket as unknown as Socket}
+        />,
+      );
+      act(() =>
+        socket.callbacks['breakout:assigned']({
+          breakoutId: 'breakout-1',
+          label: 'Mini sala 1',
+          leavePolicy: 'free_return',
+        }),
+      );
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Volver' }));
+      });
+
+      expect(screen.getByRole('alert')).toHaveTextContent('No se pudo volver a la sala principal');
+      expect(screen.getByText('Mini sala 1')).toBeInTheDocument();
+    });
   });
 });

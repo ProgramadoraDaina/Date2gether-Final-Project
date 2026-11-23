@@ -249,6 +249,12 @@ TDD estricto activo (`pnpm test`). Estos tests fijan el comportamiento **actual*
 - [x] 6.10 [RED+GREEN] `BreakoutPanel.tsx` (nuevo, solo-admin): crear bajo tope con mensaje de error cuando se alcanza, toggle de política, timer opcional, elegir participante para trasladar, cerrar una o todas, "devolver a todos" (RTL).
 - [x] 6.11 Commit: `feat(calls): add breakout rooms client UI and room-switch handling`.
 
+### 6.12 — Wiring en la UI real (hueco detectado post-6.11: ni design.md ni este checklist especificaban dónde se montan los componentes)
+
+- [x] 6.12.1 [RED+GREEN] Montar `<BreakoutPanel>` dentro de `MeetingRoom.tsx`, visible solo cuando `isCurrentUserAdmin` (mismo gate que el toggle de mute-all/cámara-off ya existente en ese componente), alimentado con la lista de participantes de la sala.
+- [x] 6.12.2 [RED+GREEN] Montar `<BreakoutBanner>` dentro de `MeetingRoom.tsx`, visible cuando el payload de `breakout:assigned` (vía `useRoomSocket`) indica que el usuario actual está en una mini sala; se oculta de nuevo tras `breakout:closed`/retorno.
+- [x] 6.12.3 Commit propio (no amend de 59aa34c): `feat(calls): mount breakout rooms panel and banner in meeting room`.
+
 ## Fase 7 — E2E y prueba de carga
 
 - [ ] 7.1 Playwright: admin crea 2 mini salas, traslada a dos participantes, el aislamiento de medios se verifica por ausencia de tracks cruzados.

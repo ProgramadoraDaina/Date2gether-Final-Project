@@ -166,6 +166,37 @@
   filter: brightness(0.9);
 }
 
+/* Botón + popover de Mini salas (breakout-rooms, Fase 6.12): mismo patrón
+   que .wrap/.panel de CallSettings.module.css (posicionado respecto al
+   propio botón, no al dock entero). */
+.breakoutWrap {
+  position: relative;
+}
+
+.breakoutPanelPopover {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  right: 0;
+  z-index: 5;
+  width: max-content;
+  min-width: 260px;
+  max-width: min(360px, calc(100vw - 24px));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow-md);
+}
+
+@media (max-width: 640px) {
+  .breakoutPanelPopover {
+    left: 0;
+    right: 0;
+    width: auto;
+    min-width: 0;
+  }
+}
+
 @media (max-width: 640px) {
   .controlsDock {
     --dock-pad-y: 8px;

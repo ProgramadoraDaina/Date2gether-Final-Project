@@ -290,6 +290,15 @@ export default function RoomPage() {
     () => users.map(({ participantId, userName }) => ({ participantId, userName })),
     [users],
   );
+  // Mini salas (breakout-rooms, Fase 6.12): el identity de LiveKit de cada
+  // presente en la sala principal es el mismo participantId del socket
+  // (ver RoomPresence arriba), que el backend asigna como `participant.sub`
+  // del pase de sala (ver chat.gateway.ts: `participantId: participant.sub`)
+  // -- no se deriva ni inventa uno nuevo acá.
+  const breakoutParticipants = useMemo(
+    () => users.map(({ participantId, userName }) => ({ livekitIdentity: participantId, displayName: userName })),
+    [users],
+  );
   useEffect(() => {
     setName(localStorage.getItem(NAME_KEY) ?? '');
   }, []);
@@ -917,6 +926,8 @@ export default function RoomPage() {
                       videoLocked={mediaLock.videoLocked}
                       onSetAudioLock={mediaLock.setAudioLock}
                       onSetVideoLock={mediaLock.setVideoLock}
+                      participants={breakoutParticipants}
+                      roomSocket={roomSocket}
                     />
                   </AvatarDirectoryProvider>
                 </div>

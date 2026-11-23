@@ -288,3 +288,46 @@ Ningún archivo de Fase 7/8 (E2E, despliegue) aparece en este diff.
 ### Próximo lote: Fase 7
 
 Fase 7 (E2E con Playwright: aislamiento de medios entre mini salas, rechazo de autosalida `locked`, cierre de todas devuelve a todos; más la prueba de carga manual bloqueante) depende de esta fase y queda pendiente. No se tocó ningún archivo de Fase 7 en esta fase.
+
+## Batch 6b — Fase 6.12 (wiring real en la UI: montaje de `BreakoutPanel`/`BreakoutBanner` en `MeetingRoom.tsx`)
+
+Estado: **completa**. Tareas 6.12.1–6.12.3 marcadas `[x]` en `tasks.md`. Cierra el hueco documentado en la deviación 4 de Batch 6 ("`BreakoutPanel.tsx` recibe `participants` por prop, sin cablear a `RoomPage`").
+
+### Qué se hizo
+
+- **6.12.1** — `MeetingRoom.tsx`: nuevo botón-ícono "Mini salas" en `.controlsDock`, al lado de `CallSettingsButton`, gateado por el **mismo** `isCurrentUserAdmin` que ya gatea el toggle de mute-all/cámara-off (no se inventó un segundo gate). El botón abre/cierra un popover (mismo patrón `.wrap`/`.panel` posicionado que `CallSettingsButton`/`CallSettings.module.css`, con `useDismiss` para cerrar al clickear afuera o con Escape) que monta `<BreakoutPanel roomCode roomToken participants />`. `participants` llega como prop nueva de `MeetingRoomProps` (opcional, default `[]` para no romper los `render()` existentes de `MeetingRoom.spec.tsx` que todavía no la pasan) y se alimenta en `page.tsx` desde `users` (estado de presencia del socket de sala): `breakoutParticipants = users.map(({participantId, userName}) => ({livekitIdentity: participantId, displayName: userName}))`. **Confirmado leyendo `chat.gateway.ts` línea 210** que `participantId` ya es `participant.sub` — el mismo identity que usa el pase de sala para LiveKit — así que no hace falta derivar ni inventar un identity nuevo, es una proyección directa de datos que `page.tsx` ya tenía.
+- **6.12.2** — `MeetingRoom.tsx`: `<BreakoutBanner>` montado dentro de `MeetingContent`, como hermano de `<ConnectionStateToast />` (hereda el `position: relative` de `.meetingRoom` en el `<LiveKitRoom>` exterior, mismo mecanismo de posicionamiento que ya usan los overlays existentes). Nueva prop `roomSocket` en `MeetingRoomProps` (opcional, default `null`, mismo criterio que `participants`) que `page.tsx` alimenta con el `roomSocket` que ya tenía en estado. Dentro de `MeetingContent` se llama `useRoomSocket(roomSocket)` (el hook real, sin mockear — con `roomSocket=null` ya se comporta como no-op, confirmado por el propio test de `useRoomSocket.spec.ts`) para obtener `breakoutAssignment`. Visibilidad: `breakoutAssignment !== null` ya cubre el ocultamiento tras `breakout:closed` **gratis**, porque `useRoomSocket` ya pone `breakoutAssignment` en `null` internamente cuando llega ese evento para la mini sala asignada (ver `useRoomSocket.ts` — no hizo falta tocar ese hook). Lo que el hook **no** cubre es el retorno por autoservicio (`selfReturn`, política `free_return`): esa ruta de backend no emite `breakout:closed` (esa señal es solo para cierre de la sala completa — ver 6.8 en Batch 6), así que se agregó un estado local `returnedBreakoutId` en `MeetingContent` que oculta el banner para ese `breakoutId` puntual sin depender de ninguna señal adicional; si llega una asignación nueva con otro `breakoutId`, el banner vuelve a aparecer (la comparación es por id, no un flag global).
+- **`onReturn` del banner** — `handleBreakoutReturn` llama `returnFromBreakoutRoom(roomCode, roomToken, breakoutAssignment.breakoutId)` (sin `livekitIdentity`: camino de autoservicio, no el de admin-devuelve-a-otro) y, si resuelve, marca `returnedBreakoutId`; si falla, muestra el mensaje en un `<p role="alert" className={styles.error}>` (mismo patrón ya usado para el error de dispositivo en este archivo) y mantiene el banner visible para reintentar. `returning` (estado de "solicitud en vuelo") se pasa a `<BreakoutBanner returning={...}>`, que ya sabía deshabilitar su propio botón con esa prop (Batch 6, sin cambios en `BreakoutBanner.tsx`).
+- **6.12.3** — Commit propio sobre `59aa34c`, sin amend: `feat(calls): mount breakout rooms panel and banner in meeting room`.
+
+### Archivos nuevos/modificados de este lote
+
+| Archivo | Acción |
+|---|---|
+| `client/src/features/calls/MeetingRoom.tsx` | Modificado (nuevo botón+popover de `BreakoutPanel`, `BreakoutBanner` montado, `useRoomSocket`/`returnFromBreakoutRoom` cableados, props `participants`/`roomSocket` nuevas) |
+| `client/src/features/calls/MeetingRoom.module.css` | Modificado (`.breakoutWrap`, `.breakoutPanelPopover` + media query de 640px) |
+| `client/src/features/calls/MeetingRoom.spec.tsx` | Modificado (mock de `@/lib/breakouts`, helper `createFakeSocket`, describe nuevo `mini salas (breakout-rooms, Fase 6.12...)` con 5 tests) |
+| `client/src/app/room/[code]/page.tsx` | Modificado (`breakoutParticipants` derivado de `users`, pasado junto con `roomSocket` a `<MeetingRoom>`) |
+| `openspec/changes/breakout-rooms/tasks.md` | Modificado (6.12.1–6.12.3 → `[x]`) |
+
+Ningún archivo de backend (`src/modules/calls/*`, `BreakoutRoomsService`, etc.) ni de Fase 7/8 aparece en el diff de este lote — es exclusivamente el wiring de cliente que Batch 6 había dejado pendiente.
+
+### Deviaciones / decisiones no explicitadas en `tasks.md` (declaradas, no silenciosas)
+
+1. **El retorno real a los medios de la mini sala (`issueBreakoutToken` + `call.switchRoom`) sigue sin wiring**, ni en este lote ni en Batch 6. `grep` confirmado: ningún código de producción llama a `issueBreakoutToken` ni a `call.switchRoom()` todavía — ambos solo se ejercitan desde sus propios specs aislados (`useCallSession.spec.ts`, `breakouts.spec.ts`). El Flujo 1 completo de `design.md` (líneas 379–418) especifica que al recibir `breakout:assigned` el cliente debe pedir el token de la mini sala y hacer `switchRoom` para remontar `<LiveKitRoom key=roomName>` contra la sala nueva — **eso no está implementado**. Lo que sí hace este lote es mostrar/ocultar el banner correctamente según la señal y permitir el retorno HTTP; el banner es por ahora una señal visual correcta sobre un traslado de medios que el cliente todavía no ejecuta. **Riesgo explícito para quien siga con Fase 7**: los E2E de aislamiento de medios entre mini salas (7.1) van a fallar o van a necesitar este wiring primero — no estaba en el alcance literal de 6.12.1–6.12.3 (que solo pedían el *punto de montaje* de los componentes, no esta orquestación), así que se dejó fuera deliberadamente en vez de improvisarlo sin que el diseño lo pidiera explícitamente en esa tarea.
+2. **El toggle "Mini salas" es un botón+popover nuevo, no una entrada dentro del menú de `CallSettingsButton`**: ni `tasks.md` ni `design.md` especifican la forma exacta del punto de montaje del panel (ver el propio título de la sección 6.12 — "ni design.md ni este checklist especificaban dónde se montan los componentes"), así que se eligió el patrón visual ya existente más parecido (mismo `.wrap`/popover que `CallSettingsButton`) en vez de anidar un panel con formulario y lista dentro del menú de ajustes, que no tiene espacio ni semántica para eso.
+3. **El banner se oculta tras un retorno por autoservicio vía un `returnedBreakoutId` local**, no vía una señal de socket nueva: confirmado por lectura directa de `breakout-rooms.service.ts`/`chat.gateway.ts` (Batch 6) que `selfReturn` no pasa por el choke point `closeRow()` que emite `breakout:closed` — es un comportamiento de backend ya existente, no algo que este lote podría o debiera cambiar bajo el alcance de 6.12.
+
+### Resultado final del lote
+
+- `pnpm test` (client, jest): **441/441** en verde (66 archivos) — 436 previos + 5 nuevos del describe de Fase 6.12.
+- `pnpm typecheck` (client): mismo único error preexistente y no relacionado ya documentado en Batch 6 (`page.spec.tsx:385`, `exact` no es una opción válida de `ByRoleOptions`) — confirmado que no cambió.
+- `pnpm lint` (client, oxlint): 0 errores, mismos warnings preexistentes (incluye el ya documentado de `BreakoutPanel.tsx`); sin warnings nuevos atribuibles a `MeetingRoom.tsx`/`page.tsx`.
+- `pnpm test` (backend, vitest): **501/501** en verde (60 archivos) — sin cambios, este lote no tocó backend.
+- `pnpm build` (backend, `nest build`): sin errores.
+- `pnpm lint` (backend): **13 problemas** (12 errores + 1 warning), los mismos 13 preexistentes ya documentados en Batch 6 (0 nuevos).
+- **Gotcha de CRLF reproducido de nuevo, mismos dos archivos exactos**: `pnpm lint` (backend) tocó otra vez `room-code-recycling.integration.spec.ts` y `rooms.service.create-room.integration.spec.ts`; revertidos con `git checkout --` y confirmado con `git diff --ignore-all-space` que después del revert ambos vuelven a diff vacío, antes de tocar ningún `git add`.
+
+### Próximo lote: Fase 7
+
+Sigue pendiente, sin cambios respecto de lo ya documentado en Batch 6 — con la salvedad agregada del riesgo de la deviación 1 de este lote (wiring de `switchRoom`/`issueBreakoutToken` para la mini sala todavía no existe en ningún punto del código de producción).

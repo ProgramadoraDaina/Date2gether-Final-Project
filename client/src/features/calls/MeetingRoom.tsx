@@ -29,13 +29,19 @@ import {
 } from 'livekit-client';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { Socket } from 'socket.io-client';
 import { DEFAULT_CALL_DEVICES, type CallDevices } from './callDevices';
 import { HangUpButton } from './HangUpButton';
 import type { RoomEmoji } from '@/lib/api';
 import { useTranslation } from '../translation/useTranslation';
 import { reportTrackState } from '@/lib/calls';
+import { returnFromBreakoutRoom } from '@/lib/breakouts';
+import { useDismiss } from '@/lib/useDismiss';
 import type { CallSessionState } from './useCallSession';
 import styles from './MeetingRoom.module.css';
+import { useRoomSocket } from '../chat/useRoomSocket';
+import { BreakoutPanel, type BreakoutPanelParticipant } from './BreakoutPanel';
+import { BreakoutBanner } from './BreakoutBanner';
 import { ReactionOverlay } from './reactions/ReactionOverlay';
 import { ReactionPicker } from './reactions/ReactionPicker';
 import { SoundboardPicker } from './reactions/SoundboardPicker';
@@ -130,6 +136,25 @@ function ScreenShareIcon() {
       <path d="M12 16v4" />
       <path d="M9 11l3-3 3 3" />
       <path d="M12 8v4" />
+    </svg>
+  );
+}
+
+function BreakoutRoomsIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="20"
+      height="20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="4" width="10" height="10" rx="2" />
+      <rect x="14" y="13" width="7" height="7" rx="1.5" />
     </svg>
   );
 }
@@ -280,6 +305,17 @@ interface MeetingRoomProps {
   videoLocked: boolean;
   onSetAudioLock: (locked: boolean) => void;
   onSetVideoLock: (locked: boolean) => void;
+  // Mini salas (breakout-rooms, Fase 6.12 — montaje real en la UI). Gente
+  // conectada a la sala principal elegible para trasladar: el identity de
+  // LiveKit de cada fila es el mismo `participant.sub` que arma el gate de
+  // host-gate (ver RoomPresence.participantId en page.tsx), no uno inventado
+  // acá. Opcional con default vacío para no romper los render() existentes
+  // de MeetingRoom.spec.tsx que todavía no pasan esta prop.
+  participants?: BreakoutPanelParticipant[];
+  // Socket de sala ya conectado (o null mientras conecta): se lo pasa tal
+  // cual a useRoomSocket para escuchar breakout:assigned/breakout:closed,
+  // mismo patrón que useRoomMediaLock/useRoomEvents en page.tsx.
+  roomSocket?: Socket | null;
 }
 
 // Un permiso revocado después del lobby no debe hacer fallar la llamada.
@@ -322,10 +358,44 @@ function MeetingContent({
   videoLocked,
   onSetAudioLock,
   onSetVideoLock,
+  participants = [],
+  roomSocket = null,
 }: Omit<MeetingRoomProps, 'call' | 'onHangUp'>) {
   const { t } = useTranslation();
   const [deviceError, setDeviceError] = useState(false);
   const showDeviceError = useCallback(() => setDeviceError(true), []);
+  const { breakoutAssignment } = useRoomSocket(roomSocket);
+  const [breakoutPanelOpen, setBreakoutPanelOpen] = useState(false);
+  const breakoutWrapRef = useRef<HTMLDivElement>(null);
+  const closeBreakoutPanel = useCallback(() => setBreakoutPanelOpen(false), []);
+  useDismiss(breakoutPanelOpen, breakoutWrapRef, closeBreakoutPanel);
+  const [returningFromBreakout, setReturningFromBreakout] = useState(false);
+  const [breakoutReturnError, setBreakoutReturnError] = useState<string | null>(null);
+  // Autoservicio "Volver" (free_return, D8/design.md): breakout:closed solo
+  // viaja cuando se cierra la mini sala entera (close/closeAll/cascada, ver
+  // chat.gateway.ts) -- un retorno individual via selfReturn no la dispara.
+  // El banner se oculta localmente por id en vez de depender de una señal de
+  // socket que esta ruta no produce.
+  const [returnedBreakoutId, setReturnedBreakoutId] = useState<string | null>(null);
+  const visibleBreakoutAssignment =
+    breakoutAssignment && breakoutAssignment.breakoutId !== returnedBreakoutId
+      ? breakoutAssignment
+      : null;
+  const handleBreakoutReturn = useCallback(async () => {
+    if (!breakoutAssignment) return;
+    setReturningFromBreakout(true);
+    setBreakoutReturnError(null);
+    try {
+      await returnFromBreakoutRoom(roomCode, roomToken, breakoutAssignment.breakoutId);
+      setReturnedBreakoutId(breakoutAssignment.breakoutId);
+    } catch (cause) {
+      setBreakoutReturnError(
+        cause instanceof Error ? cause.message : t('No se pudo volver a la sala principal'),
+      );
+    } finally {
+      setReturningFromBreakout(false);
+    }
+  }, [breakoutAssignment, roomCode, roomToken, t]);
   // El admin nunca se autosilencia: el lock que ve y controla en el panel es
   // el crudo (audioLocked/videoLocked), pero el que efectivamente se aplica a
   // sus propios botones de mic/cámara descarta ese caso.
@@ -367,6 +437,18 @@ function MeetingContent({
           <RoomAudioRenderer />
           <StartAudio label={t('Activar sonido de la reunión')} />
           <ConnectionStateToast />
+          {visibleBreakoutAssignment && (
+            <BreakoutBanner
+              assignment={visibleBreakoutAssignment}
+              onReturn={handleBreakoutReturn}
+              returning={returningFromBreakout}
+            />
+          )}
+          {breakoutReturnError && (
+            <p className={styles.error} role="alert">
+              {breakoutReturnError}
+            </p>
+          )}
           {focusTrack ? (
             <FocusLayoutContainer className={styles.meetingGrid}>
               {/* Remount per focus: LiveKit's stable ordering throws when reused across focus changes. */}
@@ -434,6 +516,29 @@ function MeetingContent({
               onSetAudioLock={onSetAudioLock}
               onSetVideoLock={onSetVideoLock}
             />
+            {isCurrentUserAdmin && (
+              <div className={styles.breakoutWrap} ref={breakoutWrapRef}>
+                <button
+                  type="button"
+                  className={`${styles.iconButton} ${breakoutPanelOpen ? styles.iconButtonActive : ''}`}
+                  onClick={() => setBreakoutPanelOpen((open) => !open)}
+                  title={t('Mini salas')}
+                  aria-label={t('Mini salas')}
+                  aria-expanded={breakoutPanelOpen}
+                >
+                  <BreakoutRoomsIcon />
+                </button>
+                {breakoutPanelOpen && (
+                  <div className={styles.breakoutPanelPopover} role="dialog" aria-label={t('Mini salas')}>
+                    <BreakoutPanel
+                      roomCode={roomCode}
+                      roomToken={roomToken}
+                      participants={participants}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
             <ConnectedHangUpButton />
           </div>
         </LayoutContextProvider>
@@ -455,6 +560,8 @@ export default function MeetingRoom({
   videoLocked,
   onSetAudioLock,
   onSetVideoLock,
+  participants = [],
+  roomSocket = null,
 }: MeetingRoomProps) {
   const router = useRouter();
   const roomOptions = useMemo(
@@ -520,6 +627,8 @@ export default function MeetingRoom({
         videoLocked={videoLocked}
         onSetAudioLock={onSetAudioLock}
         onSetVideoLock={onSetVideoLock}
+        participants={participants}
+        roomSocket={roomSocket}
       />
     </LiveKitRoom>
   );
