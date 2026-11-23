@@ -413,7 +413,7 @@ export const callEvents = pgTable(
     id: varchar('id', { length: 40 }).primaryKey(),
     livekitRoomSid: varchar('livekit_room_sid', { length: 64 }).notNull(),
     // room.name; sin FK a propósito (ver D7).
-    roomCode: varchar('room_code', { length: 20 }).notNull(),
+    roomCode: varchar('room_code', { length: 40 }).notNull(),
     eventType: varchar('event_type', { length: 40 }).notNull(),
     // null en room_started / room_finished.
     livekitIdentity: varchar('livekit_identity', { length: 64 }),
@@ -442,7 +442,7 @@ export const callSessions = pgTable(
     id: uuid('id').defaultRandom().primaryKey(),
     livekitRoomSid: varchar('livekit_room_sid', { length: 64 }).notNull(),
     roomId: uuid('room_id').references(() => rooms.id, { onDelete: 'set null' }),
-    roomCode: varchar('room_code', { length: 20 }).notNull(),
+    roomCode: varchar('room_code', { length: 40 }).notNull(),
     startedAt: timestamp('started_at').notNull(),
     // De room_finished.
     endedAt: timestamp('ended_at'),
