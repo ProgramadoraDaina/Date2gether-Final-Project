@@ -131,8 +131,18 @@ describe('MeetingRoom', () => {
     const { useTrackToggle } = await import('@livekit/components-react');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     jest.mocked(useTrackToggle).mockImplementation(defaultUseTrackToggle as any);
-    const { listBreakoutRooms } = await import('@/lib/breakouts');
+    const { listBreakoutRooms, issueBreakoutToken } = await import('@/lib/breakouts');
     (listBreakoutRooms as jest.Mock<typeof listBreakoutRooms>).mockResolvedValue([]);
+    // Default para los tests que no son sobre el traslado real de medios
+    // (Fase 6.13): cualquier breakout:assigned que emitan ahora también
+    // dispara el pedido de token (ver MeetingRoom.tsx), así que necesita una
+    // resolución válida para no tirar un TypeError sobre una promesa undefined.
+    (issueBreakoutToken as jest.Mock<typeof issueBreakoutToken>).mockResolvedValue({
+      url: 'wss://media.example.com',
+      token: 'breakout-token',
+      roomName: 'abc-defg-hij::breakout-1',
+      participantLimit: 6,
+    });
   });
   it('al tocar micrófono o cámara en la llamada recuerda la elección para la próxima vez', async () => {
     const { useCallSettingsStore } = await import('./settings/store');
@@ -835,6 +845,185 @@ describe('MeetingRoom', () => {
 
       expect(screen.getByRole('alert')).toHaveTextContent('No se pudo volver a la sala principal');
       expect(screen.getByText('Mini sala 1')).toBeInTheDocument();
+    });
+  });
+
+  describe('traslado real de medios al recibir breakout:assigned (Fase 6.13)', () => {
+    it('[6.13.1] pide el token de la mini sala vía issueBreakoutToken y traslada los medios reales con switchRoom, sin pasar por joinCall', async () => {
+      const { issueBreakoutToken } = await import('@/lib/breakouts');
+      (issueBreakoutToken as jest.Mock<typeof issueBreakoutToken>).mockResolvedValue({
+        url: 'wss://media.example.com',
+        token: 'breakout-token-1',
+        roomName: 'abc-defg-hij::breakout-1',
+        participantLimit: 6,
+      });
+      const MeetingRoom = (await import('./MeetingRoom')).default;
+      const socket = createFakeSocket();
+      const call = state();
+      render(
+        <MeetingRoom
+          call={call}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin={false}
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+          participants={[]}
+          roomSocket={socket as unknown as Socket}
+        />,
+      );
+
+      await act(async () => {
+        socket.callbacks['breakout:assigned']({
+          breakoutId: 'breakout-1',
+          label: 'Mini sala 1',
+          leavePolicy: 'locked',
+        });
+      });
+
+      expect(issueBreakoutToken).toHaveBeenCalledWith(
+        'abc-defg-hij',
+        'test-room-token',
+        'breakout-1',
+      );
+      await waitFor(() =>
+        expect(call.switchRoom).toHaveBeenCalledWith({
+          url: 'wss://media.example.com',
+          token: 'breakout-token-1',
+          roomName: 'abc-defg-hij::breakout-1',
+          participantLimit: 6,
+        }),
+      );
+      expect(call.joinCall).not.toHaveBeenCalled();
+    });
+
+    it('[6.13.2] si issueBreakoutToken falla (403 sin asignación, red caída), no llama switchRoom y muestra un error visible sin traslado parcial', async () => {
+      const { issueBreakoutToken } = await import('@/lib/breakouts');
+      (issueBreakoutToken as jest.Mock<typeof issueBreakoutToken>).mockRejectedValue(
+        new Error('No se pudo obtener el acceso a la mini sala'),
+      );
+      const MeetingRoom = (await import('./MeetingRoom')).default;
+      const socket = createFakeSocket();
+      const call = state();
+      render(
+        <MeetingRoom
+          call={call}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin={false}
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+          participants={[]}
+          roomSocket={socket as unknown as Socket}
+        />,
+      );
+
+      await act(async () => {
+        socket.callbacks['breakout:assigned']({
+          breakoutId: 'breakout-1',
+          label: 'Mini sala 1',
+          leavePolicy: 'locked',
+        });
+      });
+
+      await waitFor(() =>
+        expect(screen.getByRole('alert')).toHaveTextContent(
+          'No se pudo obtener el acceso a la mini sala',
+        ),
+      );
+      expect(call.switchRoom).not.toHaveBeenCalled();
+    });
+
+    it('[6.13.3] dos breakout:assigned consecutivos (reasignación) para el mismo usuario: el segundo traslado reemplaza limpiamente al primero, sin un switchRoom intermedio hacia la mini sala vieja', async () => {
+      const { issueBreakoutToken } = await import('@/lib/breakouts');
+      const deferred: Array<(value: Awaited<ReturnType<typeof issueBreakoutToken>>) => void> = [];
+      (issueBreakoutToken as jest.Mock<typeof issueBreakoutToken>).mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            deferred.push(resolve);
+          }),
+      );
+      const MeetingRoom = (await import('./MeetingRoom')).default;
+      const socket = createFakeSocket();
+      const call = state();
+      render(
+        <MeetingRoom
+          call={call}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin={false}
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+          participants={[]}
+          roomSocket={socket as unknown as Socket}
+        />,
+      );
+
+      act(() =>
+        socket.callbacks['breakout:assigned']({
+          breakoutId: 'breakout-1',
+          label: 'Mini sala 1',
+          leavePolicy: 'locked',
+        }),
+      );
+      act(() =>
+        socket.callbacks['breakout:assigned']({
+          breakoutId: 'breakout-2',
+          label: 'Mini sala 2',
+          leavePolicy: 'locked',
+        }),
+      );
+
+      expect(issueBreakoutToken).toHaveBeenCalledTimes(2);
+      expect(issueBreakoutToken).toHaveBeenNthCalledWith(
+        1,
+        'abc-defg-hij',
+        'test-room-token',
+        'breakout-1',
+      );
+      expect(issueBreakoutToken).toHaveBeenNthCalledWith(
+        2,
+        'abc-defg-hij',
+        'test-room-token',
+        'breakout-2',
+      );
+
+      // La primera resuelve tarde, después de que ya se pidió la segunda: no
+      // debe aplicar un switchRoom intermedio hacia la mini sala vieja.
+      await act(async () => {
+        deferred[0]({
+          url: 'wss://media.example.com',
+          token: 'breakout-token-1',
+          roomName: 'abc-defg-hij::breakout-1',
+          participantLimit: 6,
+        });
+      });
+      expect(call.switchRoom).not.toHaveBeenCalled();
+
+      await act(async () => {
+        deferred[1]({
+          url: 'wss://media.example.com',
+          token: 'breakout-token-2',
+          roomName: 'abc-defg-hij::breakout-2',
+          participantLimit: 6,
+        });
+      });
+      expect(call.switchRoom).toHaveBeenCalledTimes(1);
+      expect(call.switchRoom).toHaveBeenCalledWith({
+        url: 'wss://media.example.com',
+        token: 'breakout-token-2',
+        roomName: 'abc-defg-hij::breakout-2',
+        participantLimit: 6,
+      });
     });
   });
 });

@@ -35,7 +35,7 @@ import { HangUpButton } from './HangUpButton';
 import type { RoomEmoji } from '@/lib/api';
 import { useTranslation } from '../translation/useTranslation';
 import { reportTrackState } from '@/lib/calls';
-import { returnFromBreakoutRoom } from '@/lib/breakouts';
+import { issueBreakoutToken, returnFromBreakoutRoom } from '@/lib/breakouts';
 import { useDismiss } from '@/lib/useDismiss';
 import type { CallSessionState } from './useCallSession';
 import styles from './MeetingRoom.module.css';
@@ -360,7 +360,15 @@ function MeetingContent({
   onSetVideoLock,
   participants = [],
   roomSocket = null,
-}: Omit<MeetingRoomProps, 'call' | 'onHangUp'>) {
+  switchRoom,
+}: Omit<MeetingRoomProps, 'call' | 'onHangUp'> & {
+  // Mini salas (breakout-rooms, Fase 6.13): traslado REAL de medios al
+  // recibir breakout:assigned. Se pasa solo esta función de `call` (no el
+  // objeto `call` entero, excluido arriba) porque es lo único que este
+  // componente necesita para ejecutar el Flujo 1 de design.md -- pedir el
+  // token y reemplazar la sesión de forma atómica, nunca vía joinCall.
+  switchRoom: CallSessionState['switchRoom'];
+}) {
   const { t } = useTranslation();
   const [deviceError, setDeviceError] = useState(false);
   const showDeviceError = useCallback(() => setDeviceError(true), []);
@@ -377,6 +385,36 @@ function MeetingContent({
   // El banner se oculta localmente por id en vez de depender de una señal de
   // socket que esta ruta no produce.
   const [returnedBreakoutId, setReturnedBreakoutId] = useState<string | null>(null);
+  // Traslado real de medios (Fase 6.13, Flujo 1 de design.md): pide el token
+  // de la mini sala y reemplaza la sesión con switchRoom -- nunca joinCall,
+  // cuya guarda `if (pending.current || current.current) return;` aborta
+  // cualquier traslado porque ya hay una sesión en curso (mismo motivo que
+  // 6.2/6.3 de useCallSession). `breakoutSwitchHandled` evita repetir el
+  // pedido para la MISMA asignación en renders sucesivos (useRoomSocket
+  // entrega un objeto nuevo en cada evento, incluso si el id no cambió) y,
+  // junto con el chequeo dentro de la promesa, descarta una resolución
+  // atrasada de un pedido viejo si mientras tanto llegó una reasignación: el
+  // id más reciente siempre gana, sin un switchRoom intermedio inconsistente.
+  const breakoutSwitchHandled = useRef<string | null>(null);
+  const [breakoutSwitchError, setBreakoutSwitchError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!breakoutAssignment) return;
+    if (breakoutSwitchHandled.current === breakoutAssignment.breakoutId) return;
+    const requestedId = breakoutAssignment.breakoutId;
+    breakoutSwitchHandled.current = requestedId;
+    setBreakoutSwitchError(null);
+    issueBreakoutToken(roomCode, roomToken, requestedId)
+      .then((token) => {
+        if (breakoutSwitchHandled.current !== requestedId) return;
+        switchRoom(token);
+      })
+      .catch((cause) => {
+        if (breakoutSwitchHandled.current !== requestedId) return;
+        setBreakoutSwitchError(
+          cause instanceof Error ? cause.message : t('No se pudo entrar a la mini sala'),
+        );
+      });
+  }, [breakoutAssignment, roomCode, roomToken, switchRoom, t]);
   const visibleBreakoutAssignment =
     breakoutAssignment && breakoutAssignment.breakoutId !== returnedBreakoutId
       ? breakoutAssignment
@@ -447,6 +485,11 @@ function MeetingContent({
           {breakoutReturnError && (
             <p className={styles.error} role="alert">
               {breakoutReturnError}
+            </p>
+          )}
+          {breakoutSwitchError && (
+            <p className={styles.error} role="alert">
+              {breakoutSwitchError}
             </p>
           )}
           {focusTrack ? (
@@ -629,6 +672,7 @@ export default function MeetingRoom({
         onSetVideoLock={onSetVideoLock}
         participants={participants}
         roomSocket={roomSocket}
+        switchRoom={call.switchRoom}
       />
     </LiveKitRoom>
   );

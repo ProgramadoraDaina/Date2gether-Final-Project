@@ -255,6 +255,13 @@ TDD estricto activo (`pnpm test`). Estos tests fijan el comportamiento **actual*
 - [x] 6.12.2 [RED+GREEN] Montar `<BreakoutBanner>` dentro de `MeetingRoom.tsx`, visible cuando el payload de `breakout:assigned` (vía `useRoomSocket`) indica que el usuario actual está en una mini sala; se oculta de nuevo tras `breakout:closed`/retorno.
 - [x] 6.12.3 Commit propio (no amend de 59aa34c): `feat(calls): mount breakout rooms panel and banner in meeting room`.
 
+### 6.13 — Traslado real de medios al recibir `breakout:assigned` (hueco detectado post-6.12: el Flujo 1 del diseño — pedir token + `switchRoom` — no estaba conectado a ningún trigger real)
+
+- [x] 6.13.1 [RED+GREEN] Al recibir `breakout:assigned` (vía `useRoomSocket`, ya expuesto por 6.6/6.7), el participante trasladado llama a `issueBreakoutToken` (`lib/breakouts.ts`, ya existente de 6.1) y, con la respuesta, invoca `useCallSession.switchRoom(session)` (ya existente de 6.2/6.3) — sin pasar por `joinCall`. Este efecto debe vivir donde hoy se consume `useRoomSocket` dentro de `MeetingRoom.tsx`/`page.tsx` (confirmar el punto exacto leyendo el wiring de 6.12 antes de tocarlo).
+- [x] 6.13.2 [RED] Fallo de `issueBreakoutToken` (403 sin asignación, red caída) → no se llama `switchRoom`; el usuario permanece en la sala actual con un error visible (no un traslado parcial).
+- [x] 6.13.3 [RED] Dos eventos `breakout:assigned` consecutivos para el mismo usuario (reasignación) → el segundo traslado reemplaza al primero sin quedar en un estado intermedio inconsistente (coherente con el reemplazo atómico de `switchRoom`, D de `useCallSession`).
+- [x] 6.13.4 Commit propio (no amend de 0d05f44): `feat(calls): wire real media switch on breakout assignment`.
+
 ## Fase 7 — E2E y prueba de carga
 
 - [ ] 7.1 Playwright: admin crea 2 mini salas, traslada a dos participantes, el aislamiento de medios se verifica por ausencia de tracks cruzados.

@@ -331,3 +331,70 @@ Ningún archivo de backend (`src/modules/calls/*`, `BreakoutRoomsService`, etc.)
 ### Próximo lote: Fase 7
 
 Sigue pendiente, sin cambios respecto de lo ya documentado en Batch 6 — con la salvedad agregada del riesgo de la deviación 1 de este lote (wiring de `switchRoom`/`issueBreakoutToken` para la mini sala todavía no existe en ningún punto del código de producción).
+
+## Batch 6c — Fase 6.13 (traslado real de medios al recibir `breakout:assigned`)
+
+Estado: **completa**. Tareas 6.13.1–6.13.4 marcadas `[x]` en `tasks.md`. Cierra el hueco documentado como deviación 1 de Batch 6b: el Flujo 1 de `design.md` (pedir el token de la mini sala + `switchRoom`) estaba descrito y tenía todas sus piezas ya implementadas (`issueBreakoutToken` de 6.1, `switchRoom`/`'switching'` de 6.2/6.3, `useRoomSocket` de 6.6/6.7), pero ningún código de producción las conectaba entre sí.
+
+### Punto exacto del wiring
+
+Confirmado leyendo el código real de 6.12 (no solo su reporte) antes de tocar nada: el único lugar donde se consume `useRoomSocket(roomSocket)` es dentro de `MeetingContent`, el componente interno de `MeetingRoom.tsx` que se renderiza **dentro** de `<LiveKitRoom>` (no en `page.tsx`, que solo pasa `roomSocket` como prop). El nuevo efecto vive ahí mismo, junto a `const { breakoutAssignment } = useRoomSocket(roomSocket);`.
+
+`MeetingContent` no recibía antes ninguna pieza de `call` (`CallSessionState`) — el `Omit<MeetingRoomProps, 'call' | 'onHangUp'>` lo excluía explícitamente. Se le agregó una prop nueva y acotada, `switchRoom: CallSessionState['switchRoom']` (no el objeto `call` entero), que el default export `MeetingRoom` pasa como `switchRoom={call.switchRoom}` al montar `<MeetingContent>`. Es deliberado: este componente solo necesita ejecutar el traslado, no leer `status`/`session` (eso lo sigue gobernando el componente padre vía la `key={call.session.roomName}` de `<LiveKitRoom>`, sin cambios).
+
+### Cómo funciona el efecto
+
+```ts
+const breakoutSwitchHandled = useRef<string | null>(null);
+const [breakoutSwitchError, setBreakoutSwitchError] = useState<string | null>(null);
+useEffect(() => {
+  if (!breakoutAssignment) return;
+  if (breakoutSwitchHandled.current === breakoutAssignment.breakoutId) return;
+  const requestedId = breakoutAssignment.breakoutId;
+  breakoutSwitchHandled.current = requestedId;
+  setBreakoutSwitchError(null);
+  issueBreakoutToken(roomCode, roomToken, requestedId)
+    .then((token) => {
+      if (breakoutSwitchHandled.current !== requestedId) return;
+      switchRoom(token);
+    })
+    .catch((cause) => {
+      if (breakoutSwitchHandled.current !== requestedId) return;
+      setBreakoutSwitchError(cause instanceof Error ? cause.message : t('No se pudo entrar a la mini sala'));
+    });
+}, [breakoutAssignment, roomCode, roomToken, switchRoom, t]);
+```
+
+- **6.13.1 (traslado real)**: `issueBreakoutToken(roomCode, roomToken, breakoutId)` devuelve exactamente la misma forma que `CallSession` (`{url, token, roomName, participantLimit}`), así que se pasa sin mapear a `switchRoom(token)`. Nunca se llama `joinCall` (confirmado por test, `call.joinCall` no se invoca) — el traslado es puramente `switchRoom`, igual que especifica el Flujo 1.
+- **6.13.2 (fallo sin traslado parcial)**: si `issueBreakoutToken` rechaza (403 sin asignación, red caída), el `.catch` nunca llama `switchRoom` — solo setea `breakoutSwitchError`, renderizado como un `<p role="alert" className={styles.error}>` nuevo (mismo patrón ya usado para `breakoutReturnError`/`deviceError` en este archivo). El usuario se queda en la sala actual porque nada tocó `session`/`status` de `call`.
+- **6.13.3 (reasignación sin estado intermedio inconsistente)**: `breakoutSwitchHandled` guarda el `breakoutId` del pedido más reciente de forma síncrona en el cuerpo del efecto (no en el `.then`), así que si llega un segundo `breakout:assigned` con otro id mientras el primer `issueBreakoutToken` todavía está en vuelo, el pedido nuevo se dispara igual (ids distintos) pero el `.then`/`.catch` del pedido viejo comparan `breakoutSwitchHandled.current !== requestedId` antes de actuar — si ya no son el id más reciente, no hacen nada. Cubre explícitamente la carrera donde el primer `issueBreakoutToken` resuelve **después** de que ya se pidió el segundo: el test fuerza ese orden con promesas controladas a mano y confirma `switchRoom` llamado una sola vez, con los datos de la segunda mini sala — nunca un `switchRoom` intermedio hacia la primera.
+- El objeto `breakoutAssignment` que entrega `useRoomSocket` es uno nuevo en cada evento (incluso si el `breakoutId` no cambió), por eso la guarda es por `breakoutId` y no por identidad de objeto — evita repetir el pedido de token si el componente simplemente vuelve a renderizar con la misma asignación.
+
+### Deviaciones / decisiones no explicitadas en `tasks.md` (declaradas, no silenciosas)
+
+1. **Prop `switchRoom` aislada en vez de pasar `call` completo a `MeetingContent`**: el tipo de `MeetingContent` seguía excluyendo `call` de `MeetingRoomProps` (decisión ya tomada en Batch 6/6.12, sin tocarla); se agregó solo la función necesaria como prop adicional al tipo (`& { switchRoom: CallSessionState['switchRoom'] }`), no se amplió el `Omit` para dejar entrar todo `call`.
+2. **Guarda de carrera por `breakoutId`, no pedida literalmente por 6.13.3**: el texto de la tarea solo pide que "el segundo traslado reemplace al primero sin un estado intermedio inconsistente", lo que el reemplazo atómico de `switchRoom` ya garantiza para el caso secuencial simple (segunda llamada pisa la sesión de la primera). Se agregó además la guarda explícita contra la resolución tardía de una promesa vieja (caso con ambos `issueBreakoutToken` en vuelo a la vez) porque sin ella existía una ventana real donde un `switchRoom` hacia la mini sala VIEJA se aplicaría de forma transitoria antes de que la respuesta de la NUEVA llegara — eso sí sería el "estado intermedio inconsistente" que la tarea pide evitar, solo que en un escenario de carrera más estricto que el que un test puramente secuencial (`await` entre cada evento) alcanzaría a ejercitar.
+3. **Mensaje de error de fallback nuevo** (`'No se pudo entrar a la mini sala'`) para cuando `issueBreakoutToken` rechaza con algo que no es un `Error` con mensaje — mismo patrón de fallback ya usado para `breakoutReturnError` en este archivo, sin introducir un código de error nuevo (a diferencia de `BREAKOUT_RETURN_LOCKED`, este camino no tiene un código estable que mapear: cualquier mensaje que venga de `extractErrorDetails` ya es presentable, ver `issueBreakoutToken` en `lib/breakouts.ts`).
+
+### Archivos modificados de este lote
+
+| Archivo | Acción |
+|---|---|
+| `client/src/features/calls/MeetingRoom.tsx` | Modificado — import de `issueBreakoutToken`; prop nueva `switchRoom` en `MeetingContent`; efecto de traslado real con guarda de carrera; `<p role="alert">` nuevo para `breakoutSwitchError`; `MeetingRoom` (default export) pasa `switchRoom={call.switchRoom}`. |
+| `client/src/features/calls/MeetingRoom.spec.tsx` | Modificado — `beforeEach` ahora da un default `mockResolvedValue` a `issueBreakoutToken` (los tests preexistentes de Fase 6.12 que emiten `breakout:assigned` ahora también disparan el pedido de token); nuevo `describe('traslado real de medios al recibir breakout:assigned (Fase 6.13)')` con los 3 tests RED→GREEN de 6.13.1–6.13.3. |
+| `openspec/changes/breakout-rooms/tasks.md` | Modificado — 6.13.1–6.13.4 marcadas `[x]`. |
+
+### Resultado final del lote
+
+- `pnpm test` (client, jest): **444/444** en verde (66 archivos) — 441 previos + 3 nuevos del describe de Fase 6.13.
+- `pnpm lint` (client, oxlint): exit 0, mismos warnings preexistentes; ninguno nuevo atribuible a `MeetingRoom.tsx`.
+- `pnpm typecheck` (client): mismo único error preexistente y no relacionado ya documentado en Batch 6/6b (`page.spec.tsx:385`, `exact` no es una opción válida de `ByRoleOptions`) — confirmado que no cambió.
+- `pnpm build` (client, `next build`): sin errores.
+- `pnpm test` (backend, vitest): **501/501** en verde (60 archivos) — este lote no tocó backend; una corrida intermedia tuvo 1 falla aislada en `migration-0016-rollback.integration.spec.ts` por estado de datos (códigos de sala duplicados) de una corrida anterior compartiendo la base de desarrollo — no reproducible, confirmado en verde en dos corridas completas posteriores, no relacionado a este lote (0 archivos de backend tocados).
+- `pnpm build` (backend, `nest build`): sin errores.
+- `pnpm lint` (backend): **13 problemas** (12 errores + 1 warning), los mismos 13 preexistentes ya documentados en Batch 6/6b (0 nuevos).
+- **Gotcha de CRLF reproducido de nuevo, mismos dos archivos exactos**: `pnpm lint` (backend) volvió a tocar `room-code-recycling.integration.spec.ts` y `rooms.service.create-room.integration.spec.ts`; revertidos con `git checkout --` y confirmado con `git diff --stat` (equivalente a `--ignore-all-space` para estos dos archivos, que no tienen cambios de contenido reales) que el diff final de todo el repo solo contiene los archivos de este lote, antes de tocar ningún `git add`.
+
+### Próximo lote: Fase 7
+
+Ahora sí tiene wiring real de medios para apoyarse: el E2E de aislamiento de medios entre mini salas (7.1) puede ejercitar un traslado de verdad (`breakout:assigned` → token real → `switchRoom` → remonte de `<LiveKitRoom>`), no solo la señal visual del banner.
