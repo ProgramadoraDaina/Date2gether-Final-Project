@@ -1,4 +1,4 @@
-import { describe, expect, it, jest } from '@jest/globals';
+import { describe, expect, it, vi } from 'vitest';
 import { NotFoundException } from '@nestjs/common';
 import type { DrizzleDb } from '../../db/drizzle.module';
 import { chain } from '../../test-support/fake-drizzle';
@@ -18,8 +18,8 @@ describe('CallTimelineService', () => {
         },
       ];
       const query = chain(rows);
-      const select = jest.fn().mockReturnValueOnce(query);
-      const db = { select, $count: jest.fn() } as unknown as DrizzleDb;
+      const select = vi.fn().mockReturnValueOnce(query);
+      const db = { select, $count: vi.fn() } as unknown as DrizzleDb;
       const service = new CallTimelineService(db);
 
       await expect(service.listSessions('user-1')).resolves.toEqual(rows);
@@ -28,8 +28,8 @@ describe('CallTimelineService', () => {
     });
 
     it('devuelve una lista vacía si el solicitante no tiene sesiones recientes', async () => {
-      const select = jest.fn().mockReturnValueOnce(chain([]));
-      const db = { select, $count: jest.fn() } as unknown as DrizzleDb;
+      const select = vi.fn().mockReturnValueOnce(chain([]));
+      const db = { select, $count: vi.fn() } as unknown as DrizzleDb;
       const service = new CallTimelineService(db);
 
       const result = await service.listSessions('user-sin-sesiones');
@@ -76,7 +76,7 @@ describe('CallTimelineService', () => {
         startedAt: new Date('2026-01-01T10:00:00Z'),
         endedAt: new Date('2026-01-01T10:30:00Z'),
       };
-      const select = jest
+      const select = vi
         .fn()
         .mockReturnValueOnce(chain([sessionHeaderRow]))
         .mockReturnValueOnce(chain(participantRows));
@@ -89,7 +89,7 @@ describe('CallTimelineService', () => {
     });
 
     it('un usuario ajeno a la sesión recibe 404 sin consultar los participantes', async () => {
-      const select = jest.fn().mockReturnValueOnce(chain([]));
+      const select = vi.fn().mockReturnValueOnce(chain([]));
       const db = { select } as unknown as DrizzleDb;
       const service = new CallTimelineService(db);
 
@@ -100,7 +100,7 @@ describe('CallTimelineService', () => {
     });
 
     it('un sessionId inexistente recibe el mismo 404 que un usuario ajeno (no filtra existencia)', async () => {
-      const select = jest.fn().mockReturnValueOnce(chain([]));
+      const select = vi.fn().mockReturnValueOnce(chain([]));
       const db = { select } as unknown as DrizzleDb;
       const service = new CallTimelineService(db);
 

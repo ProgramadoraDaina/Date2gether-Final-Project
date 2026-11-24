@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { describe, expect, it, jest } from '@jest/globals';
+import { describe, expect, it, vi } from 'vitest';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import type { AccessTokenPayload } from '../auth/auth.types';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -14,8 +14,8 @@ describe('TranscriptHistoryController', () => {
       JwtAuthGuard,
     ]);
     const service = {
-      getForSession: jest.fn<TranscriptHistoryService['getForSession']>().mockResolvedValue([]),
-      resolveBySid: jest
+      getForSession: vi.fn<TranscriptHistoryService['getForSession']>().mockResolvedValue([]),
+      resolveBySid: vi
         .fn<TranscriptHistoryService['resolveBySid']>()
         .mockResolvedValue({ id: 'session-1' }),
     };

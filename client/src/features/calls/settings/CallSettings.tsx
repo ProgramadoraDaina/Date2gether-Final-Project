@@ -5,6 +5,7 @@ import { AvatarDialog } from '@/features/avatar/AvatarDialog';
 import { useDismiss } from '@/lib/useDismiss';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { useCallSettingsStore, type CaptionSize } from './store';
+import { ToggleSwitch } from './ToggleSwitch';
 import styles from './CallSettings.module.css';
 
 const CAPTION_SIZES: { value: CaptionSize; label: string }[] = [
@@ -34,7 +35,27 @@ function SettingsIcon() {
 
 type View = 'menu' | 'captions';
 
-export function CallSettingsButton({ buttonClassName }: { buttonClassName: string }) {
+interface CallSettingsButtonProps {
+  buttonClassName: string;
+  isAdmin: boolean;
+  audioLocked: boolean;
+  videoLocked: boolean;
+  onSetAudioLock: (locked: boolean) => void;
+  onSetVideoLock: (locked: boolean) => void;
+  nameFocusEnabled: boolean;
+  onSetNameFocus: (enabled: boolean) => void;
+}
+
+export function CallSettingsButton({
+  buttonClassName,
+  isAdmin,
+  audioLocked,
+  videoLocked,
+  onSetAudioLock,
+  onSetVideoLock,
+  nameFocusEnabled,
+  onSetNameFocus,
+}: CallSettingsButtonProps) {
   const { t } = useTranslation();
   const { captionSize, setCaptionSize } = useCallSettingsStore();
   const [open, setOpen] = useState(false);
@@ -91,6 +112,34 @@ export function CallSettingsButton({ buttonClassName }: { buttonClassName: strin
                   <span className={styles.menuHint}>›</span>
                 </button>
               </li>
+              {isAdmin && (
+                <>
+                  <li className={styles.menuItem}>
+                    <span>{t('Mutear a todos')}</span>
+                    <ToggleSwitch
+                      checked={audioLocked}
+                      onChange={onSetAudioLock}
+                      aria-label={t('Mutear a todos')}
+                    />
+                  </li>
+                  <li className={styles.menuItem}>
+                    <span>{t('Apagar cámaras de todos')}</span>
+                    <ToggleSwitch
+                      checked={videoLocked}
+                      onChange={onSetVideoLock}
+                      aria-label={t('Apagar cámaras de todos')}
+                    />
+                  </li>
+                  <li className={styles.menuItem}>
+                    <span>{t('Enfocar automáticamente al nombrar a alguien')}</span>
+                    <ToggleSwitch
+                      checked={nameFocusEnabled}
+                      onChange={onSetNameFocus}
+                      aria-label={t('Enfocar automáticamente al nombrar a alguien')}
+                    />
+                  </li>
+                </>
+              )}
             </ul>
           ) : (
             <>

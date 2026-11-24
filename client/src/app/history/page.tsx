@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Suspense, useCallback, useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   ApiError,
@@ -10,7 +10,7 @@ import {
   getRoomCallArchive,
   type CallHistoryPage,
 } from '@/lib/api';
-import { isLoggedIn } from '@/lib/auth';
+import { RequireAuth } from '@/features/auth/RequireAuth';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { AppShell } from '@/features/navigation/AppShell';
 import styles from './page.module.css';
@@ -19,39 +19,17 @@ import styles from './page.module.css';
 export default function HistoryPage() {
   return (
     <Suspense fallback={null}>
-      <HistoryContent />
+      <RequireAuth>
+        <HistoryContent />
+      </RequireAuth>
     </Suspense>
   );
 }
 
 function HistoryContent() {
-  const { t } = useTranslation();
-  const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
-  const onLoggedOut = useCallback(() => setLoggedIn(false), []);
   const search = useSearchParams();
   const roomFilter = search.get('roomId');
   const roomArchive = roomFilter && search.get('roomArchive') === '1' ? roomFilter : null;
-
-  useEffect(() => {
-    setLoggedIn(isLoggedIn());
-  }, []);
-
-  if (loggedIn === null) return null;
-
-  if (!loggedIn) {
-    return (
-      <AppShell>
-        <div className={styles.card}>
-          <h1>{t('Historial')}</h1>
-          <p>{t('Necesitás iniciar sesión para ver tu historial de llamadas.')}</p>
-          <p className={styles.authLinks}>
-            <Link href="/login">{t('Iniciar sesión')}</Link>
-            <Link href="/register">{t('Crear cuenta')}</Link>
-          </p>
-        </div>
-      </AppShell>
-    );
-  }
 
   return (
     <AppShell>
@@ -59,7 +37,6 @@ function HistoryContent() {
         key={roomArchive ? `archive/${roomArchive}` : roomFilter}
         roomId={roomFilter}
         roomArchive={roomArchive}
-        onLoggedOut={onLoggedOut}
       />
     </AppShell>
   );
@@ -68,11 +45,9 @@ function HistoryContent() {
 function HistoryList({
   roomId,
   roomArchive,
-  onLoggedOut,
 }: {
   roomId: string | null;
   roomArchive: string | null;
-  onLoggedOut: () => void;
 }) {
   const { t, language } = useTranslation();
   const [view, setView] = useState<'recent' | 'archive'>('recent');
@@ -109,10 +84,9 @@ function HistoryList({
           key: requestKey,
           error: err instanceof ApiError ? err.message : 'No se pudo obtener el historial',
         });
-        if (!isLoggedIn()) onLoggedOut();
       });
     return () => controller.abort();
-  }, [view, roomId, roomArchive, before, requestKey, onLoggedOut]);
+  }, [view, roomId, roomArchive, before, requestKey]);
 
   function showView(next: 'recent' | 'archive') {
     setView(next);
@@ -133,7 +107,6 @@ function HistoryList({
       setDeleteError(
         err instanceof ApiError ? err.message : 'No se pudo borrar el historial anterior',
       );
-      if (!isLoggedIn()) onLoggedOut();
     } finally {
       setDeleting(false);
     }

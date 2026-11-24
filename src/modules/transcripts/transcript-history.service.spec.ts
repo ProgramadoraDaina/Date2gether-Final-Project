@@ -1,4 +1,4 @@
-import { describe, expect, it, jest } from '@jest/globals';
+import { describe, expect, it, vi } from 'vitest';
 import { NotFoundException } from '@nestjs/common';
 import type { DrizzleDb } from '../../db/drizzle.module';
 import { chain, createFakeDb } from '../../test-support/fake-drizzle';
@@ -16,7 +16,7 @@ function setup(sessionRows: object[]) {
   const db = createFakeDb();
   const sessionChain = chain(sessionRows);
   db.select.mockReturnValueOnce(sessionChain);
-  const transcripts = { getCall: jest.fn<TranscriptsService['getCall']>() };
+  const transcripts = { getCall: vi.fn<TranscriptsService['getCall']>() };
   transcripts.getCall.mockResolvedValue([entry]);
   const service = new TranscriptHistoryService(
     db as unknown as DrizzleDb,

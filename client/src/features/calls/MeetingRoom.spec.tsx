@@ -112,7 +112,19 @@ describe('MeetingRoom', () => {
     useCallSettingsStore.setState({ cameraEnabled: true, microphoneEnabled: true });
     const MeetingRoom = (await import('./MeetingRoom')).default;
     render(
-      <MeetingRoom call={state()} roomCode="abc" roomToken="test-room-token" roomEmojis={[]} />,
+      <MeetingRoom
+        call={state()}
+        roomCode="abc"
+        roomToken="test-room-token"
+        roomEmojis={[]}
+        isCurrentUserAdmin={false}
+        audioLocked={false}
+        videoLocked={false}
+        onSetAudioLock={jest.fn()}
+        onSetVideoLock={jest.fn()}
+        nameFocusEnabled={false}
+        onSetNameFocus={jest.fn()}
+      />,
     );
     fireEvent.click(screen.getByRole('button', { name: 'Desactivar micrófono' }));
     expect(useCallSettingsStore.getState()).toMatchObject({
@@ -134,6 +146,13 @@ describe('MeetingRoom', () => {
         roomCode="abc-defg-hij"
         roomToken="test-room-token"
         roomEmojis={[]}
+        isCurrentUserAdmin={false}
+        audioLocked={false}
+        videoLocked={false}
+        onSetAudioLock={jest.fn()}
+        onSetVideoLock={jest.fn()}
+        nameFocusEnabled={false}
+        onSetNameFocus={jest.fn()}
       />,
     );
     const props = jest.mocked(LiveKitRoom).mock.calls[0][0];
@@ -165,6 +184,13 @@ describe('MeetingRoom', () => {
         roomCode="abc-defg-hij"
         roomToken="test-room-token"
         roomEmojis={[]}
+        isCurrentUserAdmin={false}
+        audioLocked={false}
+        videoLocked={false}
+        onSetAudioLock={jest.fn()}
+        onSetVideoLock={jest.fn()}
+        nameFocusEnabled={false}
+        onSetNameFocus={jest.fn()}
       />,
     );
     const micButton = screen.getByRole('button', { name: 'Desactivar micrófono' });
@@ -183,6 +209,13 @@ describe('MeetingRoom', () => {
         roomCode="abc-defg-hij"
         roomToken="test-room-token"
         roomEmojis={[]}
+        isCurrentUserAdmin={false}
+        audioLocked={false}
+        videoLocked={false}
+        onSetAudioLock={jest.fn()}
+        onSetVideoLock={jest.fn()}
+        nameFocusEnabled={false}
+        onSetNameFocus={jest.fn()}
       />,
     );
     const firstMicOnChange = jest
@@ -197,6 +230,13 @@ describe('MeetingRoom', () => {
         roomCode="abc-defg-hij"
         roomToken="test-room-token"
         roomEmojis={[]}
+        isCurrentUserAdmin={false}
+        audioLocked={false}
+        videoLocked={false}
+        onSetAudioLock={jest.fn()}
+        onSetVideoLock={jest.fn()}
+        nameFocusEnabled={false}
+        onSetNameFocus={jest.fn()}
       />,
     );
     const secondMicOnChange = jest
@@ -217,6 +257,13 @@ describe('MeetingRoom', () => {
         roomCode="abc-defg-hij"
         roomToken="test-room-token"
         roomEmojis={[]}
+        isCurrentUserAdmin={false}
+        audioLocked={false}
+        videoLocked={false}
+        onSetAudioLock={jest.fn()}
+        onSetVideoLock={jest.fn()}
+        nameFocusEnabled={false}
+        onSetNameFocus={jest.fn()}
       />,
     );
 
@@ -265,6 +312,13 @@ describe('MeetingRoom', () => {
         roomCode="abc-defg-hij"
         roomToken="test-room-token"
         roomEmojis={[]}
+        isCurrentUserAdmin={false}
+        audioLocked={false}
+        videoLocked={false}
+        onSetAudioLock={jest.fn()}
+        onSetVideoLock={jest.fn()}
+        nameFocusEnabled={false}
+        onSetNameFocus={jest.fn()}
       />,
     );
     const micButton = screen.getByRole('button', { name: 'Activar micrófono' });
@@ -281,6 +335,13 @@ describe('MeetingRoom', () => {
         roomCode="abc-defg-hij"
         roomToken="test-room-token"
         roomEmojis={[]}
+        isCurrentUserAdmin={false}
+        audioLocked={false}
+        videoLocked={false}
+        onSetAudioLock={jest.fn()}
+        onSetVideoLock={jest.fn()}
+        nameFocusEnabled={false}
+        onSetNameFocus={jest.fn()}
       />,
     );
     fireEvent.click(screen.getByRole('button', { name: 'Desactivar cámara' }));
@@ -299,6 +360,13 @@ describe('MeetingRoom', () => {
         roomCode="abc-defg-hij"
         roomToken="test-room-token"
         roomEmojis={[]}
+        isCurrentUserAdmin={false}
+        audioLocked={false}
+        videoLocked={false}
+        onSetAudioLock={jest.fn()}
+        onSetVideoLock={jest.fn()}
+        nameFocusEnabled={false}
+        onSetNameFocus={jest.fn()}
       />,
     );
     const screenShareButton = screen.getByRole('button', { name: 'Dejar de compartir pantalla' });
@@ -320,6 +388,13 @@ describe('MeetingRoom', () => {
         roomCode="abc-defg-hij"
         roomToken="test-room-token"
         roomEmojis={[]}
+        isCurrentUserAdmin={false}
+        audioLocked={false}
+        videoLocked={false}
+        onSetAudioLock={jest.fn()}
+        onSetVideoLock={jest.fn()}
+        nameFocusEnabled={false}
+        onSetNameFocus={jest.fn()}
       />,
     );
     const props = jest.mocked(LiveKitRoom).mock.calls[0][0];
@@ -341,6 +416,13 @@ describe('MeetingRoom', () => {
         roomCode="abc-defg-hij"
         roomToken="test-room-token"
         roomEmojis={[]}
+        isCurrentUserAdmin={false}
+        audioLocked={false}
+        videoLocked={false}
+        onSetAudioLock={jest.fn()}
+        onSetVideoLock={jest.fn()}
+        nameFocusEnabled={false}
+        onSetNameFocus={jest.fn()}
         onHangUp={onHangUp}
       />,
     );
@@ -359,6 +441,13 @@ describe('MeetingRoom', () => {
         roomCode="abc"
         roomToken="test-room-token"
         roomEmojis={[]}
+        isCurrentUserAdmin={false}
+        audioLocked={false}
+        videoLocked={false}
+        onSetAudioLock={jest.fn()}
+        onSetVideoLock={jest.fn()}
+        nameFocusEnabled={false}
+        onSetNameFocus={jest.fn()}
         initialDevices={{
           cameraEnabled: true,
           microphoneEnabled: true,
@@ -396,6 +485,13 @@ describe('MeetingRoom', () => {
         roomCode="abc"
         roomToken="test-room-token"
         roomEmojis={[]}
+        isCurrentUserAdmin={false}
+        audioLocked={false}
+        videoLocked={false}
+        onSetAudioLock={jest.fn()}
+        onSetVideoLock={jest.fn()}
+        nameFocusEnabled={false}
+        onSetNameFocus={jest.fn()}
         initialDevices={{
           cameraEnabled: true,
           microphoneEnabled: true,
@@ -420,6 +516,13 @@ describe('MeetingRoom', () => {
         roomCode="abc-defg-hij"
         roomToken="test-room-token"
         roomEmojis={[]}
+        isCurrentUserAdmin={false}
+        audioLocked={false}
+        videoLocked={false}
+        onSetAudioLock={jest.fn()}
+        onSetVideoLock={jest.fn()}
+        nameFocusEnabled={false}
+        onSetNameFocus={jest.fn()}
       />,
     );
     const props = jest.mocked(LiveKitRoom).mock.calls[0][0];
@@ -439,11 +542,106 @@ describe('MeetingRoom', () => {
         roomCode="abc-defg-hij"
         roomToken="test-room-token"
         roomEmojis={[]}
+        isCurrentUserAdmin={false}
+        audioLocked={false}
+        videoLocked={false}
+        onSetAudioLock={jest.fn()}
+        onSetVideoLock={jest.fn()}
+        nameFocusEnabled={false}
+        onSetNameFocus={jest.fn()}
       />,
     );
     const props = jest.mocked(LiveKitRoom).mock.calls[0][0];
     act(() => props.onDisconnected?.(DisconnectReason.ROOM_CLOSED));
     expect(call.endedByHost).toHaveBeenCalledTimes(1);
     expect(call.failed).not.toHaveBeenCalled();
+  });
+  it('con el enfoque automático activado, una frase final de otro participante que nombra a alguien pinea su track', async () => {
+    const { useCreateLayoutContext, useDataChannel, useTracks } = await import(
+      '@livekit/components-react'
+    );
+    const { encodeCaption } = await import('./transcription/transcript');
+    const { Track } = await import('livekit-client');
+    const dispatch = jest.fn();
+    jest.mocked(useCreateLayoutContext).mockReturnValueOnce({ pin: { dispatch }, widget: {} } as never);
+    const juanTrack = { source: Track.Source.Camera, participant: { identity: 'id-juan', name: 'Juan' } };
+    jest.mocked(useTracks).mockReturnValueOnce([juanTrack] as never);
+
+    const MeetingRoom = (await import('./MeetingRoom')).default;
+    render(
+      <MeetingRoom
+        call={state()}
+        roomCode="abc-defg-hij"
+        roomToken="test-room-token"
+        roomEmojis={[]}
+        isCurrentUserAdmin={false}
+        audioLocked={false}
+        videoLocked={false}
+        onSetAudioLock={jest.fn()}
+        onSetVideoLock={jest.fn()}
+        nameFocusEnabled
+        onSetNameFocus={jest.fn()}
+      />,
+    );
+
+    const dataChannelCalls = (useDataChannel as unknown as jest.Mock).mock.calls as [
+      string,
+      (msg: unknown) => void,
+    ][];
+    const onTranscriptMessage = dataChannelCalls.find(([topic]) => topic === 'transcript')?.[1] as (
+      msg: unknown,
+    ) => void;
+    act(() => {
+      onTranscriptMessage({
+        payload: encodeCaption({ id: 'phrase-1', text: 'che Juan, mirá', final: true }),
+        from: { identity: 'id-ana', name: 'Ana' },
+      });
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({ msg: 'set_pin', trackReference: juanTrack });
+  });
+  it('con el enfoque automático desactivado, nombrar a alguien no pinea nada', async () => {
+    const { useCreateLayoutContext, useDataChannel, useTracks } = await import(
+      '@livekit/components-react'
+    );
+    const { encodeCaption } = await import('./transcription/transcript');
+    const { Track } = await import('livekit-client');
+    const dispatch = jest.fn();
+    jest.mocked(useCreateLayoutContext).mockReturnValueOnce({ pin: { dispatch }, widget: {} } as never);
+    const juanTrack = { source: Track.Source.Camera, participant: { identity: 'id-juan', name: 'Juan' } };
+    jest.mocked(useTracks).mockReturnValueOnce([juanTrack] as never);
+
+    const MeetingRoom = (await import('./MeetingRoom')).default;
+    render(
+      <MeetingRoom
+        call={state()}
+        roomCode="abc-defg-hij"
+        roomToken="test-room-token"
+        roomEmojis={[]}
+        isCurrentUserAdmin={false}
+        audioLocked={false}
+        videoLocked={false}
+        onSetAudioLock={jest.fn()}
+        onSetVideoLock={jest.fn()}
+        nameFocusEnabled={false}
+        onSetNameFocus={jest.fn()}
+      />,
+    );
+
+    const dataChannelCalls = (useDataChannel as unknown as jest.Mock).mock.calls as [
+      string,
+      (msg: unknown) => void,
+    ][];
+    const onTranscriptMessage = dataChannelCalls.find(([topic]) => topic === 'transcript')?.[1] as (
+      msg: unknown,
+    ) => void;
+    act(() => {
+      onTranscriptMessage({
+        payload: encodeCaption({ id: 'phrase-1', text: 'che Juan, mirá', final: true }),
+        from: { identity: 'id-ana', name: 'Ana' },
+      });
+    });
+
+    expect(dispatch).not.toHaveBeenCalled();
   });
 });

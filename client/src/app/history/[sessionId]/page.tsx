@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { ApiError, getCallSessionTimeline, type CallSessionTimeline } from '@/lib/api';
-import { isLoggedIn } from '@/lib/auth';
+import { RequireAuth } from '@/features/auth/RequireAuth';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { AppShell } from '@/features/navigation/AppShell';
 import { ParticipationTimeline } from '@/features/calls/ParticipationTimeline';
@@ -12,10 +12,16 @@ import { SessionTranscript } from '@/features/calls/transcription/SessionTranscr
 import styles from './page.module.css';
 
 export default function CallSessionTimelinePage() {
+  return (
+    <RequireAuth>
+      <CallSessionTimelineContent />
+    </RequireAuth>
+  );
+}
+
+function CallSessionTimelineContent() {
   const { t, language } = useTranslation();
   const { sessionId } = useParams<{ sessionId: string }>();
-  const [loggedIn, setLoggedIn] = useState(false);
-  const [checking, setChecking] = useState(true);
   const [timeline, setTimeline] = useState<CallSessionTimeline | null>(null);
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
@@ -25,11 +31,6 @@ export default function CallSessionTimelinePage() {
   // sin desmontar la página); `t` se omite a propósito, mismo criterio que
   // history/page.tsx.
   useEffect(() => {
-    const alreadyLoggedIn = isLoggedIn();
-    setLoggedIn(alreadyLoggedIn);
-    setChecking(false);
-    if (!alreadyLoggedIn) return;
-
     setLoading(true);
     setNotFound(false);
     setError(null);
@@ -56,23 +57,6 @@ export default function CallSessionTimelinePage() {
     const locale = language === 'en' ? 'en-US' : 'es-AR';
     return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(
       new Date(iso),
-    );
-  }
-
-  if (checking) return null;
-
-  if (!loggedIn) {
-    return (
-      <AppShell>
-        <div className={styles.card}>
-          <h1>{t('Línea de tiempo')}</h1>
-          <p>{t('Necesitás iniciar sesión para ver esta línea de tiempo.')}</p>
-          <p className={styles.authLinks}>
-            <Link href="/login">{t('Iniciar sesión')}</Link>
-            <Link href="/register">{t('Crear cuenta')}</Link>
-          </p>
-        </div>
-      </AppShell>
     );
   }
 

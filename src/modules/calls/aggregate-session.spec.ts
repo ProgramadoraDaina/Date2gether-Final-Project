@@ -1,4 +1,4 @@
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it } from 'vitest';
 import { aggregateSession, type IdentityCorrelation, type SessionEvent } from './aggregate-session';
 
 const t0 = new Date('2026-11-06T10:00:00Z');

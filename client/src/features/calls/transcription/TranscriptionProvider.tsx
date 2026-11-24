@@ -34,12 +34,24 @@ function joinPhrase(base: string, next: string): string {
   return `${base} ${next}`;
 }
 
+interface FinalPhrase {
+  identity: string;
+  name: string;
+  text: string;
+}
+
 interface TranscriptionProviderProps {
   children: ReactNode;
   roomCode: string;
   roomToken: string;
   // Fires with the call sid as soon as it is known, so the transcript can be opened later.
   onTranscriptAvailable?: (callSid: string) => void;
+  // A diferencia de `captions` (gateado por el toggle de mostrar subtítulos:
+  // "Captions only control what is shown: the transcript is always
+  // recorded"), esto dispara con CUALQUIER frase final, propia o ajena, se
+  // estén mostrando subtítulos o no — lo necesita el enfoque automático al
+  // nombrar (ver MeetingRoom.tsx), que no depende de esa preferencia visual.
+  onFinalPhrase?: (phrase: FinalPhrase) => void;
 }
 
 export function TranscriptionProvider({
@@ -47,6 +59,7 @@ export function TranscriptionProvider({
   roomCode,
   roomToken,
   onTranscriptAvailable,
+  onFinalPhrase,
 }: TranscriptionProviderProps) {
   const { language } = useTranslation();
   const room = useRoomContext();
@@ -105,12 +118,10 @@ export function TranscriptionProvider({
   const { send } = useDataChannel(TRANSCRIPT_TOPIC, (msg) => {
     const message = decodeCaption(msg.payload);
     if (!message || !msg.from) return;
-    showCaption({
-      ...message,
-      identity: msg.from.identity,
-      name: msg.from.name || msg.from.identity,
-      at: Date.now(),
-    });
+    const identity = msg.from.identity;
+    const name = msg.from.name || identity;
+    showCaption({ ...message, identity, name, at: Date.now() });
+    if (message.final) onFinalPhrase?.({ identity, name, text: message.text });
   });
 
   const showOwnCaption = useCallback(
@@ -160,10 +171,15 @@ export function TranscriptionProvider({
     const message: CaptionMessage = { id: pending.id, text: pending.text, final: true };
     showOwnCaption(message);
     void send(encodeCaption(message), { reliable: true, topic: TRANSCRIPT_TOPIC });
+    onFinalPhrase?.({
+      identity: localParticipant.identity,
+      name: localParticipant.name || localParticipant.identity,
+      text: message.text,
+    });
     // Cada persona guarda solo sus propias frases: así el acta no se duplica.
     unsaved.current.push(message.text);
     void flushUnsaved();
-  }, [flushUnsaved, send, showOwnCaption]);
+  }, [flushUnsaved, send, showOwnCaption, onFinalPhrase, localParticipant]);
 
   const commitRef = useRef(commitPhrase);
   useEffect(() => {

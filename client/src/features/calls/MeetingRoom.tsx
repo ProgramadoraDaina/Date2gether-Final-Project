@@ -31,6 +31,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_CALL_DEVICES, type CallDevices } from './callDevices';
 import { HangUpButton } from './HangUpButton';
+import { findMentionedParticipant } from './nameFocus';
 import type { RoomEmoji } from '@/lib/api';
 import { useTranslation } from '../translation/useTranslation';
 import { reportTrackState } from '@/lib/calls';
@@ -147,10 +148,15 @@ interface ToggleButtonProps {
   roomCode: string;
   roomToken: string;
   setDeviceError: (value: boolean) => void;
+  // Bloqueo forzado por el admin de la sala (mutear/apagar cámara a todos):
+  // mientras esté activo, esta persona no puede volver a prender el
+  // dispositivo por su cuenta (ver useRoomMediaLock.ts).
+  locked: boolean;
 }
 
-function MicToggleButton({ roomCode, roomToken, setDeviceError }: ToggleButtonProps) {
+function MicToggleButton({ roomCode, roomToken, setDeviceError, locked }: ToggleButtonProps) {
   const { t } = useTranslation();
+  const room = useRoomContext();
   // useTrackToggle sincroniza `onChange` con un useEffect propio que depende
   // de [enabled, onChange] (ver livekit-client/components-react): una
   // función nueva en cada render reengancha ese efecto en cada render, no
@@ -169,16 +175,24 @@ function MicToggleButton({ roomCode, roomToken, setDeviceError }: ToggleButtonPr
     onDeviceError: () => setDeviceError(true),
     onChange: onMicChange,
   });
+  // Si el admin activa el mute global mientras esta persona ya estaba con el
+  // mic prendido, se lo apaga en el momento (no espera a que vuelva a tocar
+  // el botón).
+  useEffect(() => {
+    if (locked && enabled) void room.localParticipant.setMicrophoneEnabled(false);
+  }, [locked, enabled, room]);
   const remember = useCallSettingsStore((state) => state.setDeviceEnabled);
   const label = enabled ? t('Desactivar micrófono') : t('Activar micrófono');
   return (
     <button
       {...buttonProps}
       onClick={(event) => {
+        if (locked) return;
         buttonProps.onClick?.(event);
         remember('microphone', !enabled);
       }}
       type="button"
+      disabled={locked}
       className={`${styles.iconButton} ${enabled ? styles.iconButtonActive : ''}`}
       title={label}
       aria-label={label}
@@ -188,8 +202,9 @@ function MicToggleButton({ roomCode, roomToken, setDeviceError }: ToggleButtonPr
   );
 }
 
-function CameraToggleButton({ roomCode, roomToken, setDeviceError }: ToggleButtonProps) {
+function CameraToggleButton({ roomCode, roomToken, setDeviceError, locked }: ToggleButtonProps) {
   const { t } = useTranslation();
+  const room = useRoomContext();
   // Mismo motivo que en MicToggleButton: onChange tiene que ser estable.
   const onCameraChange = useCallback(
     (isEnabled: boolean) => {
@@ -203,16 +218,21 @@ function CameraToggleButton({ roomCode, roomToken, setDeviceError }: ToggleButto
     onDeviceError: () => setDeviceError(true),
     onChange: onCameraChange,
   });
+  useEffect(() => {
+    if (locked && enabled) void room.localParticipant.setCameraEnabled(false);
+  }, [locked, enabled, room]);
   const remember = useCallSettingsStore((state) => state.setDeviceEnabled);
   const label = enabled ? t('Desactivar cámara') : t('Activar cámara');
   return (
     <button
       {...buttonProps}
       onClick={(event) => {
+        if (locked) return;
         buttonProps.onClick?.(event);
         remember('camera', !enabled);
       }}
       type="button"
+      disabled={locked}
       className={`${styles.iconButton} ${enabled ? styles.iconButtonActive : ''}`}
       title={label}
       aria-label={label}
@@ -253,6 +273,19 @@ interface MeetingRoomProps {
   onTranscriptAvailable?: (callSid: string) => void;
   // Reemplaza la vuelta al inicio al colgar (por ejemplo, para mostrar el acta).
   onHangUp?: () => void;
+  // Mutear/apagar cámara a todos (ver useRoomMediaLock.ts): el admin nunca
+  // se autosilencia, por eso MeetingContent recalcula el bloqueo aplicado
+  // por dispositivo en vez de usar estos valores crudos directamente.
+  isCurrentUserAdmin: boolean;
+  audioLocked: boolean;
+  videoLocked: boolean;
+  onSetAudioLock: (locked: boolean) => void;
+  onSetVideoLock: (locked: boolean) => void;
+  // Enfocar automáticamente el video de quien es nombrado en voz (ver
+  // nameFocus.ts): activable/desactivable solo por el admin, sincronizado a
+  // toda la sala por el mismo gateway que mediaLock (ver useNameFocusSetting).
+  nameFocusEnabled: boolean;
+  onSetNameFocus: (enabled: boolean) => void;
 }
 
 // Un permiso revocado después del lobby no debe hacer fallar la llamada.
@@ -290,10 +323,22 @@ function MeetingContent({
   roomEmojis,
   initialDevices = DEFAULT_CALL_DEVICES,
   onTranscriptAvailable,
+  isCurrentUserAdmin,
+  audioLocked,
+  videoLocked,
+  onSetAudioLock,
+  onSetVideoLock,
+  nameFocusEnabled,
+  onSetNameFocus,
 }: Omit<MeetingRoomProps, 'call' | 'onHangUp'>) {
   const { t } = useTranslation();
   const [deviceError, setDeviceError] = useState(false);
   const showDeviceError = useCallback(() => setDeviceError(true), []);
+  // El admin nunca se autosilencia: el lock que ve y controla en el panel es
+  // el crudo (audioLocked/videoLocked), pero el que efectivamente se aplica a
+  // sus propios botones de mic/cámara descarta ese caso.
+  const enforceAudioLock = audioLocked && !isCurrentUserAdmin;
+  const enforceVideoLock = videoLocked && !isCurrentUserAdmin;
   const tracks = useTracks(
     [
       { source: Track.Source.Camera, withPlaceholder: true },
@@ -309,6 +354,22 @@ function MeetingContent({
   const layoutContext = useCreateLayoutContext();
   const pinnedTracks = usePinnedTracks(layoutContext);
   const focusTrack = pinnedTracks[0];
+  // Misma frase final de transcripción llega a todas las pantallas por el
+  // data channel que ya usa TranscriptionProvider (ver TRANSCRIPT_TOPIC): al
+  // correr este mismo matching en cada cliente, el pineo termina viéndose
+  // igual en todos sin necesidad de un mensaje de foco aparte.
+  const cameraTracks = useMemo(
+    () => tracks.filter((track) => track.source === Track.Source.Camera),
+    [tracks],
+  );
+  const handleFinalPhrase = useCallback(
+    (phrase: { identity: string; name: string; text: string }) => {
+      if (!nameFocusEnabled) return;
+      const match = findMentionedParticipant(phrase.text, cameraTracks, phrase.identity);
+      if (match) layoutContext?.pin.dispatch?.({ msg: 'set_pin', trackReference: match });
+    },
+    [nameFocusEnabled, cameraTracks, layoutContext],
+  );
   const carouselTracks = focusTrack
     ? tracks.filter(
         (track) =>
@@ -324,6 +385,7 @@ function MeetingContent({
         roomCode={roomCode}
         roomToken={roomToken}
         onTranscriptAvailable={onTranscriptAvailable}
+        onFinalPhrase={handleFinalPhrase}
       >
         <LayoutContextProvider value={layoutContext}>
           <InitialCallDevices devices={initialDevices} onDeviceError={showDeviceError} />
@@ -363,6 +425,7 @@ function MeetingContent({
                 roomCode={roomCode}
                 roomToken={roomToken}
                 setDeviceError={setDeviceError}
+                locked={enforceAudioLock}
               />
               <MediaDeviceMenu
                 kind="audioinput"
@@ -373,6 +436,7 @@ function MeetingContent({
                 roomCode={roomCode}
                 roomToken={roomToken}
                 setDeviceError={setDeviceError}
+                locked={enforceVideoLock}
               />
               <MediaDeviceMenu
                 kind="videoinput"
@@ -387,7 +451,16 @@ function MeetingContent({
                 activeClassName={styles.iconButtonActive}
               />
             </div>
-            <CallSettingsButton buttonClassName={styles.iconButton} />
+            <CallSettingsButton
+              buttonClassName={styles.iconButton}
+              isAdmin={isCurrentUserAdmin}
+              audioLocked={audioLocked}
+              videoLocked={videoLocked}
+              onSetAudioLock={onSetAudioLock}
+              onSetVideoLock={onSetVideoLock}
+              nameFocusEnabled={nameFocusEnabled}
+              onSetNameFocus={onSetNameFocus}
+            />
             <ConnectedHangUpButton />
           </div>
         </LayoutContextProvider>
@@ -404,6 +477,13 @@ export default function MeetingRoom({
   initialDevices = DEFAULT_CALL_DEVICES,
   onTranscriptAvailable,
   onHangUp,
+  isCurrentUserAdmin,
+  audioLocked,
+  videoLocked,
+  onSetAudioLock,
+  onSetVideoLock,
+  nameFocusEnabled,
+  onSetNameFocus,
 }: MeetingRoomProps) {
   const router = useRouter();
   const roomOptions = useMemo(
@@ -454,6 +534,13 @@ export default function MeetingRoom({
         roomEmojis={roomEmojis}
         initialDevices={initialDevices}
         onTranscriptAvailable={onTranscriptAvailable}
+        isCurrentUserAdmin={isCurrentUserAdmin}
+        audioLocked={audioLocked}
+        videoLocked={videoLocked}
+        onSetAudioLock={onSetAudioLock}
+        onSetVideoLock={onSetVideoLock}
+        nameFocusEnabled={nameFocusEnabled}
+        onSetNameFocus={onSetNameFocus}
       />
     </LiveKitRoom>
   );

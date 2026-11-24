@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 
-const push = jest.fn();
-jest.mock('next/navigation', () => ({ useRouter: () => ({ push }) }));
+const replace = jest.fn();
+jest.mock('next/navigation', () => ({ useRouter: () => ({ replace }) }));
 jest.mock('@/features/translation/useTranslation', () => {
   const t = (key: string) => key;
   return { useTranslation: () => ({ t }) };
@@ -14,7 +14,7 @@ const NAME_KEY = 'date2gether:userName';
 describe('RegisterPage', () => {
   beforeEach(() => {
     localStorage.clear();
-    push.mockClear();
+    replace.mockClear();
   });
 
   it('un registro exitoso guarda el nombre de la persona y navega al inicio', async () => {
@@ -36,7 +36,7 @@ describe('RegisterPage', () => {
     });
     expect(register).toHaveBeenCalledWith('a@example.test', 'password123', 'Daina');
     expect(localStorage.getItem(NAME_KEY)).toBe('Daina');
-    expect(push).toHaveBeenCalledWith('/');
+    expect(replace).toHaveBeenCalledWith('/');
   });
 
   it('un registro rechazado por el backend (ej: email repetido) muestra el error en pantalla y no navega', async () => {
@@ -53,7 +53,7 @@ describe('RegisterPage', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Crear cuenta' }));
     });
     expect(screen.getByText('Ya existe una cuenta con ese email')).toBeInTheDocument();
-    expect(push).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it('mientras se procesa el registro, el botón queda deshabilitado y avisa que se está creando la cuenta', async () => {

@@ -11,6 +11,9 @@ jest.mock('@/features/translation/useTranslation', () => {
   const t = (key: string) => key;
   return { useTranslation: () => ({ t, language: 'es' }) };
 });
+jest.mock('@/features/auth/RequireAuth', () => ({
+  RequireAuth: ({ children }: { children: React.ReactNode }) => children,
+}));
 jest.mock('@/lib/auth', () => ({ isLoggedIn: jest.fn(), onAuthChange: () => () => {} }));
 jest.mock('@/lib/api', () => ({
   resolveCallSessionBySid: jest.fn(),
@@ -60,12 +63,4 @@ describe('Link al acta desde el final de la llamada', () => {
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/history/session-1'));
   });
 
-  it('sin sesión iniciada pide entrar con la cuenta', async () => {
-    const { resolveCallSessionBySid } = await import('@/lib/api');
-    await renderPage(false);
-    expect(
-      await screen.findByText('Necesitás iniciar sesión para ver esta transcripción.'),
-    ).toBeInTheDocument();
-    expect(resolveCallSessionBySid).not.toHaveBeenCalled();
-  });
 });

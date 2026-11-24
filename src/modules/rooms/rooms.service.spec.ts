@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import type { DrizzleDb } from '../../db/drizzle.module';
 import type { Room } from '../../db/schema';
@@ -25,23 +25,23 @@ const room: Room = {
 
 describe('RoomsService', () => {
   let db: FakeDb;
-  let roomEvents: { emitMemberRoleChanged: ReturnType<typeof jest.fn> };
+  let roomEvents: { emitMemberRoleChanged: ReturnType<typeof vi.fn> };
   let resolver: {
-    resolveJoinable: ReturnType<typeof jest.fn>;
-    touchEntry: ReturnType<typeof jest.fn>;
-    findPoolOccupant: ReturnType<typeof jest.fn>;
-    retireExpired: ReturnType<typeof jest.fn>;
+    resolveJoinable: ReturnType<typeof vi.fn>;
+    touchEntry: ReturnType<typeof vi.fn>;
+    findPoolOccupant: ReturnType<typeof vi.fn>;
+    retireExpired: ReturnType<typeof vi.fn>;
   };
   let service: RoomsService;
 
   beforeEach(() => {
     db = createFakeDb();
-    roomEvents = { emitMemberRoleChanged: jest.fn() };
+    roomEvents = { emitMemberRoleChanged: vi.fn() };
     resolver = {
-      resolveJoinable: jest.fn().mockResolvedValue(room),
-      touchEntry: jest.fn().mockResolvedValue(undefined),
-      findPoolOccupant: jest.fn().mockResolvedValue(undefined),
-      retireExpired: jest.fn().mockResolvedValue(undefined),
+      resolveJoinable: vi.fn().mockResolvedValue(room),
+      touchEntry: vi.fn().mockResolvedValue(undefined),
+      findPoolOccupant: vi.fn().mockResolvedValue(undefined),
+      retireExpired: vi.fn().mockResolvedValue(undefined),
     };
     service = new RoomsService(
       db as unknown as DrizzleDb,
@@ -53,7 +53,7 @@ describe('RoomsService', () => {
   describe('createRoom', () => {
     function stubTransaction(insertResults: unknown[][]) {
       const inserts = insertResults.map((rows) => chain(rows));
-      const tx = { insert: jest.fn() };
+      const tx = { insert: vi.fn() };
       for (const insertChain of inserts) tx.insert.mockReturnValueOnce(insertChain);
       db.transaction.mockImplementationOnce(async (cb: unknown) => {
         return (cb as (transaction: typeof tx) => Promise<Room>)(tx);
@@ -131,7 +131,7 @@ describe('RoomsService', () => {
     it('reintenta si el código generado ya existe en el pool, y tira error después de 5 intentos fallidos', async () => {
       resolver.findPoolOccupant.mockResolvedValue(room); // siempre ocupado
       db.transaction.mockImplementationOnce(async (cb: unknown) => {
-        const tx = { insert: jest.fn() };
+        const tx = { insert: vi.fn() };
         return (cb as (transaction: typeof tx) => Promise<Room>)(tx);
       });
 
@@ -251,6 +251,28 @@ describe('RoomsService', () => {
 
       expect(updateChain.set).toHaveBeenCalledWith({ role: 'colaborador' });
       expect(roomEvents.emitMemberRoleChanged).toHaveBeenCalledWith({ roomCode: room.code });
+    });
+  });
+
+  describe('renameRoom', () => {
+    it('actualiza el nombre de una sala permanente', async () => {
+      const permanentRoom = { ...room, isPermanent: true };
+      resolver.resolveJoinable.mockResolvedValueOnce(permanentRoom);
+      const updateChain = chain([]);
+      db.update.mockReturnValueOnce(updateChain);
+
+      await service.renameRoom(room.code, 'Grupo de los jueves');
+
+      expect(updateChain.set).toHaveBeenCalledWith({ name: 'Grupo de los jueves' });
+    });
+
+    it('rechaza renombrar una sala no permanente, sin tocar la base', async () => {
+      resolver.resolveJoinable.mockResolvedValueOnce({ ...room, isPermanent: false });
+
+      await expect(service.renameRoom(room.code, 'Nuevo nombre')).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(db.update).not.toHaveBeenCalled();
     });
   });
 });

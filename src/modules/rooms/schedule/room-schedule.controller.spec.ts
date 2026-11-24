@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Room, RoomScheduleSlot } from '../../../db/schema';
 import type { RoomResolverService } from '../room-resolver.service';
 import { RoomScheduleController } from './room-schedule.controller';
@@ -24,23 +24,23 @@ function makeRoom(overrides: Partial<Room> = {}): Room {
 }
 
 describe('RoomScheduleController', () => {
-  let resolver: { resolveJoinable: ReturnType<typeof jest.fn> };
+  let resolver: { resolveJoinable: ReturnType<typeof vi.fn> };
   let scheduleService: {
-    getNextOccurrence: ReturnType<typeof jest.fn>;
-    listSlots: ReturnType<typeof jest.fn>;
-    createSlot: ReturnType<typeof jest.fn>;
-    deleteSlot: ReturnType<typeof jest.fn>;
+    getNextOccurrence: ReturnType<typeof vi.fn>;
+    listSlots: ReturnType<typeof vi.fn>;
+    createSlot: ReturnType<typeof vi.fn>;
+    deleteSlot: ReturnType<typeof vi.fn>;
   };
   let controller: RoomScheduleController;
 
   beforeEach(() => {
     const room = makeRoom();
-    resolver = { resolveJoinable: jest.fn().mockResolvedValue(room) };
+    resolver = { resolveJoinable: vi.fn().mockResolvedValue(room) };
     scheduleService = {
-      getNextOccurrence: jest.fn(),
-      listSlots: jest.fn(),
-      createSlot: jest.fn(),
-      deleteSlot: jest.fn(),
+      getNextOccurrence: vi.fn(),
+      listSlots: vi.fn(),
+      createSlot: vi.fn(),
+      deleteSlot: vi.fn(),
     };
     controller = new RoomScheduleController(
       scheduleService as unknown as RoomScheduleService,

@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MockInstance } from 'vitest';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RoomServiceClient, type ParticipantInfo } from 'livekit-server-sdk';
@@ -22,8 +23,8 @@ function createDbMock() {
   // hasConnectedAdmin() (sin fila = sin admin conectado) y por
   // ensureSessionRow() (sin fila = roomId queda null, D4-D) — default sin
   // fila en ambos casos.
-  const select = jest.fn().mockImplementation(() => ({
-    from: jest.fn().mockImplementation((table: unknown) => {
+  const select = vi.fn().mockImplementation(() => ({
+    from: vi.fn().mockImplementation((table: unknown) => {
       if (table === callEvents)
         return chain([] as { occurredAt: Date; livekitIdentity: string | null }[]);
       return chain([] as { id: string; roomId: string | null }[]); // callParticipantIdentities
@@ -33,19 +34,19 @@ function createDbMock() {
   // insert(callSessions).values(...).onConflictDoNothing() — creación
   // perezosa de la cabecera de sesión (ver claimAndClose/ensureSessionRow).
   // Default: no-op exitoso, sin modelar si la fila ya existía o no.
-  const insertValues = jest.fn().mockReturnValue({
-    onConflictDoNothing: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+  const insertValues = vi.fn().mockReturnValue({
+    onConflictDoNothing: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
   });
-  const insert = jest.fn().mockReturnValue({ values: insertValues });
+  const insert = vi.fn().mockReturnValue({ values: insertValues });
 
   // update(callSessions).set(...).where(...).returning(...) — claimAndClose().
   // Default: compare-and-set gana (1 fila devuelta).
-  const updateReturning = jest
+  const updateReturning = vi
     .fn<(cols: unknown) => Promise<{ id: string }[]>>()
     .mockResolvedValue([{ id: 'session-1' }]);
-  const updateWhere = jest.fn().mockReturnValue({ returning: updateReturning });
-  const updateSet = jest.fn().mockReturnValue({ where: updateWhere });
-  const update = jest.fn().mockReturnValue({ set: updateSet });
+  const updateWhere = vi.fn().mockReturnValue({ returning: updateReturning });
+  const updateSet = vi.fn().mockReturnValue({ where: updateWhere });
+  const update = vi.fn().mockReturnValue({ set: updateSet });
 
   return { select, insert, insertValues, update, updateSet, updateWhere, updateReturning };
 }
@@ -62,20 +63,20 @@ async function flushMicrotasks(): Promise<void> {
 describe('CallSessionCloseService', () => {
   let db: ReturnType<typeof createDbMock>;
   let service: CallSessionCloseService;
-  let listParticipants: jest.SpiedFunction<RoomServiceClient['listParticipants']>;
-  let deleteRoom: jest.SpiedFunction<RoomServiceClient['deleteRoom']>;
+  let listParticipants: MockInstance<RoomServiceClient['listParticipants']>;
+  let deleteRoom: MockInstance<RoomServiceClient['deleteRoom']>;
 
   beforeEach(() => {
-    jest.useFakeTimers();
+    vi.useFakeTimers();
     db = createDbMock();
     service = new CallSessionCloseService(new ConfigService(config), db as unknown as DrizzleDb);
-    listParticipants = jest.spyOn(RoomServiceClient.prototype, 'listParticipants');
-    deleteRoom = jest.spyOn(RoomServiceClient.prototype, 'deleteRoom').mockResolvedValue(undefined);
+    listParticipants = vi.spyOn(RoomServiceClient.prototype, 'listParticipants');
+    deleteRoom = vi.spyOn(RoomServiceClient.prototype, 'deleteRoom').mockResolvedValue(undefined);
   });
 
   afterEach(() => {
-    jest.useRealTimers();
-    jest.restoreAllMocks();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it('único admin se desconecta sin otro admin conectado: no cierra de inmediato, agenda un re-chequeo a T+15s (D3)', async () => {
@@ -84,7 +85,7 @@ describe('CallSessionCloseService', () => {
     await service.onAdminLeft('RM_session-A', 'abc-defg-hij');
     expect(deleteRoom).not.toHaveBeenCalled();
 
-    await jest.advanceTimersByTimeAsync(15_000);
+    await vi.advanceTimersByTimeAsync(15_000);
     await flushMicrotasks();
 
     expect(deleteRoom).toHaveBeenCalledWith('abc-defg-hij');
@@ -99,7 +100,7 @@ describe('CallSessionCloseService', () => {
     listParticipants.mockResolvedValueOnce([{ identity: 'admin-reconnected' } as ParticipantInfo]);
     db.select.mockReturnValueOnce(chain([{ id: 'identity-row-new' }]));
 
-    await jest.advanceTimersByTimeAsync(15_000);
+    await vi.advanceTimersByTimeAsync(15_000);
     await flushMicrotasks();
 
     expect(deleteRoom).not.toHaveBeenCalled();
@@ -113,7 +114,7 @@ describe('CallSessionCloseService', () => {
       service.onAdminLeft('RM_session-A', 'abc-defg-hij'),
     ]);
 
-    await jest.advanceTimersByTimeAsync(15_000);
+    await vi.advanceTimersByTimeAsync(15_000);
     await flushMicrotasks();
 
     expect(deleteRoom).toHaveBeenCalledTimes(1);
@@ -124,7 +125,7 @@ describe('CallSessionCloseService', () => {
     db.updateReturning.mockResolvedValue([]);
 
     await service.onAdminLeft('RM_session-A', 'abc-defg-hij');
-    await jest.advanceTimersByTimeAsync(15_000);
+    await vi.advanceTimersByTimeAsync(15_000);
     await flushMicrotasks();
 
     expect(deleteRoom).not.toHaveBeenCalled();
@@ -142,8 +143,8 @@ describe('CallSessionCloseService', () => {
     // a true y el UPDATE de abajo devuelve 0 filas SIEMPRE.
     let rowExists = false;
     db.insert.mockImplementation((table: unknown) => ({
-      values: jest.fn().mockReturnValue({
-        onConflictDoNothing: jest.fn().mockImplementation(() => {
+      values: vi.fn().mockReturnValue({
+        onConflictDoNothing: vi.fn().mockImplementation(() => {
           if (table === callSessions) rowExists = true;
           return Promise.resolve();
         }),
@@ -154,7 +155,7 @@ describe('CallSessionCloseService', () => {
     );
 
     await service.onAdminLeft('RM_session-A', 'abc-defg-hij');
-    await jest.advanceTimersByTimeAsync(15_000);
+    await vi.advanceTimersByTimeAsync(15_000);
     await flushMicrotasks();
 
     expect(db.insert).toHaveBeenCalledWith(callSessions);
@@ -175,7 +176,7 @@ describe('CallSessionCloseService', () => {
       )
       .mockReturnValueOnce(chain([{ roomId: 'room-real' }]));
 
-    await jest.advanceTimersByTimeAsync(15_000);
+    await vi.advanceTimersByTimeAsync(15_000);
     await flushMicrotasks();
 
     expect(db.insertValues).toHaveBeenCalledWith(expect.objectContaining({ roomId: 'room-real' }));
@@ -204,11 +205,11 @@ describe('CallSessionCloseService', () => {
   it('deleteRoom falla (sala ya cerrada): no relanza, se registra con logger.log y no con logger.error (D4 capa 3)', async () => {
     listParticipants.mockResolvedValue([]);
     deleteRoom.mockRejectedValue(new Error('room not found: secret-internal-detail'));
-    const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
-    const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const logSpy = vi.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+    const errorSpy = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
 
     await expect(service.onAdminLeft('RM_session-A', 'abc-defg-hij')).resolves.toBeUndefined();
-    await jest.advanceTimersByTimeAsync(15_000);
+    await vi.advanceTimersByTimeAsync(15_000);
     await flushMicrotasks();
 
     expect(errorSpy).not.toHaveBeenCalled();
@@ -221,7 +222,7 @@ describe('CallSessionCloseService', () => {
     await service.onAdminLeft('RM_session-A', 'abc-defg-hij');
     service.cancelPending('RM_session-A');
 
-    await jest.advanceTimersByTimeAsync(15_000);
+    await vi.advanceTimersByTimeAsync(15_000);
     await flushMicrotasks();
 
     expect(deleteRoom).not.toHaveBeenCalled();
@@ -235,7 +236,7 @@ describe('CallSessionCloseService', () => {
     listParticipants.mockRejectedValue(new Error('livekit unreachable'));
 
     await service.onAdminLeft('RM_session-A', 'abc-defg-hij');
-    await jest.advanceTimersByTimeAsync(15_000);
+    await vi.advanceTimersByTimeAsync(15_000);
     await flushMicrotasks();
 
     expect(deleteRoom).not.toHaveBeenCalled();

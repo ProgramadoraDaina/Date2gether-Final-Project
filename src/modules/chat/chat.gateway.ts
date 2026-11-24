@@ -28,8 +28,12 @@ import { JoinRoomDto } from './dto/join-room.dto';
 import { MusicAddTrackDto } from './dto/music-add-track.dto';
 import { MusicPositionDto } from './dto/music-position.dto';
 import { MusicTrackIndexDto } from './dto/music-track-index.dto';
+import { CastPollVoteDto } from './dto/cast-poll-vote.dto';
 import { SendMessageDto } from './dto/send-message.dto';
-import { StartRoomEventDto, type RoomEventType } from './dto/start-room-event.dto';
+import { StartRoomEventDto } from './dto/start-room-event.dto';
+import { SetMediaLockDto } from './dto/set-media-lock.dto';
+import { SetNameFocusDto } from './dto/set-name-focus.dto';
+import { MEDIA_LOCK_EVENTS, NAME_FOCUS_EVENTS, type MediaLockState } from '@date2gether/shared';
 
 // "Hasta la próxima ruleta o evento" (lo que llegue primero: el próximo
 // startRoomEvent pisa este estado igual) además de un techo fijo en el
@@ -96,13 +100,29 @@ interface MusicState extends PlaybackState {
   updatedAt: number;
 }
 
-interface RoomEventState {
-  type: RoomEventType;
+interface RouletteEventState {
+  type: 'roulette';
   participants: RoomUser[];
   winner: RoomUser;
   startedAt: number;
   expiresAt: number;
 }
+
+interface PollEventState {
+  type: 'poll';
+  question: string;
+  options: string[];
+  multipleChoice: boolean;
+  anonymous: boolean;
+  participants: RoomUser[];
+  // participantId -> índices de opción elegidos; ausente = todavía no votó.
+  votes: Record<string, number[]>;
+  closed: boolean;
+  startedAt: number;
+  expiresAt: number;
+}
+
+type RoomEventState = RouletteEventState | PollEventState;
 
 // Clients extrapolate from updatedAt, so refreshing it requires advancing the position too.
 function livePosition(state: MusicState, now: number): number {
@@ -122,6 +142,8 @@ export class ChatGateway implements OnGatewayDisconnect {
   private readonly connectedUsers = new Map<string, ConnectedUser>();
   private readonly musicStateByRoom = new Map<string, MusicState>();
   private readonly eventStateByRoom = new Map<string, RoomEventState>();
+  private readonly mediaLockByRoom = new Map<string, MediaLockState>();
+  private readonly nameFocusByRoom = new Map<string, boolean>();
   private readonly permanentRoomIds = new Set<string>();
   private readonly playlistSaves = new Map<string, Promise<void>>();
   private readonly logger = new Logger(ChatGateway.name);
@@ -197,6 +219,13 @@ export class ChatGateway implements OnGatewayDisconnect {
     // recién se une: solo le muestra el cartel de resultado si ya corresponde.
     const eventState = this.eventStateByRoom.get(dto.code);
     if (eventState && eventState.expiresAt > Date.now()) client.emit('eventState', eventState);
+
+    const mediaLockState = this.mediaLockByRoom.get(dto.code);
+    if (mediaLockState) client.emit(MEDIA_LOCK_EVENTS.state, mediaLockState);
+
+    // A diferencia de mediaLockState (dos flags, ausente = "sin lock
+    // todavía"), acá false YA es el default válido: siempre se emite.
+    client.emit(NAME_FOCUS_EVENTS.state, { enabled: this.nameFocusByRoom.get(dto.code) ?? false });
 
     client.to(dto.code).emit('userJoined', presence);
   }
@@ -320,6 +349,34 @@ export class ChatGateway implements OnGatewayDisconnect {
   }
 
   @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage(MEDIA_LOCK_EVENTS.set)
+  async handleSetMediaLock(@ConnectedSocket() client: Socket, @MessageBody() dto: SetMediaLockDto) {
+    const user = await this.requireMediaLockAdmin(client);
+    if (!user) return;
+
+    const current = this.mediaLockByRoom.get(user.roomCode) ?? {
+      audioLocked: false,
+      videoLocked: false,
+    };
+    const state: MediaLockState = {
+      audioLocked: dto.target === 'audio' ? dto.locked : current.audioLocked,
+      videoLocked: dto.target === 'video' ? dto.locked : current.videoLocked,
+    };
+    this.mediaLockByRoom.set(user.roomCode, state);
+    this.server.to(user.roomCode).emit(MEDIA_LOCK_EVENTS.state, state);
+  }
+
+  @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage(NAME_FOCUS_EVENTS.set)
+  async handleSetNameFocus(@ConnectedSocket() client: Socket, @MessageBody() dto: SetNameFocusDto) {
+    const user = await this.requireNameFocusAdmin(client);
+    if (!user) return;
+
+    this.nameFocusByRoom.set(user.roomCode, dto.enabled);
+    this.server.to(user.roomCode).emit(NAME_FOCUS_EVENTS.state, { enabled: dto.enabled });
+  }
+
+  @UseGuards(WsJwtAuthGuard)
   @SubscribeMessage('musicJumpToTrack')
   async handleMusicJumpToTrack(
     @ConnectedSocket() client: Socket,
@@ -437,17 +494,82 @@ export class ChatGateway implements OnGatewayDisconnect {
       return;
     }
 
-    const winner = participants[Math.floor(Math.random() * participants.length)];
     const now = Date.now();
-    const state: RoomEventState = {
-      type: dto.type,
-      participants,
-      winner,
-      startedAt: now,
-      expiresAt: now + ROOM_EVENT_TTL_MS,
-    };
+    const state: RoomEventState =
+      dto.type === 'poll'
+        ? {
+            // Los ! son seguros: el ValidationPipe global ya corrió @ValidateIf
+            // + @IsString/@IsArray/@IsBoolean sobre estos campos para type 'poll'
+            // (ver start-room-event.dto.ts) antes de que el handler se ejecute.
+            type: 'poll',
+            question: dto.question!,
+            options: dto.options!,
+            multipleChoice: dto.multipleChoice!,
+            anonymous: dto.anonymous!,
+            participants,
+            votes: {},
+            closed: false,
+            startedAt: now,
+            expiresAt: now + ROOM_EVENT_TTL_MS,
+          }
+        : {
+            type: 'roulette',
+            participants,
+            winner: participants[Math.floor(Math.random() * participants.length)],
+            startedAt: now,
+            expiresAt: now + ROOM_EVENT_TTL_MS,
+          };
     this.eventStateByRoom.set(user.roomCode, state);
     this.server.to(user.roomCode).emit('eventStarted', state);
+  }
+
+  @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage('castPollVote')
+  handleCastPollVote(@ConnectedSocket() client: Socket, @MessageBody() dto: CastPollVoteDto) {
+    const user = this.connectedUsers.get(client.id);
+    if (!user) {
+      client.emit('error', { message: 'Tenés que unirte a una sala antes de votar' });
+      return;
+    }
+
+    const state = this.eventStateByRoom.get(user.roomCode);
+    if (!state || state.type !== 'poll' || state.closed) {
+      client.emit('error', { message: 'No hay ninguna encuesta abierta en esta sala' });
+      return;
+    }
+    if (!state.participants.some((p) => p.participantId === user.participantId)) {
+      client.emit('error', { message: 'No estás participando en esta encuesta' });
+      return;
+    }
+    const inRange = dto.optionIndexes.every((index) => index < state.options.length);
+    if (!inRange) {
+      client.emit('error', { message: 'Esa opción no existe en la encuesta' });
+      return;
+    }
+    if (!state.multipleChoice && dto.optionIndexes.length > 1) {
+      client.emit('error', { message: 'Esta encuesta solo permite elegir una opción' });
+      return;
+    }
+
+    if (dto.optionIndexes.length === 0) {
+      delete state.votes[user.participantId];
+    } else {
+      state.votes[user.participantId] = [...new Set(dto.optionIndexes)];
+    }
+    this.server.to(user.roomCode).emit('eventState', state);
+  }
+
+  @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage('closePollEvent')
+  async handleClosePollEvent(@ConnectedSocket() client: Socket) {
+    const user = await this.requireEventModerator(client);
+    if (!user) return;
+
+    const state = this.eventStateByRoom.get(user.roomCode);
+    if (!state || state.type !== 'poll' || state.closed) return;
+
+    state.closed = true;
+    this.server.to(user.roomCode).emit('eventState', state);
   }
 
   handleDisconnect(client: Socket) {
@@ -471,6 +593,8 @@ export class ChatGateway implements OnGatewayDisconnect {
     if (this.getUsersInRoom(user.roomCode).length === 0) {
       this.musicStateByRoom.delete(user.roomCode);
       this.eventStateByRoom.delete(user.roomCode);
+      this.mediaLockByRoom.delete(user.roomCode);
+      this.nameFocusByRoom.delete(user.roomCode);
       this.permanentRoomIds.delete(user.roomId);
     }
   }
@@ -516,6 +640,59 @@ export class ChatGateway implements OnGatewayDisconnect {
     if (role !== 'administrador') {
       client.emit('error', {
         message: 'Solo el administrador de la sala puede controlar la música',
+      });
+      return undefined;
+    }
+    return user;
+  }
+
+  // Misma regla que requireMusicAdmin (administrador exclusivo), pero con
+  // mensajes propios: reusar requireMusicAdmin tal cual le mostraba al
+  // participante errores de "música" al tocar un switch de mic/cámara.
+  private async requireMediaLockAdmin(client: Socket): Promise<ConnectedUser | undefined> {
+    const user = this.connectedUsers.get(client.id);
+    if (!user) {
+      client.emit('error', {
+        message: 'Tenés que unirte a una sala antes de silenciar a los demás',
+      });
+      return undefined;
+    }
+    if (!user.userId) {
+      client.emit('error', {
+        message: 'Necesitás una cuenta para silenciar a los demás en la sala',
+      });
+      return undefined;
+    }
+    const role = await this.roomsService.getMemberRole(user.roomCode, user.userId);
+    if (role !== 'administrador') {
+      client.emit('error', {
+        message: 'Solo el administrador de la sala puede silenciar a los demás',
+      });
+      return undefined;
+    }
+    return user;
+  }
+
+  // Misma regla que requireMediaLockAdmin (administrador exclusivo), pero con
+  // mensajes propios para el enfoque automático al nombrar.
+  private async requireNameFocusAdmin(client: Socket): Promise<ConnectedUser | undefined> {
+    const user = this.connectedUsers.get(client.id);
+    if (!user) {
+      client.emit('error', {
+        message: 'Tenés que unirte a una sala antes de activar el enfoque automático',
+      });
+      return undefined;
+    }
+    if (!user.userId) {
+      client.emit('error', {
+        message: 'Necesitás una cuenta para activar el enfoque automático en la sala',
+      });
+      return undefined;
+    }
+    const role = await this.roomsService.getMemberRole(user.roomCode, user.userId);
+    if (role !== 'administrador') {
+      client.emit('error', {
+        message: 'Solo el administrador de la sala puede activar el enfoque automático',
       });
       return undefined;
     }

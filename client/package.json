@@ -12,6 +12,7 @@
     "test:watch": "jest --watch"
   },
   "dependencies": {
+    "@date2gether/shared": "workspace:*",
     "@livekit/components-react": "2.9.24",
     "@livekit/components-styles": "1.2.0",
     "frimousse": "0.4.0",

@@ -1,4 +1,4 @@
-import { describe, expect, it, jest } from '@jest/globals';
+import { describe, expect, it, vi } from 'vitest';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { ForbiddenException, NotFoundException, type ExecutionContext } from '@nestjs/common';
@@ -16,12 +16,12 @@ const httpContext = (request: object) =>
 // joinable; cualquier otro código es 404. assertBound replica la lógica
 // real (403 si el roomId del participante no coincide con el de la sala).
 const resolver = {
-  resolveJoinable: jest.fn((code: string) => {
+  resolveJoinable: vi.fn((code: string) => {
     if (code === 'abc-defg-hij') return { id: 'room-1', code, isActive: true };
     if (code === 'xyz-abcd-efg') return { id: 'room-2', code, isActive: true };
     throw new NotFoundException(`No existe una sala con el código "${code}"`);
   }),
-  assertBound: jest.fn((participant: { roomId: string }, room: { id: string }) => {
+  assertBound: vi.fn((participant: { roomId: string }, room: { id: string }) => {
     if (participant.roomId !== room.id) {
       throw new ForbiddenException('El acceso pertenece a otra sala');
     }

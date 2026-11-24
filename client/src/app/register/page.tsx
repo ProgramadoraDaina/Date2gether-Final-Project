@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { register } from '@/lib/auth';
+import { readNextPath } from '@/features/auth/safeRedirect';
 import { useTranslation } from '@/features/translation/useTranslation';
 import styles from './page.module.css';
 
@@ -25,7 +26,7 @@ export default function RegisterPage() {
     try {
       const user = await register(email.trim(), password, name.trim());
       localStorage.setItem(NAME_KEY, user.name);
-      router.push('/');
+      router.replace(readNextPath());
     } catch (err) {
       setError(err instanceof Error ? err.message : t('No se pudo crear la cuenta'));
     } finally {

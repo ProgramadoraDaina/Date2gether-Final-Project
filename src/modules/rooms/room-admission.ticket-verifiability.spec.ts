@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import type { DrizzleDb } from '../../db/drizzle.module';
@@ -37,7 +37,7 @@ function makeRoom(overrides: Partial<Room> = {}): Room {
 // hold, using a REAL JwtService (not mocked) so the ticket's actual
 // expiresIn is what's under test.
 //
-// Advances the clock via a Date.now() spy, NOT jest.useFakeTimers(): the
+// Advances the clock via a Date.now() spy, NOT vi.useFakeTimers(): the
 // 'jsonwebtoken' library signs/verifies through Node's crypto bindings,
 // whose completion callback is scheduled on a real timer phase -- modern
 // fake timers intercept that phase and the call never resolves. A plain
@@ -47,11 +47,11 @@ describe('Permanent-room admission ticket survives past hour 24 (real JWT, fake 
   let db: FakeDb;
   let access: RoomAccessService;
   let resolver: {
-    lockJoinable: ReturnType<typeof jest.fn>;
-    touchEntry: ReturnType<typeof jest.fn>;
+    lockJoinable: ReturnType<typeof vi.fn>;
+    touchEntry: ReturnType<typeof vi.fn>;
   };
   let service: RoomAdmissionService;
-  let tx: { select: ReturnType<typeof jest.fn>; insert: ReturnType<typeof jest.fn> };
+  let tx: { select: ReturnType<typeof vi.fn>; insert: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     db = createFakeDb();
@@ -60,8 +60,8 @@ describe('Permanent-room admission ticket survives past hour 24 (real JWT, fake 
       new ConfigService({ JWT_ACCESS_SECRET: 'ticket-verifiability-test-secret' }),
     );
     resolver = {
-      lockJoinable: jest.fn(),
-      touchEntry: jest.fn().mockResolvedValue(undefined),
+      lockJoinable: vi.fn(),
+      touchEntry: vi.fn().mockResolvedValue(undefined),
     };
     service = new RoomAdmissionService(
       db as unknown as DrizzleDb,
@@ -69,8 +69,8 @@ describe('Permanent-room admission ticket survives past hour 24 (real JWT, fake 
       resolver as unknown as RoomResolverService,
     );
     tx = {
-      select: jest.fn().mockReturnValue(chain([])),
-      insert: jest.fn().mockReturnValue(chain([])),
+      select: vi.fn().mockReturnValue(chain([])),
+      insert: vi.fn().mockReturnValue(chain([])),
     };
     db.transaction.mockImplementation(async (cb: unknown) =>
       (cb as (t: typeof tx) => Promise<unknown>)(tx),
@@ -78,7 +78,7 @@ describe('Permanent-room admission ticket survives past hour 24 (real JWT, fake 
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('at hour 25: the ticket still verifies AND the request row is still pending', async () => {
@@ -92,7 +92,7 @@ describe('Permanent-room admission ticket survives past hour 24 (real JWT, fake 
     const { requestId, ticket } = pending;
 
     const hour25 = Date.now() + 25 * 60 * 60 * 1000;
-    jest.spyOn(Date, 'now').mockReturnValue(hour25);
+    vi.spyOn(Date, 'now').mockReturnValue(hour25);
 
     // Half 1: the ticket itself, signed `expiresIn: '365d'` for a
     // permanent room (room-access.service.ts), still verifies at hour 25 --
@@ -129,7 +129,7 @@ describe('Permanent-room admission ticket survives past hour 24 (real JWT, fake 
     if (!('ticket' in pending)) throw new Error('expected a pending receipt with a ticket');
     const { requestId, ticket } = pending;
 
-    jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 25 * 60 * 60 * 1000);
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 25 * 60 * 60 * 1000);
 
     await expect(access.verifyAdmissionTicket(ticket, room.id, requestId)).rejects.toThrow();
   });

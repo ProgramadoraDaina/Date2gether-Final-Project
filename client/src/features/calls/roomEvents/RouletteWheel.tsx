@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from '@/features/translation/useTranslation';
-import type { RoomEventState } from './useRoomEvents';
+import type { RouletteEventState } from './useRoomEvents';
 import styles from './RouletteWheel.module.css';
 
 // Colores solo decorativos (no codifican datos, a diferencia de una paleta
@@ -34,7 +34,7 @@ function buildGradient(count: number): string {
 }
 
 interface RouletteWheelProps {
-  state: RoomEventState;
+  state: RouletteEventState;
   onDone(): void;
 }
 

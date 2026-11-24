@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it } from 'vitest';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { UpdateAvatarDto } from './update-avatar.dto';
