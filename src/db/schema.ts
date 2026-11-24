@@ -150,9 +150,19 @@ export const roomMembers = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     role: roomRoleEnum('role').notNull().default('participante'),
     hiddenFromMyRooms: boolean('hidden_from_my_rooms').notNull().default(false),
+    isOwner: boolean('is_owner').notNull().default(false),
     joinedAt: timestamp('joined_at').notNull().defaultNow(),
   },
-  (table) => [primaryKey({ columns: [table.roomId, table.userId] })],
+  (table) => [
+    primaryKey({ columns: [table.roomId, table.userId] }),
+    uniqueIndex('room_members_one_owner_per_room')
+      .on(table.roomId)
+      .where(sql`${table.isOwner}`),
+    check(
+      'room_members_owner_is_admin',
+      sql`not ${table.isOwner} or ${table.role} = 'administrador'`,
+    ),
+  ],
 );
 
 export const admissionStatusEnum = pgEnum('admission_status', [
@@ -412,8 +422,8 @@ export const callParticipantIdentities = pgTable(
     // null para invitados.
     userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
     displayName: varchar('display_name', { length: 60 }).notNull(),
-    // Snapshot del rol al emitir el token; null para invitados. Promover o
-    // transferir el rol durante la llamada está fuera de alcance (D1).
+    // Snapshot del rol al emitir el token; null para invitados. La presencia
+    // de anfitriones se determina con el rol actual de roomMembers.
     roleAtIssue: roomRoleEnum('role_at_issue'),
     issuedAt: timestamp('issued_at').notNull().defaultNow(),
   },

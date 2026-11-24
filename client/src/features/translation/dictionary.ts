@@ -3,7 +3,14 @@ const en: Record<string, string> = {
   'Necesitás ser admitido para unirte a esta sala': 'You must be admitted before joining this room',
   // Moderación de ingreso
   'Sala de espera': 'Waiting room',
-  'El anfitrión debe admitir tu ingreso.': 'The host needs to admit you.',
+  'Código de la sala': 'Room code',
+  'Esperando al anfitrión': 'Waiting for the host',
+  'Vas a entrar automáticamente cuando te admitan.':
+    'You’ll join automatically once the host admits you.',
+  'Esperando la admisión': 'Waiting for admission',
+  'Cancelación pendiente': 'Cancellation pending',
+  'Próximo encuentro programado:': 'Next scheduled meeting:',
+  'Esta sala no tiene un próximo horario programado.': 'No upcoming meeting is scheduled.',
   'El anfitrión rechazó tu solicitud.': 'The host declined your request.',
   'La solicitud fue cancelada.': 'The request was cancelled.',
   'La solicitud venció. Podés volver a solicitar el ingreso.':
@@ -11,7 +18,6 @@ const en: Record<string, string> = {
   'Todavía no estás conectado al chat ni a la llamada.':
     'You are not connected to the chat or call yet.',
   'Volver al formulario': 'Back to the form',
-  'Revisar estado': 'Check status',
   'Cancelar solicitud': 'Cancel request',
   'Cancelando…': 'Cancelling…',
   'Administrar ingresos': 'Manage access',
@@ -373,6 +379,12 @@ const en: Record<string, string> = {
   'No se pudieron cargar los GIFs. Intentá nuevamente.': 'Could not load GIFs. Please try again.',
   'La búsqueda de GIFs no está configurada': 'GIF search is not configured',
   'Hacer colaborador': 'Make collaborator',
+  'Hacer administrador': 'Make administrator',
+  'Quitar administrador': 'Remove administrator',
+  Propietario: 'Owner',
+  'Permisos de': 'Permissions for',
+  'La sala debe conservar al menos un administrador':
+    'The room must keep at least one administrator',
   'Quitar colaborador': 'Remove collaborator',
   Conversación: 'Conversation',
   Presentes: 'Attendees',
@@ -395,6 +407,8 @@ const en: Record<string, string> = {
   'La sala volvió a tu lista.': 'The room is back in your list.',
   'No se pudo actualizar tu lista de salas': 'Could not update your room list',
   'No se encontró la sala en tu lista': 'The room was not found in your list',
+  'Salas que administrás': 'Rooms you administer',
+  'Todavía no tenés salas como administrador.': 'You do not administer any rooms yet.',
   'Necesitás iniciar sesión para ver tus salas.': 'You need to sign in to see your rooms.',
   'No se pudieron cargar tus salas': 'Could not load your rooms',
   'Cargando salas…': 'Loading rooms…',

@@ -7,8 +7,10 @@ import {
   ApiError,
   clearCallHistoryArchive,
   getCallHistory,
+  getOwnedRooms,
   getRoomCallArchive,
   type CallHistoryPage,
+  type OwnedRoom,
 } from '@/lib/api';
 import { RequireAuth } from '@/features/auth/RequireAuth';
 import { useTranslation } from '@/features/translation/useTranslation';
@@ -135,6 +137,7 @@ function HistoryList({
           {t('Ver historial de la sala')}
         </Link>
       )}
+      {!roomArchive && <OwnedRoomsSection roomFilter={roomId} />}
       {!archive && <p className={styles.filter}>{t('Llamadas de los últimos 90 días')}</p>}
       {loading && <p>{t('Cargando historial…')}</p>}
       {error && (
@@ -290,5 +293,60 @@ function HistoryList({
       )}
       {deleted && <p role="status">{t('Se borró el historial anterior de tu cuenta.')}</p>}
     </div>
+  );
+}
+
+function OwnedRoomsSection({ roomFilter }: { roomFilter: string | null }) {
+  const { t } = useTranslation();
+  const [rooms, setRooms] = useState<OwnedRoom[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Corre solo al montar: `t` se omite a propósito para no repetir el fetch al cambiar el idioma.
+  useEffect(() => {
+    getOwnedRooms()
+      .then(setRooms)
+      .catch((err) => {
+        setError(err instanceof ApiError ? err.message : t('No se pudieron cargar tus salas'));
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const visibleRooms = roomFilter ? rooms.filter((room) => room.id === roomFilter) : rooms;
+
+  return (
+    <section aria-label={t('Salas que administrás')} className={styles.roomsSection}>
+      <h2>{t('Salas que administrás')}</h2>
+      {loading && <p>{t('Cargando salas…')}</p>}
+      {error && (
+        <p role="alert" className={styles.error}>
+          {error}
+        </p>
+      )}
+      {!loading && !error && visibleRooms.length === 0 && !roomFilter && (
+        <p>{t('Todavía no tenés salas como administrador.')}</p>
+      )}
+      {visibleRooms.length > 0 && (
+        <ul className={styles.list}>
+          {visibleRooms.map((room) => (
+            <li key={room.id} className={styles.entry}>
+              <div className={styles.entryMain}>
+                <strong>{room.name}</strong>
+                <span className={styles.code}>{room.code}</span>
+              </div>
+              <div className={styles.entryMeta}>
+                {room.isJoinable ? (
+                  <Link href={`/room/${room.code}`} className={styles.sessionLink}>
+                    {t('Entrar')}
+                  </Link>
+                ) : (
+                  <span className={styles.date}>{t('Vencida')}</span>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

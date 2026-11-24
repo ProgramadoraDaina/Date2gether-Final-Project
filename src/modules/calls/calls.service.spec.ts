@@ -85,8 +85,8 @@ function createDbMock() {
   const roleWhere = vi.fn().mockReturnValue({ limit: roleLimit });
   const roleFrom = vi.fn().mockReturnValue({ where: roleWhere });
 
-  // select({id}).from(callParticipantIdentities).where(...).limit(1) —
-  // cruce de identities conectadas contra roleAtIssue='administrador' en
+  // select({id}).from(callParticipantIdentities).innerJoin(roomMembers).where(...).limit(1) —
+  // cruce de identities conectadas contra el rol actual de administrador en
   // assertHostConnected(). Default: SÍ hay un admin conectado, para que los
   // tests de join() preexistentes (que no ejercitan el gate en sí) sigan
   // emitiendo token sin tener que mockear un anfitrión por separado.
@@ -94,7 +94,8 @@ function createDbMock() {
     .fn<() => Promise<{ id: string }[]>>()
     .mockResolvedValue([{ id: 'already-connected-admin-identity' }]);
   const adminWhere = vi.fn().mockReturnValue({ limit: adminLimit });
-  const adminFrom = vi.fn().mockReturnValue({ where: adminWhere });
+  const adminInnerJoin = vi.fn().mockReturnValue({ where: adminWhere });
+  const adminFrom = vi.fn().mockReturnValue({ innerJoin: adminInnerJoin });
 
   const from = vi.fn((table: unknown) => {
     if (table === page) return { innerJoin };

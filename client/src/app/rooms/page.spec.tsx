@@ -124,7 +124,7 @@ describe('MyRoomsPage', () => {
     expect(renameRoom).toHaveBeenCalledWith('abc-defg-hij', 'Grupo de los jueves');
   });
 
-  it('avisa cuando todavía no creó ninguna sala', async () => {
+  it('avisa cuando no administra salas propias ni heredadas', async () => {
     const { isLoggedIn } = await import('@/lib/auth');
     const { getOwnedRooms } = await import('@/lib/api');
     (isLoggedIn as jest.Mock<typeof isLoggedIn>).mockReturnValue(true);
@@ -132,6 +132,6 @@ describe('MyRoomsPage', () => {
     const MyRoomsPage = (await import('./page')).default;
     render(<MyRoomsPage />);
 
-    await screen.findByText('Todavía no creaste ninguna sala.');
+    await screen.findByText('Todavía no tenés salas como administrador.');
   });
 });

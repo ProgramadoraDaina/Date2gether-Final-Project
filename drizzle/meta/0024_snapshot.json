@@ -1,6 +1,6 @@
 {
-  "id": "fb295b14-9026-467c-b99f-08ccc2a6390b",
-  "prevId": "c6918dc5-2760-4ebf-9b8c-8f9e95e00687",
+  "id": "c6918dc5-2760-4ebf-9b8c-8f9e95e00687",
+  "prevId": "19d816af-609f-46a6-9bfd-9b3c401ee96f",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1143,8 +1143,8 @@
           "notNull": true,
           "default": "'participante'"
         },
-        "hidden_from_my_rooms": {
-          "name": "hidden_from_my_rooms",
+        "is_owner": {
+          "name": "is_owner",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
@@ -1158,7 +1158,24 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "room_members_one_owner_per_room": {
+          "name": "room_members_one_owner_per_room",
+          "columns": [
+            {
+              "expression": "room_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"room_members\".\"is_owner\"",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "room_members_room_id_rooms_id_fk": {
           "name": "room_members_room_id_rooms_id_fk",
@@ -1198,7 +1215,12 @@
       },
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "room_members_owner_is_admin": {
+          "name": "room_members_owner_is_admin",
+          "value": "not \"room_members\".\"is_owner\" or \"room_members\".\"role\" = 'administrador'"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.room_notes": {

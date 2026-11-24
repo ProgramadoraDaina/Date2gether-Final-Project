@@ -47,12 +47,12 @@ function createDbMock() {
   const onConflictDoNothing = vi.fn().mockReturnValue({ returning });
   const values = vi.fn().mockReturnValue({ onConflictDoNothing });
   const insert = vi.fn().mockReturnValue({ values });
-  // select({roleAtIssue}).from(callParticipantIdentities).where(...).limit(1)
+  // El rol actual de roomMembers se cruza con la identidad que salió.
   // — onParticipantLeft() resolviendo si el identity que se fue era admin.
   // Default: sin fila (no se encuentra ninguna correlación), así que el
   // dispatch de participant_left no llama a CallSessionCloseService salvo
   // que el test particular configure lo contrario.
-  const select = vi.fn().mockReturnValue(chain([] as { roleAtIssue: string | null }[]));
+  const select = vi.fn().mockReturnValue(chain([] as { role: string | null }[]));
   // Default genérico para cualquier dispatch que caiga en una transacción
   // (p. ej. room_finished) sin que el test particular configure su propio
   // tx: selects vacíos, compare-and-set sin filas -> no materializa nada,
@@ -432,8 +432,8 @@ describe('CallsWebhookService: cierre forzado en participant_left (tasks.md 6.10
     vi.restoreAllMocks();
   });
 
-  it('participant_left de un identity con roleAtIssue=administrador invoca a CallSessionCloseService.onAdminLeft', async () => {
-    db.select.mockReturnValue(chain([{ roleAtIssue: 'administrador' }]));
+  it('participant_left de un admin actual, incluso promovido durante la llamada, invoca el cierre', async () => {
+    db.select.mockReturnValue(chain([{ role: 'administrador' }]));
     receive.mockResolvedValue(
       buildEvent({
         event: 'participant_left',
@@ -447,8 +447,8 @@ describe('CallsWebhookService: cierre forzado en participant_left (tasks.md 6.10
     expect(closeService.onAdminLeft).toHaveBeenCalledWith('RM_session-A', 'abc-defg-hij');
   });
 
-  it('participant_left de un identity sin roleAtIssue=administrador (invitado o no-admin) no invoca el cierre', async () => {
-    db.select.mockReturnValue(chain([{ roleAtIssue: 'participante' }]));
+  it('participant_left de un invitado o no-admin actual no invoca el cierre', async () => {
+    db.select.mockReturnValue(chain([{ role: 'participante' }]));
     receive.mockResolvedValue(
       buildEvent({
         event: 'participant_left',

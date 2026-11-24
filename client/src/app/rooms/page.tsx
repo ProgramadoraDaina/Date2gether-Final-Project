@@ -117,7 +117,9 @@ function MyRoomsContent() {
             {error}
           </p>
         )}
-        {!loading && !error && rooms.length === 0 && <p>{t('Todavía no creaste ninguna sala.')}</p>}
+        {!loading && !error && rooms.length === 0 && (
+          <p>{t('Todavía no tenés salas como administrador.')}</p>
+        )}
         {!loading && !error && rooms.length > 0 && visibleRooms.length === 0 && (
           <p>{t(showHidden ? 'No hay salas ocultas.' : 'No hay salas visibles en tu lista.')}</p>
         )}
