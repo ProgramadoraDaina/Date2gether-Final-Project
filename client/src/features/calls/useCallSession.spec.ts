@@ -104,6 +104,54 @@ describe('useCallSession: LiveKit', () => {
     expect(fake.result.current.endReason).toBeNull();
   });
 
+  // Decisión 2 (design.md "Señal de motivo de remoción", tasks.md 2.8):
+  // dos productores nuevos + un literal nuevo. Ninguno pasa por 'error':
+  // una remoción esperada (traslado/vuelta) o una expulsión por política no
+  // son fallos de red, son fines de sesión por regla.
+  describe('[2.8] endedForBreakout() / removedByPolicy() (Decisión 2, design.md)', () => {
+    it('endedForBreakout() produce el estado terminal "ended" con endReason "breakout-closed", sin pasar por "error"', async () => {
+      const fake = await setup();
+      await act(() => fake.result.current.joinCall('abc', 'room-token'));
+
+      act(() => fake.result.current.endedForBreakout());
+
+      expect(fake.result.current.status).toBe('ended');
+      expect(fake.result.current.endReason).toBe('breakout-closed');
+      expect(fake.result.current.session).toBeNull();
+      expect(fake.result.current.error).toBeNull();
+    });
+
+    it('removedByPolicy(code) produce el estado terminal "ended" con endReason "breakout-locked", nunca "error"', async () => {
+      const fake = await setup();
+      await act(() => fake.result.current.joinCall('abc', 'room-token'));
+
+      act(() => fake.result.current.removedByPolicy('BREAKOUT_RETURN_LOCKED'));
+
+      expect(fake.result.current.status).toBe('ended');
+      expect(fake.result.current.endReason).toBe('breakout-locked');
+      expect(fake.result.current.session).toBeNull();
+    });
+
+    it('removedByPolicy(code) deja disponible el código recibido para que el renderizador resuelva la copia visible', async () => {
+      const fake = await setup();
+      await act(() => fake.result.current.joinCall('abc', 'room-token'));
+
+      act(() => fake.result.current.removedByPolicy('BREAKOUT_RETURN_LOCKED'));
+
+      expect(fake.result.current.error).toBe('BREAKOUT_RETURN_LOCKED');
+    });
+
+    it('un nuevo joinCall después de endedForBreakout()/removedByPolicy() limpia endReason', async () => {
+      const fake = await setup();
+      await act(() => fake.result.current.joinCall('abc', 'room-token'));
+      act(() => fake.result.current.removedByPolicy('BREAKOUT_RETURN_LOCKED'));
+
+      await act(() => fake.result.current.joinCall('abc', 'room-token'));
+
+      expect(fake.result.current.endReason).toBeNull();
+    });
+  });
+
   describe('switchRoom (breakout-rooms, Flujo 1 de su design.md)', () => {
     const breakoutSession = {
       url: 'wss://media.example.com',

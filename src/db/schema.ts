@@ -541,6 +541,12 @@ export const callBreakoutRooms = pgTable(
     // 'locked' | 'free_return'. varchar y no pgEnum: mismo precedente que
     // call_sessions.close_reason — es operativo, no una taxonomía de dominio.
     leavePolicy: varchar('leave_policy', { length: 16 }).notNull().default('locked'),
+    // Decisión 3 (breakout-rooms-ux-fix/design.md "joinPolicy: esquema,
+    // migración y autorización"): 'admin_only' | 'open'. Gobierna el
+    // movimiento HACIA DENTRO por iniciativa propia -- separado de
+    // leavePolicy, que gobierna la VUELTA a la principal. Mismo precedente
+    // varchar que leavePolicy, documentado arriba.
+    joinPolicy: varchar('join_policy', { length: 16 }).notNull().default('admin_only'),
     // null = sin timer de cierre automático.
     autoCloseAt: timestamp('auto_close_at'),
     // null = abierta. Objetivo del compare-and-set de cierre.

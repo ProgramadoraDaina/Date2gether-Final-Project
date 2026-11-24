@@ -2,10 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MockInstance } from 'vitest';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNull } from 'drizzle-orm';
 import { RoomServiceClient, type ParticipantInfo } from 'livekit-server-sdk';
 import type { DrizzleDb } from '../../db/drizzle.module';
-import { callEvents, callParticipantIdentities, callSessions } from '../../db/schema';
+import {
+  callBreakoutOccupants,
+  callBreakoutRooms,
+  callEvents,
+  callParticipantIdentities,
+  callSessions,
+} from '../../db/schema';
 import { chain } from '../../test-support/fake-drizzle';
 import type { BreakoutRoomsService } from './breakout-rooms.service';
 import type { CallGroupResolverService } from './call-group-resolver.service';
@@ -30,6 +36,11 @@ function createDbMock() {
     from: vi.fn().mockImplementation((table: unknown) => {
       if (table === callEvents)
         return chain([] as { occurredAt: Date; livekitIdentity: string | null }[]);
+      // hasAdminAssignmentInFlight (R1, Fase 1): join de tres tablas
+      // encabezado por callBreakoutOccupants. Default: sin fila (ningún
+      // admin en tránsito), para que ningún test preexistente que llegue a
+      // este branch sin configurarlo explícitamente asuma lo contrario.
+      if (table === callBreakoutOccupants) return chain([] as { id: string }[]);
       return chain([] as { id: string; roomId: string | null }[]); // callParticipantIdentities
     }),
   }));
@@ -485,5 +496,151 @@ describe('CallSessionCloseService', () => {
 
     expect(breakoutRooms.closeGroupBreakouts).toHaveBeenCalledWith(null, 'abc-defg-hij');
     expect(deleteRoom).toHaveBeenCalledWith('abc-defg-hij');
+  });
+
+  // R1 (design.md "R1 -- Admin sola que se traslada", tasks.md Fase 1):
+  // caracterización del comportamiento ACTUAL de hasConnectedAdmin/
+  // onAdminLeft/recheckAndClose con grupo multi-sala (R1-C1, R1-C2, red de
+  // seguridad antes de tocar el evaluador), seguida de la mitigación nueva
+  // hasAdminAssignmentInFlight (R1-C3, R1-C4). Ningún assert de arriba se
+  // tocó para agregar lo de abajo.
+  describe('R1 -- admin sola que se traslada a una mini sala', () => {
+    const roomCode = 'abc-defg-hij';
+    const breakoutName = `${roomCode}::breakout-1`;
+    const roomId = 'room-1';
+
+    beforeEach(() => {
+      groupResolver.resolveCallGroupRoomNames.mockResolvedValue([roomCode, breakoutName]);
+    });
+
+    it('[R1-C1] con la mini sala creada y vacía y la principal vacía, onAdminLeft agenda el timer (comportamiento de hoy, antes de la mitigación)', async () => {
+      vi.spyOn(RoomServiceClient.prototype, 'listRooms').mockResolvedValue(
+        [roomCode, breakoutName].map((name) => ({ name })) as Awaited<
+          ReturnType<RoomServiceClient['listRooms']>
+        >,
+      );
+      listParticipants.mockResolvedValue([]); // ambas salas vacías
+
+      await service.onAdminLeft('RM_session-A', roomCode, roomId);
+
+      // El timer todavía no corrió: ningún cierre inmediato.
+      expect(deleteRoom).not.toHaveBeenCalled();
+    });
+
+    it('[R1-C2] a T+15s con la identity nueva presente en la mini sala, recheckAndClose no llama a deleteRoom', async () => {
+      vi.spyOn(RoomServiceClient.prototype, 'listRooms').mockResolvedValue(
+        [roomCode, breakoutName].map((name) => ({ name })) as Awaited<
+          ReturnType<RoomServiceClient['listRooms']>
+        >,
+      );
+      // Al momento del participant_left: ambas salas vacías todavía.
+      listParticipants.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+      await service.onAdminLeft('RM_session-A', roomCode, roomId);
+
+      // La reconexión completó antes de T+15s: la identity nueva ya está
+      // en la mini sala, y su roleAtIssue ya quedó escrito (heredado por
+      // moveIn).
+      listParticipants
+        .mockResolvedValueOnce([]) // principal
+        .mockResolvedValueOnce([{ identity: 'admin-reconnected-new' } as ParticipantInfo]); // mini sala
+      db.select.mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue(chain([{ id: 'identity-row-new' }])),
+        }),
+      });
+
+      await vi.advanceTimersByTimeAsync(15_000);
+      await flushMicrotasks();
+
+      expect(deleteRoom).not.toHaveBeenCalled();
+    });
+
+    it('[R1-C3] asignación de admin de 5s de antigüedad suprime el cierre; de 60s de antigüedad, no', async () => {
+      vi.spyOn(RoomServiceClient.prototype, 'listRooms').mockResolvedValue(
+        [roomCode, breakoutName].map((name) => ({ name })) as Awaited<
+          ReturnType<RoomServiceClient['listRooms']>
+        >,
+      );
+      listParticipants.mockResolvedValue([]); // ambas salas vacías, siempre
+
+      // Rama "fresca" (5s): hasAdminAssignmentInFlight encuentra una fila.
+      db.select.mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          innerJoin: vi.fn().mockReturnValue({
+            innerJoin: vi.fn().mockReturnValue({
+              where: vi.fn().mockReturnValue(chain([{ id: 'occupant-fresh' }])),
+            }),
+          }),
+        }),
+      });
+      await service.onAdminLeft('RM_session-A', roomCode, roomId);
+      await vi.advanceTimersByTimeAsync(15_000);
+      await flushMicrotasks();
+      expect(deleteRoom).not.toHaveBeenCalled();
+
+      // Rama "vencida" (60s, simulada: ninguna fila -- el cutoff real de
+      // 30s en producción ya la habría excluido): hasAdminAssignmentInFlight
+      // no encuentra nada (el default del mock ya es sin fila) -> el
+      // cierre procede.
+      await service.onAdminLeft('RM_session-A', roomCode, roomId);
+      await vi.advanceTimersByTimeAsync(15_000);
+      await flushMicrotasks();
+      expect(deleteRoom).toHaveBeenCalledWith(roomCode);
+    });
+
+    it('[R1-C3] hasAdminAssignmentInFlight consulta el join de tres tablas filtrando por roomId, mini sala abierta, asignación abierta y roleAtIssue=administrador', async () => {
+      vi.spyOn(RoomServiceClient.prototype, 'listRooms').mockResolvedValue(
+        [roomCode, breakoutName].map((name) => ({ name })) as Awaited<
+          ReturnType<RoomServiceClient['listRooms']>
+        >,
+      );
+      listParticipants.mockResolvedValue([]);
+
+      const whereSpy = vi.fn().mockReturnValue(chain([] as { id: string }[]));
+      const innerJoin2 = vi.fn().mockReturnValue({ where: whereSpy });
+      const innerJoin1 = vi.fn().mockReturnValue({ innerJoin: innerJoin2 });
+      const fromSpy = vi.fn().mockReturnValue({ innerJoin: innerJoin1 });
+      db.select.mockReturnValueOnce({ from: fromSpy });
+
+      await service.onAdminLeft('RM_session-A', roomCode, roomId);
+
+      expect(fromSpy).toHaveBeenCalledWith(callBreakoutOccupants);
+      expect(innerJoin1).toHaveBeenCalledWith(
+        callBreakoutRooms,
+        eq(callBreakoutOccupants.breakoutRoomId, callBreakoutRooms.id),
+      );
+      expect(innerJoin2).toHaveBeenCalledWith(
+        callParticipantIdentities,
+        eq(callBreakoutOccupants.livekitIdentity, callParticipantIdentities.livekitIdentity),
+      );
+      expect(whereSpy).toHaveBeenCalledWith(
+        and(
+          eq(callBreakoutRooms.roomId, roomId),
+          isNull(callBreakoutRooms.closedAt),
+          isNull(callBreakoutOccupants.returnedAt),
+          gt(callBreakoutOccupants.assignedAt, expect.any(Date) as unknown as Date),
+          eq(callParticipantIdentities.roleAtIssue, 'administrador'),
+        ),
+      );
+    });
+
+    it('[R1-C4] asignación fresca de un NO-admin no suprime el cierre: se agenda igual', async () => {
+      vi.spyOn(RoomServiceClient.prototype, 'listRooms').mockResolvedValue(
+        [roomCode, breakoutName].map((name) => ({ name })) as Awaited<
+          ReturnType<RoomServiceClient['listRooms']>
+        >,
+      );
+      listParticipants.mockResolvedValue([]);
+      // hasAdminAssignmentInFlight filtra por roleAtIssue='administrador'
+      // en el propio WHERE: una asignación de un no-admin nunca aparece en
+      // el resultado (el mock por defecto ya es sin fila), así que el
+      // cierre procede igual que si no hubiera ninguna asignación.
+
+      await service.onAdminLeft('RM_session-A', roomCode, roomId);
+      await vi.advanceTimersByTimeAsync(15_000);
+      await flushMicrotasks();
+
+      expect(deleteRoom).toHaveBeenCalledWith(roomCode);
+    });
   });
 });

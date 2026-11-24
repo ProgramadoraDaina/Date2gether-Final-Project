@@ -68,6 +68,7 @@ describe('ChatGateway', () => {
       onRoomEmojisChanged: vi.fn(),
       onBreakoutAssigned: vi.fn(),
       onBreakoutClosed: vi.fn(),
+      onBreakoutRemoval: vi.fn(),
     } as unknown as RoomEventsService;
 
     const gateway = new ChatGateway(
@@ -1368,6 +1369,55 @@ describe('ChatGateway', () => {
 
       expect(serverTo).toHaveBeenCalledWith('abc-defg-hij');
       expect(serverEmit).toHaveBeenCalledWith('breakout:closed', { breakoutId: 'breakout-1' });
+    });
+
+    // Decisión 2 (design.md "Señal de motivo de remoción", tasks.md 2.4):
+    // mismo patrón que breakout:assigned -- personal, nunca broadcast, pero
+    // direccionado por `targetIdentity` del evento, que ya es la
+    // sourceIdentity estable (el llamador -- BreakoutRoomsService/
+    // CallsWebhookService -- ya resolvió cuál identity corresponde al
+    // socket real).
+    describe('señal breakout:removal', () => {
+      function removalListener(roomEvents: ReturnType<typeof createGateway>['roomEvents']) {
+        return (roomEvents.onBreakoutRemoval as unknown as ReturnType<typeof vi.fn>).mock
+          .calls[0][0] as (event: {
+          roomCode: string;
+          targetIdentity: string;
+          reason: string;
+        }) => void;
+      }
+
+      it('[2.4] breakout:removal llega solo al socket del participante señalado, con el motivo como único payload', async () => {
+        const { gateway, serverTo, serverEmit, roomEvents } = createGateway();
+        const adminClient = createSocket(admin, 'socket-admin');
+        const guestClient = createSocket(guest, 'socket-guest');
+        await gateway.handleJoinRoom(adminClient as never, { code: 'abc-defg-hij' });
+        await gateway.handleJoinRoom(guestClient as never, { code: 'abc-defg-hij' });
+        serverTo.mockClear();
+        serverEmit.mockClear();
+
+        removalListener(roomEvents)({
+          roomCode: 'abc-defg-hij',
+          targetIdentity: 'guest-sub',
+          reason: 'BREAKOUT_MOVE_IN',
+        });
+
+        expect(serverTo).toHaveBeenCalledTimes(1);
+        expect(serverTo).toHaveBeenCalledWith('socket-guest');
+        expect(serverEmit).toHaveBeenCalledWith('breakout:removal', { reason: 'BREAKOUT_MOVE_IN' });
+      });
+
+      it('[2.4] breakout:removal no emite nada si el participante señalado ya no está conectado', () => {
+        const { serverTo, roomEvents } = createGateway();
+
+        removalListener(roomEvents)({
+          roomCode: 'abc-defg-hij',
+          targetIdentity: 'nobody-connected',
+          reason: 'BREAKOUT_FORCED_RETURN',
+        });
+
+        expect(serverTo).not.toHaveBeenCalled();
+      });
     });
   });
 });

@@ -1,9 +1,15 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNull } from 'drizzle-orm';
 import { RoomServiceClient } from 'livekit-server-sdk';
 import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
-import { callEvents, callParticipantIdentities, callSessions } from '../../db/schema';
+import {
+  callBreakoutOccupants,
+  callBreakoutRooms,
+  callEvents,
+  callParticipantIdentities,
+  callSessions,
+} from '../../db/schema';
 import { BreakoutRoomsService } from './breakout-rooms.service';
 import { CallGroupResolverService } from './call-group-resolver.service';
 
@@ -14,6 +20,14 @@ import { CallGroupResolverService } from './call-group-resolver.service';
 // el mismo": la única pregunta contestable a T+15s es "¿hay algún admin
 // conectado ahora?".
 const GRACE_WINDOW_MS = 15_000;
+
+// R1 (design.md "Decisión R1 — Marcador durable de 'asignación en vuelo'"):
+// un admin con una asignación abierta y fresca a una mini sala del grupo
+// está EN TRÁNSITO -- todavía no aparece en listParticipants de ninguna
+// sala del grupo. 30s, no 15s (GRACE_WINDOW_MS): es un marcador
+// independiente, no un ensanchamiento del gate de cierre forzado ya en
+// producción.
+const ASSIGNMENT_IN_FLIGHT_MS = 30_000;
 
 /**
  * Cierre forzado idempotente de la videollamada cuando se desconecta el
@@ -131,7 +145,18 @@ export class CallSessionCloseService {
     try {
       const groupRoomNames = await this.groupResolver.resolveCallGroupRoomNames(roomId, roomCode);
       const identities = await this.listGroupIdentities(groupRoomNames);
-      if (identities.length === 0) return false;
+      if (identities.length === 0) {
+        // R1: nadie conectado en NINGUNA sala del grupo todavía no prueba
+        // que el grupo quedó sin admin -- un admin puede estar EN TRÁNSITO
+        // (removida de la principal, todavía no reconectada a la mini
+        // sala). Se evalúa solo con mini salas abiertas (D2/D9 intactas
+        // para toda llamada sin mini salas: groupRoomNames.length === 1
+        // nunca entra acá).
+        if (groupRoomNames.length > 1) {
+          return await this.hasAdminAssignmentInFlight(roomId);
+        }
+        return false;
+      }
 
       const conditions = [
         inArray(callParticipantIdentities.livekitIdentity, identities),
@@ -155,6 +180,44 @@ export class CallSessionCloseService {
       this.logger.warn('No se pudo verificar la presencia de un admin para el cierre forzado');
       return true;
     }
+  }
+
+  /**
+   * R1 (design.md "Decisión R1"): ¿hay, en este grupo, una fila de ocupante
+   * ABIERTA (`returned_at IS NULL`) de una mini sala ABIERTA
+   * (`closed_at IS NULL`), con `assigned_at` dentro de los últimos
+   * `ASSIGNMENT_IN_FLIGHT_MS`, cuya identity de ORIGEN tenía
+   * `roleAtIssue = 'administrador'`? Si sí, ese admin está EN TRÁNSITO:
+   * todavía no aparece en `listParticipants` de ninguna sala, pero la
+   * asignación ya quedó escrita por `moveIn` ANTES de desconectar de la
+   * principal (mismo orden que design.md documenta para el Flujo 1).
+   *
+   * Se evalúa SOLO desde `hasConnectedAdmin`, nunca desde
+   * `CallsService.assertHostConnected`: son preguntas distintas (ver
+   * design.md, "Vive solo en CallSessionCloseService.hasConnectedAdmin").
+   */
+  private async hasAdminAssignmentInFlight(roomId: string | null): Promise<boolean> {
+    if (!roomId) return false;
+    const cutoff = new Date(Date.now() - ASSIGNMENT_IN_FLIGHT_MS);
+    const [row] = await this.db
+      .select({ id: callBreakoutOccupants.id })
+      .from(callBreakoutOccupants)
+      .innerJoin(callBreakoutRooms, eq(callBreakoutOccupants.breakoutRoomId, callBreakoutRooms.id))
+      .innerJoin(
+        callParticipantIdentities,
+        eq(callBreakoutOccupants.livekitIdentity, callParticipantIdentities.livekitIdentity),
+      )
+      .where(
+        and(
+          eq(callBreakoutRooms.roomId, roomId),
+          isNull(callBreakoutRooms.closedAt),
+          isNull(callBreakoutOccupants.returnedAt),
+          gt(callBreakoutOccupants.assignedAt, cutoff),
+          eq(callParticipantIdentities.roleAtIssue, 'administrador'),
+        ),
+      )
+      .limit(1);
+    return !!row;
   }
 
   // D2 (fast path, código de hoy) + D3 (multi-sala: existencia por

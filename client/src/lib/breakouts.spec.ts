@@ -198,4 +198,72 @@ describe('lib/breakouts', () => {
       { method: 'DELETE', headers: { Authorization: `Bearer ${roomToken}` } },
     );
   });
+
+  // Decisión 3 (design.md "joinPolicy: esquema, migración y autorización",
+  // tasks.md 5.5): joinPolicy viaja igual que leavePolicy, sin mezclarse.
+  it('[5.5] createBreakoutRoom envía joinPolicy cuando se indica', async () => {
+    mockFetchOnce(
+      {
+        id: 'breakout-1',
+        livekitRoomName: `${roomCode}::breakout-1`,
+        label: 'Mini sala 1',
+        leavePolicy: 'locked',
+        joinPolicy: 'open',
+        autoCloseAt: null,
+        occupants: [],
+      },
+      201,
+    );
+    const { createBreakoutRoom } = await import('./breakouts');
+
+    await createBreakoutRoom(roomCode, roomToken, { joinPolicy: 'open' });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      `http://localhost:3001/calls/${roomCode}/breakouts`,
+      expect.objectContaining({ body: JSON.stringify({ joinPolicy: 'open' }) }),
+    );
+  });
+
+  it('[5.5] updateBreakoutRoomPolicy envía joinPolicy sin incluir leavePolicy cuando solo se cambia uno', async () => {
+    mockFetchOnce({
+      id: 'breakout-1',
+      livekitRoomName: `${roomCode}::breakout-1`,
+      label: 'Mini sala 1',
+      leavePolicy: 'locked',
+      joinPolicy: 'open',
+      autoCloseAt: null,
+      occupants: [],
+    });
+    const { updateBreakoutRoomPolicy } = await import('./breakouts');
+
+    await updateBreakoutRoomPolicy(roomCode, roomToken, 'breakout-1', { joinPolicy: 'open' });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      `http://localhost:3001/calls/${roomCode}/breakouts/breakout-1`,
+      expect.objectContaining({ body: JSON.stringify({ joinPolicy: 'open' }) }),
+    );
+  });
+
+  // Decisión 2 (design.md "Señal de motivo de remoción", tasks.md 5.5):
+  // mapeo código->copia para que useCallSession.removedByPolicy(code) y
+  // endedForBreakout() tengan un mensaje propio y específico que
+  // renderizar, en vez de dejar un código crudo visible.
+  describe('[5.5] resolveBreakoutEndCopy', () => {
+    it('breakout-locked resuelve al mensaje de política de BREAKOUT_RETURN_LOCKED', async () => {
+      const { resolveBreakoutEndCopy } = await import('./breakouts');
+
+      expect(resolveBreakoutEndCopy('breakout-locked')).toBe(
+        'El host te va a devolver a la sala principal.',
+      );
+    });
+
+    it('breakout-closed resuelve a un mensaje propio, distinto del de breakout-locked', async () => {
+      const { resolveBreakoutEndCopy } = await import('./breakouts');
+
+      const closedCopy = resolveBreakoutEndCopy('breakout-closed');
+
+      expect(closedCopy).toBeTruthy();
+      expect(closedCopy).not.toBe('El host te va a devolver a la sala principal.');
+    });
+  });
 });

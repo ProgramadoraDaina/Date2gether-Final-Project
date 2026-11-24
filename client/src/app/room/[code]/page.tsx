@@ -52,6 +52,7 @@ import { RoomEventButton } from '@/features/calls/roomEvents/RoomEventButton';
 import { RouletteWheel } from '@/features/calls/roomEvents/RouletteWheel';
 import { useRoomEvents } from '@/features/calls/roomEvents/useRoomEvents';
 import { useRoomMediaLock } from '@/features/calls/useRoomMediaLock';
+import { resolveBreakoutEndCopy } from '@/lib/breakouts';
 import { createRoomSocket } from '@/lib/socket';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { NAME_COLOR_HEX, isNameColorId } from '@/lib/nameColors';
@@ -550,9 +551,20 @@ export default function RoomPage() {
   // room_finished, de forma asíncrona). "Volver a la sala" solo descarta
   // este panel; la sala y el chat siguen disponibles sin cambios (alcance
   // exclusivo a la videollamada, spec host-gate/alcance-exclusivo).
+  // Decisión 2 (design.md "Señal de motivo de remoción"): el panel
+  // terminal ya no asume host-left para cualquier cierre -- distingue
+  // breakout-closed (endedForBreakout, vuelta forzada por el admin) y
+  // breakout-locked (removedByPolicy, expulsión por política) con la
+  // copia de resolveBreakoutEndCopy, y cae al texto de host-left para
+  // cualquier otro caso (null incluido, aunque el panel solo se muestra
+  // con status 'ended').
+  const callEndedMessage =
+    callSession.endReason === 'breakout-closed' || callSession.endReason === 'breakout-locked'
+      ? resolveBreakoutEndCopy(callSession.endReason)
+      : t('La llamada terminó porque el anfitrión se desconectó.');
   const callEndedPanel = (
     <div className={styles.callLoadingPanel} role="status" aria-live="polite">
-      <p>{t('La llamada terminó porque el anfitrión se desconectó.')}</p>
+      <p>{callEndedMessage}</p>
       <div className={styles.callEndedActions}>
         <Link href="/history" className={styles.callLoadingButton}>
           {t('Ver línea de tiempo')}
@@ -928,6 +940,7 @@ export default function RoomPage() {
                       onSetVideoLock={mediaLock.setVideoLock}
                       participants={breakoutParticipants}
                       roomSocket={roomSocket}
+                      currentParticipantId={access.participant.sub}
                     />
                   </AvatarDirectoryProvider>
                 </div>

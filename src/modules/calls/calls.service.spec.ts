@@ -787,6 +787,32 @@ describe('CallsService: gate de administrador (host-gate)', () => {
 
     expect(db.breakoutOccupantsFrom).not.toHaveBeenCalled();
   });
+
+  // R1 (design.md "R1 -- Admin sola que se traslada", tasks.md Fase 1):
+  // caracterización obligatoria -- la mitigación de R1
+  // (hasAdminAssignmentInFlight, ver call-session-close.service.ts) vive
+  // SOLO en CallSessionCloseService.hasConnectedAdmin, nunca en
+  // CallsService.assertHostConnected. Son preguntas distintas (design.md:
+  // "destruyo este grupo" admite fail-safe; "admito a alguien ahora" no).
+
+  it('[R1-C6] assertHostConnected no consulta call_breakout_occupants: la única consulta a esa tabla en join() viene de assertBreakoutReturnAllowed, nunca del gate de presencia', async () => {
+    const breakoutName = `${room.code}::breakout-1`;
+    groupResolver.resolveCallGroupRoomNames.mockResolvedValueOnce([room.code, breakoutName]);
+    listRooms.mockResolvedValue([{ name: room.code }, { name: breakoutName }] as Awaited<
+      ReturnType<RoomServiceClient['listRooms']>
+    >);
+    listParticipants.mockResolvedValue([{ identity: 'admin-sub' } as ParticipantInfo]);
+    db.adminLimit.mockResolvedValueOnce([{ id: 'identity-row-1' }]);
+
+    await service.join(room.code, participant);
+
+    // assertBreakoutReturnAllowed() es la única llamadora conocida de este
+    // branch de la base (D8 punto 1). Si assertHostConnected (o cualquier
+    // pieza de la mitigación de R1) también consultara
+    // call_breakout_occupants, esta aserción de "exactamente una vez" se
+    // rompería.
+    expect(db.breakoutOccupantsFrom).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('CallsService: historial', () => {

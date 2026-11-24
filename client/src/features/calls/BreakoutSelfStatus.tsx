@@ -2,9 +2,9 @@
 
 import { useTranslation } from '../translation/useTranslation';
 import type { BreakoutAssignment } from '../chat/useRoomSocket';
-import styles from './BreakoutBanner.module.css';
+import styles from './BreakoutSelfStatus.module.css';
 
-interface BreakoutBannerProps {
+interface BreakoutSelfStatusProps {
   assignment: BreakoutAssignment;
   onReturn: () => void;
   // Disponible para deshabilitar el botón mientras la solicitud HTTP de
@@ -16,7 +16,11 @@ interface BreakoutBannerProps {
 // siempre visible, botón "Volver" solo si la política lo permite, y un
 // texto explícito en vez del botón cuando no -- mitigación del riesgo
 // "percibido como estar atrapado" (D8/leave-policy, design.md).
-export function BreakoutBanner({ assignment, onReturn, returning = false }: BreakoutBannerProps) {
+export function BreakoutSelfStatus({
+  assignment,
+  onReturn,
+  returning = false,
+}: BreakoutSelfStatusProps) {
   const { t } = useTranslation();
   const canReturnFreely = assignment.leavePolicy === 'free_return';
 

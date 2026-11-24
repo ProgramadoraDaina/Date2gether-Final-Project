@@ -12,7 +12,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { RoomAccessGuard, type ParticipantRequest } from '../auth/guards/room-access.guard';
-import { BreakoutRoomsService } from './breakout-rooms.service';
+import {
+  BreakoutRoomsService,
+  type BreakoutRoomAdminView,
+  type BreakoutRoomPublicView,
+} from './breakout-rooms.service';
 import { CreateBreakoutRoomDto } from './dto/create-breakout-room.dto';
 import { MoveParticipantDto } from './dto/move-participant.dto';
 import { ReturnOccupantDto } from './dto/return-occupant.dto';
@@ -28,9 +32,14 @@ export class BreakoutRoomsController {
     return this.breakoutRooms.create(request.room.id, request.room.code, request.participant, dto);
   }
 
+  // Decisión 4 (design.md "Proyección de list por rol", tasks.md 4.2): el
+  // tipo de retorno documenta explícitamente la unión discriminada por rol
+  // -- la proyección real vive en BreakoutRoomsService.list().
   @Get(':roomCode/breakouts')
   @Header('Cache-Control', 'no-store')
-  list(@Req() request: ParticipantRequest) {
+  list(
+    @Req() request: ParticipantRequest,
+  ): Promise<BreakoutRoomAdminView[] | BreakoutRoomPublicView[]> {
     return this.breakoutRooms.list(request.room.id, request.participant);
   }
 

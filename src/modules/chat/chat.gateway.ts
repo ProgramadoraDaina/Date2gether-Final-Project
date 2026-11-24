@@ -179,6 +179,16 @@ export class ChatGateway implements OnGatewayDisconnect {
     this.roomEvents.onBreakoutClosed((event) => {
       this.server.to(event.roomCode).emit('breakout:closed', { breakoutId: event.breakoutId });
     });
+    // Decisión 2 (design.md "Señal de motivo de remoción"): mismo criterio
+    // que breakout:assigned -- personal, nunca broadcast. targetIdentity ya
+    // llega resuelto por el llamador (BreakoutRoomsService/
+    // CallsWebhookService) como la sourceIdentity estable que corresponde
+    // al socket real.
+    this.roomEvents.onBreakoutRemoval((event) => {
+      this.emitToParticipant(event.roomCode, event.targetIdentity, 'breakout:removal', {
+        reason: event.reason,
+      });
+    });
   }
 
   @UseGuards(WsJwtAuthGuard)

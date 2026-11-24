@@ -1,16 +1,16 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { BreakoutBanner } from './BreakoutBanner';
+import { BreakoutSelfStatus } from './BreakoutSelfStatus';
 import { useLanguageStore } from '../translation/store';
 
-describe('BreakoutBanner', () => {
+describe('BreakoutSelfStatus', () => {
   beforeEach(() => {
     useLanguageStore.setState({ language: 'es' });
   });
 
   it('muestra la etiqueta de la mini sala', () => {
     render(
-      <BreakoutBanner
+      <BreakoutSelfStatus
         assignment={{ breakoutId: 'breakout-1', label: 'Mini sala 1', leavePolicy: 'locked' }}
         onReturn={jest.fn()}
       />,
@@ -22,7 +22,7 @@ describe('BreakoutBanner', () => {
   it('con política free_return muestra el botón "Volver" y lo invoca al click', () => {
     const onReturn = jest.fn();
     render(
-      <BreakoutBanner
+      <BreakoutSelfStatus
         assignment={{ breakoutId: 'breakout-1', label: 'Mini sala 1', leavePolicy: 'free_return' }}
         onReturn={onReturn}
       />,
@@ -37,7 +37,7 @@ describe('BreakoutBanner', () => {
 
   it('con política locked no muestra el botón "Volver" y explica que el host va a devolver', () => {
     render(
-      <BreakoutBanner
+      <BreakoutSelfStatus
         assignment={{ breakoutId: 'breakout-1', label: 'Mini sala 1', leavePolicy: 'locked' }}
         onReturn={jest.fn()}
       />,
@@ -49,7 +49,7 @@ describe('BreakoutBanner', () => {
 
   it('deshabilita el botón "Volver" mientras la solicitud de retorno está en vuelo', () => {
     render(
-      <BreakoutBanner
+      <BreakoutSelfStatus
         assignment={{ breakoutId: 'breakout-1', label: 'Mini sala 1', leavePolicy: 'free_return' }}
         onReturn={jest.fn()}
         returning

@@ -67,4 +67,25 @@ describe('RoomEventsService', () => {
 
     expect(listener).toHaveBeenCalledWith({ roomCode: 'abc-defg-hij', breakoutId: 'breakout-1' });
   });
+
+  // Decisión 2 (design.md "Señal de motivo de remoción", tasks.md 2.3):
+  // mismo puente, canal propio para la señal de motivo de remoción forzada
+  // (moveIn/selfReturn admin), distinta de la señal de asignación.
+  it('[2.3] entrega a cada listener registrado el payload exacto de una señal de motivo de remoción', () => {
+    const events = new RoomEventsService();
+    const listener = vi.fn();
+    events.onBreakoutRemoval(listener);
+
+    events.emitBreakoutRemoval({
+      roomCode: 'abc-defg-hij',
+      targetIdentity: 'participant-sub-1',
+      reason: 'BREAKOUT_MOVE_IN',
+    });
+
+    expect(listener).toHaveBeenCalledWith({
+      roomCode: 'abc-defg-hij',
+      targetIdentity: 'participant-sub-1',
+      reason: 'BREAKOUT_MOVE_IN',
+    });
+  });
 });

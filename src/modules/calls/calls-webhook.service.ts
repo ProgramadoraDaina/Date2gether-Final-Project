@@ -23,6 +23,7 @@ import {
   callSessionParticipants,
   callSessions,
 } from '../../db/schema';
+import { RoomEventsService } from '../rooms/room-events.service';
 import { aggregateSession, type SessionEvent } from './aggregate-session';
 import { isBreakoutRoomName, parseBreakoutRoomName } from './call-group';
 import { CallSessionCloseService } from './call-session-close.service';
@@ -59,6 +60,7 @@ export class CallsWebhookService {
     config: ConfigService,
     @Inject(DRIZZLE) private readonly db: DrizzleDb,
     private readonly closeService: CallSessionCloseService,
+    private readonly roomEvents: RoomEventsService,
   ) {
     this.receiver = new WebhookReceiver(
       config.get<string>('LIVEKIT_API_KEY', ''),
@@ -210,6 +212,18 @@ export class CallsWebhookService {
       .limit(1);
     if (!openLockedAssignment) return;
 
+    // Decisión 2 (design.md "Señal de motivo de remoción") + spec
+    // call-webhook-ingestion "Señal explícita en la expulsión...locked":
+    // motivo propio, distinto de BREAKOUT_MOVE_IN/BREAKOUT_FORCED_RETURN --
+    // debe sobrevivir al tratamiento de "no es error" que el cliente aplica
+    // a esas dos. `identity` ya es el de la principal (= sub) para este
+    // camino: el ocupante reconectó CON ESE identity, así que coincide con
+    // sourceIdentity sin necesidad de una consulta extra.
+    this.roomEvents.emitBreakoutRemoval({
+      roomCode,
+      targetIdentity: identity,
+      reason: 'BREAKOUT_RETURN_LOCKED',
+    });
     try {
       await this.client.removeParticipant(roomCode, identity);
     } catch {

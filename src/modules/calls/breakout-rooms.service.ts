@@ -27,8 +27,13 @@ import { buildBreakoutRoomName, parseBreakoutRoomName } from './call-group';
 import { CallGroupResolverService } from './call-group-resolver.service';
 
 export type LeavePolicy = 'locked' | 'free_return';
+// Decisión 3 (design.md "joinPolicy: esquema, migración y autorización"):
+// separado de LeavePolicy -- gobierna el movimiento HACIA DENTRO por
+// iniciativa propia, nunca la vuelta a la principal.
+export type JoinPolicy = 'admin_only' | 'open';
 
 const DEFAULT_LEAVE_POLICY: LeavePolicy = 'locked';
+const DEFAULT_JOIN_POLICY: JoinPolicy = 'admin_only';
 const BREAKOUT_EMPTY_TIMEOUT_SECONDS = 300;
 const BREAKOUT_DEPARTURE_TIMEOUT_SECONDS = 30;
 
@@ -48,18 +53,54 @@ export interface BreakoutRoomView {
   livekitRoomName: string;
   label: string;
   leavePolicy: LeavePolicy;
+  joinPolicy: JoinPolicy;
   autoCloseAt: Date | null;
   occupants: BreakoutRoomOccupantView[];
+}
+
+// Decisión 4 (design.md "Proyección de list por rol", tasks.md 4.1):
+// list() discrimina por rol en el SERVICIO, no en el controlador --
+// resolveRole ya vive acá, y la proyección ES la frontera de seguridad.
+export interface BreakoutRoomAdminOccupantView {
+  livekitIdentity: string;
+  // Única clave que permite al cliente calcular "quién quedó en la sala
+  // principal" (design.md Decisión 4): breakoutParticipants (presencia de
+  // socket) menos la unión de sourceIdentity de todos los occupants.
+  sourceIdentity: string;
+  displayName: string;
+  userId: string | null;
+}
+
+export interface BreakoutRoomAdminView {
+  id: string;
+  livekitRoomName: string;
+  label: string;
+  leavePolicy: LeavePolicy;
+  joinPolicy: JoinPolicy;
+  autoCloseAt: Date | null;
+  occupants: BreakoutRoomAdminOccupantView[];
+}
+
+export interface BreakoutRoomPublicView {
+  id: string;
+  label: string;
+  leavePolicy: LeavePolicy;
+  joinPolicy: JoinPolicy;
+  autoCloseAt: Date | null;
+  occupantCount: number;
+  selfAssigned: boolean;
 }
 
 export interface CreateBreakoutRoomInput {
   label?: string;
   leavePolicy?: LeavePolicy;
+  joinPolicy?: JoinPolicy;
   autoCloseInMinutes?: number;
 }
 
 export interface UpdateBreakoutRoomInput {
   leavePolicy?: LeavePolicy;
+  joinPolicy?: JoinPolicy;
   autoCloseInMinutes?: number | null;
 }
 
@@ -131,6 +172,7 @@ export class BreakoutRoomsService {
     const parentLivekitRoomSid = parentRoom?.sid ?? null;
     const autoCloseAt = this.resolveAutoCloseAt(dto.autoCloseInMinutes);
     const leavePolicy = dto.leavePolicy ?? DEFAULT_LEAVE_POLICY;
+    const joinPolicy = dto.joinPolicy ?? DEFAULT_JOIN_POLICY;
 
     for (let index = 1; index <= max; index++) {
       if (usedIndexes.has(index)) continue;
@@ -144,6 +186,7 @@ export class BreakoutRoomsService {
             parentLivekitRoomSid,
             label: dto.label ?? `Mini sala ${index}`,
             leavePolicy,
+            joinPolicy,
             autoCloseAt,
           })
           .returning();
@@ -165,17 +208,57 @@ export class BreakoutRoomsService {
     throw new ConflictException('No se pudo crear la mini sala, intentá nuevamente');
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async list(roomId: string, actor: RoomParticipant): Promise<BreakoutRoomView[]> {
+  /**
+   * Decisión 4 (design.md "Proyección de list por rol"): un administrador
+   * recibe el roster completo (incluido sourceIdentity, la clave que le
+   * permite al cliente calcular quién quedó en la principal); cualquier
+   * otro participante recibe solo la ocupación agregada -- sin
+   * livekitRoomName (espacio de nombres interno) ni identidad de ningún
+   * ocupante. La proyección vive acá, no en el controlador: dejarla ahí
+   * significaría que el servicio sigue devolviendo rosters completos a
+   * cualquier llamador, a un refactor de distancia de filtrarlos.
+   */
+  async list(
+    roomId: string,
+    actor: RoomParticipant,
+  ): Promise<BreakoutRoomAdminView[] | BreakoutRoomPublicView[]> {
+    const role = await this.resolveRole(roomId, actor.userId);
     const rows = await this.fetchOpenRows(roomId);
     if (rows.length === 0) return [];
     const occupants = await this.fetchOccupantsByBreakoutIds(rows.map((row) => row.id));
-    return rows.map((row) =>
-      this.toView(
-        row,
-        occupants.filter((occupant) => occupant.breakoutRoomId === row.id),
-      ),
-    );
+
+    if (role === 'administrador') {
+      return rows.map((row): BreakoutRoomAdminView => {
+        const roomOccupants = occupants.filter((occupant) => occupant.breakoutRoomId === row.id);
+        return {
+          id: row.id,
+          livekitRoomName: row.livekitRoomName,
+          label: row.label,
+          leavePolicy: row.leavePolicy as LeavePolicy,
+          joinPolicy: row.joinPolicy as JoinPolicy,
+          autoCloseAt: row.autoCloseAt,
+          occupants: roomOccupants.map((occupant) => ({
+            livekitIdentity: occupant.livekitIdentity,
+            sourceIdentity: occupant.sourceIdentity,
+            displayName: occupant.displayName,
+            userId: occupant.userId,
+          })),
+        };
+      });
+    }
+
+    return rows.map((row): BreakoutRoomPublicView => {
+      const roomOccupants = occupants.filter((occupant) => occupant.breakoutRoomId === row.id);
+      return {
+        id: row.id,
+        label: row.label,
+        leavePolicy: row.leavePolicy as LeavePolicy,
+        joinPolicy: row.joinPolicy as JoinPolicy,
+        autoCloseAt: row.autoCloseAt,
+        occupantCount: roomOccupants.length,
+        selfAssigned: roomOccupants.some((occupant) => occupant.sourceIdentity === actor.sub),
+      };
+    });
   }
 
   async updatePolicy(
@@ -192,8 +275,12 @@ export class BreakoutRoomsService {
     }
     const row = await this.getOpenRowOrThrow(breakoutId, roomId);
 
-    const patch: Partial<Pick<CallBreakoutRoom, 'leavePolicy' | 'autoCloseAt'>> = {};
+    const patch: Partial<Pick<CallBreakoutRoom, 'leavePolicy' | 'joinPolicy' | 'autoCloseAt'>> = {};
     if (dto.leavePolicy) patch.leavePolicy = dto.leavePolicy;
+    // Decisión 3 (design.md): control separado -- cambiar uno nunca toca
+    // el otro. Cada uno solo entra al patch si vino explícitamente en el
+    // dto correspondiente.
+    if (dto.joinPolicy) patch.joinPolicy = dto.joinPolicy;
     if (dto.autoCloseInMinutes !== undefined) {
       patch.autoCloseAt =
         dto.autoCloseInMinutes === null ? null : this.resolveAutoCloseAt(dto.autoCloseInMinutes);
@@ -211,11 +298,19 @@ export class BreakoutRoomsService {
   }
 
   /**
-   * Admin: traslada a un occupant. Valida rol, pertenencia al grupo y
-   * capacidad del destino. Escribe la identity nueva (D7) y la asignación
-   * ANTES de desconectar de la principal -- si el cliente nunca pide el
-   * token (issueBreakoutToken), la asignación abierta queda registrada y es
-   * recuperable (mitigación "participante varado", design.md Flujo 1).
+   * Traslada a un occupant hacia una mini sala. Valida pertenencia al
+   * grupo, autorización (Decisión 3) y capacidad del destino. Escribe la
+   * identity nueva (D7) y la asignación ANTES de desconectar de la
+   * principal -- si el cliente nunca pide el token (issueBreakoutToken),
+   * la asignación abierta queda registrada y es recuperable (mitigación
+   * "participante varado", design.md Flujo 1).
+   *
+   * Decisión 3 (design.md "Autorización de moveIn"): autorizado si (a) el
+   * actor es administrador, sin importar destino ni joinPolicy -- incluido
+   * ella misma; o (b) joinPolicy del destino es 'open' Y el participante
+   * trasladado es la misma persona que solicita el traslado. La fila de
+   * la mini sala se busca ANTES de resolver el rol porque joinPolicy vive
+   * ahí y la decisión depende de ambos.
    */
   async moveIn(
     breakoutId: string,
@@ -223,17 +318,44 @@ export class BreakoutRoomsService {
     actor: RoomParticipant,
     target: { livekitIdentity: string },
   ): Promise<{ targetIdentity: string }> {
+    const breakout = await this.getOpenRowOrThrow(breakoutId, roomId);
     const role = await this.resolveRole(roomId, actor.userId);
-    if (role !== 'administrador') {
-      throw new ForbiddenException('Solo un administrador puede trasladar participantes');
+
+    let authorized = role === 'administrador';
+    if (!authorized && breakout.joinPolicy === 'open') {
+      // "actorGroupIdentity" (design.md): la identity BAJO LA CUAL el
+      // actor está conectado ahora mismo en el grupo -- su asignación
+      // abierta actual si ya está en una mini sala, o su propio sub si
+      // está en la principal. Solo se evalúa cuando hace falta (joinPolicy
+      // abierto Y no-admin): cero costo extra para el camino admin.
+      const actorOccupant = await this.findOpenOccupantBySourceAcrossGroup(roomId, actor.sub);
+      const actorGroupIdentity = actorOccupant?.livekitIdentity ?? actor.sub;
+      const selfMove = target.livekitIdentity === actorGroupIdentity;
+      // Bugfix (breakout-rooms-ux-fix): joinPolicy='open' del DESTINO nunca
+      // debe ser una puerta trasera para escapar de un ORIGEN con
+      // leavePolicy='locked' -- esa garantía existe específicamente para
+      // que nadie salga sin que el admin actúe (mismo código/mensaje que
+      // selfReturn usa para el mismo caso).
+      if (selfMove && actorOccupant?.leavePolicy === 'locked') {
+        throw new ForbiddenException({
+          message: BREAKOUT_RETURN_LOCKED_MESSAGE,
+          code: BREAKOUT_RETURN_LOCKED_CODE,
+        });
+      }
+      authorized = selfMove;
+    }
+    if (!authorized) {
+      throw new ForbiddenException('No tenés permiso para trasladar a esa persona a esta mini sala');
     }
 
-    const breakout = await this.getOpenRowOrThrow(breakoutId);
-    if (breakout.roomId !== roomId) {
-      throw new ForbiddenException('La mini sala no pertenece a este grupo');
-    }
-
-    const participants = await this.client.listParticipants(breakout.livekitRoomName);
+    // Decisión 3, riesgo adyacente: listRooms primero -- una mini sala
+    // abierta en la base cuya sala de LiveKit ya reapeó por emptyTimeout
+    // (crear y no usar por 5 minutos, escenario normal de auto-ingreso) se
+    // trata como vacía en vez de hacer tirar listParticipants (createRoom
+    // más abajo, implícito en issueBreakoutToken, es idempotente).
+    const existingRooms = await this.client.listRooms([breakout.livekitRoomName]);
+    const participants =
+      existingRooms.length > 0 ? await this.client.listParticipants(breakout.livekitRoomName) : [];
     if (participants.length >= this.resolveMaxParticipants()) {
       throw new ConflictException('Esa mini sala ya está en su capacidad máxima');
     }
@@ -252,6 +374,58 @@ export class BreakoutRoomsService {
       throw new NotFoundException('No se encontró a ese participante en la sala');
     }
 
+    // Decisión 3, consecuencia 1 (design.md): sourceIdentity debe ser
+    // siempre el SUJETO ESTABLE del pase, no el identity de origen. Si
+    // target.livekitIdentity ya tiene una asignación abierta (salto
+    // mini-sala -> mini-sala), se hereda su sourceIdentity; si no (origen
+    // = la principal), target.livekitIdentity YA ES el sujeto estable.
+    //
+    // Bugfix (breakout-rooms-ux-fix): se intenta primero por coincidencia
+    // EXACTA de livekitIdentity (cubre el salto mini-sala -> mini-sala
+    // cuando quien llama ya conoce la identity ACTUAL del destinatario). Si
+    // no hay coincidencia, target.livekitIdentity puede en realidad ser el
+    // SUB estable de alguien conectado a OTRA mini sala -- la consola de
+    // admin arma "Trasladar" desde la presencia de la principal (sockets),
+    // que nunca conoce la identity minteada de una mini sala ajena. Sin este
+    // segundo intento la asignación previa nunca se cierra (dos filas
+    // abiertas para el mismo sourceIdentity, rompe el índice parcial que
+    // hasAdminAssignmentInFlight y la expulsión locked usan como clave de
+    // decisión) y removeParticipant más abajo apunta a la sala equivocada.
+    let existingAssignment = await this.findOpenOccupantByLivekitIdentityAnyRoom(
+      target.livekitIdentity,
+    );
+    let resolvedLivekitIdentity = target.livekitIdentity;
+    if (!existingAssignment) {
+      const bySource = await this.findOpenOccupantBySourceAcrossGroup(
+        roomId,
+        target.livekitIdentity,
+      );
+      if (bySource) {
+        existingAssignment = {
+          id: bySource.id,
+          sourceIdentity: target.livekitIdentity,
+          breakoutRoomId: bySource.breakoutRoomId,
+          livekitRoomName: bySource.livekitRoomName,
+        };
+        resolvedLivekitIdentity = bySource.livekitIdentity;
+      }
+    }
+    const effectiveSourceIdentity = existingAssignment?.sourceIdentity ?? target.livekitIdentity;
+
+    // Decisión 3, consecuencia 2: la asignación anterior se cierra ANTES
+    // de insertar la nueva -- dos asignaciones abiertas para el mismo
+    // sourceIdentity romperían el índice parcial que hasAdminAssignmentInFlight
+    // y la expulsión locked usan como clave de decisión.
+    let previousRoomName = existingAssignment?.livekitRoomName;
+    if (existingAssignment) {
+      await this.markOccupantReturned(existingAssignment.id);
+      // El camino de coincidencia directa (findOpenOccupantByLivekitIdentityAnyRoom)
+      // no trae livekitRoomName -- se resuelve acá solo cuando hace falta.
+      if (!previousRoomName && existingAssignment.breakoutRoomId) {
+        previousRoomName = await this.getBreakoutRoomNameById(existingAssignment.breakoutRoomId);
+      }
+    }
+
     const newIdentity = randomUUID();
     await this.db.insert(callParticipantIdentities).values({
       livekitIdentity: newIdentity,
@@ -262,7 +436,7 @@ export class BreakoutRoomsService {
     });
     await this.db.insert(callBreakoutOccupants).values({
       breakoutRoomId: breakout.id,
-      sourceIdentity: target.livekitIdentity,
+      sourceIdentity: effectiveSourceIdentity,
       livekitIdentity: newIdentity,
       userId: sourceIdentity.userId,
       displayName: sourceIdentity.displayName,
@@ -273,14 +447,43 @@ export class BreakoutRoomsService {
       // Señal antes del removeParticipant (orden del Flujo 1, design.md):
       // el cliente se entera del traslado antes de perder la conexión a la
       // principal. Nunca el token -- D12.
+      // Bugfix (breakout-rooms-ux-fix, Judgment Day Round 2): direccionada
+      // por effectiveSourceIdentity (el sujeto ESTABLE), NO por
+      // target.livekitIdentity -- igual que selfReturn ya hace con
+      // occupant.sourceIdentity. ChatGateway.emitToParticipant resuelve el
+      // socket por participantId === participant.sub (identity estable);
+      // en un salto mini-sala -> mini-sala auto-iniciado (joinPolicy=open),
+      // target.livekitIdentity es la identity MINTEADA de la sala de
+      // origen que el cliente envió para pasar la autorización -- nunca
+      // corresponde a ningún participantId de presencia, así que la señal
+      // nunca llegaba al socket real de quien se traslada.
       this.roomEvents.emitBreakoutAssigned({
         roomCode: parentCode,
-        targetIdentity: target.livekitIdentity,
+        targetIdentity: effectiveSourceIdentity,
         breakoutId: breakout.id,
         label: breakout.label,
         leavePolicy: breakout.leavePolicy,
       });
-      await this.client.removeParticipant(parentCode, target.livekitIdentity);
+      // Decisión 2 (design.md "Señal de motivo de remoción"): el cliente
+      // necesita distinguir ESTE removeParticipant (traslado en curso,
+      // esperado) de una desconexión por fallo real. Mismo canal, mismo
+      // orden que emitBreakoutAssigned -- antes del removeParticipant.
+      this.roomEvents.emitBreakoutRemoval({
+        roomCode: parentCode,
+        targetIdentity: effectiveSourceIdentity,
+        reason: 'BREAKOUT_MOVE_IN',
+      });
+      // Bugfix (breakout-rooms-ux-fix): el origen real de quien se traslada
+      // puede ser OTRA mini sala (salto mini-sala -> mini-sala), no siempre
+      // la principal -- removeParticipant debe apuntar a la sala donde la
+      // persona está REALMENTE conectada, con su identity ACTUAL. Tolerante
+      // a fallo, mismo patrón que selfReturn: si ya no estaba conectada ahí,
+      // no hay nada que limpiar.
+      try {
+        await this.client.removeParticipant(previousRoomName ?? parentCode, resolvedLivekitIdentity);
+      } catch {
+        this.logger.log('La persona trasladada ya no estaba conectada a su sala de origen');
+      }
     }
 
     return { targetIdentity: newIdentity };
@@ -361,6 +564,22 @@ export class BreakoutRoomsService {
         );
       }
       await this.markOccupantReturned(occupant.id);
+      const parentCode = parseBreakoutRoomName(breakout.livekitRoomName)?.parentCode;
+      if (parentCode) {
+        // Decisión 2 (design.md "Señal de motivo de remoción"): direccionada
+        // por occupant.sourceIdentity, NO por targetLivekitIdentity (el
+        // identity de la MINI sala). ChatGateway.emitToParticipant resuelve
+        // el socket por participantId === participant.sub, y ese socket
+        // sigue indexado por el identity ESTABLE de la principal (D7) --
+        // el identity nuevo de mini sala nunca corresponde a ningún
+        // participantId de presencia (bug descubierto al diseñar esto, ver
+        // design.md).
+        this.roomEvents.emitBreakoutRemoval({
+          roomCode: parentCode,
+          targetIdentity: occupant.sourceIdentity,
+          reason: 'BREAKOUT_FORCED_RETURN',
+        });
+      }
       try {
         await this.client.removeParticipant(breakout.livekitRoomName, targetLivekitIdentity);
       } catch {
@@ -582,6 +801,11 @@ export class BreakoutRoomsService {
     {
       breakoutRoomId: string;
       livekitIdentity: string;
+      // Decisión 4 (design.md): proyectado también acá (no solo en
+      // list()) -- es aditivo, toView()/BreakoutRoomOccupantView siguen
+      // ignorándolo (D11, mismo criterio de no romper el contrato de
+      // create()/updatePolicy() en este cambio).
+      sourceIdentity: string;
       displayName: string;
       userId: string | null;
     }[]
@@ -591,6 +815,7 @@ export class BreakoutRoomsService {
       .select({
         breakoutRoomId: callBreakoutOccupants.breakoutRoomId,
         livekitIdentity: callBreakoutOccupants.livekitIdentity,
+        sourceIdentity: callBreakoutOccupants.sourceIdentity,
         displayName: callBreakoutOccupants.displayName,
         userId: callBreakoutOccupants.userId,
       })
@@ -628,9 +853,9 @@ export class BreakoutRoomsService {
   private async findOpenOccupantByLivekitIdentity(
     breakoutRoomId: string,
     livekitIdentity: string,
-  ): Promise<{ id: string } | undefined> {
+  ): Promise<{ id: string; sourceIdentity: string } | undefined> {
     const [occupant] = await this.db
-      .select({ id: callBreakoutOccupants.id })
+      .select({ id: callBreakoutOccupants.id, sourceIdentity: callBreakoutOccupants.sourceIdentity })
       .from(callBreakoutOccupants)
       .where(
         and(
@@ -641,6 +866,102 @@ export class BreakoutRoomsService {
       )
       .limit(1);
     return occupant;
+  }
+
+  // Decisión 3 (design.md "Autorización de moveIn"): ¿el actor tiene una
+  // asignación abierta en CUALQUIER mini sala abierta de este grupo?
+  // Reusa fetchOpenRows (ya existe) en vez de un innerJoin -- evita tener
+  // que extender el shape de consulta a dos tablas para esta pregunta.
+  // Bugfix (breakout-rooms-ux-fix): también proyecta breakoutRoomId,
+  // livekitRoomName y leavePolicy de esa fila (ya están en memoria dentro
+  // de openRows, sin consulta extra) -- los necesitan tanto la guardia del
+  // "open" self-move (leavePolicy del ORIGEN) como la resolución de
+  // sourceIdentity-a-través-del-grupo en moveIn (origen real para
+  // removeParticipant).
+  private async findOpenOccupantBySourceAcrossGroup(
+    roomId: string,
+    sourceIdentity: string,
+  ): Promise<
+    | {
+        id: string;
+        livekitIdentity: string;
+        breakoutRoomId: string;
+        livekitRoomName: string | undefined;
+        leavePolicy: LeavePolicy | undefined;
+      }
+    | undefined
+  > {
+    const openRows = await this.fetchOpenRows(roomId);
+    if (openRows.length === 0) return undefined;
+    const [occupant] = await this.db
+      .select({
+        id: callBreakoutOccupants.id,
+        livekitIdentity: callBreakoutOccupants.livekitIdentity,
+        breakoutRoomId: callBreakoutOccupants.breakoutRoomId,
+      })
+      .from(callBreakoutOccupants)
+      .where(
+        and(
+          inArray(
+            callBreakoutOccupants.breakoutRoomId,
+            openRows.map((row) => row.id),
+          ),
+          eq(callBreakoutOccupants.sourceIdentity, sourceIdentity),
+          isNull(callBreakoutOccupants.returnedAt),
+        ),
+      )
+      .limit(1);
+    if (!occupant) return undefined;
+    const room = openRows.find((row) => row.id === occupant.breakoutRoomId);
+    return {
+      id: occupant.id,
+      livekitIdentity: occupant.livekitIdentity,
+      breakoutRoomId: occupant.breakoutRoomId,
+      livekitRoomName: room?.livekitRoomName,
+      leavePolicy: room?.leavePolicy as LeavePolicy | undefined,
+    };
+  }
+
+  // Decisión 3, consecuencia 1 (design.md): a diferencia de
+  // findOpenOccupantByLivekitIdentity (acotado a UNA mini sala, usado por
+  // selfReturn), esta busca por livekitIdentity SIN acotar a una mini sala
+  // -- necesario para el salto mini-sala -> mini-sala, donde el origen y
+  // el destino son mini salas DISTINTAS. livekit_identity es único
+  // (unique index), así que a lo sumo una fila abierta puede coincidir.
+  private async findOpenOccupantByLivekitIdentityAnyRoom(
+    livekitIdentity: string,
+  ): Promise<
+    { id: string; sourceIdentity: string; breakoutRoomId: string; livekitRoomName?: string } | undefined
+  > {
+    const [occupant] = await this.db
+      .select({
+        id: callBreakoutOccupants.id,
+        sourceIdentity: callBreakoutOccupants.sourceIdentity,
+        breakoutRoomId: callBreakoutOccupants.breakoutRoomId,
+      })
+      .from(callBreakoutOccupants)
+      .where(
+        and(
+          eq(callBreakoutOccupants.livekitIdentity, livekitIdentity),
+          isNull(callBreakoutOccupants.returnedAt),
+        ),
+      )
+      .limit(1);
+    return occupant;
+  }
+
+  // Bugfix (breakout-rooms-ux-fix): resuelve el nombre de sala de LiveKit de
+  // una mini sala por id -- usado por moveIn cuando el origen real de quien
+  // se traslada es OTRA mini sala (no la principal), para que
+  // removeParticipant apunte a la sala correcta en vez de siempre a la
+  // principal.
+  private async getBreakoutRoomNameById(breakoutRoomId: string): Promise<string | undefined> {
+    const [row] = await this.db
+      .select({ livekitRoomName: callBreakoutRooms.livekitRoomName })
+      .from(callBreakoutRooms)
+      .where(eq(callBreakoutRooms.id, breakoutRoomId))
+      .limit(1);
+    return row?.livekitRoomName;
   }
 
   private async markOccupantReturned(occupantId: string): Promise<void> {
@@ -659,6 +980,7 @@ export class BreakoutRoomsService {
       livekitRoomName: row.livekitRoomName,
       label: row.label,
       leavePolicy: row.leavePolicy as LeavePolicy,
+      joinPolicy: row.joinPolicy as JoinPolicy,
       autoCloseAt: row.autoCloseAt,
       occupants: occupants.map((occupant) => ({
         livekitIdentity: occupant.livekitIdentity,

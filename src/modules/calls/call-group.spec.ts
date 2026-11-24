@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BREAKOUT_REMOVAL_REASONS,
   buildBreakoutRoomName,
   buildCallGroupRoomNames,
+  isBreakoutRemovalReason,
   isBreakoutRoomName,
   parseBreakoutRoomName,
   type OpenBreakout,
@@ -106,5 +108,30 @@ describe('isBreakoutRoomName', () => {
 
   it('false para un código de sala normal', () => {
     expect(isBreakoutRoomName('abc-defg-hij')).toBe(false);
+  });
+});
+
+// Decisión 2 (design.md "Señal de motivo de remoción"): unión cerrada,
+// compartida sin cambios entre breakout-rooms.service (moveIn, selfReturn) y
+// calls-webhook.service (expulsión locked) -- un solo lugar que enumera los
+// tres motivos posibles evita que un llamador nuevo invente un cuarto string
+// suelto.
+describe('BreakoutRemovalReason', () => {
+  it('[2.1] expone exactamente los tres motivos documentados, sin ninguno extra', () => {
+    expect(BREAKOUT_REMOVAL_REASONS).toEqual([
+      'BREAKOUT_MOVE_IN',
+      'BREAKOUT_FORCED_RETURN',
+      'BREAKOUT_RETURN_LOCKED',
+    ]);
+  });
+
+  it('[2.1] isBreakoutRemovalReason reconoce cada uno de los tres motivos', () => {
+    for (const reason of BREAKOUT_REMOVAL_REASONS) {
+      expect(isBreakoutRemovalReason(reason)).toBe(true);
+    }
+  });
+
+  it('[2.1] isBreakoutRemovalReason rechaza un string que no es ninguno de los tres motivos', () => {
+    expect(isBreakoutRemovalReason('SOME_OTHER_REASON')).toBe(false);
   });
 });

@@ -31,6 +31,17 @@ export interface BreakoutClosedEvent {
   breakoutId: string;
 }
 
+// Decisión 2 (design.md "Señal de motivo de remoción"): señal previa a una
+// remoción forzada, distinguible del cierre y de la asignación --
+// `reason` es `BreakoutRemovalReason` (call-group.ts), pero se mantiene
+// como `string` acá para que este módulo de infraestructura no dependa de
+// CallsModule.
+export interface BreakoutRemovalEvent {
+  roomCode: string;
+  targetIdentity: string;
+  reason: string;
+}
+
 // Puente desacoplado entre RoomsService/CallsModule (REST) y ChatGateway
 // (sockets): evita que RoomsModule importe ChatModule (ChatModule ya importa
 // RoomsModule) y, para breakout-rooms, evita un import circular entre
@@ -69,5 +80,13 @@ export class RoomEventsService {
 
   emitBreakoutClosed(event: BreakoutClosedEvent): void {
     this.emitter.emit('breakoutClosed', event);
+  }
+
+  onBreakoutRemoval(listener: (event: BreakoutRemovalEvent) => void): void {
+    this.emitter.on('breakoutRemoval', listener);
+  }
+
+  emitBreakoutRemoval(event: BreakoutRemovalEvent): void {
+    this.emitter.emit('breakoutRemoval', event);
   }
 }

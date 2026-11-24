@@ -21,7 +21,7 @@ import { chain } from '../../test-support/fake-drizzle';
 import type { RoomParticipant } from '../auth/room-access.service';
 import type { RoomEventsService } from '../rooms/room-events.service';
 import type { CallGroupResolverService } from './call-group-resolver.service';
-import { BreakoutRoomsService } from './breakout-rooms.service';
+import { BREAKOUT_RETURN_LOCKED_CODE, BreakoutRoomsService } from './breakout-rooms.service';
 
 const secret = 'test-secret-at-least-32-characters-long';
 const config = {
@@ -60,6 +60,7 @@ function buildBreakoutRow(overrides: Partial<CallBreakoutRoom> = {}): CallBreako
     parentLivekitRoomSid: 'RM_parent',
     label: 'Mini sala 1',
     leavePolicy: 'locked',
+    joinPolicy: 'admin_only',
     autoCloseAt: null,
     closedAt: null,
     createdAt: new Date('2026-11-20T10:00:00Z'),
@@ -163,6 +164,7 @@ function createRoomEventsMock() {
   return {
     emitBreakoutAssigned: vi.fn(),
     emitBreakoutClosed: vi.fn(),
+    emitBreakoutRemoval: vi.fn(),
   };
 }
 
@@ -368,6 +370,85 @@ describe('BreakoutRoomsService', () => {
     });
   });
 
+  // --- Decisión 3 (design.md "joinPolicy: esquema, migración y
+  // autorización", tasks.md 3.2): joinPolicy, separado y aislado de
+  // leavePolicy. ---------------------------------------------------------
+
+  describe('[3.2] joinPolicy', () => {
+    it('crear sin indicar joinPolicy -> admin_only', async () => {
+      asAdmin();
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([]));
+
+      await service.create(roomId, roomCode, admin, {});
+
+      expect(db.breakoutRoomsInsertValues).toHaveBeenCalledWith(
+        expect.objectContaining({ joinPolicy: 'admin_only' }),
+      );
+    });
+
+    it('crear con joinPolicy=open explícito -> persiste open', async () => {
+      asAdmin();
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([]));
+
+      await service.create(roomId, roomCode, admin, { joinPolicy: 'open' });
+
+      expect(db.breakoutRoomsInsertValues).toHaveBeenCalledWith(
+        expect.objectContaining({ joinPolicy: 'open' }),
+      );
+    });
+
+    it('updatePolicy cambia joinPolicy de admin_only a open en una mini sala abierta', async () => {
+      asAdmin();
+      const row = buildBreakoutRow({ joinPolicy: 'admin_only' });
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
+      db.breakoutRoomsUpdateReturning.mockResolvedValueOnce([{ ...row, joinPolicy: 'open' }]);
+
+      const view = await service.updatePolicy(row.id, roomId, admin, { joinPolicy: 'open' });
+
+      expect(view.joinPolicy).toBe('open');
+      expect(db.breakoutRoomsUpdateSet).toHaveBeenCalledWith(
+        expect.objectContaining({ joinPolicy: 'open' }),
+      );
+    });
+
+    it('cambiar joinPolicy NO incluye leavePolicy en el patch de actualización (aislamiento)', async () => {
+      asAdmin();
+      const row = buildBreakoutRow({ leavePolicy: 'free_return', joinPolicy: 'admin_only' });
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
+      db.breakoutRoomsUpdateReturning.mockResolvedValueOnce([{ ...row, joinPolicy: 'open' }]);
+
+      await service.updatePolicy(row.id, roomId, admin, { joinPolicy: 'open' });
+
+      expect(db.breakoutRoomsUpdateSet).toHaveBeenCalledWith(
+        expect.not.objectContaining({ leavePolicy: expect.anything() }),
+      );
+    });
+
+    it('cambiar leavePolicy NO incluye joinPolicy en el patch de actualización (aislamiento)', async () => {
+      asAdmin();
+      const row = buildBreakoutRow({ leavePolicy: 'locked', joinPolicy: 'open' });
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
+      db.breakoutRoomsUpdateReturning.mockResolvedValueOnce([
+        { ...row, leavePolicy: 'free_return' },
+      ]);
+
+      await service.updatePolicy(row.id, roomId, admin, { leavePolicy: 'free_return' });
+
+      expect(db.breakoutRoomsUpdateSet).toHaveBeenCalledWith(
+        expect.not.objectContaining({ joinPolicy: expect.anything() }),
+      );
+    });
+
+    it('toView() proyecta joinPolicy en list()', async () => {
+      const row = buildBreakoutRow({ joinPolicy: 'open' });
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
+
+      const [view] = await service.list(roomId, admin);
+
+      expect(view.joinPolicy).toBe('open');
+    });
+  });
+
   // --- 5.4: moveIn() -------------------------------------------------------
 
   describe('5.4 — moveIn()', () => {
@@ -414,6 +495,14 @@ describe('BreakoutRoomsService', () => {
     });
 
     it('[5.4.3] solicitante no-administrador: 403, ninguna identity nueva', async () => {
+      // Decisión 3 (design.md): moveIn ahora busca la fila de la mini sala
+      // ANTES de resolver el rol (joinPolicy vive ahí) -- a diferencia del
+      // código anterior a este cambio, que resolvía el rol primero y nunca
+      // llegaba a tocar esta tabla para un no-admin. buildBreakoutRow()
+      // default es joinPolicy='admin_only', así que un no-admin igual
+      // queda rechazado.
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([buildBreakoutRow()]));
+
       await expect(
         service.moveIn('breakout-1', roomId, guest, { livekitIdentity: 'other-sub' }),
       ).rejects.toBeInstanceOf(ForbiddenException);
@@ -467,6 +556,261 @@ describe('BreakoutRoomsService', () => {
 
       expect(first.targetIdentity).not.toBe(second.targetIdentity);
     });
+
+    // --- Decisión 3 (design.md "Autorización de moveIn", tasks.md 3.4):
+    // matriz de autorización [spec: call-breakout-rooms "Traslado de un
+    // participante hacia una mini sala" todos los escenarios]. -----------
+
+    describe('[3.4] matriz de autorización', () => {
+      it('administrador se traslada a sí misma bajo admin_only: autorizado', async () => {
+        asAdmin();
+        db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([buildBreakoutRow()]));
+        listParticipants.mockResolvedValueOnce([]);
+        db.identitiesSelectWhere.mockReturnValueOnce(chain([sourceIdentityRow]));
+
+        const result = await service.moveIn('breakout-1', roomId, admin, {
+          livekitIdentity: admin.sub,
+        });
+
+        expect(result.targetIdentity).not.toBe(admin.sub);
+        expect(db.identitiesInsertValues).toHaveBeenCalled();
+      });
+
+      it('no-administrador se auto-traslada bajo admin_only: 403, sin consultar asignaciones del grupo', async () => {
+        db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([buildBreakoutRow()]));
+
+        await expect(
+          service.moveIn('breakout-1', roomId, guest, { livekitIdentity: guest.sub }),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+        expect(db.identitiesInsertValues).not.toHaveBeenCalled();
+      });
+
+      it('no-administrador se auto-traslada bajo open: autorizado', async () => {
+        db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([buildBreakoutRow({ joinPolicy: 'open' })]));
+        listParticipants.mockResolvedValueOnce([]);
+        db.identitiesSelectWhere.mockReturnValueOnce(chain([sourceIdentityRow]));
+
+        const result = await service.moveIn('breakout-1', roomId, guest, {
+          livekitIdentity: guest.sub,
+        });
+
+        expect(result.targetIdentity).not.toBe(guest.sub);
+        expect(db.identitiesInsertValues).toHaveBeenCalled();
+      });
+
+      it('no-administrador bajo open intenta trasladar a un tercero: 403, ninguna identity nueva', async () => {
+        db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([buildBreakoutRow({ joinPolicy: 'open' })]));
+
+        await expect(
+          service.moveIn('breakout-1', roomId, guest, { livekitIdentity: 'third-party-sub' }),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+        expect(db.identitiesInsertValues).not.toHaveBeenCalled();
+      });
+
+      // Bugfix (breakout-rooms-ux-fix, issue #2): joinPolicy='open' del
+      // destino nunca debe ser una puerta trasera para escapar de un ORIGEN
+      // con leavePolicy='locked' -- esa garantía existe específicamente
+      // para que nadie salga sin que el admin actúe.
+      it('[bugfix] no-administrador confinado en una mini sala locked intenta auto-trasladarse a una mini sala open: 403 BREAKOUT_RETURN_LOCKED, ninguna identity nueva', async () => {
+        const destinationRow = buildBreakoutRow({ id: 'breakout-1', joinPolicy: 'open' });
+        const lockedOriginRow = buildBreakoutRow({
+          id: 'breakout-locked-origin',
+          livekitRoomName: `${roomCode}::breakout-locked-origin`,
+          leavePolicy: 'locked',
+        });
+        db.breakoutRoomsSelectWhere
+          .mockReturnValueOnce(chain([destinationRow])) // getOpenRowOrThrow (destino)
+          .mockReturnValueOnce(chain([lockedOriginRow])); // fetchOpenRows (autorización: assignment del actor)
+        db.breakoutOccupantsSelectWhere.mockReturnValueOnce(
+          chain([
+            {
+              id: 'occ-locked',
+              livekitIdentity: 'locked-origin-identity',
+              breakoutRoomId: lockedOriginRow.id,
+            },
+          ]),
+        );
+
+        const error = await service
+          .moveIn(destinationRow.id, roomId, guest, { livekitIdentity: 'locked-origin-identity' })
+          .catch((e: unknown) => e);
+
+        expect(error).toBeInstanceOf(ForbiddenException);
+        expect((error as ForbiddenException).getResponse()).toMatchObject({
+          code: BREAKOUT_RETURN_LOCKED_CODE,
+        });
+        expect(db.identitiesInsertValues).not.toHaveBeenCalled();
+      });
+
+      it('[bugfix] no-administrador en una mini sala free_return se auto-traslada a una mini sala open: autorizado (sin regresión)', async () => {
+        const destinationRow = buildBreakoutRow({ id: 'breakout-1', joinPolicy: 'open' });
+        const freeReturnOriginRow = buildBreakoutRow({
+          id: 'breakout-free-origin',
+          livekitRoomName: `${roomCode}::breakout-free-origin`,
+          leavePolicy: 'free_return',
+        });
+        db.breakoutRoomsSelectWhere
+          .mockReturnValueOnce(chain([destinationRow])) // getOpenRowOrThrow (destino)
+          .mockReturnValueOnce(chain([freeReturnOriginRow])); // fetchOpenRows (autorización)
+        db.breakoutOccupantsSelectWhere.mockReturnValueOnce(
+          chain([
+            {
+              id: 'occ-free',
+              livekitIdentity: 'free-origin-identity',
+              breakoutRoomId: freeReturnOriginRow.id,
+            },
+          ]),
+        );
+        listParticipants.mockResolvedValueOnce([]);
+        db.identitiesSelectWhere.mockReturnValueOnce(chain([sourceIdentityRow]));
+
+        const result = await service.moveIn(destinationRow.id, roomId, guest, {
+          livekitIdentity: 'free-origin-identity',
+        });
+
+        expect(result.targetIdentity).toBeDefined();
+        expect(db.identitiesInsertValues).toHaveBeenCalled();
+      });
+    });
+
+    // --- Decisión 3 (tasks.md 3.5): salto mini-sala -> mini-sala hereda
+    // sourceIdentity y cierra la asignación previa antes de insertar la
+    // nueva. ---------------------------------------------------------------
+
+    it('[3.5] salto de mini sala a mini sala: hereda sourceIdentity de la asignación abierta existente y la cierra antes de insertar la nueva', async () => {
+      asAdmin();
+      const destinationRow = buildBreakoutRow({ id: 'breakout-dest' });
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([destinationRow]));
+      listParticipants.mockResolvedValueOnce([]);
+      db.identitiesSelectWhere.mockReturnValueOnce(
+        chain([{ roomId, userId: 'guest-user-1', displayName: 'Invitado', roleAtIssue: null }]),
+      );
+      // La identity que se traslada YA tiene una asignación abierta en otra
+      // mini sala (el origen), con sourceIdentity = el sujeto estable real.
+      db.breakoutOccupantsSelectWhere.mockReturnValueOnce(
+        chain([{ id: 'occ-origin', sourceIdentity: 'original-sub' }]),
+      );
+      const callOrder: string[] = [];
+      db.breakoutOccupantsUpdateWhere.mockImplementationOnce(() => {
+        callOrder.push('close-previous');
+        return chain(undefined);
+      });
+      db.breakoutOccupantsInsertValues.mockImplementationOnce(() => {
+        callOrder.push('insert-new');
+        return chain(undefined);
+      });
+
+      await service.moveIn(destinationRow.id, roomId, admin, {
+        livekitIdentity: 'mini-room-a-identity',
+      });
+
+      expect(db.breakoutOccupantsUpdateSet).toHaveBeenCalledWith(
+        expect.objectContaining({ returnedAt: expect.any(Date) as unknown as Date }),
+      );
+      expect(db.breakoutOccupantsInsertValues).toHaveBeenCalledWith(
+        expect.objectContaining({ sourceIdentity: 'original-sub', breakoutRoomId: destinationRow.id }),
+      );
+      expect(callOrder).toEqual(['close-previous', 'insert-new']);
+    });
+
+    it('[3.5] traslado desde la principal (sin asignación previa): sourceIdentity es el livekitIdentity recibido, sin cerrar nada', async () => {
+      asAdmin();
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([buildBreakoutRow()]));
+      listParticipants.mockResolvedValueOnce([]);
+      db.identitiesSelectWhere.mockReturnValueOnce(chain([sourceIdentityRow]));
+      db.breakoutOccupantsSelectWhere.mockReturnValueOnce(chain([])); // sin asignación abierta
+
+      await service.moveIn('breakout-1', roomId, admin, { livekitIdentity: 'guest-sub' });
+
+      expect(db.breakoutOccupantsInsertValues).toHaveBeenCalledWith(
+        expect.objectContaining({ sourceIdentity: 'guest-sub' }),
+      );
+      expect(db.breakoutOccupantsUpdateSet).not.toHaveBeenCalled();
+    });
+
+    // Bugfix (breakout-rooms-ux-fix, issue #1): el admin elige del dropdown
+    // "Trasladar" (armado sobre presencia cruda de la principal) a alguien
+    // que YA está en OTRA mini sala -- el cliente envía su sub ESTABLE
+    // (identity de la dropdown), no la identity minteada bajo la que esa
+    // persona está conectada actualmente en su mini sala de origen.
+    it('[bugfix] traslado de alguien ya asignado a OTRA mini sala, enviando su sub estable (no su identity de mini sala actual): cierra la asignación previa, sin duplicar fila abierta, y remueve de la sala de ORIGEN con su identity real', async () => {
+      asAdmin();
+      const destinationRow = buildBreakoutRow({
+        id: 'breakout-dest',
+        livekitRoomName: `${roomCode}::breakout-2`,
+      });
+      const originRow = buildBreakoutRow({
+        id: 'breakout-origin',
+        livekitRoomName: `${roomCode}::breakout-3`,
+      });
+      db.breakoutRoomsSelectWhere
+        .mockReturnValueOnce(chain([destinationRow])) // getOpenRowOrThrow (destino)
+        .mockReturnValueOnce(chain([originRow])); // fetchOpenRows (resolución por sourceIdentity a través del grupo)
+      listParticipants.mockResolvedValueOnce([]);
+      db.identitiesSelectWhere.mockReturnValueOnce(chain([sourceIdentityRow]));
+      db.breakoutOccupantsSelectWhere
+        .mockReturnValueOnce(chain([])) // findOpenOccupantByLivekitIdentityAnyRoom('guest-sub') -- no coincide: la fila real tiene la identity minteada, no el sub
+        .mockReturnValueOnce(
+          chain([
+            { id: 'occ-origin', livekitIdentity: 'origin-minted-identity', breakoutRoomId: originRow.id },
+          ]),
+        ); // findOpenOccupantBySourceAcrossGroup('guest-sub') -- sí coincide por sourceIdentity
+
+      await service.moveIn(destinationRow.id, roomId, admin, { livekitIdentity: 'guest-sub' });
+
+      // Consecuencia 1 del bugfix: la asignación previa se cierra (sin ella,
+      // quedarían dos filas abiertas para el mismo sourceIdentity).
+      expect(db.breakoutOccupantsUpdateSet).toHaveBeenCalledWith(
+        expect.objectContaining({ returnedAt: expect.any(Date) as unknown as Date }),
+      );
+      // La fila nueva hereda el sub estable como sourceIdentity (no se
+      // duplica bajo ninguna otra identity).
+      expect(db.breakoutOccupantsInsertValues).toHaveBeenCalledWith(
+        expect.objectContaining({ sourceIdentity: 'guest-sub', breakoutRoomId: destinationRow.id }),
+      );
+      // Consecuencia 2: removeParticipant apunta a la sala de ORIGEN con la
+      // identity REAL bajo la que esa persona está conectada ahí -- nunca a
+      // la principal con el sub (eso tiraría o sería un no-op en LiveKit).
+      expect(removeParticipant).toHaveBeenCalledWith(
+        originRow.livekitRoomName,
+        'origin-minted-identity',
+      );
+      expect(removeParticipant).not.toHaveBeenCalledWith(roomCode, 'guest-sub');
+    });
+
+    // --- Decisión 3 (tasks.md 3.6): guardia de capacidad con listRooms
+    // primero -- sala ausente de LiveKit se trata como vacía, sin 500. ----
+
+    it('[3.6] mini sala ausente de LiveKit (ya reapeada por emptyTimeout): se trata como vacía, no tira 500, el traslado continúa', async () => {
+      asAdmin();
+      const row = buildBreakoutRow();
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
+      db.identitiesSelectWhere.mockReturnValueOnce(chain([sourceIdentityRow]));
+      db.breakoutOccupantsSelectWhere.mockReturnValueOnce(chain([]));
+      vi.spyOn(RoomServiceClient.prototype, 'listRooms').mockResolvedValueOnce([]);
+
+      const result = await service.moveIn(row.id, roomId, admin, { livekitIdentity: 'guest-sub' });
+
+      expect(result.targetIdentity).toBeDefined();
+      expect(listParticipants).not.toHaveBeenCalled();
+    });
+
+    it('[3.6] mini sala existente en LiveKit pero llena: listRooms confirma existencia, listParticipants se consulta y el traslado se rechaza', async () => {
+      asAdmin();
+      const row = buildBreakoutRow();
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
+      vi.spyOn(RoomServiceClient.prototype, 'listRooms').mockResolvedValueOnce([
+        { sid: 'RM_breakout', name: row.livekitRoomName },
+      ] as Awaited<ReturnType<RoomServiceClient['listRooms']>>);
+      listParticipants.mockResolvedValueOnce(
+        Array.from({ length: 6 }, (_, i) => ({ identity: `p${i}` }) as ParticipantInfo),
+      );
+
+      await expect(
+        service.moveIn(row.id, roomId, admin, { livekitIdentity: 'guest-sub' }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(db.identitiesInsertValues).not.toHaveBeenCalled();
+    });
   });
 
   // --- 5.5: retorno a la sala principal -----------------------------------
@@ -476,7 +820,9 @@ describe('BreakoutRoomsService', () => {
       asAdmin();
       const row = buildBreakoutRow({ leavePolicy: 'locked' });
       db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
-      db.breakoutOccupantsSelectWhere.mockReturnValueOnce(chain([{ id: 'occ-1' }]));
+      db.breakoutOccupantsSelectWhere.mockReturnValueOnce(
+        chain([{ id: 'occ-1', sourceIdentity: 'occupant-sub' }]),
+      );
 
       await service.selfReturn(row.id, roomId, admin, 'occupant-identity');
 
@@ -484,6 +830,25 @@ describe('BreakoutRoomsService', () => {
         expect.objectContaining({ returnedAt: expect.any(Date) as unknown as Date }),
       );
       expect(removeParticipant).toHaveBeenCalledWith(row.livekitRoomName, 'occupant-identity');
+    });
+
+    // Decisión 2 (design.md "Señal de motivo de remoción", tasks.md 2.2):
+    // findOpenOccupantByLivekitIdentity debe proyectar sourceIdentity --
+    // sin eso, selfReturn no puede direccionar la señal de remoción al
+    // socket correcto (el bug descubierto al diseñar esto, ver design.md).
+    it('[2.2] findOpenOccupantByLivekitIdentity proyecta sourceIdentity además de id', async () => {
+      asAdmin();
+      const row = buildBreakoutRow();
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
+      db.breakoutOccupantsSelectWhere.mockReturnValueOnce(
+        chain([{ id: 'occ-1', sourceIdentity: 'occupant-sub' }]),
+      );
+
+      await service.selfReturn(row.id, roomId, admin, 'occupant-identity');
+
+      expect(db.select).toHaveBeenCalledWith(
+        expect.objectContaining({ sourceIdentity: callBreakoutOccupants.sourceIdentity }),
+      );
     });
 
     it('[5.5.2] ocupante en free_return pide volver por cuenta propia: se cierra la asignación', async () => {
@@ -559,7 +924,8 @@ describe('BreakoutRoomsService', () => {
       );
     });
 
-    it('[5.6.5] list() devuelve las mini salas abiertas del room_id con sus ocupantes', async () => {
+    it('[5.6.5] list() (administrador) devuelve las mini salas abiertas del room_id con sus ocupantes', async () => {
+      asAdmin();
       const row = buildBreakoutRow();
       db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
       db.breakoutOccupantsSelectWhere.mockReturnValueOnce(
@@ -567,18 +933,125 @@ describe('BreakoutRoomsService', () => {
           {
             breakoutRoomId: row.id,
             livekitIdentity: 'new-identity',
+            sourceIdentity: 'guest-sub',
             displayName: 'Invitado',
             userId: null,
           },
         ]),
       );
 
-      const views = await service.list(roomId, guest);
+      const views = await service.list(roomId, admin);
 
       expect(views).toHaveLength(1);
-      expect(views[0].occupants).toEqual([
-        { livekitIdentity: 'new-identity', displayName: 'Invitado', userId: null },
-      ]);
+      expect(views[0]).toMatchObject({
+        livekitRoomName: row.livekitRoomName,
+        occupants: [
+          {
+            livekitIdentity: 'new-identity',
+            sourceIdentity: 'guest-sub',
+            displayName: 'Invitado',
+            userId: null,
+          },
+        ],
+      });
+    });
+  });
+
+  // --- Decisión 4 (design.md "Proyección de list por rol", tasks.md
+  // 4.1/4.2): list() discrimina por rol -- admin recibe el roster completo
+  // (incluido sourceIdentity); no-admin recibe solo ocupación agregada, sin
+  // livekitRoomName ni identidad de ningún ocupante. [spec:
+  // call-breakout-rooms "Proyección de roster por rol al listar mini
+  // salas"] -------------------------------------------------------------
+
+  describe('[4.1] list(): proyección por rol', () => {
+    function occupantRow(overrides: Partial<Record<string, unknown>> = {}) {
+      return {
+        breakoutRoomId: 'breakout-1',
+        livekitIdentity: 'mini-room-identity-1',
+        sourceIdentity: 'guest-sub',
+        displayName: 'Invitado',
+        userId: null,
+        ...overrides,
+      };
+    }
+
+    it('administrador recibe el roster completo con sourceIdentity por cada mini sala', async () => {
+      asAdmin();
+      const row = buildBreakoutRow();
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
+      db.breakoutOccupantsSelectWhere.mockReturnValueOnce(chain([occupantRow()]));
+
+      const [view] = await service.list(roomId, admin);
+
+      expect(view).toMatchObject({
+        id: row.id,
+        livekitRoomName: row.livekitRoomName,
+        label: row.label,
+        leavePolicy: row.leavePolicy,
+        joinPolicy: row.joinPolicy,
+        autoCloseAt: row.autoCloseAt,
+        occupants: [
+          {
+            livekitIdentity: 'mini-room-identity-1',
+            sourceIdentity: 'guest-sub',
+            displayName: 'Invitado',
+            userId: null,
+          },
+        ],
+      });
+      expect(view).not.toHaveProperty('occupantCount');
+      expect(view).not.toHaveProperty('selfAssigned');
+    });
+
+    it('no-administrador recibe solo etiqueta + cantidad de ocupantes, sin livekitRoomName ni identidad de ningún ocupante', async () => {
+      const row = buildBreakoutRow();
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
+      db.breakoutOccupantsSelectWhere.mockReturnValueOnce(
+        chain([occupantRow({ sourceIdentity: 'other-sub' }), occupantRow({ sourceIdentity: 'yet-another-sub' })]),
+      );
+
+      const [view] = await service.list(roomId, guest);
+
+      expect(view).toEqual({
+        id: row.id,
+        label: row.label,
+        leavePolicy: row.leavePolicy,
+        joinPolicy: row.joinPolicy,
+        autoCloseAt: row.autoCloseAt,
+        occupantCount: 2,
+        selfAssigned: false,
+      });
+      expect(view).not.toHaveProperty('livekitRoomName');
+      expect(view).not.toHaveProperty('occupants');
+    });
+
+    it('no-administrador con asignación abierta en esa mini sala: selfAssigned=true', async () => {
+      const row = buildBreakoutRow();
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
+      db.breakoutOccupantsSelectWhere.mockReturnValueOnce(
+        chain([occupantRow({ sourceIdentity: guest.sub })]),
+      );
+
+      const [view] = await service.list(roomId, guest);
+
+      expect(view).toMatchObject({ occupantCount: 1, selfAssigned: true });
+    });
+
+    it('mini sala sin ocupantes: occupantCount=0, selfAssigned=false', async () => {
+      const row = buildBreakoutRow();
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
+      db.breakoutOccupantsSelectWhere.mockReturnValueOnce(chain([]));
+
+      const [view] = await service.list(roomId, guest);
+
+      expect(view).toMatchObject({ occupantCount: 0, selfAssigned: false });
+    });
+
+    it('sin mini salas abiertas: lista vacía para cualquier rol', async () => {
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([]));
+
+      await expect(service.list(roomId, guest)).resolves.toEqual([]);
     });
   });
 
@@ -760,6 +1233,119 @@ describe('BreakoutRoomsService', () => {
         ConflictException,
       );
       expect(roomEvents.emitBreakoutClosed).not.toHaveBeenCalled();
+    });
+
+    // Decisión 2 (design.md "Señal de motivo de remoción", tasks.md 2.5):
+    // moveIn y selfReturn (camino admin) emiten la señal explícita de
+    // motivo ANTES de removeParticipant -- mismo orden que ya usa
+    // emitBreakoutAssigned (D12).
+
+    it('[2.5] moveIn() emite breakout:removal con motivo BREAKOUT_MOVE_IN antes de removeParticipant', async () => {
+      asAdmin();
+      const row = buildBreakoutRow();
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
+      listParticipants.mockResolvedValueOnce([]);
+      db.identitiesSelectWhere.mockReturnValueOnce(
+        chain([{ roomId, userId: 'guest-user-1', displayName: 'Invitado', roleAtIssue: null }]),
+      );
+      const callOrder: string[] = [];
+      roomEvents.emitBreakoutRemoval.mockImplementationOnce(() => {
+        callOrder.push('emitBreakoutRemoval');
+      });
+      removeParticipant.mockImplementationOnce(() => {
+        callOrder.push('removeParticipant');
+        return Promise.resolve(undefined);
+      });
+
+      await service.moveIn(row.id, roomId, admin, { livekitIdentity: 'guest-sub' });
+
+      expect(roomEvents.emitBreakoutRemoval).toHaveBeenCalledWith({
+        roomCode,
+        targetIdentity: 'guest-sub',
+        reason: 'BREAKOUT_MOVE_IN',
+      });
+      expect(callOrder).toEqual(['emitBreakoutRemoval', 'removeParticipant']);
+    });
+
+    // Bugfix (breakout-rooms-ux-fix, Judgment Day Round 2): salto
+    // mini-sala -> mini-sala auto-iniciado bajo joinPolicy=open -- el
+    // cliente envía su identity MINTEADA actual (de la mini sala de
+    // origen) como target.livekitIdentity (así pasa la autorización de
+    // "self move", ver [3.4]), pero ChatGateway.emitToParticipant solo
+    // resuelve sockets por participantId === sub ESTABLE. Si las señales
+    // seguían direccionadas por target.livekitIdentity, nunca llegaban al
+    // socket real de quien se traslada.
+    it('[bugfix] moveIn() self-move mini-sala -> mini-sala bajo joinPolicy=open: ambas señales usan el sourceIdentity estable, no la identity minteada enviada como target', async () => {
+      const destinationRow = buildBreakoutRow({
+        id: 'breakout-dest',
+        livekitRoomName: `${roomCode}::breakout-2`,
+        joinPolicy: 'open',
+      });
+      const originRow = buildBreakoutRow({
+        id: 'breakout-origin',
+        livekitRoomName: `${roomCode}::breakout-3`,
+        leavePolicy: 'free_return',
+      });
+      db.breakoutRoomsSelectWhere
+        .mockReturnValueOnce(chain([destinationRow])) // getOpenRowOrThrow (destino)
+        .mockReturnValueOnce(chain([originRow])) // fetchOpenRows (autorización: self-move)
+        .mockReturnValueOnce(chain([{ livekitRoomName: originRow.livekitRoomName }])); // getBreakoutRoomNameById
+      db.breakoutOccupantsSelectWhere
+        .mockReturnValueOnce(
+          chain([
+            { id: 'occ-origin', livekitIdentity: 'origin-minted-identity', breakoutRoomId: originRow.id },
+          ]),
+        ) // findOpenOccupantBySourceAcrossGroup(actor.sub) -- resuelve actorGroupIdentity
+        .mockReturnValueOnce(
+          chain([{ id: 'occ-origin', sourceIdentity: guest.sub, breakoutRoomId: originRow.id }]),
+        ); // findOpenOccupantByLivekitIdentityAnyRoom(target.livekitIdentity)
+      db.identitiesSelectWhere.mockReturnValueOnce(
+        chain([{ roomId, userId: 'guest-user-1', displayName: 'Invitado', roleAtIssue: null }]),
+      );
+      listParticipants.mockResolvedValueOnce([]);
+
+      await service.moveIn(destinationRow.id, roomId, guest, {
+        livekitIdentity: 'origin-minted-identity',
+      });
+
+      expect(roomEvents.emitBreakoutAssigned).toHaveBeenCalledWith(
+        expect.objectContaining({ targetIdentity: guest.sub }),
+      );
+      expect(roomEvents.emitBreakoutRemoval).toHaveBeenCalledWith(
+        expect.objectContaining({ targetIdentity: guest.sub }),
+      );
+      expect(roomEvents.emitBreakoutAssigned).not.toHaveBeenCalledWith(
+        expect.objectContaining({ targetIdentity: 'origin-minted-identity' }),
+      );
+      expect(roomEvents.emitBreakoutRemoval).not.toHaveBeenCalledWith(
+        expect.objectContaining({ targetIdentity: 'origin-minted-identity' }),
+      );
+    });
+
+    it('[2.5] selfReturn() admin emite breakout:removal con motivo BREAKOUT_FORCED_RETURN direccionado a occupant.sourceIdentity (no al identity de mini sala), antes de removeParticipant', async () => {
+      asAdmin();
+      const row = buildBreakoutRow();
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
+      db.breakoutOccupantsSelectWhere.mockReturnValueOnce(
+        chain([{ id: 'occ-1', sourceIdentity: 'occupant-sub' }]),
+      );
+      const callOrder: string[] = [];
+      roomEvents.emitBreakoutRemoval.mockImplementationOnce(() => {
+        callOrder.push('emitBreakoutRemoval');
+      });
+      removeParticipant.mockImplementationOnce(() => {
+        callOrder.push('removeParticipant');
+        return Promise.resolve(undefined);
+      });
+
+      await service.selfReturn(row.id, roomId, admin, 'mini-room-identity');
+
+      expect(roomEvents.emitBreakoutRemoval).toHaveBeenCalledWith({
+        roomCode,
+        targetIdentity: 'occupant-sub',
+        reason: 'BREAKOUT_FORCED_RETURN',
+      });
+      expect(callOrder).toEqual(['emitBreakoutRemoval', 'removeParticipant']);
     });
   });
 });

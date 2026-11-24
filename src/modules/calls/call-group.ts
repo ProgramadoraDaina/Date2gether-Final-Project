@@ -63,3 +63,19 @@ export function parseBreakoutRoomName(name: string): { parentCode: string; index
 export function isBreakoutRoomName(name: string): boolean {
   return name.includes(BREAKOUT_NAME_SEPARATOR);
 }
+
+// Decisión 2 (design.md "Señal de motivo de remoción"): unión cerrada,
+// compartida sin cambios entre BreakoutRoomsService (moveIn, selfReturn) y
+// CallsWebhookService (expulsión locked), y consumida por el cliente para
+// distinguir un traslado/vuelta esperada de una expulsión por política.
+export const BREAKOUT_REMOVAL_REASONS = [
+  'BREAKOUT_MOVE_IN', // moveIn -- traslado en curso, esperado
+  'BREAKOUT_FORCED_RETURN', // selfReturn, camino admin -- vuelta forzada, esperada
+  'BREAKOUT_RETURN_LOCKED', // webhook, expulsión por política (reusa BREAKOUT_RETURN_LOCKED_CODE)
+] as const;
+
+export type BreakoutRemovalReason = (typeof BREAKOUT_REMOVAL_REASONS)[number];
+
+export function isBreakoutRemovalReason(value: string): value is BreakoutRemovalReason {
+  return (BREAKOUT_REMOVAL_REASONS as readonly string[]).includes(value);
+}
