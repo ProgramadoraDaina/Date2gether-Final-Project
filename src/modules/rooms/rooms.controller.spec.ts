@@ -15,6 +15,7 @@ describe('RoomsController', () => {
     listOwnedRooms: Mock<(...args: unknown[]) => Promise<unknown>>;
     renameRoom: Mock<(...args: unknown[]) => Promise<unknown>>;
     deleteRoomAsAdmin: Mock<(...args: unknown[]) => Promise<unknown>>;
+    setMemberRole: Mock<(...args: unknown[]) => Promise<unknown>>;
   };
 
   beforeEach(async () => {
@@ -24,6 +25,7 @@ describe('RoomsController', () => {
       listOwnedRooms: vi.fn(),
       renameRoom: vi.fn(),
       deleteRoomAsAdmin: vi.fn(),
+      setMemberRole: vi.fn(),
     };
 
     const module = await Test.createTestingModule({
@@ -51,6 +53,25 @@ describe('RoomsController', () => {
 
     await expect(controller.listMine({ sub: 'user-1' } as never)).resolves.toBe(owned);
     expect(roomsService.listOwnedRooms).toHaveBeenCalledWith('user-1');
+  });
+
+  it('reenvía el usuario autenticado para volver a verificar sus permisos dentro de la transacción', async () => {
+    await controller.updateMemberRole(
+      'abc-defg-hij',
+      'member-1',
+      { role: 'participante' },
+      {
+        sub: 'admin-1',
+        email: 'admin@example.test',
+      },
+    );
+
+    expect(roomsService.setMemberRole).toHaveBeenCalledWith(
+      'abc-defg-hij',
+      'member-1',
+      'participante',
+      'admin-1',
+    );
   });
 
   it('declara /rooms/mine antes de /rooms/:code para que "mine" no se tome como código de sala', () => {

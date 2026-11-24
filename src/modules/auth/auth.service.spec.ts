@@ -31,6 +31,7 @@ function buildUser(overrides: Partial<User> = {}): User {
     nameColor: null,
     avatar: null,
     role: 'user',
+    callHistoryDeletedBefore: null,
     createdAt: new Date(),
     ...overrides,
   };

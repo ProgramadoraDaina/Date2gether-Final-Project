@@ -29,6 +29,7 @@ jest.mock('@/lib/api', () => ({
 
 function ownedRoom(overrides: Partial<OwnedRoom> = {}): OwnedRoom {
   return {
+    hiddenFromMyRooms: false,
     id: 'room-1',
     code: 'abc-defg-hij',
     name: 'Cita de los lunes',
@@ -66,7 +67,7 @@ describe('MyRoomsPage', () => {
     const MyRoomsPage = (await import('./page')).default;
     render(<MyRoomsPage />);
 
-    await screen.findByText('Cita de los lunes');
+    await screen.findByText('Cita de los lunes', { selector: '.roomName' });
     expect(screen.getByText('Permanente')).toBeInTheDocument();
     expect(screen.getByText(/Lunes 21:30/)).toBeInTheDocument();
     expect(screen.getByText(/Próximo encuentro/)).toBeInTheDocument();
@@ -110,7 +111,7 @@ describe('MyRoomsPage', () => {
     const MyRoomsPage = (await import('./page')).default;
     render(<MyRoomsPage />);
 
-    await screen.findByText('Cita de los lunes');
+    await screen.findByText('Cita de los lunes', { selector: '.roomName' });
     expect(screen.getAllByRole('button', { name: 'Renombrar sala' })).toHaveLength(1);
   });
 
@@ -129,7 +130,7 @@ describe('MyRoomsPage', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
-    await screen.findByText('Grupo de los jueves');
+    await screen.findByText('Grupo de los jueves', { selector: '.roomName' });
     expect(renameRoom).toHaveBeenCalledWith('abc-defg-hij', 'Grupo de los jueves');
   });
 
@@ -144,7 +145,7 @@ describe('MyRoomsPage', () => {
       ]);
       const MyRoomsPage = (await import('./page')).default;
       render(<MyRoomsPage />);
-      await screen.findByText('Cita de los lunes');
+      await screen.findAllByText('Cita de los lunes');
     }
 
     it('pide confirmación en la página antes de borrar y cancelar no llama a la API', async () => {
@@ -158,7 +159,7 @@ describe('MyRoomsPage', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
 
       expect(deleteRoom).not.toHaveBeenCalled();
-      expect(screen.getByText('Cita de los lunes')).toBeInTheDocument();
+      expect(screen.getAllByText('Cita de los lunes').length).toBeGreaterThan(0);
     });
 
     it('al confirmar borra la sala, muestra el estado de carga y la saca de la lista', async () => {
@@ -179,8 +180,8 @@ describe('MyRoomsPage', () => {
 
       finish();
 
-      await waitFor(() => expect(screen.queryByText('Cita de los lunes')).not.toBeInTheDocument());
-      expect(screen.getByText('Otra sala')).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryAllByText('Cita de los lunes')).toHaveLength(0));
+      expect(screen.getAllByText('Otra sala').length).toBeGreaterThan(0);
     });
 
     it('si la sala ya no existe (404) cierra el diálogo, la saca de la lista y avisa', async () => {
@@ -194,8 +195,8 @@ describe('MyRoomsPage', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Sí, eliminar sala' }));
 
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-      expect(screen.queryByText('Cita de los lunes')).not.toBeInTheDocument();
-      expect(screen.getByText('Otra sala')).toBeInTheDocument();
+      expect(screen.queryAllByText('Cita de los lunes')).toHaveLength(0);
+      expect(screen.getAllByText('Otra sala').length).toBeGreaterThan(0);
       expect(screen.getByRole('status')).toHaveTextContent('La sala ya no existe.');
     });
 
@@ -213,11 +214,13 @@ describe('MyRoomsPage', () => {
         'Solo el administrador de la sala puede borrarla',
       );
       // El nombre también aparece en el diálogo abierto: se mira la lista.
-      expect(within(screen.getByRole('list')).getByText('Cita de los lunes')).toBeInTheDocument();
+      expect(
+        within(screen.getByRole('list')).getAllByText('Cita de los lunes').length,
+      ).toBeGreaterThan(0);
     });
   });
 
-  it('avisa cuando todavía no creó ninguna sala', async () => {
+  it('avisa cuando no administra salas propias ni heredadas', async () => {
     const { isLoggedIn } = await import('@/lib/auth');
     const { getOwnedRooms } = await import('@/lib/api');
     (isLoggedIn as jest.Mock<typeof isLoggedIn>).mockReturnValue(true);
@@ -225,6 +228,6 @@ describe('MyRoomsPage', () => {
     const MyRoomsPage = (await import('./page')).default;
     render(<MyRoomsPage />);
 
-    await screen.findByText('Todavía no creaste ninguna sala.');
+    await screen.findByText('Todavía no tenés salas como administrador.');
   });
 });

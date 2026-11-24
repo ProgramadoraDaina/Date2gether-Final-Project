@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { RoomServiceClient } from 'livekit-server-sdk';
 import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
-import { callEvents, callParticipantIdentities, callSessions } from '../../db/schema';
+import { callEvents, callParticipantIdentities, callSessions, roomMembers } from '../../db/schema';
 
 // Ventana de gracia (D3, design.md): 15s. No es un sleep ciego antes de
 // cerrar: es una RE-VERIFICACIÓN agendada. Un admin que se reconecta vuelve
@@ -47,7 +47,7 @@ export class CallSessionCloseService {
 
   /**
    * Se invoca desde el dispatcher de webhooks cuando el identity que generó
-   * un `participant_left` tenía `roleAtIssue = 'administrador'`. No cierra
+   * un `participant_left` tiene el rol actual de administrador. No cierra
    * de inmediato: si en este instante ya no queda ningún admin conectado,
    * agenda un re-chequeo a T+15s (D3) en vez de forzar el cierre ya mismo.
    */
@@ -103,10 +103,17 @@ export class CallSessionCloseService {
       const [admin] = await this.db
         .select({ id: callParticipantIdentities.id })
         .from(callParticipantIdentities)
+        .innerJoin(
+          roomMembers,
+          and(
+            eq(roomMembers.roomId, callParticipantIdentities.roomId),
+            eq(roomMembers.userId, callParticipantIdentities.userId),
+          ),
+        )
         .where(
           and(
             inArray(callParticipantIdentities.livekitIdentity, identities),
-            eq(callParticipantIdentities.roleAtIssue, 'administrador'),
+            eq(roomMembers.role, 'administrador'),
           ),
         )
         .limit(1);

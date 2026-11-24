@@ -1,5 +1,5 @@
 {
-  "id": "e139225c-ef2d-4b1c-8af3-1a3475c0a81e",
+  "id": "492c6b19-9757-4602-abe7-723514de0e3d",
   "prevId": "8dd0e744-ee86-4da6-9af7-81c83eabe5f9",
   "version": "7",
   "dialect": "postgresql",
@@ -993,6 +993,13 @@
           "notNull": true,
           "default": "'participante'"
         },
+        "is_owner": {
+          "name": "is_owner",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "joined_at": {
           "name": "joined_at",
           "type": "timestamp",
@@ -1001,7 +1008,24 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "room_members_one_owner_per_room": {
+          "name": "room_members_one_owner_per_room",
+          "columns": [
+            {
+              "expression": "room_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"room_members\".\"is_owner\"",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "room_members_room_id_rooms_id_fk": {
           "name": "room_members_room_id_rooms_id_fk",
@@ -1041,7 +1065,12 @@
       },
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "room_members_owner_is_admin": {
+          "name": "room_members_owner_is_admin",
+          "value": "not \"room_members\".\"is_owner\" or \"room_members\".\"role\" = 'administrador'"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.room_notes": {
@@ -1506,14 +1535,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "role": {
-          "name": "role",
-          "type": "user_role",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'user'"
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -1622,14 +1643,6 @@
         "small",
         "medium",
         "large"
-      ]
-    },
-    "public.user_role": {
-      "name": "user_role",
-      "schema": "public",
-      "values": [
-        "user",
-        "admin"
       ]
     }
   },

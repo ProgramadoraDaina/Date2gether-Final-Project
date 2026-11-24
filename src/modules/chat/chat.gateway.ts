@@ -207,7 +207,7 @@ export class ChatGateway implements OnGatewayDisconnect {
       ...presence,
     });
 
-    const history = await this.chatService.getHistory(room.id);
+    const history = await this.chatService.getHistory(room.id, room.isPermanent);
     client.emit('roomHistory', history);
     client.emit('roomUsers', this.getUsersInRoom(dto.code));
 

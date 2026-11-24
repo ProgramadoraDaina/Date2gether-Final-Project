@@ -61,7 +61,9 @@ describe('ChatGateway', () => {
     const resolver = { resolveJoinable, assertBound } as unknown as RoomResolverService;
     const createMessage = vi.fn<ChatService['createMessage']>();
     const chatService = {
-      getHistory: vi.fn<ChatService['getHistory']>().mockResolvedValue([]),
+      getHistory: vi
+        .fn<ChatService['getHistory']>()
+        .mockResolvedValue({ entries: [], nextCursor: null }),
       createMessage,
     } as unknown as ChatService;
     const roomEvents = {
