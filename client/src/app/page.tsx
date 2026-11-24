@@ -55,6 +55,8 @@ export default function HomePage() {
     await logout();
     setUser(null);
     setLoggedIn(false);
+    // replace: the logged-out home must not stay in history either.
+    router.replace('/login');
   }
 
   async function handleCreate(e: FormEvent) {

@@ -10,6 +10,9 @@ jest.mock('@/features/translation/useTranslation', () => {
   const t = (key: string) => key;
   return { useTranslation: () => ({ t, language: 'es' }) };
 });
+jest.mock('@/features/auth/RequireAuth', () => ({
+  RequireAuth: ({ children }: { children: React.ReactNode }) => children,
+}));
 jest.mock('@/lib/auth', () => ({ isLoggedIn: jest.fn() }));
 jest.mock('@/lib/api', () => ({
   getCallHistory: jest.fn(),
@@ -20,15 +23,6 @@ describe('HistoryPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     searchParams = new URLSearchParams();
-  });
-
-  it('muestra el mensaje de inicio de sesión si no hay sesión', async () => {
-    const { isLoggedIn } = await import('@/lib/auth');
-    (isLoggedIn as jest.Mock<typeof isLoggedIn>).mockReturnValue(false);
-    const HistoryPage = (await import('./page')).default;
-    render(<HistoryPage />);
-    await screen.findByText('Necesitás iniciar sesión para ver tu historial de llamadas.');
-    expect(screen.getByRole('link', { name: 'Iniciar sesión' })).toHaveAttribute('href', '/login');
   });
 
   it('muestra las entradas del historial cuando hay sesión, sin botón al gráfico si no hay sesión materializada', async () => {

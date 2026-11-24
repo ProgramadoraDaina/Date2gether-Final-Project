@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { login } from '@/lib/auth';
+import { readNextPath } from '@/features/auth/safeRedirect';
 import { useTranslation } from '@/features/translation/useTranslation';
 import styles from './page.module.css';
 
@@ -24,7 +25,7 @@ export default function LoginPage() {
     try {
       const user = await login(email.trim(), password);
       localStorage.setItem(NAME_KEY, user.name);
-      router.push('/');
+      router.replace(readNextPath());
     } catch (err) {
       setError(err instanceof Error ? err.message : t('No se pudo iniciar sesión'));
     } finally {

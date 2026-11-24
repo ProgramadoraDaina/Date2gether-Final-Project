@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ApiError, getCallHistory, type CallHistoryEntry } from '@/lib/api';
-import { isLoggedIn } from '@/lib/auth';
+import { RequireAuth } from '@/features/auth/RequireAuth';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { AppShell } from '@/features/navigation/AppShell';
 import styles from './page.module.css';
@@ -13,15 +13,15 @@ import styles from './page.module.css';
 export default function HistoryPage() {
   return (
     <Suspense fallback={null}>
-      <HistoryContent />
+      <RequireAuth>
+        <HistoryContent />
+      </RequireAuth>
     </Suspense>
   );
 }
 
 function HistoryContent() {
   const { t, language } = useTranslation();
-  const [loggedIn, setLoggedIn] = useState(false);
-  const [checking, setChecking] = useState(true);
   const [entries, setEntries] = useState<CallHistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,17 +30,11 @@ function HistoryContent() {
   // Corre solo al montar: `t` se omite a propósito de las dependencias para
   // no repetir el fetch del historial cada vez que cambia el idioma.
   useEffect(() => {
-    const alreadyLoggedIn = isLoggedIn();
-    setLoggedIn(alreadyLoggedIn);
-    setChecking(false);
-    if (!alreadyLoggedIn) return;
-
     setLoading(true);
     getCallHistory()
       .then(setEntries)
       .catch((err) => {
         setError(err instanceof ApiError ? err.message : t('No se pudo obtener el historial'));
-        if (!isLoggedIn()) setLoggedIn(false);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -57,23 +51,6 @@ function HistoryContent() {
     ? entries.filter((entry) => entry.roomId === roomFilter)
     : entries;
   const filteredRoomName = visibleEntries[0]?.roomName;
-
-  if (checking) return null;
-
-  if (!loggedIn) {
-    return (
-      <AppShell>
-        <div className={styles.card}>
-          <h1>{t('Historial')}</h1>
-          <p>{t('Necesitás iniciar sesión para ver tu historial de llamadas.')}</p>
-          <p className={styles.authLinks}>
-            <Link href="/login">{t('Iniciar sesión')}</Link>
-            <Link href="/register">{t('Crear cuenta')}</Link>
-          </p>
-        </div>
-      </AppShell>
-    );
-  }
 
   return (
     <AppShell>
