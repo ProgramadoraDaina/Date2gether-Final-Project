@@ -52,8 +52,8 @@
 
 .principalList {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
 
   margin-top: 12px;
 
@@ -61,10 +61,10 @@
 }
 
 .principalList li {
-  background: rgba(59, 130, 246, 0.15);
-  border: 1px solid rgba(59, 130, 246, 0.25);
-  border-radius: 999px;
-  padding: 6px 12px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 10px;
+  padding: 8px 12px;
   font-size: 0.9rem;
 }
 
@@ -128,16 +128,17 @@
 
 .occupantList {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-direction: column;
+  gap: 4px;
 
   list-style: none;
 }
 
 .occupantList li {
   padding: 6px 10px;
-  border-radius: 999px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.05);
+  font-size: 0.9rem;
 }
 
 .policyBadge {
