@@ -588,6 +588,12 @@ const en: Record<string, string> = {
   'Vuelven en': 'Back in',
   'No se pudo llamar de vuelta a las mini salas': 'Could not call the breakout rooms back',
   'Volver a la llamada': 'Back to the call',
+  // Aviso de solicitudes de ingreso
+  'Solicitudes para entrar': 'Requests to join',
+  'quiere entrar a la sala': 'wants to join the room',
+  'Decidir más tarde': 'Decide later',
+  esperando: 'waiting',
+  'Ver todas': 'View all',
   'Las mini salas siguen funcionando aunque cierres este panel.':
     'Breakout rooms keep running when you close this panel.',
 };

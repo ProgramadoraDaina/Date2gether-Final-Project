@@ -7,6 +7,7 @@ import {
   type AdmissionManagement,
 } from '@/lib/api';
 import { useTranslation } from '../translation/useTranslation';
+import { AdmissionToasts } from './AdmissionToasts';
 import styles from './AdmissionControl.module.css';
 
 const ADMISSION_HELP =
@@ -122,6 +123,16 @@ export function AdmissionControl({ code }: { code: string }) {
       >
         {t('Administrar ingresos')} <span aria-live="polite">({data?.requests.length ?? 0})</span>
       </button>
+      {!open && (
+        <AdmissionToasts
+          requests={data?.requests ?? []}
+          busy={busy}
+          onDecide={(requestId, decision) =>
+            void mutate(() => decideAdmission(code, requestId, decision))
+          }
+          onOpenAll={() => setOpen(true)}
+        />
+      )}
       {error && !open && <p role="alert">{t(error)}</p>}
       <dialog
         ref={dialog}
