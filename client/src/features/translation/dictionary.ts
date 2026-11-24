@@ -188,6 +188,9 @@ const en: Record<string, string> = {
   'La llamada terminó porque el anfitrión se desconectó.':
     'The call ended because the host disconnected.',
   'Volver a la sala': 'Back to the room',
+  'Esta sala fue eliminada por su administrador.': 'This room was deleted by its administrator.',
+  'Ir a mis salas': 'Go to my rooms',
+  'La sala ya no existe.': 'The room no longer exists.',
   'Ver línea de tiempo': 'View timeline',
   'Ver gráfico de interacción': 'View interaction chart',
   'Videollamadas simples, en el navegador.': 'Simple video calls, in the browser.',
@@ -625,6 +628,30 @@ const en: Record<string, string> = {
   Cadena: 'Chain',
   Bufanda: 'Scarf',
   'Capitán América': 'Captain America',
+  // Borrado de salas
+  'Eliminar sala': 'Delete room',
+  'Eliminando…': 'Deleting…',
+  'Sí, eliminar sala': 'Yes, delete room',
+  'Vas a eliminar': 'You are about to delete',
+  'Se borran sus mensajes, notas, horarios y miembros. Esta acción no se puede deshacer.':
+    'Its messages, notes, schedules and members are deleted. This cannot be undone.',
+  'No se pudo eliminar la sala': 'Could not delete the room',
+  // Administración (roles globales)
+  Admin: 'Admin',
+  Administración: 'Administration',
+  'Sin acceso': 'No access',
+  'Necesitás ser administrador de la plataforma para ver esta página.':
+    'You need to be a platform administrator to view this page.',
+  'Usuarios de la plataforma y su rol global.': 'Platform users and their global role.',
+  'Cargando usuarios…': 'Loading users…',
+  'No se pudieron cargar los usuarios': 'Could not load users',
+  'No se pudo cambiar el rol': 'Could not change the role',
+  Rol: 'Role',
+  'Rol de': 'Role of',
+  'No se pudo verificar tu cuenta. Revisá tu conexión e intentá de nuevo.':
+    'Could not verify your account. Check your connection and try again.',
+  Usuario: 'User',
+  Administrador: 'Administrator',
 };
 
 export default en;

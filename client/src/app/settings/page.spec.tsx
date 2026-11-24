@@ -7,6 +7,8 @@ jest.mock('@/features/translation/useTranslation', () => {
   return { useTranslation: () => ({ t }) };
 });
 jest.mock('@/lib/auth', () => ({ isLoggedIn: jest.fn(), getCurrentUser: jest.fn() }));
+// El riel de navegación pide el rol global; estas pruebas no ejercitan el link de admin.
+jest.mock('@/features/auth/useGlobalRole', () => ({ useGlobalRole: () => 'user' }));
 jest.mock('@/lib/api', () => ({
   updateNameColor: jest.fn(),
   updateAvatar: jest.fn(),

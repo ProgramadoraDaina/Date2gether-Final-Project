@@ -38,6 +38,12 @@ export const NAME_COLOR_IDS = [
 
 export const nameColorEnum = pgEnum('name_color', NAME_COLOR_IDS);
 
+// Rol GLOBAL de la cuenta (distinto del rol por sala, roomRoleEnum): 'admin' puede moderar
+// usuarios y salas de toda la plataforma.
+export const USER_ROLES = ['user', 'admin'] as const;
+
+export const userRoleEnum = pgEnum('user_role', USER_ROLES);
+
 export const users = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
   email: varchar('email', { length: 255 }).notNull().unique(),
@@ -45,6 +51,7 @@ export const users = pgTable('users', {
   name: varchar('name', { length: 100 }).notNull(),
   nameColor: nameColorEnum('name_color'),
   avatar: jsonb('avatar').$type<UserAvatar>(),
+  role: userRoleEnum('role').notNull().default('user'),
   callHistoryDeletedBefore: timestamp('call_history_deleted_before'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
@@ -67,6 +74,7 @@ export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
+export type UserRole = (typeof userRoleEnum.enumValues)[number];
 export type RefreshToken = typeof refreshTokens.$inferSelect;
 export type NewRefreshToken = typeof refreshTokens.$inferInsert;
 

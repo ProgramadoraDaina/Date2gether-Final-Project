@@ -73,6 +73,16 @@ Se aplican las migraciones versionadas. `0002_panoramic_nebula` incorpora roles 
 
 Si una base de la versión anterior del PR ya aplicó `0002_fast_nebula`, registró antes la migración de Chime que la de roles. No se debe reutilizar esa secuencia como si fuera la nueva: usá una base local nueva o planificá su reconciliación conservando los datos. Las bases que siguen las migraciones de `develop` pueden aplicar `0003` normalmente.
 
+## Administradores globales
+
+Cada cuenta tiene un rol global (`user` por defecto o `admin`), distinto del rol por sala. Los endpoints `/admin/*` exigen `admin`, por lo que la primera cuenta administradora se crea desde la terminal, con la cuenta ya registrada y `DATABASE_URL` definida en `.env`:
+
+```bash
+pnpm admin:promote ana@example.com
+```
+
+El script marca esa cuenta como `admin` (el email debe existir). Desde ahí, el panel `/admin` del frontend permite cambiar roles de otras cuentas. El rol se lee de la base en cada request, así que un cambio aplica de inmediato.
+
 ## Levantar backend y frontend
 
 En dos terminales, ambas desde la raíz:
@@ -124,8 +134,12 @@ Los cambios de LiveKit y seguridad deben revisarse en el PR antes de desplegarlo
 | Método | Ruta                                                             | Acceso                                                                                  |
 | ------ | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | POST   | `/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout` | Gestión de cuentas y sesión                                                             |
-| GET    | `/auth/me`                                                       | JWT de cuenta                                                                           |
+| GET    | `/auth/me`                                                       | JWT de cuenta; incluye el rol global (`user` o `admin`)                                 |
 | POST   | `/rooms`                                                         | JWT de cuenta; registra al administrador                                                |
+| DELETE | `/rooms/:code`                                                   | Administrador de esa sala (403 si no, 404 si no existe); responde 204                   |
+| GET    | `/admin/users`                                                   | Rol global `admin` (403 si es `user`, 401 sin token); `id, email, name, role, createdAt` |
+| PATCH  | `/admin/users/:id/role`                                          | Rol global `admin`; `{ "role": "user" \| "admin" }`; no permite quitarse el rol a uno mismo |
+| DELETE | `/admin/rooms/:code`                                             | Rol global `admin`; moderación, borra cualquier sala (204)                              |
 | GET    | `/rooms/:code`                                                   | Consulta mediante código                                                                |
 | POST   | `/rooms/:code/access`                                            | Enlace/código y `{ "name": "Ana" }`; JWT de cuenta opcional                             |
 | POST   | `/rooms/:code/join`                                              | JWT de cuenta; membresía registrada                                                     |

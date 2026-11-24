@@ -251,6 +251,7 @@ export default function RoomPage() {
   const [transcriptCallSid, setTranscriptCallSid] = useState<string | null>(null);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [callEnded, setCallEnded] = useState(false);
+  const [roomDeleted, setRoomDeleted] = useState(false);
   const { emojis, refetchEmojis } = useRoomEmojis(access ? code : undefined);
   const chatEmojis = useMemo(() => emojis.filter((e) => e.kind === 'emoji'), [emojis]);
   const emojisByName = useMemo(() => new Map(chatEmojis.map((e) => [e.name, e])), [chatEmojis]);
@@ -426,6 +427,9 @@ export default function RoomPage() {
     socket.on('roomEmojisChanged', () => {
       void refetchEmojis();
     });
+    // La sala se borró (su administrador): el backend corta chat y llamada, y desde
+    // acá se reemplaza toda la vista por un aviso en vez de dejar una sala muerta.
+    socket.on('roomDeleted', () => setRoomDeleted(true));
 
     socket.connect();
 
@@ -501,6 +505,21 @@ export default function RoomPage() {
             onJoin={handleJoin}
           />
         )}
+      </AppShell>
+    );
+  }
+
+  if (roomDeleted) {
+    return (
+      <AppShell>
+        <div className={styles.callLoadingPanel} role="alert">
+          <p>{t('Esta sala fue eliminada por su administrador.')}</p>
+          <div className={styles.callEndedActions}>
+            <Link href="/rooms" className={styles.callLoadingButton}>
+              {t('Ir a mis salas')}
+            </Link>
+          </div>
+        </div>
       </AppShell>
     );
   }

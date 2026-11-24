@@ -1,6 +1,12 @@
 import type { Avatar } from '@/features/avatar/catalog';
 import type { TranscriptEntry } from './transcripts';
-import { extractErrorMessage, getAccessToken, refreshAccessToken, type AuthUser } from './auth';
+import {
+  extractErrorMessage,
+  getAccessToken,
+  refreshAccessToken,
+  type AuthUser,
+  type UserRole,
+} from './auth';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -219,6 +225,44 @@ export async function renameRoom(code: string, name: string): Promise<void> {
     body: JSON.stringify({ name }),
   });
   if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudo renombrar la sala'));
+}
+
+// Borra la sala (204). Solo su administrador; el backend responde 403/404 si no corresponde.
+export async function deleteRoom(code: string): Promise<void> {
+  const res = await authFetch(`/rooms/${encodeURIComponent(code)}`, { method: 'DELETE' });
+  if (!res.ok) {
+    throw new ApiError(await extractErrorMessage(res, 'No se pudo eliminar la sala'), res.status);
+  }
+}
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  createdAt: string;
+}
+
+export async function getAdminUsers(): Promise<AdminUser[]> {
+  const res = await authFetch('/admin/users');
+  if (!res.ok) {
+    throw new ApiError(
+      await extractErrorMessage(res, 'No se pudieron cargar los usuarios'),
+      res.status,
+    );
+  }
+  return res.json();
+}
+
+export async function updateAdminUserRole(id: string, role: UserRole): Promise<AdminUser> {
+  const res = await authFetch(`/admin/users/${id}/role`, {
+    method: 'PATCH',
+    body: JSON.stringify({ role }),
+  });
+  if (!res.ok) {
+    throw new ApiError(await extractErrorMessage(res, 'No se pudo cambiar el rol'), res.status);
+  }
+  return res.json();
 }
 
 export interface CallHistoryEntry {

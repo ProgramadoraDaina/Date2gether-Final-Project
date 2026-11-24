@@ -25,7 +25,10 @@ const room: Room = {
 
 describe('RoomsService', () => {
   let db: FakeDb;
-  let roomEvents: { emitMemberRoleChanged: ReturnType<typeof vi.fn> };
+  let roomEvents: {
+    emitMemberRoleChanged: ReturnType<typeof vi.fn>;
+    emitRoomDeleted: ReturnType<typeof vi.fn>;
+  };
   let resolver: {
     resolveJoinable: ReturnType<typeof vi.fn>;
     lockJoinable: Mock<RoomResolverService['lockJoinable']>;
@@ -37,7 +40,7 @@ describe('RoomsService', () => {
 
   beforeEach(() => {
     db = createFakeDb();
-    roomEvents = { emitMemberRoleChanged: vi.fn() };
+    roomEvents = { emitMemberRoleChanged: vi.fn(), emitRoomDeleted: vi.fn() };
     resolver = {
       resolveJoinable: vi.fn().mockResolvedValue(room),
       lockJoinable: vi.fn<RoomResolverService['lockJoinable']>().mockResolvedValue(room),
@@ -344,6 +347,92 @@ describe('RoomsService', () => {
         ForbiddenException,
       );
       expect(db.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deleteRoom', () => {
+    function stubTransaction() {
+      const deleteChain = chain([]);
+      const tx = { delete: vi.fn().mockReturnValue(deleteChain) };
+      db.transaction.mockImplementationOnce(async (cb: unknown) =>
+        (cb as (transaction: typeof tx) => Promise<void>)(tx),
+      );
+      return { tx, deleteChain };
+    }
+
+    it('borra la sala en una transacción y avisa a los sockets conectados', async () => {
+      resolver.findPoolOccupant.mockResolvedValueOnce(room);
+      const { tx, deleteChain } = stubTransaction();
+
+      await service.deleteRoom(room.code);
+
+      expect(resolver.findPoolOccupant).toHaveBeenCalledWith(room.code);
+      expect(tx.delete).toHaveBeenCalledTimes(1);
+      expect(deleteChain.where).toHaveBeenCalledTimes(1);
+      expect(roomEvents.emitRoomDeleted).toHaveBeenCalledWith({ roomCode: room.code });
+    });
+
+    it('responde 404 si la sala no existe, sin borrar ni avisar', async () => {
+      resolver.findPoolOccupant.mockResolvedValueOnce(undefined);
+
+      await expect(service.deleteRoom('zzz-zzzz-zzz')).rejects.toThrow(NotFoundException);
+      expect(db.transaction).not.toHaveBeenCalled();
+      expect(roomEvents.emitRoomDeleted).not.toHaveBeenCalled();
+    });
+
+    it('no avisa a los sockets si el borrado falla', async () => {
+      resolver.findPoolOccupant.mockResolvedValueOnce(room);
+      db.transaction.mockRejectedValueOnce(new Error('db down'));
+
+      await expect(service.deleteRoom(room.code)).rejects.toThrow('db down');
+      expect(roomEvents.emitRoomDeleted).not.toHaveBeenCalled();
+    });
+
+    describe('deleteRoomAsAdmin', () => {
+      it('borra la sala si quien llama es su administrador', async () => {
+        resolver.findPoolOccupant.mockResolvedValueOnce(room);
+        db.select.mockReturnValueOnce(chain([{ role: 'administrador' }]));
+        const { tx } = stubTransaction();
+
+        await service.deleteRoomAsAdmin(room.code, 'owner-1');
+
+        expect(tx.delete).toHaveBeenCalledTimes(1);
+        expect(roomEvents.emitRoomDeleted).toHaveBeenCalledWith({ roomCode: room.code });
+      });
+
+      it.each(['colaborador', 'participante'] as const)(
+        'responde 403 si quien llama es %s de la sala, sin borrar',
+        async (role) => {
+          resolver.findPoolOccupant.mockResolvedValueOnce(room);
+          db.select.mockReturnValueOnce(chain([{ role }]));
+
+          await expect(service.deleteRoomAsAdmin(room.code, 'user-2')).rejects.toThrow(
+            ForbiddenException,
+          );
+          expect(db.transaction).not.toHaveBeenCalled();
+          expect(roomEvents.emitRoomDeleted).not.toHaveBeenCalled();
+        },
+      );
+
+      it('responde 403 si quien llama ni siquiera es miembro de la sala', async () => {
+        resolver.findPoolOccupant.mockResolvedValueOnce(room);
+        db.select.mockReturnValueOnce(chain([]));
+
+        await expect(service.deleteRoomAsAdmin(room.code, 'ajeno')).rejects.toThrow(
+          ForbiddenException,
+        );
+        expect(db.transaction).not.toHaveBeenCalled();
+      });
+
+      it('responde 404 si la sala no existe', async () => {
+        resolver.findPoolOccupant.mockResolvedValueOnce(undefined);
+
+        await expect(service.deleteRoomAsAdmin('zzz-zzzz-zzz', 'owner-1')).rejects.toThrow(
+          NotFoundException,
+        );
+        expect(db.select).not.toHaveBeenCalled();
+        expect(db.transaction).not.toHaveBeenCalled();
+      });
     });
   });
 });

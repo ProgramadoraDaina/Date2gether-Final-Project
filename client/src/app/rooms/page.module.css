@@ -133,6 +133,19 @@
   border-color: var(--color-text);
 }
 
+/* After .action:hover so its hover rules win over the composed class. */
+.dangerAction {
+  composes: action;
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+
+.dangerAction:hover {
+  background: var(--color-error);
+  border-color: var(--color-error);
+  color: #fff;
+}
+
 .primaryAction {
   border-color: var(--color-accent);
   background: var(--color-accent);

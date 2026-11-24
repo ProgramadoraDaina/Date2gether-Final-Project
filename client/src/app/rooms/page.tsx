@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { ApiError, getOwnedRooms, renameRoom, type OwnedRoom } from '@/lib/api';
+import { ApiError, deleteRoom, getOwnedRooms, renameRoom, type OwnedRoom } from '@/lib/api';
 import { RequireAuth } from '@/features/auth/RequireAuth';
+import { DeleteRoomDialog } from '@/features/rooms/DeleteRoomDialog';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { AppShell } from '@/features/navigation/AppShell';
 import { MyRoomMenu } from '@/features/rooms/MyRoomMenu';
@@ -28,6 +29,10 @@ function MyRoomsContent() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [renameError, setRenameError] = useState<string | null>(null);
+  const [roomToDelete, setRoomToDelete] = useState<OwnedRoom | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [showHidden, setShowHidden] = useState(false);
   const [visibilityNotice, setVisibilityNotice] = useState('');
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -91,8 +96,52 @@ function MyRoomsContent() {
     }
   }
 
+  function askToDelete(room: OwnedRoom) {
+    setRoomToDelete(room);
+    setDeleteError(null);
+    setNotice(null);
+  }
+
+  function cancelDelete() {
+    if (deleting) return;
+    setRoomToDelete(null);
+    setDeleteError(null);
+  }
+
+  async function confirmDelete() {
+    if (!roomToDelete || deleting) return;
+    const room = roomToDelete;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteRoom(room.code);
+      setRooms((prev) => prev.filter((r) => r.id !== room.id));
+      setRoomToDelete(null);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        // La sala ya no existe (borrada desde otra pestaña o ya retirada): el objetivo
+        // del usuario ya se cumplió, así que se cierra el diálogo y se limpia la fila.
+        setRooms((prev) => prev.filter((r) => r.id !== room.id));
+        setRoomToDelete(null);
+        setNotice(t('La sala ya no existe.'));
+      } else {
+        setDeleteError(err instanceof ApiError ? err.message : t('No se pudo eliminar la sala'));
+      }
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <AppShell>
+      <DeleteRoomDialog
+        open={roomToDelete !== null}
+        roomName={roomToDelete?.name ?? ''}
+        deleting={deleting}
+        error={deleteError}
+        onConfirm={() => void confirmDelete()}
+        onCancel={cancelDelete}
+      />
       <div className={styles.card}>
         <h1 ref={headingRef} tabIndex={-1}>
           {t('Mis salas')}
@@ -111,6 +160,7 @@ function MyRoomsContent() {
         )}
         {visibilityNotice && <p role="status">{t(visibilityNotice)}</p>}
 
+        {notice && <p role="status">{notice}</p>}
         {loading && <p>{t('Cargando salas…')}</p>}
         {error && (
           <p className={styles.error} role="alert">
@@ -209,6 +259,13 @@ function MyRoomsContent() {
                   <Link href={`/history?roomId=${room.id}`} className={styles.action}>
                     {t('Ver historial')}
                   </Link>
+                  <button
+                    type="button"
+                    className={styles.dangerAction}
+                    onClick={() => askToDelete(room)}
+                  >
+                    {t('Eliminar sala')}
+                  </button>
                   {copiedId === room.id && (
                     <span className={styles.copied} role="status">
                       {t('Link copiado')}

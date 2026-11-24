@@ -4,6 +4,7 @@ import { JwtAuthModule } from '../auth/jwt-auth.module';
 import { RoomResolverModule } from '../rooms/room-resolver.module';
 import { RoomsModule } from '../rooms/rooms.module';
 import { CallHistoryController } from './call-history.controller';
+import { CallRoomTeardownService } from './call-room-teardown.service';
 import { CallSessionCloseService } from './call-session-close.service';
 import { CallTimelineController } from './call-timeline.controller';
 import { CallTimelineService } from './call-timeline.service';
@@ -20,6 +21,12 @@ import { CallsWebhookService } from './calls-webhook.service';
     CallsWebhookController,
     CallTimelineController,
   ],
-  providers: [CallsService, CallsWebhookService, CallTimelineService, CallSessionCloseService],
+  providers: [
+    CallsService,
+    CallsWebhookService,
+    CallTimelineService,
+    CallSessionCloseService,
+    CallRoomTeardownService,
+  ],
 })
 export class CallsModule {}

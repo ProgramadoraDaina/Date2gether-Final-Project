@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useGlobalRole } from '@/features/auth/useGlobalRole';
 import { useTranslation } from '@/features/translation/useTranslation';
 import styles from './AppNav.module.css';
 
@@ -82,9 +83,30 @@ function SettingsIcon() {
   );
 }
 
+function AdminIcon() {
+  return (
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <path
+        d="M12 3 5 6v5c0 4.5 2.9 8.3 7 10 4.1-1.7 7-5.5 7-10V6l-7-3Z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="m9 12 2 2 4-4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function AppNav() {
   const { t } = useTranslation();
   const pathname = usePathname();
+  const role = useGlobalRole();
 
   const topItems: NavItem[] = [
     { href: '/', label: t('Inicio'), icon: <HomeIcon /> },
@@ -92,6 +114,8 @@ export function AppNav() {
     { href: '/history', label: t('Historial'), icon: <HistoryIcon /> },
   ];
   const bottomItems: NavItem[] = [
+    // Cosmético: ocultar el link no protege nada, el backend responde 403 a /admin/*.
+    ...(role === 'admin' ? [{ href: '/admin', label: t('Admin'), icon: <AdminIcon /> }] : []),
     { href: '/settings', label: t('Configuración'), icon: <SettingsIcon /> },
   ];
 

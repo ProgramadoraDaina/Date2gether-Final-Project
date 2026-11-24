@@ -162,6 +162,11 @@ export class ChatGateway implements OnGatewayDisconnect {
     this.roomEvents.onRoomEmojisChanged(({ roomCode }) => {
       this.server.to(roomCode).emit('roomEmojisChanged');
     });
+    // La sala se borró: se avisa y se corta el chat. handleDisconnect limpia el estado en memoria.
+    this.roomEvents.onRoomDeleted(({ roomCode }) => {
+      this.server.to(roomCode).emit('roomDeleted');
+      this.server.in(roomCode).disconnectSockets(true);
+    });
   }
 
   @UseGuards(WsJwtAuthGuard)

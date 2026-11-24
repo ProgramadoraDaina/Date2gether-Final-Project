@@ -37,6 +37,12 @@ describe('RoomRolesGuard', () => {
     await expect(guard.canActivate(httpContext(request))).rejects.toThrow(ForbiddenException);
   });
 
+  it('un colaborador tampoco pasa un endpoint exclusivo del administrador (p. ej. borrar la sala)', async () => {
+    const guard = buildGuard('colaborador', ['administrador']);
+
+    await expect(guard.canActivate(httpContext(request))).rejects.toThrow(ForbiddenException);
+  });
+
   it('permite si el rol de quien llama está en la lista de roles permitidos', async () => {
     const guard = buildGuard('administrador', ['administrador']);
 
