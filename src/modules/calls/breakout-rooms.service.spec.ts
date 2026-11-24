@@ -586,7 +586,9 @@ describe('BreakoutRoomsService', () => {
       });
 
       it('no-administrador se auto-traslada bajo open: autorizado', async () => {
-        db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([buildBreakoutRow({ joinPolicy: 'open' })]));
+        db.breakoutRoomsSelectWhere.mockReturnValueOnce(
+          chain([buildBreakoutRow({ joinPolicy: 'open' })]),
+        );
         listParticipants.mockResolvedValueOnce([]);
         db.identitiesSelectWhere.mockReturnValueOnce(chain([sourceIdentityRow]));
 
@@ -599,7 +601,9 @@ describe('BreakoutRoomsService', () => {
       });
 
       it('no-administrador bajo open intenta trasladar a un tercero: 403, ninguna identity nueva', async () => {
-        db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([buildBreakoutRow({ joinPolicy: 'open' })]));
+        db.breakoutRoomsSelectWhere.mockReturnValueOnce(
+          chain([buildBreakoutRow({ joinPolicy: 'open' })]),
+        );
 
         await expect(
           service.moveIn('breakout-1', roomId, guest, { livekitIdentity: 'third-party-sub' }),
@@ -708,7 +712,10 @@ describe('BreakoutRoomsService', () => {
         expect.objectContaining({ returnedAt: expect.any(Date) as unknown as Date }),
       );
       expect(db.breakoutOccupantsInsertValues).toHaveBeenCalledWith(
-        expect.objectContaining({ sourceIdentity: 'original-sub', breakoutRoomId: destinationRow.id }),
+        expect.objectContaining({
+          sourceIdentity: 'original-sub',
+          breakoutRoomId: destinationRow.id,
+        }),
       );
       expect(callOrder).toEqual(['close-previous', 'insert-new']);
     });
@@ -752,7 +759,11 @@ describe('BreakoutRoomsService', () => {
         .mockReturnValueOnce(chain([])) // findOpenOccupantByLivekitIdentityAnyRoom('guest-sub') -- no coincide: la fila real tiene la identity minteada, no el sub
         .mockReturnValueOnce(
           chain([
-            { id: 'occ-origin', livekitIdentity: 'origin-minted-identity', breakoutRoomId: originRow.id },
+            {
+              id: 'occ-origin',
+              livekitIdentity: 'origin-minted-identity',
+              breakoutRoomId: originRow.id,
+            },
           ]),
         ); // findOpenOccupantBySourceAcrossGroup('guest-sub') -- sí coincide por sourceIdentity
 
@@ -918,7 +929,9 @@ describe('BreakoutRoomsService', () => {
       const row = buildBreakoutRow({ leavePolicy: 'locked' });
       db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
       db.breakoutOccupantsSelectWhere.mockReturnValueOnce(
-        chain([{ id: 'occ-admin', livekitIdentity: 'admin-minted-identity', displayName: 'Admin' }]),
+        chain([
+          { id: 'occ-admin', livekitIdentity: 'admin-minted-identity', displayName: 'Admin' },
+        ]),
       );
 
       await expect(service.selfReturn(row.id, roomId, admin)).resolves.toBeUndefined();
@@ -938,7 +951,9 @@ describe('BreakoutRoomsService', () => {
       const row = buildBreakoutRow({ leavePolicy: 'free_return' });
       db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
       db.breakoutOccupantsSelectWhere.mockReturnValueOnce(
-        chain([{ id: 'occ-admin', livekitIdentity: 'admin-minted-identity', displayName: 'Admin' }]),
+        chain([
+          { id: 'occ-admin', livekitIdentity: 'admin-minted-identity', displayName: 'Admin' },
+        ]),
       );
 
       await expect(service.selfReturn(row.id, roomId, admin)).resolves.toBeUndefined();
@@ -971,6 +986,22 @@ describe('BreakoutRoomsService', () => {
 
       expect(result.roomName).toBe(row.livekitRoomName);
       expect(result.token).toBeDefined();
+    });
+
+    it('el token de la mini sala lleva la identity de la principal en la metadata (para mostrar el mismo avatar)', async () => {
+      const row = buildBreakoutRow();
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
+      db.breakoutOccupantsSelectWhere.mockReturnValueOnce(
+        chain([{ id: 'occ-1', livekitIdentity: 'new-identity', displayName: 'Invitado' }]),
+      );
+
+      const result = await service.issueBreakoutToken(row.id, roomId, guest);
+
+      const payload = JSON.parse(
+        Buffer.from(result.token.split('.')[1], 'base64url').toString('utf8'),
+      ) as { sub: string; metadata: string };
+      expect(payload.sub).toBe('new-identity');
+      expect(JSON.parse(payload.metadata)).toEqual({ sourceIdentity: guest.sub });
     });
 
     it('[5.6.2] admin del grupo sin asignación: también emite token (monitoreo)', async () => {
@@ -1078,7 +1109,10 @@ describe('BreakoutRoomsService', () => {
       const row = buildBreakoutRow();
       db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
       db.breakoutOccupantsSelectWhere.mockReturnValueOnce(
-        chain([occupantRow({ sourceIdentity: 'other-sub' }), occupantRow({ sourceIdentity: 'yet-another-sub' })]),
+        chain([
+          occupantRow({ sourceIdentity: 'other-sub' }),
+          occupantRow({ sourceIdentity: 'yet-another-sub' }),
+        ]),
       );
 
       const [view] = await service.list(roomId, guest);
@@ -1364,7 +1398,11 @@ describe('BreakoutRoomsService', () => {
       db.breakoutOccupantsSelectWhere
         .mockReturnValueOnce(
           chain([
-            { id: 'occ-origin', livekitIdentity: 'origin-minted-identity', breakoutRoomId: originRow.id },
+            {
+              id: 'occ-origin',
+              livekitIdentity: 'origin-minted-identity',
+              breakoutRoomId: originRow.id,
+            },
           ]),
         ) // findOpenOccupantBySourceAcrossGroup(actor.sub) -- resuelve actorGroupIdentity
         .mockReturnValueOnce(

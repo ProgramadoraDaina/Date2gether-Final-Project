@@ -345,7 +345,9 @@ export class BreakoutRoomsService {
       authorized = selfMove;
     }
     if (!authorized) {
-      throw new ForbiddenException('No tenés permiso para trasladar a esa persona a esta mini sala');
+      throw new ForbiddenException(
+        'No tenés permiso para trasladar a esa persona a esta mini sala',
+      );
     }
 
     // Decisión 3, riesgo adyacente: listRooms primero -- una mini sala
@@ -486,7 +488,10 @@ export class BreakoutRoomsService {
       // a fallo, mismo patrón que selfReturn: si ya no estaba conectada ahí,
       // no hay nada que limpiar.
       try {
-        await this.client.removeParticipant(previousRoomName ?? parentCode, resolvedLivekitIdentity);
+        await this.client.removeParticipant(
+          previousRoomName ?? parentCode,
+          resolvedLivekitIdentity,
+        );
       } catch {
         this.logger.log('La persona trasladada ya no estaba conectada a su sala de origen');
       }
@@ -517,7 +522,9 @@ export class BreakoutRoomsService {
     const identity = occupant?.livekitIdentity ?? requester.sub;
     const name = occupant?.displayName ?? requester.name;
 
-    const access = new AccessToken(apiKey, apiSecret, { identity, name, ttl: '15m' });
+    // La identity de la mini sala es nueva: la de origen permite mostrar el mismo avatar.
+    const metadata = JSON.stringify({ sourceIdentity: requester.sub });
+    const access = new AccessToken(apiKey, apiSecret, { identity, name, metadata, ttl: '15m' });
     access.addGrant({
       room: breakout.livekitRoomName,
       roomJoin: true,
@@ -1029,7 +1036,8 @@ export class BreakoutRoomsService {
   private async findOpenOccupantByLivekitIdentityAnyRoom(
     livekitIdentity: string,
   ): Promise<
-    { id: string; sourceIdentity: string; breakoutRoomId: string; livekitRoomName?: string } | undefined
+    | { id: string; sourceIdentity: string; breakoutRoomId: string; livekitRoomName?: string }
+    | undefined
   > {
     const [occupant] = await this.db
       .select({

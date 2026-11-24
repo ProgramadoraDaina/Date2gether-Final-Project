@@ -30,4 +30,26 @@ describe('TileAvatar', () => {
     rerender(tile(true));
     expect(figure()).toHaveAttribute('data-speaking');
   });
+
+  it('en una mini sala (identity nueva) muestra el avatar de la persona usando la identity de origen', () => {
+    const placeholder = document.createElement('div');
+    document.body.append(placeholder);
+    const directory = new Map([['p-1', { head: ['egg' as const], sticker: true }]]);
+    render(
+      <AvatarDirectoryProvider directory={directory}>
+        <TileAvatar
+          participant={
+            {
+              identity: 'minted-uuid',
+              metadata: JSON.stringify({ sourceIdentity: 'p-1' }),
+              isSpeaking: false,
+            } as unknown as Participant
+          }
+          placeholder={placeholder}
+        />
+      </AvatarDirectoryProvider>,
+    );
+
+    expect(placeholder.querySelector('[data-piece="egg"]')).not.toBeNull();
+  });
 });
