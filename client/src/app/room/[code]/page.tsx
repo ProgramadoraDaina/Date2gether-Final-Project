@@ -35,7 +35,10 @@ import { WaitingRoom } from '@/features/rooms/WaitingRoom';
 import { useAdmissionRequest } from '@/features/rooms/useAdmissionRequest';
 import { useRoomMembers } from '@/features/rooms/useRoomMembers';
 import { useRoomNotes } from '@/features/rooms/useRoomNotes';
+import { RoomLinksPanel } from '@/features/rooms/RoomLinksPanel';
+import { linkFromMessage } from '@/features/rooms/roomLinks';
 import {
+  addRoomLink,
   ApiError,
   getRoomInfo,
   requestRoomAccess,
@@ -174,7 +177,7 @@ export default function RoomPage() {
     const timer = setTimeout(() => setNotice(null), 'text' in notice ? 6000 : 2500);
     return () => clearTimeout(timer);
   }, [notice]);
-  const [chatTab, setChatTab] = useState<'chat' | 'presentes' | 'notas'>('chat');
+  const [chatTab, setChatTab] = useState<'chat' | 'presentes' | 'notas' | 'links'>('chat');
   const [notesTab, setNotesTab] = useState<'personal' | 'sala'>('personal');
   const [personalNotes, setPersonalNotes] = useState('');
   const [notesStatus, setNotesStatus] = useState('');
@@ -495,6 +498,15 @@ export default function RoomPage() {
     handleEmojiSelect(`:${emoji.name}: `);
   }
 
+  async function handlePinLink(link: { url: string; title?: string }) {
+    try {
+      await addRoomLink(code, link);
+      setNotice({ text: t('Link fijado en la biblioteca') });
+    } catch (err) {
+      setNotice({ text: t(err instanceof ApiError ? err.message : 'No se pudo guardar el link') });
+    }
+  }
+
   async function handleCopyLink() {
     try {
       await navigator.clipboard.writeText(window.location.href);
@@ -651,6 +663,15 @@ export default function RoomPage() {
         >
           {t('Notas')}
         </button>
+        {isPermanentRoom && (
+          <button
+            type="button"
+            className={`${styles.chatTab} ${chatTab === 'links' ? styles.chatTabActive : ''}`}
+            onClick={() => setChatTab('links')}
+          >
+            {t('Links')}
+          </button>
+        )}
       </div>
       {chatTab === 'chat' ? (
         <>
@@ -736,6 +757,10 @@ export default function RoomPage() {
                   name: access?.participant.name ?? '',
                   roleKeywords: myMentionRoleKeywords,
                 });
+              const pinnable =
+                isPermanentRoom && canManageEvents && m.kind === 'text'
+                  ? linkFromMessage(m.content)
+                  : null;
               return (
                 <li
                   key={m.id}
@@ -755,6 +780,15 @@ export default function RoomPage() {
                       emojisByName={emojisByName}
                       mentionNames={messageMentionNames}
                     />
+                  )}
+                  {pinnable && (
+                    <button
+                      type="button"
+                      className={styles.pinLink}
+                      onClick={() => void handlePinLink(pinnable)}
+                    >
+                      {t('Fijar link')}
+                    </button>
                   )}
                 </li>
               );
@@ -838,6 +872,13 @@ export default function RoomPage() {
             })}
           </ul>
         </div>
+      ) : chatTab === 'links' ? (
+        <RoomLinksPanel
+          code={code}
+          token={access.token}
+          socket={roomSocket}
+          canManage={canManageEvents}
+        />
       ) : (
         <section className={styles.notesPanel}>
           <div className={styles.notesTabs}>

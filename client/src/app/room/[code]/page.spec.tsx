@@ -14,6 +14,7 @@ jest.mock('@/features/translation/useTranslation', () => {
 const mockRoomMembersState = {
   members: [] as unknown[],
   isCurrentUserAdmin: false,
+  currentUserRole: undefined as string | undefined,
   error: null as string | null,
   changeRole: jest.fn(),
   refetchMembers: jest.fn(),
@@ -37,6 +38,8 @@ jest.mock('@/lib/api', () => ({
     updatedAt: '2026-11-04T00:00:00Z',
   }),
   saveRoomNotes: jest.fn(),
+  addRoomLink: jest.fn<() => Promise<unknown>>().mockResolvedValue({}),
+  getRoomLinks: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
   getNextScheduleOccurrence: jest
     .fn<() => Promise<unknown>>()
     .mockResolvedValue({ nextOccurrenceAt: null }),
@@ -954,5 +957,87 @@ describe('RoomPage: concesión de permisos', () => {
       callbacks.userJoined({ participantId: 'new', userName: 'Nueva', userId: 'user-new' }),
     );
     expect(mockRoomMembersState.refetchMembers).toHaveBeenCalled();
+  });
+});
+
+describe('RoomPage: biblioteca de links', () => {
+  const LINK_MESSAGE = {
+    id: 'm-link',
+    authorName: 'Santi',
+    kind: 'text',
+    content: 'Apunte de hoy: https://docs.example.com/clase-1',
+    createdAt: new Date().toISOString(),
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+    jest.clearAllMocks();
+    mockStatus = 'in-call';
+    mockRoomMembersState.currentUserRole = undefined;
+  });
+
+  async function enterRoom(isPermanent: boolean) {
+    const { requestRoomAccess, getRoomInfo } = await import('@/lib/api');
+    const { createRoomSocket } = await import('@/lib/socket');
+    jest.mocked(getRoomInfo).mockResolvedValue({ isPermanent } as never);
+    jest.mocked(requestRoomAccess).mockResolvedValue({
+      token: 'room-token',
+      participant: { sub: 'u-1', roomId: 'room-1', name: 'Gabi', roomCode: 'abc-defg-hij' },
+    });
+    const callbacks: Record<string, (...args: unknown[]) => void> = {};
+    const fake = {
+      on: jest.fn((event: string, cb: (...args: unknown[]) => void) => {
+        callbacks[event] = cb;
+      }),
+      connect: jest.fn(() => callbacks.connect?.()),
+      emit: jest.fn(),
+      disconnect: jest.fn(),
+      off: jest.fn(),
+      removeAllListeners: jest.fn(),
+    };
+    jest.mocked(createRoomSocket).mockReturnValue(fake as never);
+    const Page = (await import('./page')).default;
+    render(<Page />);
+    fireEvent.change(screen.getByLabelText('Tu nombre en la reunión'), {
+      target: { value: 'Gabi' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar a la reunión' }));
+    await waitFor(() => expect(createRoomSocket).toHaveBeenCalled());
+    await waitFor(() => expect(getRoomInfo).toHaveBeenCalled());
+    act(() => callbacks.newMessage?.(LINK_MESSAGE));
+    await screen.findByText(/Apunte de hoy/);
+  }
+
+  it('en una sala permanente, un colaborador fija el link de un mensaje en la biblioteca', async () => {
+    mockRoomMembersState.currentUserRole = 'colaborador';
+    const { addRoomLink } = await import('@/lib/api');
+    await enterRoom(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Fijar link' }));
+
+    await waitFor(() =>
+      expect(addRoomLink).toHaveBeenCalledWith('abc-defg-hij', {
+        url: 'https://docs.example.com/clase-1',
+        title: 'Apunte de hoy:',
+      }),
+    );
+    expect(await screen.findByTestId('notice')).toHaveTextContent('Link fijado en la biblioteca');
+    expect(screen.getByRole('button', { name: 'Links' })).toBeInTheDocument();
+  });
+
+  it('un participante sin rol ve la pestaña Links pero no puede fijar', async () => {
+    mockRoomMembersState.currentUserRole = 'participante';
+    await enterRoom(true);
+
+    await screen.findByRole('button', { name: 'Links' });
+    expect(screen.queryByRole('button', { name: 'Fijar link' })).not.toBeInTheDocument();
+  });
+
+  it('una sala temporal no tiene biblioteca de links', async () => {
+    mockRoomMembersState.currentUserRole = 'administrador';
+    await enterRoom(false);
+
+    expect(screen.queryByRole('button', { name: 'Links' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Fijar link' })).not.toBeInTheDocument();
   });
 });
