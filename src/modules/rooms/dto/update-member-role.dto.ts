@@ -1,6 +1,7 @@
 import { IsIn } from 'class-validator';
+import { roomRoleEnum, type RoomRole } from '../../../db/schema';
 
 export class UpdateMemberRoleDto {
-  @IsIn(['colaborador', 'participante'])
-  role: 'colaborador' | 'participante';
+  @IsIn(roomRoleEnum.enumValues)
+  role: RoomRole;
 }

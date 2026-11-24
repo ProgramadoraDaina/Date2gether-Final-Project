@@ -19,6 +19,7 @@ import {
   callParticipantIdentities,
   callSessionParticipants,
   callSessions,
+  roomMembers,
 } from '../../db/schema';
 import { aggregateSession, type SessionEvent } from './aggregate-session';
 import { CallSessionCloseService } from './call-session-close.service';
@@ -173,7 +174,7 @@ export class CallsWebhookService {
 
   /**
    * Cierre forzado idempotente (Fase 6, design.md D3/D4): si el identity que
-   * se fue tenía roleAtIssue='administrador' al emitir su token, se delega
+   * se fue tiene rol actual de administrador, se delega
    * en CallSessionCloseService la decisión de agendar (o no) un cierre.
    */
   private async onParticipantLeft(event: WebhookEvent): Promise<void> {
@@ -182,11 +183,18 @@ export class CallsWebhookService {
     if (!livekitRoomSid || !identity) return;
 
     const [row] = await this.db
-      .select({ roleAtIssue: callParticipantIdentities.roleAtIssue })
+      .select({ role: roomMembers.role })
       .from(callParticipantIdentities)
+      .innerJoin(
+        roomMembers,
+        and(
+          eq(roomMembers.roomId, callParticipantIdentities.roomId),
+          eq(roomMembers.userId, callParticipantIdentities.userId),
+        ),
+      )
       .where(eq(callParticipantIdentities.livekitIdentity, identity))
       .limit(1);
-    if (row?.roleAtIssue !== 'administrador') return;
+    if (row?.role !== 'administrador') return;
 
     await this.closeService.onAdminLeft(livekitRoomSid, event.room?.name ?? '');
   }

@@ -88,7 +88,9 @@ function MyRoomsContent() {
             {error}
           </p>
         )}
-        {!loading && !error && rooms.length === 0 && <p>{t('Todavía no creaste ninguna sala.')}</p>}
+        {!loading && !error && rooms.length === 0 && (
+          <p>{t('Todavía no tenés salas como administrador.')}</p>
+        )}
 
         {rooms.length > 0 && (
           <ul className={styles.list}>

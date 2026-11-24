@@ -3,7 +3,13 @@
 import Link from 'next/link';
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ApiError, getCallHistory, type CallHistoryEntry } from '@/lib/api';
+import {
+  ApiError,
+  getCallHistory,
+  getOwnedRooms,
+  type CallHistoryEntry,
+  type OwnedRoom,
+} from '@/lib/api';
 import { RequireAuth } from '@/features/auth/RequireAuth';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { AppShell } from '@/features/navigation/AppShell';
@@ -25,6 +31,9 @@ function HistoryContent() {
   const [entries, setEntries] = useState<CallHistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rooms, setRooms] = useState<OwnedRoom[]>([]);
+  const [roomsLoading, setRoomsLoading] = useState(false);
+  const [roomsError, setRoomsError] = useState<string | null>(null);
   const roomFilter = useSearchParams().get('roomId');
 
   // Corre solo al montar: `t` se omite a propósito de las dependencias para
@@ -37,6 +46,14 @@ function HistoryContent() {
         setError(err instanceof ApiError ? err.message : t('No se pudo obtener el historial'));
       })
       .finally(() => setLoading(false));
+
+    setRoomsLoading(true);
+    getOwnedRooms()
+      .then(setRooms)
+      .catch((err) => {
+        setRoomsError(err instanceof ApiError ? err.message : t('No se pudieron cargar tus salas'));
+      })
+      .finally(() => setRoomsLoading(false));
   }, []);
 
   function formatDate(iso: string): string {
@@ -51,11 +68,46 @@ function HistoryContent() {
     ? entries.filter((entry) => entry.roomId === roomFilter)
     : entries;
   const filteredRoomName = visibleEntries[0]?.roomName;
+  const visibleRooms = roomFilter ? rooms.filter((room) => room.id === roomFilter) : rooms;
 
   return (
     <AppShell>
       <div className={styles.card}>
         <h1>{t('Historial')}</h1>
+
+        <section aria-label={t('Salas que administrás')} className={styles.roomsSection}>
+          <h2>{t('Salas que administrás')}</h2>
+          {roomsLoading && <p>{t('Cargando salas…')}</p>}
+          {roomsError && (
+            <p role="alert" className={styles.error}>
+              {roomsError}
+            </p>
+          )}
+          {!roomsLoading && !roomsError && visibleRooms.length === 0 && !roomFilter && (
+            <p>{t('Todavía no tenés salas como administrador.')}</p>
+          )}
+          {visibleRooms.length > 0 && (
+            <ul className={styles.list}>
+              {visibleRooms.map((room) => (
+                <li key={room.id} className={styles.entry}>
+                  <div className={styles.entryMain}>
+                    <strong>{room.name}</strong>
+                    <span className={styles.code}>{room.code}</span>
+                  </div>
+                  <div className={styles.entryMeta}>
+                    {room.isJoinable ? (
+                      <Link href={`/room/${room.code}`} className={styles.sessionLink}>
+                        {t('Entrar')}
+                      </Link>
+                    ) : (
+                      <span className={styles.date}>{t('Vencida')}</span>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
 
         {loading && <p>{t('Cargando historial…')}</p>}
         {error && (

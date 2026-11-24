@@ -77,8 +77,9 @@ export class RoomsController {
     @Param('code') code: string,
     @Param('userId', ParseUUIDPipe) userId: string,
     @Body() dto: UpdateMemberRoleDto,
+    @CurrentUser() user: AccessTokenPayload,
   ) {
-    await this.roomsService.setMemberRole(code, userId, dto.role);
+    await this.roomsService.setMemberRole(code, userId, dto.role, user.sub);
     return { message: 'Rol actualizado' };
   }
 

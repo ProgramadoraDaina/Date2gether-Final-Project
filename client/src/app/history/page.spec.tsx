@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 
 let searchParams = new URLSearchParams();
 jest.mock('next/navigation', () => ({
@@ -16,13 +16,16 @@ jest.mock('@/features/auth/RequireAuth', () => ({
 jest.mock('@/lib/auth', () => ({ isLoggedIn: jest.fn() }));
 jest.mock('@/lib/api', () => ({
   getCallHistory: jest.fn(),
+  getOwnedRooms: jest.fn(),
   ApiError: class extends Error {},
 }));
 
 describe('HistoryPage', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
     searchParams = new URLSearchParams();
+    const { getOwnedRooms } = await import('@/lib/api');
+    (getOwnedRooms as jest.Mock<typeof getOwnedRooms>).mockResolvedValue([]);
   });
 
   it('muestra las entradas del historial cuando hay sesión, sin botón al gráfico si no hay sesión materializada', async () => {
@@ -55,6 +58,52 @@ describe('HistoryPage', () => {
     const HistoryPage = (await import('./page')).default;
     render(<HistoryPage />);
     await screen.findByText('Todavía no hiciste ninguna llamada.');
+  });
+
+  it('muestra una sala heredada como admin sin llamadas y permite entrar desde el historial', async () => {
+    const { isLoggedIn } = await import('@/lib/auth');
+    const { getCallHistory, getOwnedRooms } = await import('@/lib/api');
+    (isLoggedIn as jest.Mock<typeof isLoggedIn>).mockReturnValue(true);
+    (getCallHistory as jest.Mock<typeof getCallHistory>).mockResolvedValue([]);
+    (getOwnedRooms as jest.Mock<typeof getOwnedRooms>).mockResolvedValue([
+      {
+        id: 'room-inherited',
+        code: 'xyz-abcd-efg',
+        name: 'Sala heredada',
+        isJoinable: true,
+      } as never,
+      {
+        id: 'room-expired',
+        code: 'old-abcd-efg',
+        name: 'Sala vencida',
+        isJoinable: false,
+      } as never,
+    ]);
+    const HistoryPage = (await import('./page')).default;
+    render(<HistoryPage />);
+
+    const rooms = within(screen.getByRole('region', { name: 'Salas que administrás' }));
+    await rooms.findByText('Sala heredada');
+    expect(rooms.getByRole('link', { name: 'Entrar' })).toHaveAttribute(
+      'href',
+      '/room/xyz-abcd-efg',
+    );
+    expect(rooms.getAllByRole('link', { name: 'Entrar' })).toHaveLength(1);
+    expect(rooms.getByText('Vencida')).toBeInTheDocument();
+    expect(screen.getByText('Todavía no hiciste ninguna llamada.')).toBeInTheDocument();
+  });
+
+  it('un fallo al cargar salas no oculta el historial de llamadas', async () => {
+    const { isLoggedIn } = await import('@/lib/auth');
+    const { getCallHistory, getOwnedRooms } = await import('@/lib/api');
+    (isLoggedIn as jest.Mock<typeof isLoggedIn>).mockReturnValue(true);
+    (getCallHistory as jest.Mock<typeof getCallHistory>).mockResolvedValue([]);
+    (getOwnedRooms as jest.Mock<typeof getOwnedRooms>).mockRejectedValue(new Error('offline'));
+    const HistoryPage = (await import('./page')).default;
+    render(<HistoryPage />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudieron cargar tus salas');
+    expect(screen.getByText('Todavía no hiciste ninguna llamada.')).toBeInTheDocument();
   });
 
   it('muestra el botón "Ver gráfico de interacción" en la fila de un intento que sí se materializó en una sesión', async () => {

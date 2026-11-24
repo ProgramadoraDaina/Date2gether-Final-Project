@@ -78,6 +78,12 @@ describe('RoomsService.listOwnedRooms (real Postgres)', () => {
       { roomId: joinedOnly.id, userId: ownerId, role: 'participante' },
     ]);
 
+    const collaborated = await insertRoom({ name: 'Sala donde colaboro' });
+    await ctx.db.insert(roomMembers).values([
+      { roomId: collaborated.id, userId: otherId, role: 'administrador' },
+      { roomId: collaborated.id, userId: ownerId, role: 'colaborador' },
+    ]);
+
     const retired = await insertRoom({ name: 'Sala retirada', retiredAt: new Date() });
     await ctx.db
       .insert(roomMembers)
@@ -119,9 +125,86 @@ describe('RoomsService.listOwnedRooms (real Postgres)', () => {
     expect(room).toMatchObject({ id: stale.id, isJoinable: false });
   });
 
+  it('solo hereda la sala al recibir admin, conserva el rol al volver a entrar y permite el acceso sin el creador', async () => {
+    const creatorId = await insertUser('Creador');
+    const memberId = await insertUser('Participante');
+    const room = await insertRoom({
+      name: 'Sala compartida',
+      isPermanent: true,
+      waitingRoomEnabled: true,
+      entryLocked: true,
+    });
+    await ctx.db.insert(roomMembers).values([
+      { roomId: room.id, userId: creatorId, role: 'administrador' },
+      { roomId: room.id, userId: memberId, role: 'participante' },
+    ]);
+    const roomsService = service();
+
+    await roomsService.setMemberRole(room.code, memberId, 'colaborador', creatorId);
+    await expect(roomsService.listOwnedRooms(memberId)).resolves.toEqual([]);
+
+    await roomsService.setMemberRole(room.code, memberId, 'administrador', creatorId);
+    await roomsService.joinRoom(room.code, memberId);
+
+    await expect(roomsService.listOwnedRooms(memberId)).resolves.toEqual([
+      expect.objectContaining({ id: room.id, code: room.code, isJoinable: true }),
+    ]);
+    await expect(roomsService.getMemberRole(room.code, memberId)).resolves.toBe('administrador');
+    await expect(roomsService.getMemberRole(room.code, creatorId)).resolves.toBe('administrador');
+  });
+
   it('devuelve una lista vacía para quien no administra ninguna sala', async () => {
     const userId = await insertUser('Nadie');
 
     await expect(service().listOwnedRooms(userId)).resolves.toEqual([]);
   });
+
+  it.each(['participante', 'colaborador'] as const)(
+    'quitar admin pasando a %s retira la sala heredada',
+    async (role) => {
+      const creatorId = await insertUser('Creador');
+      const memberId = await insertUser('Otro admin');
+      const room = await insertRoom({ name: 'Sala compartida', isPermanent: true });
+      await ctx.db.insert(roomMembers).values([
+        { roomId: room.id, userId: creatorId, role: 'administrador' },
+        { roomId: room.id, userId: memberId, role: 'administrador' },
+      ]);
+
+      await service().setMemberRole(room.code, memberId, role, creatorId);
+
+      await expect(service().listOwnedRooms(memberId)).resolves.toEqual([]);
+      await expect(service().getMemberRole(room.code, memberId)).resolves.toBe(role);
+      await expect(service().getMemberRole(room.code, creatorId)).resolves.toBe('administrador');
+    },
+  );
+
+  it.each([false, true])(
+    'dos peticiones concurrentes conservan un admin y verifican al solicitante (sobre sí mismo: %s)',
+    async (self) => {
+      const firstId = await insertUser('Primer admin');
+      const secondId = await insertUser('Segundo admin');
+      const room = await insertRoom({ name: 'Sala concurrente', isPermanent: true });
+      await ctx.db.insert(roomMembers).values([
+        { roomId: room.id, userId: firstId, role: 'administrador' },
+        { roomId: room.id, userId: secondId, role: 'administrador' },
+      ]);
+      const otherConnection = connectTestDb();
+      try {
+        const otherService = new RoomsService(
+          otherConnection.db,
+          new RoomEventsService(),
+          new RoomResolverService(otherConnection.db),
+        );
+        const outcomes = await Promise.allSettled([
+          service().setMemberRole(room.code, self ? firstId : secondId, 'participante', firstId),
+          otherService.setMemberRole(room.code, self ? secondId : firstId, 'colaborador', secondId),
+        ]);
+        expect(outcomes.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+        const members = await service().listMembers(room.code);
+        expect(members.filter((member) => member.role === 'administrador')).toHaveLength(1);
+      } finally {
+        await otherConnection.close();
+      }
+    },
+  );
 });
