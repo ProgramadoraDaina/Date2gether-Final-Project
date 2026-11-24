@@ -133,6 +133,16 @@ export function BreakoutView({
       </button>
       {panelOpen && (
         <div className={styles.breakoutPanelPopover} role="dialog" aria-label={t('Mini salas')}>
+          <div className={styles.breakoutPanelHeader}>
+            <button
+              type="button"
+              className={styles.closeButton}
+              onClick={closePanel}
+              aria-label={t('Cerrar')}
+            >
+              ×
+            </button>
+          </div>
           {state === 'host-occupant' && (
             <BreakoutSelfStatus
               assignment={visibleAssignment!}
