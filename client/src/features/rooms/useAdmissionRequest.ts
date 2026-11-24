@@ -15,7 +15,6 @@ interface State {
   error: string | null;
   cancelling: boolean;
   cancelIntent: boolean;
-  refresh: number;
 }
 const initial = (code: string): State => ({
   code,
@@ -24,7 +23,6 @@ const initial = (code: string): State => ({
   error: null,
   cancelling: false,
   cancelIntent: false,
-  refresh: 0,
 });
 const subscribe = (listener: () => void) => {
   window.addEventListener('storage', listener);
@@ -57,7 +55,7 @@ export function useAdmissionRequest(code: string, onAdmitted: (access: RoomAcces
   const [state, setState] = useState(() => initial(code));
   const currentState = state.code === code ? state : initial(code);
   const receipt = currentState.receipt === undefined ? saved : currentState.receipt;
-  const { status, error, cancelling, cancelIntent, refresh } = currentState;
+  const { status, error, cancelling, cancelIntent } = currentState;
   const patch = useCallback(
     (changes: Partial<State>) => {
       setState((previous) => ({
@@ -132,7 +130,7 @@ export function useAdmissionRequest(code: string, onAdmitted: (access: RoomAcces
       controller.abort();
       clearTimeout(timer);
     };
-  }, [receipt, status, cancelIntent, code, refresh, clearStorage, onAdmitted, patch]);
+  }, [receipt, status, cancelIntent, code, clearStorage, onAdmitted, patch]);
 
   async function cancel() {
     if (!receipt || cancelling) return;
@@ -168,6 +166,5 @@ export function useAdmissionRequest(code: string, onAdmitted: (access: RoomAcces
     start,
     cancel,
     reset,
-    retry: () => patch({ refresh: refresh + 1 }),
   };
 }

@@ -3,7 +3,14 @@ const en: Record<string, string> = {
   'Necesitás ser admitido para unirte a esta sala': 'You must be admitted before joining this room',
   // Moderación de ingreso
   'Sala de espera': 'Waiting room',
-  'El anfitrión debe admitir tu ingreso.': 'The host needs to admit you.',
+  'Código de la sala': 'Room code',
+  'Esperando al anfitrión': 'Waiting for the host',
+  'Vas a entrar automáticamente cuando te admitan.':
+    'You’ll join automatically once the host admits you.',
+  'Esperando la admisión': 'Waiting for admission',
+  'Cancelación pendiente': 'Cancellation pending',
+  'Próximo encuentro programado:': 'Next scheduled meeting:',
+  'Esta sala no tiene un próximo horario programado.': 'No upcoming meeting is scheduled.',
   'El anfitrión rechazó tu solicitud.': 'The host declined your request.',
   'La solicitud fue cancelada.': 'The request was cancelled.',
   'La solicitud venció. Podés volver a solicitar el ingreso.':
@@ -11,7 +18,6 @@ const en: Record<string, string> = {
   'Todavía no estás conectado al chat ni a la llamada.':
     'You are not connected to the chat or call yet.',
   'Volver al formulario': 'Back to the form',
-  'Revisar estado': 'Check status',
   'Cancelar solicitud': 'Cancel request',
   'Cancelando…': 'Cancelling…',
   'Administrar ingresos': 'Manage access',
