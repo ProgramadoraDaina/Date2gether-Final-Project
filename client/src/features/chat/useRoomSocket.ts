@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Socket } from 'socket.io-client';
 import type { LeavePolicy } from '@/lib/breakouts';
 
@@ -11,7 +11,15 @@ export interface BreakoutAssignment {
   breakoutId: string;
   label: string;
   leavePolicy: LeavePolicy;
+  // ISO: momento en que la mini sala se cierra y vuelven todos a la principal.
+  closesAt?: string | null;
 }
+
+type BreakoutToastInput =
+  | { kind: 'moved' | 'returned'; names: string[]; label: string }
+  | { kind: 'closing'; closesAt: string };
+
+export type BreakoutToast = BreakoutToastInput & { id: number };
 
 // Decisión 2 (design.md "Señal de motivo de remoción"): el servidor emite
 // esta señal ANTES de la remoción forzada que la provoca (moveIn,
@@ -19,9 +27,7 @@ export interface BreakoutAssignment {
 // re-declara acá en vez de importarse del backend -- el cliente no
 // comparte ese módulo.
 export type BreakoutRemovalReason =
-  | 'BREAKOUT_MOVE_IN'
-  | 'BREAKOUT_FORCED_RETURN'
-  | 'BREAKOUT_RETURN_LOCKED';
+  'BREAKOUT_MOVE_IN' | 'BREAKOUT_FORCED_RETURN' | 'BREAKOUT_RETURN_LOCKED';
 
 export interface BreakoutRemovalNotice {
   reason: BreakoutRemovalReason;
@@ -47,6 +53,8 @@ export interface UseRoomSocketResult {
   // (fail-open en el caso sensible). null si no hay aviso, o si el aviso ya
   // venció (más de REMOVAL_NOTICE_FRESHNESS_MS de antigüedad).
   consumeRemovalNotice: () => BreakoutRemovalNotice | null;
+  breakoutToasts: BreakoutToast[];
+  dismissBreakoutToast: (id: number) => void;
 }
 
 // Mismo patrón que useRoomMediaLock.ts: un hook por tipo de aviso, todos
@@ -62,6 +70,8 @@ export function useRoomSocket(socket: Socket | null): UseRoomSocketResult {
   // Decisión 2 (design.md): nunca por estado -- ver el comentario de
   // consumeRemovalNotice en UseRoomSocketResult.
   const removalNoticeRef = useRef<BreakoutRemovalNotice | null>(null);
+  const [breakoutToasts, setBreakoutToasts] = useState<BreakoutToast[]>([]);
+  const toastSeq = useRef(0);
 
   useEffect(() => {
     if (!socket) return;
@@ -80,14 +90,43 @@ export function useRoomSocket(socket: Socket | null): UseRoomSocketResult {
     }
     function onBreakoutRemoval(payload: { reason: BreakoutRemovalReason }) {
       removalNoticeRef.current = { reason: payload.reason, at: Date.now() };
+      // Vuelta individual: breakout:closed no viaja porque la mini sala sigue abierta.
+      if (payload.reason === 'BREAKOUT_FORCED_RETURN' && assignmentRef.current) {
+        assignmentRef.current = null;
+        setBreakoutAssignment(null);
+        setBreakoutReturnSignal((count) => count + 1);
+      }
+    }
+    function pushToast(toast: BreakoutToastInput) {
+      toastSeq.current += 1;
+      const id = toastSeq.current;
+      setBreakoutToasts((list) => [...list, { ...toast, id }]);
+    }
+    function onBreakoutClosing(payload: { breakoutId: string; closesAt: string }) {
+      if (assignmentRef.current?.breakoutId !== payload.breakoutId) return;
+      const next = { ...assignmentRef.current, closesAt: payload.closesAt };
+      assignmentRef.current = next;
+      setBreakoutAssignment(next);
+      pushToast({ kind: 'closing', closesAt: payload.closesAt });
+    }
+    function onBreakoutPresence(payload: {
+      kind: 'moved' | 'returned';
+      names: string[];
+      label: string;
+    }) {
+      pushToast(payload);
     }
     socket.on('breakout:assigned', onBreakoutAssigned);
     socket.on('breakout:closed', onBreakoutClosed);
     socket.on('breakout:removal', onBreakoutRemoval);
+    socket.on('breakout:closing', onBreakoutClosing);
+    socket.on('breakout:presence', onBreakoutPresence);
     return () => {
       socket.off('breakout:assigned', onBreakoutAssigned);
       socket.off('breakout:closed', onBreakoutClosed);
       socket.off('breakout:removal', onBreakoutRemoval);
+      socket.off('breakout:closing', onBreakoutClosing);
+      socket.off('breakout:presence', onBreakoutPresence);
     };
   }, [socket]);
 
@@ -99,5 +138,15 @@ export function useRoomSocket(socket: Socket | null): UseRoomSocketResult {
     return notice;
   }
 
-  return { breakoutAssignment, breakoutReturnSignal, consumeRemovalNotice };
+  const dismissBreakoutToast = useCallback((id: number) => {
+    setBreakoutToasts((list) => list.filter((toast) => toast.id !== id));
+  }, []);
+
+  return {
+    breakoutAssignment,
+    breakoutReturnSignal,
+    consumeRemovalNotice,
+    breakoutToasts,
+    dismissBreakoutToast,
+  };
 }

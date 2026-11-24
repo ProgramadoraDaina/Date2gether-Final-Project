@@ -59,7 +59,16 @@ jest.mock('livekit-client', () => ({
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
 }));
-jest.mock('@/lib/calls', () => ({ reportTrackState: jest.fn() }));
+const mainSession = {
+  url: 'wss://media.example.com',
+  token: 'main-token',
+  roomName: 'abc-defg-hij',
+  participantLimit: 6,
+};
+jest.mock('@/lib/calls', () => ({
+  reportTrackState: jest.fn(),
+  startCall: jest.fn(() => Promise.resolve(mainSession)),
+}));
 jest.mock('@/lib/breakouts', () => ({
   createBreakoutRoom: jest.fn(),
   listBreakoutRooms: jest.fn(),
@@ -633,7 +642,7 @@ describe('MeetingRoom', () => {
       expect(call.leaveCall).not.toHaveBeenCalled();
     });
 
-    it('BREAKOUT_FORCED_RETURN: llama a endedForBreakout(), no a failed', async () => {
+    it('BREAKOUT_FORCED_RETURN: vuelve solo a la sala principal, sin terminar la llamada', async () => {
       const { LiveKitRoom } = await import('@livekit/components-react');
       const { DisconnectReason } = await import('livekit-client');
       const MeetingRoom = (await import('./MeetingRoom')).default;
@@ -656,10 +665,40 @@ describe('MeetingRoom', () => {
       act(() => socket.callbacks['breakout:removal']({ reason: 'BREAKOUT_FORCED_RETURN' }));
       const props = jest.mocked(LiveKitRoom).mock.calls[0][0];
 
-      act(() => props.onDisconnected?.(DisconnectReason.PARTICIPANT_REMOVED));
+      await act(async () => props.onDisconnected?.(DisconnectReason.PARTICIPANT_REMOVED));
 
-      expect(call.endedForBreakout).toHaveBeenCalledTimes(1);
+      expect(call.switchRoom).toHaveBeenCalledTimes(1);
+      expect(call.switchRoom).toHaveBeenCalledWith(mainSession);
+      expect(call.endedForBreakout).not.toHaveBeenCalled();
       expect(call.failed).not.toHaveBeenCalled();
+      expect(screen.getByText('Volviendo a la sala principal')).toBeInTheDocument();
+    });
+
+    it('cerrar la mini sala (ROOM_DELETED estando en ella) vuelve a la principal en vez de decir que el anfitrión se fue', async () => {
+      const { LiveKitRoom } = await import('@livekit/components-react');
+      const { DisconnectReason } = await import('livekit-client');
+      const MeetingRoom = (await import('./MeetingRoom')).default;
+      const call = state();
+      call.session = { ...call.session!, roomName: 'abc-defg-hij::breakout-1' };
+      render(
+        <MeetingRoom
+          call={call}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin={false}
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+        />,
+      );
+      const props = jest.mocked(LiveKitRoom).mock.calls[0][0];
+
+      await act(async () => props.onDisconnected?.(DisconnectReason.ROOM_DELETED));
+
+      expect(call.switchRoom).toHaveBeenCalledWith(mainSession);
+      expect(call.endedByHost).not.toHaveBeenCalled();
     });
 
     it('BREAKOUT_RETURN_LOCKED: llama a removedByPolicy con el código, no a failed', async () => {

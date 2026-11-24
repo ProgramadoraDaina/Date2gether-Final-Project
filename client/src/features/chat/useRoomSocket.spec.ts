@@ -19,7 +19,12 @@ function createFakeSocket() {
   };
 }
 
-const assignment = { breakoutId: 'breakout-1', label: 'Mini sala 1', leavePolicy: 'locked' as const };
+const assignment = {
+  breakoutId: 'breakout-1',
+  label: 'Mini sala 1',
+  leavePolicy: 'locked' as const,
+  closesAt: null,
+};
 
 describe('useRoomSocket', () => {
   it('no explota si todavía no hay socket', () => {
@@ -134,6 +139,62 @@ describe('useRoomSocket', () => {
       unmount();
 
       expect(socket.off).toHaveBeenCalledWith('breakout:removal', expect.any(Function));
+    });
+  });
+
+  describe('vueltas, cuenta regresiva y avisos', () => {
+    it('BREAKOUT_FORCED_RETURN con asignación vigente la limpia y dispara el retorno a la principal', () => {
+      const socket = createFakeSocket();
+      const { result } = renderHook(() => useRoomSocket(socket as unknown as Socket));
+      act(() => socket.callbacks['breakout:assigned'](assignment));
+
+      act(() => socket.callbacks['breakout:removal']({ reason: 'BREAKOUT_FORCED_RETURN' }));
+
+      expect(result.current.breakoutAssignment).toBeNull();
+      expect(result.current.breakoutReturnSignal).toBe(1);
+    });
+
+    it('breakout:closing de mi mini sala agrega closesAt a la asignación y muestra el aviso', () => {
+      const socket = createFakeSocket();
+      const { result } = renderHook(() => useRoomSocket(socket as unknown as Socket));
+      act(() => socket.callbacks['breakout:assigned'](assignment));
+      const closesAt = '2026-11-24T20:00:30.000Z';
+
+      act(() => socket.callbacks['breakout:closing']({ breakoutId: 'breakout-1', closesAt }));
+
+      expect(result.current.breakoutAssignment).toEqual({ ...assignment, closesAt });
+      expect(result.current.breakoutToasts).toEqual([{ id: 1, kind: 'closing', closesAt }]);
+    });
+
+    it('breakout:closing de OTRA mini sala no cambia nada', () => {
+      const socket = createFakeSocket();
+      const { result } = renderHook(() => useRoomSocket(socket as unknown as Socket));
+      act(() => socket.callbacks['breakout:assigned'](assignment));
+
+      act(() =>
+        socket.callbacks['breakout:closing']({
+          breakoutId: 'otra',
+          closesAt: '2026-11-24T20:00:30.000Z',
+        }),
+      );
+
+      expect(result.current.breakoutAssignment).toEqual(assignment);
+      expect(result.current.breakoutToasts).toEqual([]);
+    });
+
+    it('breakout:presence agrega un aviso que se puede descartar', () => {
+      const socket = createFakeSocket();
+      const { result } = renderHook(() => useRoomSocket(socket as unknown as Socket));
+
+      act(() =>
+        socket.callbacks['breakout:presence']({ kind: 'moved', names: ['Joni'], label: 'Sala 2' }),
+      );
+      expect(result.current.breakoutToasts).toEqual([
+        { id: 1, kind: 'moved', names: ['Joni'], label: 'Sala 2' },
+      ]);
+
+      act(() => result.current.dismissBreakoutToast(1));
+      expect(result.current.breakoutToasts).toEqual([]);
     });
   });
 });

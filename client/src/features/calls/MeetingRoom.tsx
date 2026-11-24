@@ -34,12 +34,14 @@ import { DEFAULT_CALL_DEVICES, type CallDevices } from './callDevices';
 import { HangUpButton } from './HangUpButton';
 import type { RoomEmoji } from '@/lib/api';
 import { useTranslation } from '../translation/useTranslation';
-import { reportTrackState } from '@/lib/calls';
+import { reportTrackState, startCall } from '@/lib/calls';
 import { issueBreakoutToken } from '@/lib/breakouts';
 import type { CallSessionState } from './useCallSession';
 import styles from './MeetingRoom.module.css';
 import { useRoomSocket } from '../chat/useRoomSocket';
 import { BreakoutView } from './BreakoutView';
+import { BreakoutTransition, type BreakoutTransitionState } from './BreakoutTransition';
+import { BreakoutToasts } from './BreakoutToasts';
 import type { BreakoutHostConsoleParticipant } from './BreakoutHostConsole';
 import { ReactionOverlay } from './reactions/ReactionOverlay';
 import { ReactionPicker } from './reactions/ReactionPicker';
@@ -554,7 +556,53 @@ export default function MeetingRoom({
   // consumeRemovalNotice hace falta -- y breakoutAssignment se pasa hacia
   // abajo como prop (en vez de que MeetingContent llame al hook otra vez
   // sobre el mismo socket).
-  const { breakoutAssignment, consumeRemovalNotice } = useRoomSocket(roomSocket);
+  const {
+    breakoutAssignment,
+    breakoutReturnSignal,
+    consumeRemovalNotice,
+    breakoutToasts,
+    dismissBreakoutToast,
+  } = useRoomSocket(roomSocket);
+  const [transition, setTransition] = useState<BreakoutTransitionState | null>(null);
+  // Evita dos reconexiones a la principal cuando llegan juntos el aviso del socket y la desconexión.
+  const returningRef = useRef(false);
+  const returnToMainRef = useRef<() => void>(() => {});
+  returnToMainRef.current = () => {
+    if (returningRef.current) return;
+    returningRef.current = true;
+    setTransition({ kind: 'return' });
+    startCall(roomCode, roomToken)
+      .then((session) => call.switchRoom(session))
+      .catch(() => {
+        returningRef.current = false;
+        setTransition(null);
+        call.endedForBreakout();
+      });
+  };
+  useEffect(() => {
+    if (breakoutReturnSignal > 0) returnToMainRef.current();
+  }, [breakoutReturnSignal]);
+  const enteringLabel = breakoutAssignment?.label;
+  const enteringId = breakoutAssignment?.breakoutId;
+  useEffect(() => {
+    if (enteringId && enteringLabel) setTransition({ kind: 'enter', label: enteringLabel });
+  }, [enteringId, enteringLabel]);
+  const previousStatus = useRef(call.status);
+  useEffect(() => {
+    const was = previousStatus.current;
+    previousStatus.current = call.status;
+    if (call.status === 'error' || call.status === 'ended') {
+      returningRef.current = false;
+      setTransition(null);
+      return;
+    }
+    if (call.status !== 'in-call' || was !== 'switching') return;
+    returningRef.current = false;
+    // Mínimo visible para que el cambio de sala se entienda aunque reconecte rápido.
+    const timer = setTimeout(() => setTransition(null), 700);
+    return () => clearTimeout(timer);
+  }, [call.status]);
+  const inBreakoutRoom = call.session?.roomName.includes('::') ?? false;
   const roomOptions = useMemo(
     () => ({
       ...options,
@@ -568,84 +616,90 @@ export default function MeetingRoom({
   );
   if (!call.session) return null;
   return (
-    <LiveKitRoom
-      // Traslado a/desde una mini sala (breakout-rooms, Flujo 1 de su
-      // design.md): cambiar solo `token` sobre un <LiveKitRoom> ya montado
-      // no reconecta de forma confiable. La `key` por roomName fuerza un
-      // desmonte/montaje completo cada vez que switchRoom() cambia de sala.
-      key={call.session.roomName}
-      token={call.session.token}
-      serverUrl={call.session.url}
-      connect
-      audio={false}
-      video={false}
-      options={roomOptions}
-      connectOptions={connectOptions}
-      onConnected={call.connected}
-      onError={call.failed}
-      onDisconnected={(reason) => {
-        // El desmonte de la sala VIEJA que el propio cambio de `key` dispara
-        // llega acá como un onDisconnected más: mientras el traslado está en
-        // curso (status 'switching'), no es ni un "me fui" ni un fallo de
-        // red, así que no hay que interpretarlo como ninguno de los dos.
-        if (call.status === 'switching') return;
-        if (reason === undefined || reason === DisconnectReason.CLIENT_INITIATED) {
-          call.leaveCall();
-          if (onHangUp) onHangUp();
-          else router.push('/');
-        } else if (
-          // Cierre forzado por el anfitrión (D5, design.md): LiveKit
-          // reporta ROOM_DELETED cuando se llamó a RoomService.DeleteRoom
-          // (nuestro cierre forzado) y ROOM_CLOSED cuando LiveKit cierra la
-          // sala por su cuenta. Ninguno de los dos es un error de red.
-          reason === DisconnectReason.ROOM_DELETED ||
-          reason === DisconnectReason.ROOM_CLOSED
-        ) {
-          call.endedByHost();
-        } else if (reason === DisconnectReason.PARTICIPANT_REMOVED) {
-          // Decisión 2 (design.md "Señal de motivo de remoción"): antes de
-          // este cambio, CUALQUIER PARTICIPANT_REMOVED caía en failed() --
-          // la carrera que la propuesta identificó. El aviso consumido acá
-          // ya llegó por el socket ANTES de este removeParticipant (mismo
-          // orden que breakout:assigned, D12), con ventana de frescura de
-          // 10s (useRoomSocket.consumeRemovalNotice).
-          const notice = consumeRemovalNotice();
-          if (notice?.reason === 'BREAKOUT_MOVE_IN') {
-            // No-op: el issueBreakoutToken().then(switchRoom) en vuelo ya
-            // resuelve el traslado -- no es ni un "me fui" ni un fallo.
-            return;
-          }
-          if (notice?.reason === 'BREAKOUT_FORCED_RETURN') {
-            call.endedForBreakout();
-            return;
-          }
-          if (notice?.reason === 'BREAKOUT_RETURN_LOCKED') {
-            call.removedByPolicy(notice.reason);
-            return;
-          }
-          // Ningún aviso, o vencido: comportamiento de hoy intacto.
-          call.failed(new Error('Disconnected'));
-        } else call.failed(new Error('Disconnected'));
-      }}
-      data-lk-theme="default"
-      className={styles.meetingRoom}
-    >
-      <MeetingContent
-        roomCode={roomCode}
-        roomToken={roomToken}
-        roomEmojis={roomEmojis}
-        initialDevices={initialDevices}
-        onTranscriptAvailable={onTranscriptAvailable}
-        isCurrentUserAdmin={isCurrentUserAdmin}
-        audioLocked={audioLocked}
-        videoLocked={videoLocked}
-        onSetAudioLock={onSetAudioLock}
-        onSetVideoLock={onSetVideoLock}
-        participants={participants}
-        currentParticipantId={currentParticipantId}
-        breakoutAssignment={breakoutAssignment}
-        switchRoom={call.switchRoom}
-      />
-    </LiveKitRoom>
+    <>
+      <LiveKitRoom
+        // Traslado a/desde una mini sala (breakout-rooms, Flujo 1 de su
+        // design.md): cambiar solo `token` sobre un <LiveKitRoom> ya montado
+        // no reconecta de forma confiable. La `key` por roomName fuerza un
+        // desmonte/montaje completo cada vez que switchRoom() cambia de sala.
+        key={call.session.roomName}
+        token={call.session.token}
+        serverUrl={call.session.url}
+        connect
+        audio={false}
+        video={false}
+        options={roomOptions}
+        connectOptions={connectOptions}
+        onConnected={call.connected}
+        onError={call.failed}
+        onDisconnected={(reason) => {
+          // El desmonte de la sala VIEJA que el propio cambio de `key` dispara
+          // llega acá como un onDisconnected más: mientras el traslado está en
+          // curso (status 'switching'), no es ni un "me fui" ni un fallo de
+          // red, así que no hay que interpretarlo como ninguno de los dos.
+          if (call.status === 'switching' || returningRef.current) return;
+          if (reason === undefined || reason === DisconnectReason.CLIENT_INITIATED) {
+            call.leaveCall();
+            if (onHangUp) onHangUp();
+            else router.push('/');
+          } else if (
+            // Cierre forzado por el anfitrión (D5, design.md): LiveKit
+            // reporta ROOM_DELETED cuando se llamó a RoomService.DeleteRoom
+            // (nuestro cierre forzado) y ROOM_CLOSED cuando LiveKit cierra la
+            // sala por su cuenta. Ninguno de los dos es un error de red.
+            reason === DisconnectReason.ROOM_DELETED ||
+            reason === DisconnectReason.ROOM_CLOSED
+          ) {
+            // Cerrar una mini sala borra SU sala de LiveKit: no es el fin de la llamada.
+            if (inBreakoutRoom) returnToMainRef.current();
+            else call.endedByHost();
+          } else if (reason === DisconnectReason.PARTICIPANT_REMOVED) {
+            // Decisión 2 (design.md "Señal de motivo de remoción"): antes de
+            // este cambio, CUALQUIER PARTICIPANT_REMOVED caía en failed() --
+            // la carrera que la propuesta identificó. El aviso consumido acá
+            // ya llegó por el socket ANTES de este removeParticipant (mismo
+            // orden que breakout:assigned, D12), con ventana de frescura de
+            // 10s (useRoomSocket.consumeRemovalNotice).
+            const notice = consumeRemovalNotice();
+            if (notice?.reason === 'BREAKOUT_MOVE_IN') {
+              // No-op: el issueBreakoutToken().then(switchRoom) en vuelo ya
+              // resuelve el traslado -- no es ni un "me fui" ni un fallo.
+              return;
+            }
+            if (notice?.reason === 'BREAKOUT_FORCED_RETURN') {
+              returnToMainRef.current();
+              return;
+            }
+            if (notice?.reason === 'BREAKOUT_RETURN_LOCKED') {
+              call.removedByPolicy(notice.reason);
+              return;
+            }
+            // Ningún aviso, o vencido: comportamiento de hoy intacto.
+            call.failed(new Error('Disconnected'));
+          } else call.failed(new Error('Disconnected'));
+        }}
+        data-lk-theme="default"
+        className={styles.meetingRoom}
+      >
+        <MeetingContent
+          roomCode={roomCode}
+          roomToken={roomToken}
+          roomEmojis={roomEmojis}
+          initialDevices={initialDevices}
+          onTranscriptAvailable={onTranscriptAvailable}
+          isCurrentUserAdmin={isCurrentUserAdmin}
+          audioLocked={audioLocked}
+          videoLocked={videoLocked}
+          onSetAudioLock={onSetAudioLock}
+          onSetVideoLock={onSetVideoLock}
+          participants={participants}
+          currentParticipantId={currentParticipantId}
+          breakoutAssignment={breakoutAssignment}
+          switchRoom={call.switchRoom}
+        />
+      </LiveKitRoom>
+      {transition && <BreakoutTransition transition={transition} />}
+      <BreakoutToasts toasts={breakoutToasts} onDismiss={dismissBreakoutToast} />
+    </>
   );
 }
