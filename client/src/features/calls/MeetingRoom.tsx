@@ -35,7 +35,7 @@ import { HangUpButton } from './HangUpButton';
 import type { RoomEmoji } from '@/lib/api';
 import { useTranslation } from '../translation/useTranslation';
 import { reportTrackState, startCall } from '@/lib/calls';
-import { issueBreakoutToken } from '@/lib/breakouts';
+import { isAdminBreakoutView, issueBreakoutToken, listBreakoutRooms } from '@/lib/breakouts';
 import type { CallSessionState } from './useCallSession';
 import styles from './MeetingRoom.module.css';
 import { useRoomSocket } from '../chat/useRoomSocket';
@@ -384,6 +384,10 @@ function MeetingContent({
   useEffect(() => {
     if (!breakoutAssignment) return;
     if (breakoutSwitchHandled.current === breakoutAssignment.breakoutId) return;
+    if (breakoutAssignment.alreadyInRoom) {
+      breakoutSwitchHandled.current = breakoutAssignment.breakoutId;
+      return;
+    }
     const requestedId = breakoutAssignment.breakoutId;
     breakoutSwitchHandled.current = requestedId;
     setBreakoutSwitchError(null);
@@ -564,6 +568,7 @@ export default function MeetingRoom({
     consumeRemovalNotice,
     breakoutToasts,
     dismissBreakoutToast,
+    restoreBreakoutAssignment,
   } = useRoomSocket(roomSocket);
   const [transition, setTransition] = useState<BreakoutTransitionState | null>(null);
   // Evita dos reconexiones a la principal cuando llegan juntos el aviso del socket y la desconexión.
@@ -585,7 +590,7 @@ export default function MeetingRoom({
     if (breakoutReturnSignal > 0) returnToMainRef.current();
   }, [breakoutReturnSignal]);
   const enteringLabel = breakoutAssignment?.label;
-  const enteringId = breakoutAssignment?.breakoutId;
+  const enteringId = breakoutAssignment?.alreadyInRoom ? undefined : breakoutAssignment?.breakoutId;
   useEffect(() => {
     if (enteringId && enteringLabel) setTransition({ kind: 'enter', label: enteringLabel });
   }, [enteringId, enteringLabel]);
@@ -614,6 +619,40 @@ export default function MeetingRoom({
     return () => clearTimeout(timer);
   }, [call.status]);
   const inBreakoutRoom = call.session?.roomName.includes('::') ?? false;
+  // La asignación llega por un único evento de socket: si se perdió (recarga, reconexión), se recupera.
+  const hasAssignment = breakoutAssignment !== null;
+  useEffect(() => {
+    if (!inBreakoutRoom || hasAssignment || returningRef.current) return;
+    let cancelled = false;
+    listBreakoutRooms(roomCode, roomToken)
+      .then((rooms) => {
+        if (cancelled) return;
+        const mine = rooms.find((room) =>
+          isAdminBreakoutView(room)
+            ? room.occupants.some((occupant) => occupant.sourceIdentity === currentParticipantId)
+            : room.selfAssigned,
+        );
+        if (!mine) return;
+        restoreBreakoutAssignment({
+          breakoutId: mine.id,
+          label: mine.label,
+          leavePolicy: mine.leavePolicy,
+          closesAt: mine.autoCloseAt,
+          alreadyInRoom: true,
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    inBreakoutRoom,
+    hasAssignment,
+    roomCode,
+    roomToken,
+    currentParticipantId,
+    restoreBreakoutAssignment,
+  ]);
   const roomOptions = useMemo(
     () => ({
       ...options,

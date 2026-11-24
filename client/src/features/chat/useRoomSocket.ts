@@ -13,6 +13,8 @@ export interface BreakoutAssignment {
   leavePolicy: LeavePolicy;
   // ISO: momento en que la mini sala se cierra y vuelven todos a la principal.
   closesAt?: string | null;
+  // Recuperada del servidor estando ya dentro de la mini sala: no hay que trasladarse otra vez.
+  alreadyInRoom?: boolean;
 }
 
 type BreakoutToastInput = { kind: 'moved' | 'returned'; names: string[]; label: string };
@@ -53,6 +55,7 @@ export interface UseRoomSocketResult {
   consumeRemovalNotice: () => BreakoutRemovalNotice | null;
   breakoutToasts: BreakoutToast[];
   dismissBreakoutToast: (id: number) => void;
+  restoreBreakoutAssignment: (assignment: BreakoutAssignment) => void;
 }
 
 // Mismo patrón que useRoomMediaLock.ts: un hook por tipo de aviso, todos
@@ -135,6 +138,12 @@ export function useRoomSocket(socket: Socket | null): UseRoomSocketResult {
     return notice;
   }
 
+  const restoreBreakoutAssignment = useCallback((assignment: BreakoutAssignment) => {
+    if (assignmentRef.current) return;
+    assignmentRef.current = assignment;
+    setBreakoutAssignment(assignment);
+  }, []);
+
   const dismissBreakoutToast = useCallback((id: number) => {
     setBreakoutToasts((list) => list.filter((toast) => toast.id !== id));
   }, []);
@@ -145,5 +154,6 @@ export function useRoomSocket(socket: Socket | null): UseRoomSocketResult {
     consumeRemovalNotice,
     breakoutToasts,
     dismissBreakoutToast,
+    restoreBreakoutAssignment,
   };
 }

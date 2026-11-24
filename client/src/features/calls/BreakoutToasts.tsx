@@ -1,5 +1,6 @@
 'use client';
 
+import { createPortal } from 'react-dom';
 import { useEffect } from 'react';
 import { useTranslation } from '../translation/useTranslation';
 import type { BreakoutToast } from '../chat/useRoomSocket';
@@ -79,11 +80,12 @@ export function BreakoutToasts({
   onDismiss: (id: number) => void;
 }) {
   if (toasts.length === 0) return null;
-  return (
+  return createPortal(
     <ul className={styles.stack} aria-live="polite">
       {toasts.slice(-4).map((toast) => (
         <PresenceToast key={toast.id} toast={toast} onDismiss={onDismiss} />
       ))}
-    </ul>
+    </ul>,
+    document.body,
   );
 }

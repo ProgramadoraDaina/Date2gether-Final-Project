@@ -587,6 +587,9 @@ const en: Record<string, string> = {
   en: 'in',
   'Vuelven en': 'Back in',
   'No se pudo llamar de vuelta a las mini salas': 'Could not call the breakout rooms back',
+  'Volver a la llamada': 'Back to the call',
+  'Las mini salas siguen funcionando aunque cierres este panel.':
+    'Breakout rooms keep running when you close this panel.',
 };
 
 export default en;

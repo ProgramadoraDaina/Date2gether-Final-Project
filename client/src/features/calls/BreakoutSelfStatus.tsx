@@ -1,5 +1,6 @@
 'use client';
 
+import { createPortal } from 'react-dom';
 import { useRef } from 'react';
 import { useTranslation } from '../translation/useTranslation';
 import type { BreakoutAssignment } from '../chat/useRoomSocket';
@@ -32,7 +33,7 @@ export function BreakoutSelfStatus({
   const progress = left !== null && total.current ? left / total.current.seconds : null;
   const urgent = left !== null && left <= URGENT_SECONDS;
 
-  return (
+  return createPortal(
     <div
       className={`${styles.banner} ${left !== null ? styles.counting : ''} ${urgent ? styles.urgent : ''}`}
       role="status"
@@ -72,6 +73,7 @@ export function BreakoutSelfStatus({
           <span className={styles.fill} style={{ transform: `scaleX(${progress})` }} />
         </span>
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }

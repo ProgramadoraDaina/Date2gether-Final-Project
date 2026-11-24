@@ -50,7 +50,12 @@ jest.mock('livekit-client', () => ({
   // Valores reales verificados en @livekit/protocol (design.md D5/Decisión 2):
   // PARTICIPANT_REMOVED = 4 ("RoomService.RemoveParticipant was called"),
   // ROOM_DELETED = 5 ("RoomService.DeleteRoom was called"), ROOM_CLOSED = 10.
-  DisconnectReason: { CLIENT_INITIATED: 1, PARTICIPANT_REMOVED: 4, ROOM_DELETED: 5, ROOM_CLOSED: 10 },
+  DisconnectReason: {
+    CLIENT_INITIATED: 1,
+    PARTICIPANT_REMOVED: 4,
+    ROOM_DELETED: 5,
+    ROOM_CLOSED: 10,
+  },
   Track: {
     Source: { Camera: 'camera', Microphone: 'microphone', ScreenShare: 'screen_share' },
   },
@@ -674,6 +679,53 @@ describe('MeetingRoom', () => {
       expect(screen.getByText('Volviendo a la sala principal')).toBeInTheDocument();
     });
 
+    it('dentro de una mini sala sin asignación en memoria, la recupera del servidor y muestra el tiempo arriba', async () => {
+      const { listBreakoutRooms, issueBreakoutToken } = await import('@/lib/breakouts');
+      const closesAt = new Date(Date.now() + 45_000).toISOString();
+      jest.mocked(listBreakoutRooms).mockResolvedValue([
+        {
+          id: 'breakout-1',
+          livekitRoomName: 'abc-defg-hij::breakout-1',
+          label: 'Mini sala 1',
+          leavePolicy: 'locked',
+          joinPolicy: 'admin_only',
+          autoCloseAt: closesAt,
+          occupants: [
+            {
+              livekitIdentity: 'minted',
+              sourceIdentity: 'admin-sub',
+              displayName: 'Santi',
+              userId: 'u1',
+            },
+          ],
+        },
+      ]);
+      const MeetingRoom = (await import('./MeetingRoom')).default;
+      const call = state();
+      call.status = 'in-call';
+      call.session = { ...call.session!, roomName: 'abc-defg-hij::breakout-1' };
+      render(
+        <MeetingRoom
+          call={call}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+          currentParticipantId="admin-sub"
+          roomSocket={createFakeSocket() as unknown as Socket}
+        />,
+      );
+
+      expect(await screen.findByRole('timer')).toHaveTextContent(/00:4[45]/);
+      expect(screen.getByText('Volvés a la sala principal en')).toBeInTheDocument();
+      expect(issueBreakoutToken).not.toHaveBeenCalled();
+      expect(call.switchRoom).not.toHaveBeenCalled();
+    });
+
     it('cerrar la mini sala (ROOM_DELETED estando en ella) vuelve a la principal en vez de decir que el anfitrión se fue', async () => {
       const { LiveKitRoom } = await import('@livekit/components-react');
       const { DisconnectReason } = await import('livekit-client');
@@ -839,9 +891,11 @@ describe('MeetingRoom', () => {
       const thirdMountId = screen.getByTestId('mount-id').getAttribute('data-mount-id');
       expect(thirdMountId).toBe(secondMountId);
     } finally {
-      jest.mocked(LiveKitRoom).mockImplementation(
-        original ?? (({ children }: { children?: ReactNode }) => <div>{children}</div>),
-      );
+      jest
+        .mocked(LiveKitRoom)
+        .mockImplementation(
+          original ?? (({ children }: { children?: ReactNode }) => <div>{children}</div>),
+        );
     }
   });
 

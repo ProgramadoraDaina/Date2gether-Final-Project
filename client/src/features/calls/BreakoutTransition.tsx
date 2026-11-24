@@ -1,5 +1,6 @@
 'use client';
 
+import { createPortal } from 'react-dom';
 import { useTranslation } from '../translation/useTranslation';
 import styles from './BreakoutTransition.module.css';
 
@@ -11,7 +12,7 @@ export function BreakoutTransition({ transition }: { transition: BreakoutTransit
   const from = entering ? t('Sala principal') : t('Mini sala');
   const to = entering ? transition.label : t('Sala principal');
 
-  return (
+  return createPortal(
     <div className={styles.overlay} role="status" aria-live="polite">
       <div className={styles.content}>
         <span className={styles.route}>
@@ -29,6 +30,7 @@ export function BreakoutTransition({ transition }: { transition: BreakoutTransit
           <div className={styles.sweep} />
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
