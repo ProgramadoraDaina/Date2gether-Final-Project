@@ -135,9 +135,38 @@ test.describe('Sesión', () => {
     await expect(page.getByTestId('auth-bar')).toContainText(user.name);
 
     await page.getByRole('button', { name: 'Cerrar sesión' }).click();
-    await expect(page.getByRole('link', { name: 'Iniciar sesión' })).toBeVisible();
+    await expect(page).toHaveURL('/login');
 
-    await page.reload();
+    await page.goto('/');
     await expect(page.getByRole('link', { name: 'Iniciar sesión' })).toBeVisible();
+  });
+});
+
+test.describe('Rutas protegidas', () => {
+  // Sin sesión, entrar directo a una página privada tiene que redirigir al
+  // login conservando el destino en ?next=.
+  test('visitar /rooms sin sesión redirige a /login con next', async ({ page }) => {
+    await page.goto('/rooms');
+    await expect(page).toHaveURL(/\/login\?next=%2Frooms$/);
+  });
+
+  // Después de cerrar sesión, "Atrás" no puede mostrar una página privada.
+  test('tras cerrar sesión, el botón Atrás no vuelve a una página privada', async ({ page }) => {
+    const user = buildTestUser();
+
+    await page.goto('/register');
+    await page.getByLabel('Nombre').fill(user.name);
+    await page.getByLabel('Email').fill(user.email);
+    await page.getByLabel('Contraseña').fill(user.password);
+    await page.getByRole('button', { name: 'Crear cuenta' }).click();
+    await expect(page.getByTestId('auth-bar')).toContainText(user.name);
+
+    await page.goto('/rooms');
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Cerrar sesión' }).click();
+    await expect(page).toHaveURL('/login');
+
+    await page.goBack();
+    await expect(page).toHaveURL(/\/login/);
   });
 });

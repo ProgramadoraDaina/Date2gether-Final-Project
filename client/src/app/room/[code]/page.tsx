@@ -53,6 +53,7 @@ import { RouletteWheel } from '@/features/calls/roomEvents/RouletteWheel';
 import { useRoomEvents } from '@/features/calls/roomEvents/useRoomEvents';
 import { useRoomMediaLock } from '@/features/calls/useRoomMediaLock';
 import { resolveBreakoutEndCopy } from '@/lib/breakouts';
+import { useNameFocusSetting } from '@/features/calls/useNameFocusSetting';
 import { createRoomSocket } from '@/lib/socket';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { NAME_COLOR_HEX, isNameColorId } from '@/lib/nameColors';
@@ -285,6 +286,7 @@ export default function RoomPage() {
   const canManageEvents = currentUserRole === 'administrador' || currentUserRole === 'colaborador';
   const roomEvents = useRoomEvents(roomSocket);
   const mediaLock = useRoomMediaLock(roomSocket);
+  const nameFocus = useNameFocusSetting(roomSocket);
   useShareMyAvatar(roomSocket);
   const avatarDirectory = useMemo(() => buildAvatarDirectory(users), [users]);
   const eventParticipants = useMemo(
@@ -297,7 +299,11 @@ export default function RoomPage() {
   // del pase de sala (ver chat.gateway.ts: `participantId: participant.sub`)
   // -- no se deriva ni inventa uno nuevo acá.
   const breakoutParticipants = useMemo(
-    () => users.map(({ participantId, userName }) => ({ livekitIdentity: participantId, displayName: userName })),
+    () =>
+      users.map(({ participantId, userName }) => ({
+        livekitIdentity: participantId,
+        displayName: userName,
+      })),
     [users],
   );
   useEffect(() => {
@@ -941,6 +947,8 @@ export default function RoomPage() {
                       participants={breakoutParticipants}
                       roomSocket={roomSocket}
                       currentParticipantId={access.participant.sub}
+                      nameFocusEnabled={nameFocus.enabled}
+                      onSetNameFocus={nameFocus.setEnabled}
                     />
                   </AvatarDirectoryProvider>
                 </div>

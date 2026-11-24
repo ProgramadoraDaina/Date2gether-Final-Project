@@ -32,6 +32,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Socket } from 'socket.io-client';
 import { DEFAULT_CALL_DEVICES, type CallDevices } from './callDevices';
 import { HangUpButton } from './HangUpButton';
+import { findMentionedParticipant } from './nameFocus';
 import type { RoomEmoji } from '@/lib/api';
 import { useTranslation } from '../translation/useTranslation';
 import { reportTrackState, startCall } from '@/lib/calls';
@@ -304,6 +305,11 @@ interface MeetingRoomProps {
   // fila del admin del selector genérico de traslado y habilita el
   // auto-traslado explícito. Mismo patrón que PollPanel (page.tsx:951).
   currentParticipantId?: string;
+  // Enfocar automáticamente el video de quien es nombrado en voz (ver
+  // nameFocus.ts): activable/desactivable solo por el admin, sincronizado a
+  // toda la sala por el mismo gateway que mediaLock (ver useNameFocusSetting).
+  nameFocusEnabled: boolean;
+  onSetNameFocus: (enabled: boolean) => void;
 }
 
 // Un permiso revocado después del lobby no debe hacer fallar la llamada.
@@ -350,6 +356,8 @@ function MeetingContent({
   currentParticipantId = '',
   breakoutAssignment,
   switchRoom,
+  nameFocusEnabled,
+  onSetNameFocus,
 }: Omit<MeetingRoomProps, 'call' | 'onHangUp' | 'roomSocket'> & {
   // Mini salas (breakout-rooms, Fase 6.13): traslado REAL de medios al
   // recibir breakout:assigned. Se pasa solo esta función de `call` (no el
@@ -423,6 +431,22 @@ function MeetingContent({
   const layoutContext = useCreateLayoutContext();
   const pinnedTracks = usePinnedTracks(layoutContext);
   const focusTrack = pinnedTracks[0];
+  // Misma frase final de transcripción llega a todas las pantallas por el
+  // data channel que ya usa TranscriptionProvider (ver TRANSCRIPT_TOPIC): al
+  // correr este mismo matching en cada cliente, el pineo termina viéndose
+  // igual en todos sin necesidad de un mensaje de foco aparte.
+  const cameraTracks = useMemo(
+    () => tracks.filter((track) => track.source === Track.Source.Camera),
+    [tracks],
+  );
+  const handleFinalPhrase = useCallback(
+    (phrase: { identity: string; name: string; text: string }) => {
+      if (!nameFocusEnabled) return;
+      const match = findMentionedParticipant(phrase.text, cameraTracks, phrase.identity);
+      if (match) layoutContext?.pin.dispatch?.({ msg: 'set_pin', trackReference: match });
+    },
+    [nameFocusEnabled, cameraTracks, layoutContext],
+  );
   const carouselTracks = focusTrack
     ? tracks.filter(
         (track) =>
@@ -438,6 +462,7 @@ function MeetingContent({
         roomCode={roomCode}
         roomToken={roomToken}
         onTranscriptAvailable={onTranscriptAvailable}
+        onFinalPhrase={handleFinalPhrase}
       >
         <LayoutContextProvider value={layoutContext}>
           <InitialCallDevices devices={initialDevices} onDeviceError={showDeviceError} />
@@ -515,6 +540,8 @@ function MeetingContent({
               videoLocked={videoLocked}
               onSetAudioLock={onSetAudioLock}
               onSetVideoLock={onSetVideoLock}
+              nameFocusEnabled={nameFocusEnabled}
+              onSetNameFocus={onSetNameFocus}
             />
             {/* Decisión 5 (design.md): único punto de montaje de toda la UI
                 de mini salas -- reemplaza el disparador del dock
@@ -555,6 +582,8 @@ export default function MeetingRoom({
   participants = [],
   roomSocket = null,
   currentParticipantId = '',
+  nameFocusEnabled,
+  onSetNameFocus,
 }: MeetingRoomProps) {
   const router = useRouter();
   // Decisión 2 (design.md "Señal de motivo de remoción"): useRoomSocket se
@@ -746,6 +775,8 @@ export default function MeetingRoom({
           currentParticipantId={currentParticipantId}
           breakoutAssignment={breakoutAssignment}
           switchRoom={call.switchRoom}
+          nameFocusEnabled={nameFocusEnabled}
+          onSetNameFocus={onSetNameFocus}
         />
       </LiveKitRoom>
       {transition && <BreakoutTransition transition={transition} />}

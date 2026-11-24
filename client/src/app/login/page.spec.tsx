@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 
-const push = jest.fn();
-jest.mock('next/navigation', () => ({ useRouter: () => ({ push }) }));
+const replace = jest.fn();
+jest.mock('next/navigation', () => ({ useRouter: () => ({ replace }) }));
 jest.mock('@/features/translation/useTranslation', () => {
   const t = (key: string) => key;
   return { useTranslation: () => ({ t }) };
@@ -14,7 +14,7 @@ const NAME_KEY = 'date2gether:userName';
 describe('LoginPage', () => {
   beforeEach(() => {
     localStorage.clear();
-    push.mockClear();
+    replace.mockClear();
   });
 
   it('un login exitoso guarda el nombre de la persona y navega al inicio', async () => {
@@ -34,7 +34,32 @@ describe('LoginPage', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
     });
     expect(localStorage.getItem(NAME_KEY)).toBe('Daina');
-    expect(push).toHaveBeenCalledWith('/');
+    expect(replace).toHaveBeenCalledWith('/');
+  });
+
+  it.each([
+    ['/rooms?x=1', '/rooms?x=1'],
+    ['//evil.com', '/'],
+    ['https://evil.com', '/'],
+  ])('con ?next=%s navega a %s tras el login', async (next, expected) => {
+    window.history.replaceState(null, '', `/login?next=${encodeURIComponent(next)}`);
+    const { login } = await import('@/lib/auth');
+    (login as jest.Mock<typeof login>).mockResolvedValue({
+      id: 'user-1',
+      email: 'a@example.test',
+      name: 'Daina',
+      createdAt: new Date().toISOString(),
+      nameColor: null,
+    });
+    const LoginPage = (await import('./page')).default;
+    render(<LoginPage />);
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'a@example.test' } });
+    fireEvent.change(screen.getByLabelText('Contraseña'), { target: { value: 'password123' } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
+    });
+    expect(replace).toHaveBeenCalledWith(expected);
+    window.history.replaceState(null, '', '/');
   });
 
   it('un login rechazado por el backend muestra el error en pantalla y no navega', async () => {
@@ -50,7 +75,7 @@ describe('LoginPage', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
     });
     expect(screen.getByText('Email o contraseña incorrectos')).toBeInTheDocument();
-    expect(push).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it('mientras se procesa el login, el botón queda deshabilitado y avisa que está entrando', async () => {

@@ -212,6 +212,7 @@
 }
 
 .controlsGroup :global(.lk-media-device-select li:not([data-lk-active='true']) > .lk-button) {
+  background: var(--color-surface);
   color: var(--color-text);
 }
 

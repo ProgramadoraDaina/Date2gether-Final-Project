@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { ApiError, getRoomNotesFromHistory, type RoomNotes } from '@/lib/api';
-import { getCurrentUser, isLoggedIn } from '@/lib/auth';
+import { getCurrentUser } from '@/lib/auth';
+import { RequireAuth } from '@/features/auth/RequireAuth';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { AppShell } from '@/features/navigation/AppShell';
 import styles from './page.module.css';
@@ -20,14 +21,20 @@ function personalNotesKey(roomCode: string, userId: string): string {
 }
 
 export default function RoomNotesFromHistoryPage() {
+  return (
+    <RequireAuth>
+      <RoomNotesFromHistoryContent />
+    </RequireAuth>
+  );
+}
+
+function RoomNotesFromHistoryContent() {
   const { t } = useTranslation();
   const { roomId } = useParams<{ roomId: string }>();
   // roomCode viaja como query param, no como parte de la ruta (D4-C): la
   // ruta identifica la sala por id; el code es solo la clave de notas
   // personales, y ya es display-only en CallHistoryEntry.
   const roomCode = useSearchParams().get('code');
-  const [loggedIn, setLoggedIn] = useState(false);
-  const [checking, setChecking] = useState(true);
   const [personalNotes, setPersonalNotes] = useState<string | null>(null);
   const [roomNotes, setRoomNotes] = useState<RoomNotes | null>(null);
   const [loading, setLoading] = useState(false);
@@ -35,11 +42,6 @@ export default function RoomNotesFromHistoryPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const alreadyLoggedIn = isLoggedIn();
-    setLoggedIn(alreadyLoggedIn);
-    setChecking(false);
-    if (!alreadyLoggedIn) return;
-
     setLoading(true);
     setForbidden(false);
     setError(null);
@@ -60,23 +62,6 @@ export default function RoomNotesFromHistoryPage() {
         }),
     ]).finally(() => setLoading(false));
   }, [roomId, roomCode]);
-
-  if (checking) return null;
-
-  if (!loggedIn) {
-    return (
-      <AppShell>
-        <div className={styles.card}>
-          <h1>{t('Notas')}</h1>
-          <p>{t('Necesitás iniciar sesión para ver estas notas.')}</p>
-          <p className={styles.authLinks}>
-            <Link href="/login">{t('Iniciar sesión')}</Link>
-            <Link href="/register">{t('Crear cuenta')}</Link>
-          </p>
-        </div>
-      </AppShell>
-    );
-  }
 
   if (forbidden) {
     return (
