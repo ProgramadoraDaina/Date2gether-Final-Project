@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { ApiError, getOwnedRooms, renameRoom, type OwnedRoom } from '@/lib/api';
-import { isLoggedIn } from '@/lib/auth';
+import { RequireAuth } from '@/features/auth/RequireAuth';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { AppShell } from '@/features/navigation/AppShell';
 import styles from './page.module.css';
@@ -11,9 +11,15 @@ import styles from './page.module.css';
 const DAY_LABELS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
 export default function MyRoomsPage() {
+  return (
+    <RequireAuth>
+      <MyRoomsContent />
+    </RequireAuth>
+  );
+}
+
+function MyRoomsContent() {
   const { t, language } = useTranslation();
-  const [loggedIn, setLoggedIn] = useState(false);
-  const [checking, setChecking] = useState(true);
   const [rooms, setRooms] = useState<OwnedRoom[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,17 +30,11 @@ export default function MyRoomsPage() {
 
   // Runs once on mount; `t` is left out so changing language does not refetch.
   useEffect(() => {
-    const alreadyLoggedIn = isLoggedIn();
-    setLoggedIn(alreadyLoggedIn);
-    setChecking(false);
-    if (!alreadyLoggedIn) return;
-
     setLoading(true);
     getOwnedRooms()
       .then(setRooms)
       .catch((err) => {
         setError(err instanceof ApiError ? err.message : t('No se pudieron cargar tus salas'));
-        if (!isLoggedIn()) setLoggedIn(false);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -75,23 +75,6 @@ export default function MyRoomsPage() {
     } catch (err) {
       setRenameError(err instanceof ApiError ? err.message : t('No se pudo renombrar la sala'));
     }
-  }
-
-  if (checking) return null;
-
-  if (!loggedIn) {
-    return (
-      <AppShell>
-        <div className={styles.card}>
-          <h1>{t('Mis salas')}</h1>
-          <p>{t('Necesitás iniciar sesión para ver tus salas.')}</p>
-          <p className={styles.authLinks}>
-            <Link href="/login">{t('Iniciar sesión')}</Link>
-            <Link href="/register">{t('Crear cuenta')}</Link>
-          </p>
-        </div>
-      </AppShell>
-    );
   }
 
   return (

@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ApiError, resolveCallSessionBySid } from '@/lib/api';
-import { isLoggedIn, onAuthChange } from '@/lib/auth';
+import { RequireAuth } from '@/features/auth/RequireAuth';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { AppShell } from '@/features/navigation/AppShell';
 import styles from '../../[sessionId]/page.module.css';
@@ -12,12 +12,18 @@ import styles from '../../[sessionId]/page.module.css';
 type State = 'resolving' | 'pending' | 'error';
 
 export default function CallTranscriptLinkPage() {
+  return (
+    <RequireAuth>
+      <CallTranscriptLinkContent />
+    </RequireAuth>
+  );
+}
+
+function CallTranscriptLinkContent() {
   const { t } = useTranslation();
   const router = useRouter();
   const routerRef = useRef(router);
   const { sid } = useParams<{ sid: string }>();
-  // El server no tiene la sesión guardada: null hasta hidratar, así no parpadea "iniciá sesión".
-  const loggedIn = useSyncExternalStore(onAuthChange, isLoggedIn, () => null);
   const [state, setState] = useState<State>('resolving');
 
   const lookup = useCallback(() => {
@@ -28,26 +34,15 @@ export default function CallTranscriptLinkPage() {
   }, [sid]);
 
   useEffect(() => {
-    if (loggedIn) lookup();
-  }, [loggedIn, lookup]);
-
-  if (loggedIn === null) return null;
+    lookup();
+  }, [lookup]);
 
   return (
     <AppShell>
       <div className={styles.card}>
         <h1>{t('Transcripción')}</h1>
-        {!loggedIn && (
-          <>
-            <p>{t('Necesitás iniciar sesión para ver esta transcripción.')}</p>
-            <p className={styles.authLinks}>
-              <Link href="/login">{t('Iniciar sesión')}</Link>
-              <Link href="/register">{t('Crear cuenta')}</Link>
-            </p>
-          </>
-        )}
-        {loggedIn && state === 'resolving' && <p>{t('Buscando la llamada en tu historial…')}</p>}
-        {loggedIn && state === 'pending' && (
+        {state === 'resolving' && <p>{t('Buscando la llamada en tu historial…')}</p>}
+        {state === 'pending' && (
           <>
             <p>
               {t(
@@ -66,7 +61,7 @@ export default function CallTranscriptLinkPage() {
             </button>
           </>
         )}
-        {loggedIn && state === 'error' && (
+        {state === 'error' && (
           <p className={styles.error} role="alert">
             {t('No se pudo cargar la transcripción')}
           </p>
