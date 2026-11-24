@@ -14,6 +14,8 @@ jest.mock('@/features/auth/RequireAuth', () => ({
   RequireAuth: ({ children }: { children: React.ReactNode }) => children,
 }));
 jest.mock('@/lib/auth', () => ({ isLoggedIn: jest.fn() }));
+// El riel de navegación pide el rol global; estas pruebas no ejercitan el link de admin.
+jest.mock('@/features/auth/useGlobalRole', () => ({ useGlobalRole: () => 'user' }));
 jest.mock('@/lib/api', () => ({
   getCallHistory: jest.fn(),
   ApiError: class extends Error {},

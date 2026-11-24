@@ -5,6 +5,8 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 const ACCESS_TOKEN_KEY = 'date2gether:accessToken';
 const REFRESH_TOKEN_KEY = 'date2gether:refreshToken';
 
+export type UserRole = 'user' | 'admin';
+
 export interface AuthUser {
   id: string;
   email: string;
@@ -12,6 +14,8 @@ export interface AuthUser {
   createdAt: string;
   nameColor: string | null;
   avatar?: Avatar | null;
+  // Rol GLOBAL de la cuenta. Solo sirve para mostrar u ocultar UI: la autoridad es el backend.
+  role?: UserRole;
 }
 
 interface AuthTokens {
@@ -157,7 +161,7 @@ export async function refreshAccessToken(): Promise<string | null> {
   return data.accessToken;
 }
 
-export async function getCurrentUser(): Promise<AuthUser | null> {
+async function fetchCurrentUser(strict: boolean): Promise<AuthUser | null> {
   const accessToken = getAccessToken();
   if (!accessToken) return null;
 
@@ -173,6 +177,21 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     });
   }
 
-  if (!res.ok) return null;
+  if (res.status === 401) return null;
+  if (!res.ok) {
+    if (strict) throw new Error(`No se pudo cargar la cuenta (${res.status})`);
+    return null;
+  }
   return res.json();
+}
+
+export async function getCurrentUser(): Promise<AuthUser | null> {
+  return fetchCurrentUser(false);
+}
+
+// Igual que getCurrentUser, pero null significa SOLO "sin sesión" (sin token o 401 tras
+// intentar refrescar): cualquier otra respuesta no-ok (5xx, 403...) lanza, para que quien
+// llama distinga "no hay sesión" de "no pude averiguarlo".
+export async function getCurrentUserOrThrow(): Promise<AuthUser | null> {
+  return fetchCurrentUser(true);
 }

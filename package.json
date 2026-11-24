@@ -21,6 +21,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
+    "admin:promote": "node scripts/promote-admin.mjs",
     "dev:client": "pnpm --filter client dev",
     "build:client": "pnpm --filter client build",
     "start:client": "pnpm --filter client start",

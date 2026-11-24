@@ -1,7 +1,10 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -88,5 +91,16 @@ export class RoomsController {
   async renameRoom(@Param('code') code: string, @Body() dto: UpdateRoomNameDto) {
     await this.roomsService.renameRoom(code, dto.name);
     return { message: 'Nombre actualizado' };
+  }
+
+  // El rol "administrador" de la sala se valida en el service (ver deleteRoomAsAdmin).
+  @UseGuards(JwtAuthGuard)
+  @Delete(':code')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteRoom(
+    @Param('code') code: string,
+    @CurrentUser() user: AccessTokenPayload,
+  ): Promise<void> {
+    await this.roomsService.deleteRoomAsAdmin(code, user.sub);
   }
 }

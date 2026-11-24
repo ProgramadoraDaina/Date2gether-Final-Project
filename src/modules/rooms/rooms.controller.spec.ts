@@ -14,6 +14,7 @@ describe('RoomsController', () => {
     getByCodeOrThrow: Mock<(...args: unknown[]) => Promise<unknown>>;
     listOwnedRooms: Mock<(...args: unknown[]) => Promise<unknown>>;
     renameRoom: Mock<(...args: unknown[]) => Promise<unknown>>;
+    deleteRoomAsAdmin: Mock<(...args: unknown[]) => Promise<unknown>>;
   };
 
   beforeEach(async () => {
@@ -22,6 +23,7 @@ describe('RoomsController', () => {
       getByCodeOrThrow: vi.fn(),
       listOwnedRooms: vi.fn(),
       renameRoom: vi.fn(),
+      deleteRoomAsAdmin: vi.fn(),
     };
 
     const module = await Test.createTestingModule({
@@ -113,6 +115,19 @@ describe('RoomsController', () => {
       expect.arrayContaining([expect.anything()]),
     );
     expect(Reflect.getMetadata('roomRoles', handler)).toEqual(['administrador']);
+  });
+
+  it('DELETE /rooms/:code exige JWT (401 sin token), responde 204 y delega con el id de quien llama', async () => {
+    const handler = Object.getOwnPropertyDescriptor(RoomsController.prototype, 'deleteRoom')!
+      .value as object;
+    expect(Reflect.getMetadata('__guards__', handler)).toEqual([JwtAuthGuard]);
+    expect(Reflect.getMetadata('__httpCode__', handler)).toBe(204);
+
+    roomsService.deleteRoomAsAdmin.mockResolvedValue(undefined);
+    await expect(
+      controller.deleteRoom('abc-defg-hij', { sub: 'user-1', email: 'a@example.test' }),
+    ).resolves.toBeUndefined();
+    expect(roomsService.deleteRoomAsAdmin).toHaveBeenCalledWith('abc-defg-hij', 'user-1');
   });
 
   it('delega el renombre al RoomsService con el código y el nombre del DTO', async () => {

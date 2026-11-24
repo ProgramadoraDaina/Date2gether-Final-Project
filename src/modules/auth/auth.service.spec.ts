@@ -30,6 +30,7 @@ function buildUser(overrides: Partial<User> = {}): User {
     name: 'Ana',
     nameColor: null,
     avatar: null,
+    role: 'user',
     createdAt: new Date(),
     ...overrides,
   };

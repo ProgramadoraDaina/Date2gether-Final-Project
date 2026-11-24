@@ -244,6 +244,50 @@ export class RoomsService {
     await this.db.update(rooms).set({ name }).where(eq(rooms.id, room.id));
   }
 
+  // Borra la sala y, por ON DELETE CASCADE, todo lo que cuelga de ella (miembros, mensajes,
+  // notas, solicitudes de admisión, horarios, playlist, emojis, transcripción, identidades de
+  // llamada). call_sessions.room_id es SET NULL: el historial de llamadas sobrevive sin sala.
+  // Es una sola sentencia, así que es atómica; la transacción deja explícito el límite si
+  // en el futuro se suman pasos. Busca por ocupación del pool (no por joinability): moderar
+  // una sala vencida pero todavía no retirada también debe poder borrarla.
+  async deleteRoom(code: string): Promise<void> {
+    const room = await this.resolver.findPoolOccupant(code);
+    if (!room) {
+      throw new NotFoundException(`No existe una sala con el código "${code}"`);
+    }
+    await this.removeRoom(room);
+  }
+
+  // Borrado hecho por la propia gente de la sala: solo su administrador. No pasa por
+  // RoomRolesGuard porque ese guard resuelve la sala por "joinable" y respondería 404 para
+  // las salas vencidas que /rooms/mine igual lista (y que sí se deben poder limpiar).
+  async deleteRoomAsAdmin(code: string, userId: string): Promise<void> {
+    const room = await this.resolver.findPoolOccupant(code);
+    if (!room) {
+      throw new NotFoundException(`No existe una sala con el código "${code}"`);
+    }
+    const [member] = await this.db
+      .select({ role: roomMembers.role })
+      .from(roomMembers)
+      .where(and(eq(roomMembers.roomId, room.id), eq(roomMembers.userId, userId)))
+      .limit(1);
+    if (!member) {
+      throw new ForbiddenException('No sos parte de esta sala');
+    }
+    if (member.role !== 'administrador') {
+      throw new ForbiddenException('Solo el administrador de la sala puede borrarla');
+    }
+    await this.removeRoom(room);
+  }
+
+  private async removeRoom(room: Room): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx.delete(rooms).where(eq(rooms.id, room.id));
+    });
+    // Sockets conectados: el gateway los avisa y los desconecta.
+    this.roomEvents.emitRoomDeleted({ roomCode: room.code });
+  }
+
   async getRoomNotes(code: string) {
     const room = await this.getByCodeOrThrow(code);
     return this.getRoomNotesById(room.id);

@@ -564,3 +564,80 @@ Se implementaron ambas puntas:
 ### Verificación
 
 Backend: `pnpm vitest run modules/rooms/rooms.controller.spec.ts modules/rooms/rooms.service.spec.ts` — 29/29. Frontend: `pnpm jest` en `client/` — 62 suites / 399 tests, todo verde. `tsc --noEmit` sin errores nuevos en los archivos tocados (los errores preexistentes en `page.spec.tsx` de `room/[code]` y en `calls-webhook.service.spec.ts` son de otro trabajo en esta misma rama, no de este cambio).
+
+
+---
+
+## 22. Roles globales vs roles por sala
+
+**Fecha:** 2026-11-24
+**Rama:** `feature/room-delete-and-global-roles`
+
+### Contexto
+
+Hasta ahora el único concepto de rol era el **rol por sala** (`room_members.role`: `administrador | colaborador | participante`), que solo gobierna lo que una persona puede hacer dentro de una sala concreta. No existía ningún permiso que dependiera de la cuenta en sí, por lo que no había forma de moderar la plataforma (listar cuentas, corregir roles, borrar una sala ajena). El proyecto necesita al menos dos roles **globales** con permisos distintos, donde el backend responda 403 cuando un rol intenta algo que no le corresponde.
+
+### Alternativas consideradas
+
+- **Reusar el rol de sala (`administrador`) como si fuera global.** Descartada: el rol de sala es relativo a una sala (la misma persona es administradora en una y participante en otra); tratarlo como global concedería permisos sobre toda la plataforma a cualquiera que haya creado una sala.
+- **Rol global dentro del JWT.** Simple (sin consulta extra por request), pero un descenso de rol no tiene efecto hasta que el access token vence (15 min por defecto) y habría que invalidar refresh tokens.
+- **Columna `users.role` leída de la base en cada request protegida (elegida).** Cuesta un `SELECT` por request a `/admin/*`, pero el cambio de rol es inmediato y el JWT no cambia de forma (`{ sub, email }`).
+- **Tabla de permisos/roles (RBAC completo).** Sobredimensionada para dos roles.
+
+### Decisión
+
+- Nuevo enum de Postgres `user_role` (`user`, `admin`) y columna `users.role` `NOT NULL DEFAULT 'user'` (migración `0022_user_role`). Todas las cuentas existentes quedan como `user`.
+- `RolesGuard` + decorador `@Roles('admin')` (módulo `JwtAuthModule`), **distintos** de `RoomRolesGuard`/`@RoomRoles`. Corre después de `JwtAuthGuard`: sin usuario en la request responde 401; con rol no permitido, 403. El rol se lee de la base en cada request, no del JWT.
+- El rol viaja en el objeto público de usuario (`/auth/register`, `/auth/login`, `/auth/me`); nunca el hash de contraseña.
+- Módulo `admin` (`AdminController` protegido a nivel de clase con `JwtAuthGuard` + `RolesGuard` + `@Roles('admin')`): `GET /admin/users`, `PATCH /admin/users/:id/role` y `DELETE /admin/rooms/:code` (moderación, reusa `RoomsService.deleteRoom`).
+- Un admin **no puede quitarse a sí mismo** el rol (400), para no dejar la plataforma sin administradores por accidente.
+- El primer admin se crea con `pnpm admin:promote <email>` (`scripts/promote-admin.mjs`), porque los endpoints `/admin/*` exigen ya ser admin.
+- Frontend: `/admin` (lista de usuarios y selector de rol) detrás de `RequireAuth`; si la cuenta no es admin muestra "Sin acceso". El link "Admin" del riel solo aparece para admins. Esto es **cosmético**: la seguridad la impone el backend.
+
+### Justificación
+
+- Separar los dos ejes (qué puede hacer en una sala vs. en la plataforma) evita escaladas de privilegio accidentales.
+- Leer el rol de la base hace que la revocación sea inmediata, que es la propiedad que más importa en un rol de moderación.
+- Dejar el payload del JWT intacto evita tocar `JwtAuthGuard`, el guard de WebSockets y los pases de sala.
+
+### Consecuencias
+
+- Cada request a `/admin/*` hace una consulta adicional a `users` (aceptable: tráfico administrativo bajo).
+- Un access token de una cuenta eliminada sigue siendo válido hasta que vence, pero `RolesGuard` responde 401 porque la cuenta ya no existe.
+- Sumar un tercer rol global implica ampliar el enum con una migración y usar `@Roles(...)` en los endpoints nuevos.
+
+---
+
+## 23. Borrado de salas (cascade)
+
+**Fecha:** 2026-11-24
+**Rama:** `feature/room-delete-and-global-roles`
+
+### Contexto
+
+Las salas se podían crear, listar (`/rooms/mine`) y renombrar, pero no borrar. Se necesita `DELETE /rooms/:code` sin dejar filas huérfanas ni fallar por claves foráneas, y que un admin global pueda hacer el mismo borrado como moderación.
+
+### Alternativas consideradas
+
+- **Borrar a mano cada tabla dependiente dentro de una transacción.** Frágil: cada tabla nueva que referencie `rooms` exigiría acordarse de agregarla.
+- **Soft delete (`retired_at`).** Ese campo ya significa "el código volvió al pool" (D2); reusarlo mezclaría dos conceptos y las filas privadas (mensajes, notas) seguirían en la base.
+- **`ON DELETE CASCADE` en la base (elegida).** Ya estaba declarado así en todas las tablas que cuelgan de la sala, por lo que no hizo falta migración para esto.
+
+### Decisión
+
+- `DELETE /rooms/:code` (`JwtAuthGuard`; 204). El rol `administrador` **de esa sala** se valida en `RoomsService.deleteRoomAsAdmin`: 404 si el código no existe, 403 si la persona no es miembro o no es administradora. No se usa `RoomRolesGuard` porque ese guard resuelve la sala por "joinable" y devolvería 404 para las salas vencidas que `/rooms/mine` igual lista.
+- Una sola sentencia `DELETE FROM rooms` dentro de `db.transaction`. Se borran por cascada: `room_members`, `messages`, `room_notes`, `room_admission_requests`, `room_schedule_slots`, `room_playlists`, `room_emojis`, `transcript_lines`, `call_history` y `call_participant_identities`.
+- **Se conserva el historial de sesiones de llamada:** `call_sessions.room_id` es `ON DELETE SET NULL` (la sesión mantiene `room_code`, horarios y participantes agregados) y `call_events` no tiene FK por diseño (log append-only). Es una decisión deliberada del feature de línea de tiempo (D7); no se cambió.
+- Llamada o chat en curso: `RoomsService` emite `roomDeleted` por `RoomEventsService` y `ChatGateway` lo reenvía a la sala y desconecta esos sockets (el estado en memoria se limpia con el `handleDisconnect` existente). La llamada de LiveKit no se cierra desde el borrado: termina cuando sus participantes salen, y nadie puede volver a entrar porque `POST /calls/:roomCode` ya responde 404.
+- UI: botón "Eliminar sala" en "Mis salas" (todas las salas listadas son de las que la persona es administradora), con un `<dialog>` de confirmación en la página (sin `window.confirm`), estado de carga, mensaje de error y retiro de la fila al terminar.
+
+### Justificación
+
+- La integridad referencial queda en la base, no en código de aplicación que haya que mantener.
+- Reusar un único método de borrado para el administrador de la sala y para la moderación evita que las dos rutas diverjan.
+
+### Consecuencias
+
+- El borrado es irreversible (sin papelera). La confirmación en la UI es la única barrera, de ahí el texto explícito del diálogo.
+- Los clientes conectados reciben `roomDeleted` pero la pantalla de sala todavía no reacciona a ese evento más allá de perder la conexión; queda como mejora.
+- Las sesiones de llamada de una sala borrada siguen apareciendo en la línea de tiempo de quienes participaron, con `roomName: null` (la consulta usa `leftJoin`). Las filas de `call_history` (listado "Historial") sí se borran junto con la sala.
