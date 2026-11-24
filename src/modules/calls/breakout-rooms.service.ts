@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   ConflictException,
   ForbiddenException,
   Inject,
@@ -533,13 +532,20 @@ export class BreakoutRoomsService {
   /**
    * Autosalida (y retorno forzado por admin, extensión aditiva documentada
    * en apply-progress Fase 5): 403 BREAKOUT_RETURN_LOCKED si la política es
-   * 'locked' y el solicitante no es admin. No emite token de la principal:
-   * cierra la asignación; el cliente reusa join() (occupant) o el backend
-   * desconecta de la mini sala (admin) para que el cliente afectado lo haga.
+   * 'locked' y el solicitante no es admin -- salvo que se haya auto-unido a
+   * una mini sala con joinPolicy 'open', en cuyo caso 'locked' no debe
+   * atraparla (bugfix: acoplar auto-salida a cómo entró). No emite token de
+   * la principal: cierra la asignación y desconecta de la mini sala vía la
+   * misma señal+removeParticipant que ya usa el retorno forzado por admin.
    *
-   * `targetLivekitIdentity` solo se usa en el camino admin -- deviación
-   * aditiva sobre el snippet abreviado de design.md: el contrato ahí no
-   * modela explícitamente a QUIÉN devuelve el admin cuando no es a sí mismo.
+   * Se branchea por si vino `targetLivekitIdentity`, NO por rol: el cliente
+   * de autorretorno ("Volver") nunca lo envía (ver breakouts.ts), así que su
+   * ausencia siempre significa "devolveme a MÍ", sea quien sea el
+   * solicitante -- incluida una administradora que se auto-unió a su propia
+   * mini sala (bugfix: antes esto SIEMPRE asumía que un admin fuerza a un
+   * tercero y exigía el target con 400, lo cual rompía su propio botón
+   * "Volver" apenas el self-join de admin habilitó que terminara como
+   * ocupante de su propia sala).
    */
   async selfReturn(
     breakoutId: string,
@@ -550,9 +556,9 @@ export class BreakoutRoomsService {
     const breakout = await this.getOpenRowOrThrow(breakoutId, roomId);
     const role = await this.resolveRole(roomId, requester.userId);
 
-    if (role === 'administrador') {
-      if (!targetLivekitIdentity) {
-        throw new BadRequestException('Falta indicar a quién devolver');
+    if (targetLivekitIdentity) {
+      if (role !== 'administrador') {
+        throw new ForbiddenException('Solo un administrador puede devolver a otra persona');
       }
       const occupant = await this.findOpenOccupantByLivekitIdentity(
         breakout.id,
@@ -563,28 +569,12 @@ export class BreakoutRoomsService {
           'Esa persona no tiene una asignación abierta en esta mini sala',
         );
       }
-      await this.markOccupantReturned(occupant.id);
-      const parentCode = parseBreakoutRoomName(breakout.livekitRoomName)?.parentCode;
-      if (parentCode) {
-        // Decisión 2 (design.md "Señal de motivo de remoción"): direccionada
-        // por occupant.sourceIdentity, NO por targetLivekitIdentity (el
-        // identity de la MINI sala). ChatGateway.emitToParticipant resuelve
-        // el socket por participantId === participant.sub, y ese socket
-        // sigue indexado por el identity ESTABLE de la principal (D7) --
-        // el identity nuevo de mini sala nunca corresponde a ningún
-        // participantId de presencia (bug descubierto al diseñar esto, ver
-        // design.md).
-        this.roomEvents.emitBreakoutRemoval({
-          roomCode: parentCode,
-          targetIdentity: occupant.sourceIdentity,
-          reason: 'BREAKOUT_FORCED_RETURN',
-        });
-      }
-      try {
-        await this.client.removeParticipant(breakout.livekitRoomName, targetLivekitIdentity);
-      } catch {
-        this.logger.log('El ocupante ya no estaba conectado a la mini sala');
-      }
+      await this.returnOccupantAndDisconnect(
+        breakout,
+        occupant.id,
+        occupant.sourceIdentity,
+        targetLivekitIdentity,
+      );
       return;
     }
 
@@ -592,13 +582,48 @@ export class BreakoutRoomsService {
     if (!occupant) {
       throw new ForbiddenException('No tenés una asignación abierta en esta mini sala');
     }
-    if (breakout.leavePolicy === 'locked') {
+    const isAdminExempt = role === 'administrador';
+    const isVoluntaryJoinExempt = breakout.joinPolicy === 'open';
+    if (breakout.leavePolicy === 'locked' && !isAdminExempt && !isVoluntaryJoinExempt) {
       throw new ForbiddenException({
         message: BREAKOUT_RETURN_LOCKED_MESSAGE,
         code: BREAKOUT_RETURN_LOCKED_CODE,
       });
     }
-    await this.markOccupantReturned(occupant.id);
+    await this.returnOccupantAndDisconnect(
+      breakout,
+      occupant.id,
+      requester.sub,
+      occupant.livekitIdentity,
+    );
+  }
+
+  // Decisión 2 (design.md "Señal de motivo de remoción"): compartida por el
+  // retorno forzado por admin y por la autosalida -- ambas terminan
+  // cerrando la misma fila de ocupante y desconectando de la misma forma,
+  // solo difieren en quién la autoriza. `sourceIdentity` direcciona la
+  // señal (identity ESTABLE de la principal, D7); `livekitIdentity` es el
+  // identity MINTEADO de la mini sala que hay que desconectar de LiveKit.
+  private async returnOccupantAndDisconnect(
+    breakout: CallBreakoutRoom,
+    occupantId: string,
+    sourceIdentity: string,
+    livekitIdentity: string,
+  ): Promise<void> {
+    await this.markOccupantReturned(occupantId);
+    const parentCode = parseBreakoutRoomName(breakout.livekitRoomName)?.parentCode;
+    if (parentCode) {
+      this.roomEvents.emitBreakoutRemoval({
+        roomCode: parentCode,
+        targetIdentity: sourceIdentity,
+        reason: 'BREAKOUT_FORCED_RETURN',
+      });
+    }
+    try {
+      await this.client.removeParticipant(breakout.livekitRoomName, livekitIdentity);
+    } catch {
+      this.logger.log('El ocupante ya no estaba conectado a la mini sala');
+    }
   }
 
   /** Cierre manual: compare-and-set sobre closed_at + deleteRoom tolerante + cierre de asignaciones. */

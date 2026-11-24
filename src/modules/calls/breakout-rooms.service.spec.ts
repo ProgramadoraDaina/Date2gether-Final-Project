@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MockInstance } from 'vitest';
 import {
-  BadRequestException,
   ConflictException,
   ForbiddenException,
   NotFoundException,
@@ -851,19 +850,27 @@ describe('BreakoutRoomsService', () => {
       );
     });
 
-    it('[5.5.2] ocupante en free_return pide volver por cuenta propia: se cierra la asignación', async () => {
+    it('[5.5.2] ocupante en free_return pide volver por cuenta propia: se cierra la asignación, emite BREAKOUT_FORCED_RETURN y desconecta de la mini sala', async () => {
       const row = buildBreakoutRow({ leavePolicy: 'free_return' });
       db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
-      db.breakoutOccupantsSelectWhere.mockReturnValueOnce(chain([{ id: 'occ-1' }]));
+      db.breakoutOccupantsSelectWhere.mockReturnValueOnce(
+        chain([{ id: 'occ-1', livekitIdentity: 'guest-minted-identity', displayName: 'Invitado' }]),
+      );
 
       await expect(service.selfReturn(row.id, roomId, guest)).resolves.toBeUndefined();
       expect(db.breakoutOccupantsUpdateSet).toHaveBeenCalledWith(
         expect.objectContaining({ returnedAt: expect.any(Date) as unknown as Date }),
       );
+      expect(roomEvents.emitBreakoutRemoval).toHaveBeenCalledWith({
+        roomCode,
+        targetIdentity: guest.sub,
+        reason: 'BREAKOUT_FORCED_RETURN',
+      });
+      expect(removeParticipant).toHaveBeenCalledWith(row.livekitRoomName, 'guest-minted-identity');
     });
 
-    it('[5.5.3] ocupante en locked pide volver por cuenta propia: 403 BREAKOUT_RETURN_LOCKED, sin efecto', async () => {
-      const row = buildBreakoutRow({ leavePolicy: 'locked' });
+    it('[5.5.3] ocupante en locked (joinPolicy admin_only) pide volver por cuenta propia: 403 BREAKOUT_RETURN_LOCKED, sin efecto', async () => {
+      const row = buildBreakoutRow({ leavePolicy: 'locked', joinPolicy: 'admin_only' });
       db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
       db.breakoutOccupantsSelectWhere.mockReturnValueOnce(chain([{ id: 'occ-1' }]));
 
@@ -874,15 +881,77 @@ describe('BreakoutRoomsService', () => {
         code: 'BREAKOUT_RETURN_LOCKED',
       });
       expect(db.breakoutOccupantsUpdateSet).not.toHaveBeenCalled();
+      expect(removeParticipant).not.toHaveBeenCalled();
     });
 
-    it('administrador sin indicar a quién devolver: 400 explícito', async () => {
+    it('[bugfix] ocupante no-admin en locked + joinPolicy open (se auto-unió) pide volver por cuenta propia: se permite, se cierra la asignación', async () => {
+      const row = buildBreakoutRow({ leavePolicy: 'locked', joinPolicy: 'open' });
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
+      db.breakoutOccupantsSelectWhere.mockReturnValueOnce(
+        chain([{ id: 'occ-1', livekitIdentity: 'guest-minted-identity', displayName: 'Invitado' }]),
+      );
+
+      await expect(service.selfReturn(row.id, roomId, guest)).resolves.toBeUndefined();
+      expect(db.breakoutOccupantsUpdateSet).toHaveBeenCalledWith(
+        expect.objectContaining({ returnedAt: expect.any(Date) as unknown as Date }),
+      );
+      expect(roomEvents.emitBreakoutRemoval).toHaveBeenCalledWith({
+        roomCode,
+        targetIdentity: guest.sub,
+        reason: 'BREAKOUT_FORCED_RETURN',
+      });
+      expect(removeParticipant).toHaveBeenCalledWith(row.livekitRoomName, 'guest-minted-identity');
+    });
+
+    // Bugfix (confirmado por product owner, deploy 2026-11-23): el self-join
+    // de admin habilitó por primera vez que una administradora termine como
+    // OCUPANTE de su propia mini sala -- al pedir "Volver" sin
+    // targetLivekitIdentity (así lo hace siempre el self-return del
+    // cliente, ver breakouts.ts), el código previo asumía rol admin =
+    // devolviendo a un tercero y exigía targetLivekitIdentity con 400. El
+    // propio doc comment de la función ya declaraba que admin está exenta
+    // del chequeo de leavePolicy -- esto implementa esa exención también
+    // para el camino de autorretorno.
+    it('[bugfix] administradora que se auto-unió a su propia mini sala puede autodevolverse sin targetLivekitIdentity, en cualquier leavePolicy (locked)', async () => {
+      asAdmin();
+      const row = buildBreakoutRow({ leavePolicy: 'locked' });
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
+      db.breakoutOccupantsSelectWhere.mockReturnValueOnce(
+        chain([{ id: 'occ-admin', livekitIdentity: 'admin-minted-identity', displayName: 'Admin' }]),
+      );
+
+      await expect(service.selfReturn(row.id, roomId, admin)).resolves.toBeUndefined();
+      expect(db.breakoutOccupantsUpdateSet).toHaveBeenCalledWith(
+        expect.objectContaining({ returnedAt: expect.any(Date) as unknown as Date }),
+      );
+      expect(roomEvents.emitBreakoutRemoval).toHaveBeenCalledWith({
+        roomCode,
+        targetIdentity: admin.sub,
+        reason: 'BREAKOUT_FORCED_RETURN',
+      });
+      expect(removeParticipant).toHaveBeenCalledWith(row.livekitRoomName, 'admin-minted-identity');
+    });
+
+    it('[bugfix] administradora que se auto-unió a su propia mini sala puede autodevolverse sin targetLivekitIdentity (free_return, sin regresión)', async () => {
+      asAdmin();
+      const row = buildBreakoutRow({ leavePolicy: 'free_return' });
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
+      db.breakoutOccupantsSelectWhere.mockReturnValueOnce(
+        chain([{ id: 'occ-admin', livekitIdentity: 'admin-minted-identity', displayName: 'Admin' }]),
+      );
+
+      await expect(service.selfReturn(row.id, roomId, admin)).resolves.toBeUndefined();
+      expect(removeParticipant).toHaveBeenCalledWith(row.livekitRoomName, 'admin-minted-identity');
+    });
+
+    it('administrador sin indicar a quién devolver y sin asignación propia abierta: 403 (no 400 -- ya no asume que siempre es un tercero)', async () => {
       asAdmin();
       const row = buildBreakoutRow();
       db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
+      db.breakoutOccupantsSelectWhere.mockReturnValueOnce(chain([]));
 
       await expect(service.selfReturn(row.id, roomId, admin)).rejects.toBeInstanceOf(
-        BadRequestException,
+        ForbiddenException,
       );
     });
   });
