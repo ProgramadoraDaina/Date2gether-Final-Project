@@ -74,6 +74,7 @@ describe('ChatGateway', () => {
       onBreakoutRemoval: vi.fn(),
       onBreakoutBroadcast: vi.fn(),
       onRoomDeleted: vi.fn(),
+      onRoomLinksChanged: vi.fn(),
     } as unknown as RoomEventsService;
 
     const gateway = new ChatGateway(

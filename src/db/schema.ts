@@ -144,6 +144,21 @@ export const roomNotes = pgTable('room_notes', {
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
+export const roomLinks = pgTable(
+  'room_links',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    roomId: uuid('room_id')
+      .notNull()
+      .references(() => rooms.id, { onDelete: 'cascade' }),
+    url: varchar('url', { length: 2048 }).notNull(),
+    title: varchar('title', { length: 120 }),
+    addedByName: varchar('added_by_name', { length: 100 }).notNull(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [unique('room_links_room_url_unique').on(table.roomId, table.url)],
+);
+
 // El rol es por sala: la misma persona puede ser admin en una y participante en otra.
 export const roomRoleEnum = pgEnum('room_role', ['administrador', 'colaborador', 'participante']);
 
@@ -400,6 +415,7 @@ export type NewRoom = typeof rooms.$inferInsert;
 export type Message = typeof messages.$inferSelect;
 export type NewMessage = typeof messages.$inferInsert;
 export type RoomNote = typeof roomNotes.$inferSelect;
+export type RoomLink = typeof roomLinks.$inferSelect;
 export type RoomMember = typeof roomMembers.$inferSelect;
 export type NewRoomMember = typeof roomMembers.$inferInsert;
 export type RoomRole = (typeof roomRoleEnum.enumValues)[number];
