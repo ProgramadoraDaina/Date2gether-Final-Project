@@ -1,40 +1,204 @@
 .panel {
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --surface-hover: #334155;
+
+  --text: #f8fafc;
+  --text-muted: #94a3b8;
+
+  --primary: #3b82f6;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+
+  --border: #334155;
+
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px;
+  gap: 16px;
+
+  padding: 20px;
+
+  background: var(--bg);
+  color: var(--text);
+
+  border-radius: 20px;
 }
 
 .error {
-  color: #e53935;
+  color: var(--danger);
   margin: 0;
-}
-
-.createRow {
-  display: flex;
-  gap: 8px;
-}
-
-.roomList {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.roomRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.roomLabel {
-  font-weight: 600;
 }
 
 .empty {
   opacity: 0.7;
+}
+
+.principalPane {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.principalLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.principalList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+
+  margin-top: 12px;
+
+  list-style: none;
+}
+
+.principalList li {
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.9rem;
+}
+
+.createCard {
+  display: flex;
+  gap: 12px;
+
+  padding: 16px;
+
+  background: var(--surface);
+  border-radius: 16px;
+}
+
+.createButton {
+  background: var(--primary);
+  color: white;
+  font-weight: 700;
+}
+
+.roomList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+
+  list-style: none;
+}
+
+.roomRow {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 16px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+
+  transition: 0.25s;
+}
+
+.roomRow:hover {
+  transform: translateY(-2px);
+  border-color: var(--primary);
+}
+
+.roomHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.roomLabel {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.roomCounter {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.occupantList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+
+  list-style: none;
+}
+
+.occupantList li {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.policyBadge {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+}
+
+.open {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--success);
+}
+
+.locked {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--danger);
+}
+
+.transferArea {
+  display: flex;
+  gap: 8px;
+}
+
+.select {
+  flex: 1;
+
+  background: var(--bg);
+  color: white;
+
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.button {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: 0.2s;
+}
+
+.button:hover {
+  filter: brightness(1.1);
+}
+
+.primary {
+  background: var(--primary);
+  color: white;
+}
+
+.success {
+  background: var(--success);
+  color: white;
+}
+
+.danger {
+  background: var(--danger);
+  color: white;
 }

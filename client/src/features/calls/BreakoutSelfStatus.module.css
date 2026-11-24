@@ -1,28 +1,40 @@
 .banner {
   position: absolute;
-  top: 12px;
+  top: 16px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 14px;
+  gap: 12px;
+  padding: 10px 16px;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(12px);
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   color: #fff;
-  font-size: 0.9rem;
-  z-index: 5;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+  z-index: 100;
 }
 
 .label {
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .returnButton {
+  border: none;
+  background: #3b82f6;
+  color: white;
+  padding: 6px 14px;
   border-radius: 999px;
-  padding: 4px 12px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.returnButton:hover {
+  background: #2563eb;
 }
 
 .lockedNotice {
-  opacity: 0.85;
+  color: #fbbf24;
+  font-size: 0.85rem;
 }

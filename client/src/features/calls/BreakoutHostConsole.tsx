@@ -200,7 +200,7 @@ export function BreakoutHostConsole({
           ))}
         </ul>
       </div>
-      <div className={styles.createRow}>
+      <div className={styles.createCard}>
         <input
           type="number"
           min={1}
@@ -209,7 +209,7 @@ export function BreakoutHostConsole({
           value={autoCloseInMinutes}
           onChange={(event) => setAutoCloseInMinutes(event.target.value)}
         />
-        <button type="button" onClick={handleCreate}>
+        <button type="button" className={styles.createButton} onClick={handleCreate}>
           {t('Crear mini sala')}
         </button>
       </div>
@@ -217,60 +217,96 @@ export function BreakoutHostConsole({
         <p className={styles.empty}>{t('Todavía no hay mini salas abiertas.')}</p>
       ) : (
         <>
-          <button type="button" onClick={handleReturnAll}>
+          <button
+            type="button"
+            className={`${styles.button} ${styles.primary}`}
+            onClick={handleReturnAll}
+          >
             {t('Devolver a todos')}
           </button>
           <ul className={styles.roomList}>
             {rooms.map((room) => (
               <li key={room.id} className={styles.roomRow}>
-                <span className={styles.roomLabel}>{room.label}</span>
+                <div className={styles.roomHeader}>
+                  <span className={styles.roomLabel}>{room.label}</span>
+                  <span className={styles.roomCounter}>
+                    {room.occupants.length === 1
+                      ? t('1 participante')
+                      : `${room.occupants.length} ${t('participantes')}`}
+                  </span>
+                </div>
                 <ul className={styles.occupantList}>
                   {room.occupants.map((occupant) => (
                     <li key={occupant.livekitIdentity}>{occupant.displayName}</li>
                   ))}
                 </ul>
-                <button type="button" onClick={() => handleToggleLeavePolicy(room)}>
+                <button
+                  type="button"
+                  className={`${styles.policyBadge} ${
+                    room.leavePolicy === 'locked' ? styles.locked : styles.open
+                  }`}
+                  onClick={() => handleToggleLeavePolicy(room)}
+                >
                   {room.leavePolicy === 'locked'
                     ? t('Permitir volver libremente')
                     : t('Bloquear retorno')}
                 </button>
-                <button type="button" onClick={() => handleToggleJoinPolicy(room)}>
+                <button
+                  type="button"
+                  className={`${styles.policyBadge} ${
+                    room.joinPolicy === 'open' ? styles.open : styles.locked
+                  }`}
+                  onClick={() => handleToggleJoinPolicy(room)}
+                >
                   {room.joinPolicy === 'open'
                     ? t('Requerir administrador para ingresar')
                     : t('Permitir auto-ingreso')}
                 </button>
-                <select
-                  aria-label={`${t('Trasladar a')} ${room.label}`}
-                  value={selectedParticipant}
-                  onChange={(event) => setSelectedParticipant(event.target.value)}
-                >
-                  <option value="">{t('Elegí a quién trasladar')}</option>
-                  {transferCandidates.map((participant) => (
-                    <option key={participant.livekitIdentity} value={participant.livekitIdentity}>
-                      {participant.displayName}
-                    </option>
-                  ))}
-                </select>
+                <div className={styles.transferArea}>
+                  <select
+                    className={styles.select}
+                    aria-label={`${t('Trasladar a')} ${room.label}`}
+                    value={selectedParticipant}
+                    onChange={(event) => setSelectedParticipant(event.target.value)}
+                  >
+                    <option value="">{t('Elegí a quién trasladar')}</option>
+                    {transferCandidates.map((participant) => (
+                      <option key={participant.livekitIdentity} value={participant.livekitIdentity}>
+                        {participant.displayName}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className={`${styles.button} ${styles.primary}`}
+                    onClick={() => handleMoveIn(room.id, selectedParticipant)}
+                    disabled={!selectedParticipant}
+                  >
+                    {t('Trasladar')}
+                  </button>
+                </div>
                 <button
                   type="button"
-                  onClick={() => handleMoveIn(room.id, selectedParticipant)}
-                  disabled={!selectedParticipant}
-                >
-                  {t('Trasladar')}
-                </button>
-                <button
-                  type="button"
+                  className={`${styles.button} ${styles.success}`}
                   onClick={() => handleMoveIn(room.id, currentParticipantId)}
                 >
                   {t('Trasladarme acá')}
                 </button>
-                <button type="button" onClick={() => handleClose(room.id)}>
+                <button
+                  type="button"
+                  className={`${styles.button} ${styles.danger}`}
+                  onClick={() => handleClose(room.id)}
+                >
                   {t('Cerrar')}
                 </button>
               </li>
             ))}
           </ul>
-          <button type="button" onClick={handleCloseAll}>
+          <button
+            type="button"
+            className={`${styles.button} ${styles.danger}`}
+            onClick={handleCloseAll}
+          >
             {t('Cerrar todas')}
           </button>
         </>
