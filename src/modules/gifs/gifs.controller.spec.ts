@@ -1,4 +1,4 @@
-import { describe, expect, it, jest } from '@jest/globals';
+import { describe, expect, it, vi } from 'vitest';
 import { RoomAccessGuard } from '../auth/guards/room-access.guard';
 import { GifsController } from './gifs.controller';
 import type { GifsService } from './gifs.service';
@@ -15,7 +15,7 @@ describe('GifsController', () => {
 
   it('delega la búsqueda en GifsService con el texto y el offset, para una sala válida y vinculada', async () => {
     const page = { results: [], nextOffset: null };
-    const gifsService = { search: jest.fn<GifsService['search']>().mockResolvedValue(page) };
+    const gifsService = { search: vi.fn<GifsService['search']>().mockResolvedValue(page) };
     const controller = new GifsController(gifsService as unknown as GifsService);
 
     const result = await controller.search({ q: 'gato', offset: 24 });

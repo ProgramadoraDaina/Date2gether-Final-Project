@@ -33,23 +33,38 @@ export function isLoggedIn(): boolean {
   return getAccessToken() !== null;
 }
 
-// El evento "storage" solo llega a las OTRAS pestañas: así se detecta un logout hecho en otra.
+// Listeners de la pestaña actual: el evento "storage" no se dispara en la pestaña que escribe.
+const authListeners = new Set<() => void>();
+
+function notifyAuthChange(): void {
+  authListeners.forEach((listener) => listener());
+}
+
+// Avisa de cambios de sesión en esta pestaña (login, refresh fallido, logout) y,
+// vía el evento "storage" (que solo llega a las OTRAS pestañas), en las demás.
 export function onAuthChange(callback: () => void): () => void {
   function handleStorage(e: StorageEvent) {
-    if (e.key === ACCESS_TOKEN_KEY || e.key === REFRESH_TOKEN_KEY) callback();
+    // key === null significa que otra pestaña llamó a localStorage.clear().
+    if (e.key === null || e.key === ACCESS_TOKEN_KEY || e.key === REFRESH_TOKEN_KEY) callback();
   }
   window.addEventListener('storage', handleStorage);
-  return () => window.removeEventListener('storage', handleStorage);
+  authListeners.add(callback);
+  return () => {
+    window.removeEventListener('storage', handleStorage);
+    authListeners.delete(callback);
+  };
 }
 
 function setTokens(tokens: AuthTokens): void {
   localStorage.setItem(ACCESS_TOKEN_KEY, tokens.accessToken);
   localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refreshToken);
+  notifyAuthChange();
 }
 
 export function clearTokens(): void {
   localStorage.removeItem(ACCESS_TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
+  notifyAuthChange();
 }
 
 // Variante de extractErrorMessage que además devuelve `code`, si el backend

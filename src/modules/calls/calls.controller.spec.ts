@@ -1,4 +1,4 @@
-import { describe, expect, it, jest } from '@jest/globals';
+import { describe, expect, it, vi } from 'vitest';
 import type { ParticipantRequest } from '../auth/guards/room-access.guard';
 import { CallsController } from './calls.controller';
 import type { CallsService } from './calls.service';
@@ -11,7 +11,7 @@ describe('CallsController', () => {
       roomName: 'abc-defg-hij',
       participantLimit: 6,
     };
-    const service = { join: jest.fn<CallsService['join']>().mockResolvedValue(session) };
+    const service = { join: vi.fn<CallsService['join']>().mockResolvedValue(session) };
     const controller = new CallsController(service as unknown as CallsService);
     const request = {
       participant: {
@@ -33,7 +33,7 @@ describe('CallsController', () => {
 
   it('reenvía el reporte de mute/unmute al servicio con la identity del pase verificado', async () => {
     const service = {
-      reportTrackState: jest.fn<CallsService['reportTrackState']>().mockResolvedValue(undefined),
+      reportTrackState: vi.fn<CallsService['reportTrackState']>().mockResolvedValue(undefined),
     };
     const controller = new CallsController(service as unknown as CallsService);
     const request = {

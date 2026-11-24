@@ -1,11 +1,11 @@
 'use client';
 
 import { useTranslation } from '@/features/translation/useTranslation';
-import type { RoomEventState } from './useRoomEvents';
+import type { RouletteEventState } from './useRoomEvents';
 import styles from './EventTicker.module.css';
 
 interface EventTickerProps {
-  state: RoomEventState;
+  state: RouletteEventState;
   onClose(): void;
 }
 

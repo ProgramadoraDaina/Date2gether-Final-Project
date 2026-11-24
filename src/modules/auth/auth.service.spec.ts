@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from '@jest/globals';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { ConfigService } from '@nestjs/config';
 import { ConflictException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -6,6 +6,7 @@ import * as bcrypt from 'bcrypt';
 import type { DrizzleDb } from '../../db/drizzle.module';
 import type { RefreshToken, User } from '../../db/schema';
 import { chain, createFakeDb, type FakeDb } from '../../test-support/fake-drizzle';
+import type { UserAvatar } from './avatar';
 import { AuthService } from './auth.service';
 
 const CONFIG = {
@@ -220,7 +221,7 @@ describe('AuthService', () => {
 
   describe('updateAvatar', () => {
     it('guarda el avatar del usuario y lo devuelve en el perfil público', async () => {
-      const avatar = { head: ['cap'] as const, face: ['mustache'] as const, sticker: true };
+      const avatar: UserAvatar = { head: ['cap'], face: ['mustache'], sticker: true };
       const updateChain = chain([buildUser({ avatar })]);
       db.update.mockReturnValueOnce(updateChain);
 

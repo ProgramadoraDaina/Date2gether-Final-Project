@@ -47,6 +47,46 @@ describe('createRoom', () => {
   });
 });
 
+describe('renameRoom', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    localStorage.setItem(ACCESS_TOKEN_KEY, 'fake-access-token');
+    global.fetch = jest.fn() as unknown as typeof fetch;
+  });
+
+  it('envía PATCH autenticado con el nuevo nombre', async () => {
+    const fetchMock = global.fetch as jest.Mock<typeof fetch>;
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    const { renameRoom } = await import('./api');
+    await renameRoom('abc-defg-hij', 'Grupo de los jueves');
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('http://localhost:3001/rooms/abc-defg-hij/name');
+    expect(init).toMatchObject({
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer fake-access-token',
+      },
+    });
+    expect(JSON.parse(init!.body as string)).toEqual({ name: 'Grupo de los jueves' });
+  });
+
+  it('lanza ApiError si el backend rechaza el renombre', async () => {
+    const fetchMock = global.fetch as jest.Mock<typeof fetch>;
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ message: 'Solo las salas permanentes se pueden renombrar' }), {
+        status: 403,
+      }),
+    );
+
+    const { renameRoom, ApiError } = await import('./api');
+
+    await expect(renameRoom('abc-defg-hij', 'x')).rejects.toThrow(ApiError);
+  });
+});
+
 describe('notas compartidas', () => {
   beforeEach(() => {
     global.fetch = jest.fn() as unknown as typeof fetch;

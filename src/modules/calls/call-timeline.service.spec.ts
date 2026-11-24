@@ -1,4 +1,4 @@
-import { describe, expect, it, jest } from '@jest/globals';
+import { describe, expect, it, vi } from 'vitest';
 import { NotFoundException } from '@nestjs/common';
 import type { DrizzleDb } from '../../db/drizzle.module';
 import { chain } from '../../test-support/fake-drizzle';
@@ -7,7 +7,7 @@ import { CallTimelineService } from './call-timeline.service';
 describe('CallTimelineService', () => {
   describe('listSessions', () => {
     it('devuelve solo las sesiones donde participó el solicitante, con roomName y participantCount', async () => {
-      const select = jest
+      const select = vi
         .fn()
         // 1) sesiones donde el solicitante aparece como participante
         .mockReturnValueOnce(chain([{ sessionId: 'session-1' }]))
@@ -50,7 +50,7 @@ describe('CallTimelineService', () => {
     });
 
     it('no consulta sesiones si el solicitante no participó de ninguna (corta antes)', async () => {
-      const select = jest.fn().mockReturnValueOnce(chain([]));
+      const select = vi.fn().mockReturnValueOnce(chain([]));
       const db = { select } as unknown as DrizzleDb;
       const service = new CallTimelineService(db);
 
@@ -98,7 +98,7 @@ describe('CallTimelineService', () => {
         startedAt: new Date('2026-01-01T10:00:00Z'),
         endedAt: new Date('2026-01-01T10:30:00Z'),
       };
-      const select = jest
+      const select = vi
         .fn()
         .mockReturnValueOnce(chain(participantRows))
         .mockReturnValueOnce(chain([sessionHeaderRow]));
@@ -126,7 +126,7 @@ describe('CallTimelineService', () => {
           nameColor: null,
         },
       ];
-      const select = jest.fn().mockReturnValueOnce(chain(participantRows));
+      const select = vi.fn().mockReturnValueOnce(chain(participantRows));
       const db = { select } as unknown as DrizzleDb;
       const service = new CallTimelineService(db);
 
@@ -137,7 +137,7 @@ describe('CallTimelineService', () => {
     });
 
     it('un sessionId inexistente recibe el mismo 404 que un usuario ajeno (no filtra existencia)', async () => {
-      const select = jest.fn().mockReturnValueOnce(chain([]));
+      const select = vi.fn().mockReturnValueOnce(chain([]));
       const db = { select } as unknown as DrizzleDb;
       const service = new CallTimelineService(db);
 

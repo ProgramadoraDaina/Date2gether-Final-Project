@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Mock } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RoomAccessGuard } from '../auth/guards/room-access.guard';
@@ -9,18 +10,20 @@ import { RoomsService } from './rooms.service';
 describe('RoomsController', () => {
   let controller: RoomsController;
   let roomsService: {
-    createRoom: jest.Mock<(...args: unknown[]) => Promise<unknown>>;
-    getByCodeOrThrow: jest.Mock<(...args: unknown[]) => Promise<unknown>>;
-    listOwnedRooms: jest.Mock<(...args: unknown[]) => Promise<unknown>>;
-    setMemberRole: jest.Mock<(...args: unknown[]) => Promise<unknown>>;
+    createRoom: Mock<(...args: unknown[]) => Promise<unknown>>;
+    getByCodeOrThrow: Mock<(...args: unknown[]) => Promise<unknown>>;
+    listOwnedRooms: Mock<(...args: unknown[]) => Promise<unknown>>;
+    renameRoom: Mock<(...args: unknown[]) => Promise<unknown>>;
+    setMemberRole: Mock<(...args: unknown[]) => Promise<unknown>>;
   };
 
   beforeEach(async () => {
     roomsService = {
-      createRoom: jest.fn(),
-      getByCodeOrThrow: jest.fn(),
-      listOwnedRooms: jest.fn(),
-      setMemberRole: jest.fn(),
+      createRoom: vi.fn(),
+      getByCodeOrThrow: vi.fn(),
+      listOwnedRooms: vi.fn(),
+      renameRoom: vi.fn(),
+      setMemberRole: vi.fn(),
     };
 
     const module = await Test.createTestingModule({
@@ -122,5 +125,23 @@ describe('RoomsController', () => {
 
     expect(result).toEqual(fakeRoom);
     expect(roomsService.getByCodeOrThrow).toHaveBeenCalledWith('abc-defg-hij');
+  });
+
+  it('requiere rol administrador para renombrar una sala', () => {
+    const handler = Object.getOwnPropertyDescriptor(RoomsController.prototype, 'renameRoom')!
+      .value as object;
+    expect(Reflect.getMetadata('__guards__', handler) ?? []).toEqual(
+      expect.arrayContaining([expect.anything()]),
+    );
+    expect(Reflect.getMetadata('roomRoles', handler)).toEqual(['administrador']);
+  });
+
+  it('delega el renombre al RoomsService con el código y el nombre del DTO', async () => {
+    roomsService.renameRoom.mockResolvedValue(undefined);
+
+    const result = await controller.renameRoom('abc-defg-hij', { name: 'Grupo de los jueves' });
+
+    expect(result).toEqual({ message: 'Nombre actualizado' });
+    expect(roomsService.renameRoom).toHaveBeenCalledWith('abc-defg-hij', 'Grupo de los jueves');
   });
 });

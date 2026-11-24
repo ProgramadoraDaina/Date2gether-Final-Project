@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { describe, expect, it, jest } from '@jest/globals';
+import { describe, expect, it, vi } from 'vitest';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import type { ParticipantRequest } from '../auth/guards/room-access.guard';
@@ -14,7 +14,7 @@ const request = {
 
 describe('TranscriptsController', () => {
   it('guarda la frase en la sala que resolvió el guard, con el nombre del pase y no con uno del body', async () => {
-    const service = { save: jest.fn<TranscriptsService['save']>() };
+    const service = { save: vi.fn<TranscriptsService['save']>() };
     const controller = new TranscriptsController(service as unknown as TranscriptsService);
     const body = Object.assign(new SaveTranscriptLineDto(), {
       callSid: 'RM_abc',
@@ -28,7 +28,7 @@ describe('TranscriptsController', () => {
   });
 
   it('devuelve el acta de la llamada pedida sin cachear', async () => {
-    const service = { getCall: jest.fn<TranscriptsService['getCall']>().mockResolvedValue([]) };
+    const service = { getCall: vi.fn<TranscriptsService['getCall']>().mockResolvedValue([]) };
     const controller = new TranscriptsController(service as unknown as TranscriptsService);
 
     await expect(

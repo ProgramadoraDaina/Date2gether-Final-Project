@@ -1,4 +1,4 @@
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it } from 'vitest';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ROOM_ROLES_KEY } from '../rooms/decorators/room-roles.decorator';
 import { RoomRolesGuard } from '../rooms/guards/room-roles.guard';

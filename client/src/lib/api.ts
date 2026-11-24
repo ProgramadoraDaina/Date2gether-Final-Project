@@ -185,6 +185,14 @@ export async function updateMemberRole(
   if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudo cambiar el rol'));
 }
 
+export async function renameRoom(code: string, name: string): Promise<void> {
+  const res = await authFetch(`/rooms/${code}/name`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudo renombrar la sala'));
+}
+
 export interface CallHistoryEntry {
   roomId: string;
   roomCode: string;

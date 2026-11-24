@@ -1,4 +1,4 @@
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it } from 'vitest';
 import { BadRequestException } from '@nestjs/common';
 import { isUniqueViolation, kindOf } from './room-emojis.service';
 

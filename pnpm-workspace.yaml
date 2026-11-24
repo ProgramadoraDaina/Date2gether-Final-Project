@@ -1,8 +1,10 @@
 packages:
   - client
+  - packages/shared
 
 allowBuilds:
   '@parcel/watcher': true
+  '@swc/core': false
   bcrypt: true
   core-js: false
   esbuild: false

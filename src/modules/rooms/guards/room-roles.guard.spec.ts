@@ -1,4 +1,4 @@
-import { describe, expect, it, jest } from '@jest/globals';
+import { describe, expect, it, vi } from 'vitest';
 import { ForbiddenException, type ExecutionContext } from '@nestjs/common';
 import type { Reflector } from '@nestjs/core';
 import type { RoomRole } from '../../../db/schema';
@@ -18,9 +18,9 @@ const request = {
 
 function buildGuard(memberRole: RoomRole | undefined, allowedRoles: RoomRole[] | undefined) {
   const roomsService = {
-    getMemberRole: jest.fn<RoomsService['getMemberRole']>().mockResolvedValue(memberRole),
+    getMemberRole: vi.fn<RoomsService['getMemberRole']>().mockResolvedValue(memberRole),
   };
-  const reflector = { get: jest.fn().mockReturnValue(allowedRoles) } as unknown as Reflector;
+  const reflector = { get: vi.fn().mockReturnValue(allowedRoles) } as unknown as Reflector;
   return new RoomRolesGuard(roomsService as unknown as RoomsService, reflector);
 }
 

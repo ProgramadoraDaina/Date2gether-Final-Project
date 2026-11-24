@@ -14,6 +14,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RoomRoles } from './decorators/room-roles.decorator';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
+import { UpdateRoomNameDto } from './dto/update-room-name.dto';
 import { RoomRolesGuard } from './guards/room-roles.guard';
 import { RoomsService } from './rooms.service';
 import { RoomAccessGuard } from '../auth/guards/room-access.guard';
@@ -80,5 +81,13 @@ export class RoomsController {
   ) {
     await this.roomsService.setMemberRole(code, userId, dto.role, user.sub);
     return { message: 'Rol actualizado' };
+  }
+
+  @UseGuards(JwtAuthGuard, RoomRolesGuard)
+  @RoomRoles('administrador')
+  @Patch(':code/name')
+  async renameRoom(@Param('code') code: string, @Body() dto: UpdateRoomNameDto) {
+    await this.roomsService.renameRoom(code, dto.name);
+    return { message: 'Nombre actualizado' };
   }
 }

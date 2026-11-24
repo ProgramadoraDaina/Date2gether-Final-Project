@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it, jest } from '@jest/globals';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { ConfigService } from '@nestjs/config';
 import { ForbiddenException } from '@nestjs/common';
 import { eq, inArray } from 'drizzle-orm';
@@ -34,7 +34,7 @@ describe('Herencia de admin durante una llamada (real Postgres)', () => {
     ctx = connectTestDb();
   });
   afterEach(async () => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
     if (eventIds.length)
       await ctx.db.delete(callEvents).where(inArray(callEvents.id, eventIds.splice(0)));
     if (roomIds.length) await ctx.db.delete(rooms).where(inArray(rooms.id, roomIds.splice(0)));
@@ -75,8 +75,8 @@ describe('Herencia de admin durante una llamada (real Postgres)', () => {
 
   it('solo un admin promovido sostiene el ingreso a la llamada sin el creador y conserva el snapshot histórico', async () => {
     const { room, heir, identity, roomsService, resolver, creatorId } = await fixture();
-    jest.spyOn(RoomServiceClient.prototype, 'createRoom').mockResolvedValue({} as never);
-    jest
+    vi.spyOn(RoomServiceClient.prototype, 'createRoom').mockResolvedValue({} as never);
+    vi
       .spyOn(RoomServiceClient.prototype, 'listParticipants')
       .mockResolvedValue([{ identity } as ParticipantInfo]);
     const calls = new CallsService(roomsService, config, ctx.db, resolver);
@@ -100,7 +100,7 @@ describe('Herencia de admin durante una llamada (real Postgres)', () => {
     expect(recorded.roleAtIssue).toBe('participante');
 
     const close = new CallSessionCloseService(config, ctx.db);
-    const schedule = jest.spyOn(global, 'setTimeout');
+    const schedule = vi.spyOn(global, 'setTimeout');
     try {
       await close.onAdminLeft('RM_role_inheritance', room.code);
       expect(schedule.mock.calls.some(([, delay]) => delay === 15_000)).toBe(false);
@@ -114,7 +114,7 @@ describe('Herencia de admin durante una llamada (real Postgres)', () => {
     await roomsService.setMemberRole(room.code, heir.id, 'administrador', creatorId);
     const id = randomUUID();
     eventIds.push(id);
-    jest.spyOn(WebhookReceiver.prototype, 'receive').mockResolvedValue({
+    vi.spyOn(WebhookReceiver.prototype, 'receive').mockResolvedValue({
       id,
       event: 'participant_left',
       createdAt: BigInt(Math.floor(Date.now() / 1000)),
@@ -122,7 +122,7 @@ describe('Herencia de admin durante una llamada (real Postgres)', () => {
       participant: { identity },
     } as WebhookEvent);
     const close = {
-      onAdminLeft: jest.fn<CallSessionCloseService['onAdminLeft']>().mockResolvedValue(undefined),
+      onAdminLeft: vi.fn<CallSessionCloseService['onAdminLeft']>().mockResolvedValue(undefined),
     };
     const webhook = new CallsWebhookService(
       config,

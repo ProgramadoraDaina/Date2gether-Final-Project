@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MockInstance } from 'vitest';
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { WebhookReceiver, type WebhookEvent } from 'livekit-server-sdk';
@@ -16,8 +17,8 @@ import { CallsWebhookService } from './calls-webhook.service';
 
 function createCloseServiceMock() {
   return {
-    onAdminLeft: jest.fn<CallSessionCloseService['onAdminLeft']>().mockResolvedValue(undefined),
-    cancelPending: jest.fn<CallSessionCloseService['cancelPending']>(),
+    onAdminLeft: vi.fn<CallSessionCloseService['onAdminLeft']>().mockResolvedValue(undefined),
+    cancelPending: vi.fn<CallSessionCloseService['cancelPending']>(),
   };
 }
 
@@ -40,29 +41,29 @@ function buildEvent(overrides: Record<string, unknown> = {}): WebhookEvent {
 }
 
 function createDbMock() {
-  const returning = jest
+  const returning = vi
     .fn<(cols: unknown) => Promise<{ id: string }[]>>()
     .mockResolvedValue([{ id: 'evt-1' }]);
-  const onConflictDoNothing = jest.fn().mockReturnValue({ returning });
-  const values = jest.fn().mockReturnValue({ onConflictDoNothing });
-  const insert = jest.fn().mockReturnValue({ values });
+  const onConflictDoNothing = vi.fn().mockReturnValue({ returning });
+  const values = vi.fn().mockReturnValue({ onConflictDoNothing });
+  const insert = vi.fn().mockReturnValue({ values });
   // El rol actual de roomMembers se cruza con la identidad que salió.
   // — onParticipantLeft() resolviendo si el identity que se fue era admin.
   // Default: sin fila (no se encuentra ninguna correlación), así que el
   // dispatch de participant_left no llama a CallSessionCloseService salvo
   // que el test particular configure lo contrario.
-  const select = jest.fn().mockReturnValue(chain([] as { role: string | null }[]));
+  const select = vi.fn().mockReturnValue(chain([] as { role: string | null }[]));
   // Default genérico para cualquier dispatch que caiga en una transacción
   // (p. ej. room_finished) sin que el test particular configure su propio
   // tx: selects vacíos, compare-and-set sin filas -> no materializa nada,
   // no revienta.
-  const transaction = jest
+  const transaction = vi
     .fn<(cb: (tx: unknown) => unknown) => Promise<unknown>>()
     .mockImplementation((cb) =>
       cb({
-        select: jest.fn().mockReturnValue(chain([])),
-        insert: jest.fn().mockReturnValue(chain(undefined)),
-        update: jest.fn().mockReturnValue(chain([])),
+        select: vi.fn().mockReturnValue(chain([])),
+        insert: vi.fn().mockReturnValue(chain(undefined)),
+        update: vi.fn().mockReturnValue(chain([])),
       }),
     );
   return { insert, values, onConflictDoNothing, returning, select, transaction };
@@ -89,38 +90,38 @@ function createMaterializationTxMock(opts: {
   const identities = opts.identities ?? [];
   const claimed = opts.claimed ?? [{ id: 'session-1' }];
 
-  const participantsInsertValues = jest
+  const participantsInsertValues = vi
     .fn<(values: unknown) => Promise<void>>()
     .mockResolvedValue(undefined);
-  const sessionInsertOnConflictDoNothing = jest
+  const sessionInsertOnConflictDoNothing = vi
     .fn<(config: unknown) => Promise<void>>()
     .mockResolvedValue(undefined);
-  const sessionInsertValues = jest
+  const sessionInsertValues = vi
     .fn()
     .mockReturnValue({ onConflictDoNothing: sessionInsertOnConflictDoNothing });
-  const updateReturning = jest
+  const updateReturning = vi
     .fn<(cols: unknown) => Promise<{ id: string }[]>>()
     .mockResolvedValue(claimed);
-  const updateWhere = jest.fn().mockReturnValue({ returning: updateReturning });
-  const updateSet = jest.fn().mockReturnValue({ where: updateWhere });
+  const updateWhere = vi.fn().mockReturnValue({ returning: updateReturning });
+  const updateSet = vi.fn().mockReturnValue({ where: updateWhere });
 
-  const select = jest.fn().mockImplementation(() => ({
-    from: jest.fn().mockImplementation((table: unknown) => {
+  const select = vi.fn().mockImplementation(() => ({
+    from: vi.fn().mockImplementation((table: unknown) => {
       if (table === callEvents) return chain(sessionEvents);
       if (table === callParticipantIdentities) return chain(identities);
       return chain([]);
     }),
   }));
 
-  const insert = jest.fn().mockImplementation((table: unknown) => {
+  const insert = vi.fn().mockImplementation((table: unknown) => {
     if (table === callSessions) return { values: sessionInsertValues };
     if (table === callSessionParticipants) return { values: participantsInsertValues };
-    return { values: jest.fn() };
+    return { values: vi.fn() };
   });
 
-  const update = jest.fn().mockImplementation((table: unknown) => {
+  const update = vi.fn().mockImplementation((table: unknown) => {
     if (table === callSessions) return { set: updateSet };
-    return { set: jest.fn() };
+    return { set: vi.fn() };
   });
 
   return {
@@ -140,7 +141,7 @@ describe('CallsWebhookService', () => {
   let db: ReturnType<typeof createDbMock>;
   let closeService: ReturnType<typeof createCloseServiceMock>;
   let service: CallsWebhookService;
-  let receive: jest.SpiedFunction<WebhookReceiver['receive']>;
+  let receive: MockInstance<WebhookReceiver['receive']>;
 
   beforeEach(() => {
     db = createDbMock();
@@ -150,11 +151,11 @@ describe('CallsWebhookService', () => {
       db as unknown as DrizzleDb,
       closeService as unknown as CallSessionCloseService,
     );
-    receive = jest.spyOn(WebhookReceiver.prototype, 'receive');
+    receive = vi.spyOn(WebhookReceiver.prototype, 'receive');
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('rechaza con 400 sin tocar la base ni la verificación de firma si falta rawBody', async () => {
@@ -264,7 +265,7 @@ describe('CallsWebhookService: materialización en room_finished', () => {
   let db: ReturnType<typeof createDbMock>;
   let closeService: ReturnType<typeof createCloseServiceMock>;
   let service: CallsWebhookService;
-  let receive: jest.SpiedFunction<WebhookReceiver['receive']>;
+  let receive: MockInstance<WebhookReceiver['receive']>;
 
   beforeEach(() => {
     db = createDbMock();
@@ -274,11 +275,11 @@ describe('CallsWebhookService: materialización en room_finished', () => {
       db as unknown as DrizzleDb,
       closeService as unknown as CallSessionCloseService,
     );
-    receive = jest.spyOn(WebhookReceiver.prototype, 'receive');
+    receive = vi.spyOn(WebhookReceiver.prototype, 'receive');
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('con materialized_at IS NULL: agrega el log crudo y materializa call_session_participants en una sola transacción (spec timeline/materialización)', async () => {
@@ -414,7 +415,7 @@ describe('CallsWebhookService: cierre forzado en participant_left (tasks.md 6.10
   let db: ReturnType<typeof createDbMock>;
   let closeService: ReturnType<typeof createCloseServiceMock>;
   let service: CallsWebhookService;
-  let receive: jest.SpiedFunction<WebhookReceiver['receive']>;
+  let receive: MockInstance<WebhookReceiver['receive']>;
 
   beforeEach(() => {
     db = createDbMock();
@@ -424,11 +425,11 @@ describe('CallsWebhookService: cierre forzado en participant_left (tasks.md 6.10
       db as unknown as DrizzleDb,
       closeService as unknown as CallSessionCloseService,
     );
-    receive = jest.spyOn(WebhookReceiver.prototype, 'receive');
+    receive = vi.spyOn(WebhookReceiver.prototype, 'receive');
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('participant_left de un admin actual, incluso promovido durante la llamada, invoca el cierre', async () => {
