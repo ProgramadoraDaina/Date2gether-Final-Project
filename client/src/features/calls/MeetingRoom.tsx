@@ -53,6 +53,8 @@ import { useCallSettingsStore } from './settings/store';
 import { CaptionsButton, CaptionsOverlay } from './transcription/Captions';
 import { TranscriptionProvider } from './transcription/TranscriptionProvider';
 
+const TRANSITION_TIMEOUT_MS = 12_000;
+
 const options: RoomOptions = {
   adaptiveStream: true,
   dynacast: true,
@@ -587,6 +589,15 @@ export default function MeetingRoom({
   useEffect(() => {
     if (enteringId && enteringLabel) setTransition({ kind: 'enter', label: enteringLabel });
   }, [enteringId, enteringLabel]);
+  // Si un traslado falla a mitad de camino, la pantalla no puede quedar tapando la llamada.
+  useEffect(() => {
+    if (!transition) return;
+    const timer = setTimeout(() => {
+      returningRef.current = false;
+      setTransition(null);
+    }, TRANSITION_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [transition]);
   const previousStatus = useRef(call.status);
   useEffect(() => {
     const was = previousStatus.current;
