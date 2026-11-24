@@ -9,12 +9,14 @@ import {
   isAdminBreakoutView,
   listBreakoutRooms,
   moveToBreakoutRoom,
+  recallBreakoutRooms,
   returnFromBreakoutRoom,
   updateBreakoutRoomPolicy,
   type BreakoutRoomAdminView,
   type JoinPolicy,
   type LeavePolicy,
 } from '@/lib/breakouts';
+import { formatCountdown, useCountdown } from './useCountdown';
 import styles from './BreakoutHostConsole.module.css';
 
 export interface BreakoutHostConsoleParticipant {
@@ -72,25 +74,62 @@ export function BreakoutHostConsole({
 
   useEffect(() => {
     void refresh();
+    // Los cierres por cuenta regresiva ocurren en el servidor: se reflejan sin acción del admin.
+    const timer = setInterval(() => void refresh(), 5000);
+    return () => clearInterval(timer);
   }, [refresh]);
+
+  const [recallIds, setRecallIds] = useState<string[] | null>(null);
+  const [recallSeconds, setRecallSeconds] = useState(30);
+  const selectedRecallIds = recallIds ?? rooms.map((room) => room.id);
+  const allSelected =
+    rooms.length > 0 && rooms.every((room) => selectedRecallIds.includes(room.id));
+
+  function toggleRecallRoom(id: string) {
+    setRecallIds(
+      selectedRecallIds.includes(id)
+        ? selectedRecallIds.filter((current) => current !== id)
+        : [...selectedRecallIds, id],
+    );
+  }
+
+  async function handleRecall() {
+    setError(null);
+    try {
+      await recallBreakoutRooms(roomCode, roomToken, {
+        breakoutIds: allSelected ? undefined : selectedRecallIds,
+        inSeconds: recallSeconds,
+      });
+      await refresh();
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : t('No se pudo llamar de vuelta a las mini salas'),
+      );
+    }
+  }
 
   // Decisión 4 (design.md "Proyección de list por rol"): la única resta
   // posible para invitados es por sourceIdentity (participantId de
   // presencia = participant.sub = sourceIdentity, ver page.tsx:293-297) --
   // nunca por userId, que no existe para invitados.
   const assignedSourceIdentities = useMemo(
-    () => new Set(rooms.flatMap((room) => room.occupants.map((occupant) => occupant.sourceIdentity))),
+    () =>
+      new Set(rooms.flatMap((room) => room.occupants.map((occupant) => occupant.sourceIdentity))),
     [rooms],
   );
   const principalOccupants = useMemo(
-    () => participants.filter((participant) => !assignedSourceIdentities.has(participant.livekitIdentity)),
+    () =>
+      participants.filter(
+        (participant) => !assignedSourceIdentities.has(participant.livekitIdentity),
+      ),
     [participants, assignedSourceIdentities],
   );
   // Decisión 5: la fila propia nunca aparece en el selector genérico --
   // se ofrece como acción separada ("Trasladarme acá") para que nunca haya
   // una fila duplicada ni ambigua.
   const transferCandidates = useMemo(
-    () => participants.filter((participant) => participant.livekitIdentity !== currentParticipantId),
+    () =>
+      participants.filter((participant) => participant.livekitIdentity !== currentParticipantId),
     [participants, currentParticipantId],
   );
 
@@ -186,48 +225,56 @@ export function BreakoutHostConsole({
 
   return (
     <div className={styles.panel}>
-      <h3>{t('Mini salas')}</h3>
+      <header className={styles.header}>
+        <h3>{t('Mini salas')}</h3>
+        <span className={styles.meta}>
+          {rooms.length} {t('abiertas')}
+        </span>
+        <div className={styles.spacer} />
+        <div className={styles.createCard}>
+          <input
+            type="number"
+            min={1}
+            placeholder={t('Minutos (opcional)')}
+            aria-label={t('Cierre automático en minutos')}
+            value={autoCloseInMinutes}
+            onChange={(event) => setAutoCloseInMinutes(event.target.value)}
+          />
+          <button type="button" className={styles.createButton} onClick={handleCreate}>
+            {t('Crear mini sala')}
+          </button>
+        </div>
+      </header>
       {error && (
         <p role="alert" className={styles.error}>
           {error}
         </p>
       )}
-      <div className={styles.principalPane} data-testid="breakout-principal-pane">
-        <span className={styles.principalLabel}>{t('Sala principal')}</span>
-        <ul className={styles.principalList}>
-          {principalOccupants.map((occupant) => (
-            <li key={occupant.livekitIdentity}>{occupant.displayName}</li>
-          ))}
-        </ul>
-      </div>
-      <div className={styles.createCard}>
-        <input
-          type="number"
-          min={1}
-          placeholder={t('Minutos (opcional)')}
-          aria-label={t('Cierre automático en minutos')}
-          value={autoCloseInMinutes}
-          onChange={(event) => setAutoCloseInMinutes(event.target.value)}
-        />
-        <button type="button" className={styles.createButton} onClick={handleCreate}>
-          {t('Crear mini sala')}
-        </button>
-      </div>
-      {rooms.length === 0 ? (
-        <p className={styles.empty}>{t('Todavía no hay mini salas abiertas.')}</p>
-      ) : (
-        <>
-          <button
-            type="button"
-            className={`${styles.button} ${styles.primary}`}
-            onClick={handleReturnAll}
-          >
-            {t('Devolver a todos')}
-          </button>
+      <div className={styles.board}>
+        <div className={styles.principalPane} data-testid="breakout-principal-pane">
+          <div className={styles.columnHeader}>
+            <span className={styles.principalLabel}>{t('Sala principal')}</span>
+            <span className={styles.meta}>{principalOccupants.length}</span>
+          </div>
+          <ul className={styles.principalList}>
+            {principalOccupants.map((occupant) => (
+              <li key={occupant.livekitIdentity}>
+                <span className={styles.initials} aria-hidden="true">
+                  {occupant.displayName.slice(0, 2).toUpperCase()}
+                </span>
+                {occupant.displayName}
+              </li>
+            ))}
+          </ul>
+        </div>
+        {rooms.length === 0 ? (
+          <p className={styles.empty}>{t('Todavía no hay mini salas abiertas.')}</p>
+        ) : (
           <ul className={styles.roomList}>
             {rooms.map((room) => (
               <li key={room.id} className={styles.roomRow}>
-                <div className={styles.roomHeader}>
+                <RoomCountdown closesAt={room.autoCloseAt} />
+                <div className={styles.columnHeader}>
                   <span className={styles.roomLabel}>{room.label}</span>
                   <span className={styles.roomCounter}>
                     {room.occupants.length === 1
@@ -237,71 +284,134 @@ export function BreakoutHostConsole({
                 </div>
                 <ul className={styles.occupantList}>
                   {room.occupants.map((occupant) => (
-                    <li key={occupant.livekitIdentity}>{occupant.displayName}</li>
+                    <li key={occupant.livekitIdentity}>
+                      <span className={styles.initials} aria-hidden="true">
+                        {occupant.displayName.slice(0, 2).toUpperCase()}
+                      </span>
+                      {occupant.displayName}
+                    </li>
                   ))}
                 </ul>
-                <button
-                  type="button"
-                  className={`${styles.policyBadge} ${
-                    room.leavePolicy === 'locked' ? styles.locked : styles.open
-                  }`}
-                  onClick={() => handleToggleLeavePolicy(room)}
-                >
-                  {room.leavePolicy === 'locked'
-                    ? t('Permitir volver libremente')
-                    : t('Bloquear retorno')}
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.policyBadge} ${
-                    room.joinPolicy === 'open' ? styles.open : styles.locked
-                  }`}
-                  onClick={() => handleToggleJoinPolicy(room)}
-                >
-                  {room.joinPolicy === 'open'
-                    ? t('Requerir administrador para ingresar')
-                    : t('Permitir auto-ingreso')}
-                </button>
-                <div className={styles.transferArea}>
-                  <select
-                    className={styles.select}
-                    aria-label={`${t('Trasladar a')} ${room.label}`}
-                    value={selectedParticipant}
-                    onChange={(event) => setSelectedParticipant(event.target.value)}
-                  >
-                    <option value="">{t('Elegí a quién trasladar')}</option>
-                    {transferCandidates.map((participant) => (
-                      <option key={participant.livekitIdentity} value={participant.livekitIdentity}>
-                        {participant.displayName}
-                      </option>
-                    ))}
-                  </select>
+                <div className={styles.roomControls}>
                   <button
                     type="button"
-                    className={`${styles.button} ${styles.primary}`}
-                    onClick={() => handleMoveIn(room.id, selectedParticipant)}
-                    disabled={!selectedParticipant}
+                    className={`${styles.policyBadge} ${
+                      room.leavePolicy === 'locked' ? styles.locked : styles.open
+                    }`}
+                    onClick={() => handleToggleLeavePolicy(room)}
                   >
-                    {t('Trasladar')}
+                    {room.leavePolicy === 'locked'
+                      ? t('Permitir volver libremente')
+                      : t('Bloquear retorno')}
                   </button>
+                  <button
+                    type="button"
+                    className={`${styles.policyBadge} ${
+                      room.joinPolicy === 'open' ? styles.open : styles.locked
+                    }`}
+                    onClick={() => handleToggleJoinPolicy(room)}
+                  >
+                    {room.joinPolicy === 'open'
+                      ? t('Requerir administrador para ingresar')
+                      : t('Permitir auto-ingreso')}
+                  </button>
+                  <div className={styles.transferArea}>
+                    <select
+                      className={styles.select}
+                      aria-label={`${t('Trasladar a')} ${room.label}`}
+                      value={selectedParticipant}
+                      onChange={(event) => setSelectedParticipant(event.target.value)}
+                    >
+                      <option value="">{t('Elegí a quién trasladar')}</option>
+                      {transferCandidates.map((participant) => (
+                        <option
+                          key={participant.livekitIdentity}
+                          value={participant.livekitIdentity}
+                        >
+                          {participant.displayName}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className={`${styles.button} ${styles.primary}`}
+                      onClick={() => handleMoveIn(room.id, selectedParticipant)}
+                      disabled={!selectedParticipant}
+                    >
+                      {t('Trasladar')}
+                    </button>
+                  </div>
+                  <div className={styles.roomActions}>
+                    <button
+                      type="button"
+                      className={styles.button}
+                      onClick={() => handleMoveIn(room.id, currentParticipantId)}
+                    >
+                      {t('Trasladarme acá')}
+                    </button>
+                    <button
+                      type="button"
+                      className={`${styles.button} ${styles.danger}`}
+                      onClick={() => handleClose(room.id)}
+                    >
+                      {t('Cerrar')}
+                    </button>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  className={`${styles.button} ${styles.success}`}
-                  onClick={() => handleMoveIn(room.id, currentParticipantId)}
-                >
-                  {t('Trasladarme acá')}
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.button} ${styles.danger}`}
-                  onClick={() => handleClose(room.id)}
-                >
-                  {t('Cerrar')}
-                </button>
               </li>
             ))}
           </ul>
+        )}
+      </div>
+      {rooms.length > 0 && (
+        <footer className={styles.recallBar}>
+          <span className={styles.recallTitle}>{t('Llamar de vuelta')}</span>
+          <div className={styles.chips} role="group" aria-label={t('Salas a llamar')}>
+            {rooms.map((room) => (
+              <button
+                key={room.id}
+                type="button"
+                className={styles.chip}
+                aria-pressed={selectedRecallIds.includes(room.id)}
+                onClick={() => toggleRecallRoom(room.id)}
+              >
+                {room.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              className={styles.chip}
+              aria-pressed={allSelected}
+              onClick={() => setRecallIds(allSelected ? [] : rooms.map((room) => room.id))}
+            >
+              {t('Todas')}
+            </button>
+          </div>
+          <span className={styles.meta}>{t('en')}</span>
+          <div className={styles.segmented} role="group" aria-label={t('Segundos de aviso')}>
+            {RECALL_SECONDS.map((seconds) => (
+              <button
+                key={seconds}
+                type="button"
+                aria-pressed={recallSeconds === seconds}
+                onClick={() => setRecallSeconds(seconds)}
+              >
+                {seconds} s
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className={`${styles.button} ${styles.primary}`}
+            onClick={handleRecall}
+            disabled={selectedRecallIds.length === 0}
+          >
+            {t('Llamar en')} {recallSeconds} s
+          </button>
+          <div className={styles.spacer} />
+          <button type="button" className={styles.button} onClick={handleReturnAll}>
+            {t('Devolver a todos')}
+          </button>
           <button
             type="button"
             className={`${styles.button} ${styles.danger}`}
@@ -309,8 +419,22 @@ export function BreakoutHostConsole({
           >
             {t('Cerrar todas')}
           </button>
-        </>
+        </footer>
       )}
+    </div>
+  );
+}
+
+const RECALL_SECONDS = [10, 30, 60];
+
+function RoomCountdown({ closesAt }: { closesAt: string | null }) {
+  const { t } = useTranslation();
+  const left = useCountdown(closesAt);
+  if (left === null) return null;
+  return (
+    <div className={styles.countdown} role="timer">
+      <span>{t('Vuelven en')}</span>
+      <span className={styles.clock}>{formatCountdown(left)}</span>
     </div>
   );
 }

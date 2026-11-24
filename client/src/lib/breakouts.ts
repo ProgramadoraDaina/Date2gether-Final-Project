@@ -271,3 +271,23 @@ export async function closeAllBreakoutRooms(roomCode: string, roomToken: string)
     throw new Error(message);
   }
 }
+
+export async function recallBreakoutRooms(
+  roomCode: string,
+  roomToken: string,
+  input: { breakoutIds?: string[]; inSeconds: number },
+): Promise<{ closesAt: string }> {
+  const res = await fetch(`${API_URL}/calls/${encodeURIComponent(roomCode)}/breakouts/recall`, {
+    method: 'POST',
+    headers: jsonHeaders(roomToken),
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const { message } = await extractErrorDetails(
+      res,
+      'No se pudo llamar de vuelta a las mini salas',
+    );
+    throw new Error(message);
+  }
+  return res.json();
+}

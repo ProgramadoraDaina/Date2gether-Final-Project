@@ -3,38 +3,87 @@
   top: 16px;
   left: 50%;
   transform: translateX(-50%);
+  z-index: 100;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  border-radius: 999px;
-  backdrop-filter: blur(12px);
-  background: rgba(15, 23, 42, 0.88);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #fff;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
-  z-index: 100;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  max-width: calc(100vw - 32px);
+  padding: 10px var(--space-4);
+  background: #1b1d22;
+  border: 1px solid #2d3038;
+  border-radius: 2px;
+  color: #edeef1;
+  font-family: var(--font-body);
+  font-size: 14px;
+}
+
+.kicker {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #9aa0ab;
 }
 
 .label {
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.divider {
+  width: 1px;
+  height: 20px;
+  background: #2d3038;
+}
+
+.countdownText {
+  color: #9aa0ab;
+}
+
+.clock {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 18px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
 .returnButton {
-  border: none;
-  background: #3b82f6;
-  color: white;
-  padding: 6px 14px;
-  border-radius: 999px;
+  height: 32px;
+  padding: 0 14px;
+  background: transparent;
+  color: #edeef1;
+  border: 1px solid #2d3038;
+  border-radius: 2px;
+  font: inherit;
   cursor: pointer;
-  transition: 0.2s;
 }
 
 .returnButton:hover {
-  background: #2563eb;
+  background: #24262c;
+}
+
+.returnButton:focus-visible {
+  outline: 2px solid #b84dff;
+  outline-offset: 2px;
 }
 
 .lockedNotice {
-  color: #fbbf24;
-  font-size: 0.85rem;
+  color: #9aa0ab;
+  font-size: 13px;
+}
+
+.track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: #2d3038;
+}
+
+.fill {
+  display: block;
+  height: 2px;
+  background: #b84dff;
 }

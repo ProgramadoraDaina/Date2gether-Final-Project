@@ -11,6 +11,7 @@ jest.mock('@/lib/breakouts', () => ({
   closeBreakoutRoom: jest.fn(),
   closeAllBreakoutRooms: jest.fn(),
   returnFromBreakoutRoom: jest.fn(),
+  recallBreakoutRooms: jest.fn(),
   // Puro -- se reusa la implementación real (Decisión 4, design.md): solo
   // la vista de admin trae `occupants`.
   isAdminBreakoutView: (room: { occupants?: unknown }) => 'occupants' in room,
@@ -143,7 +144,9 @@ describe('BreakoutHostConsole', () => {
       // Espera a que termine el fetch asíncrono de rooms (no solo a que la
       // etiqueta "Sala principal" exista -- esa está presente desde el
       // primer render, antes de que la resta por sourceIdentity sea posible).
-      await waitFor(() => expect(screen.getByText('Mini sala 1')).toBeInTheDocument());
+      await waitFor(() =>
+        expect(screen.getByText('Mini sala 1', { selector: 'span' })).toBeInTheDocument(),
+      );
       const principalPane = screen.getByTestId('breakout-principal-pane');
       expect(within(principalPane).getByText('Admin')).toBeInTheDocument();
       expect(within(principalPane).getByText('Otra persona')).toBeInTheDocument();
@@ -407,5 +410,63 @@ describe('BreakoutHostConsole', () => {
 
     expect(returnFromBreakoutRoom).toHaveBeenCalledWith(roomCode, roomToken, 'b1', 'id-1');
     expect(returnFromBreakoutRoom).toHaveBeenCalledWith(roomCode, roomToken, 'b2', 'id-2');
+  });
+
+  describe('llamar de vuelta', () => {
+    it('llama de vuelta solo a las salas elegidas con los segundos elegidos', async () => {
+      const { listBreakoutRooms, recallBreakoutRooms } = await import('@/lib/breakouts');
+      (listBreakoutRooms as jest.Mock<typeof listBreakoutRooms>).mockResolvedValue([
+        openBreakout(),
+        openBreakout({ id: 'breakout-2', label: 'Mini sala 2' }),
+      ]);
+      (recallBreakoutRooms as jest.Mock<typeof recallBreakoutRooms>).mockResolvedValue({
+        closesAt: '2026-11-24T20:00:10.000Z',
+      });
+      const { BreakoutHostConsole } = await import('./BreakoutHostConsole');
+      render(
+        <BreakoutHostConsole
+          roomCode={roomCode}
+          roomToken={roomToken}
+          participants={participants}
+          currentParticipantId={currentParticipantId}
+        />,
+      );
+      const recallGroup = await screen.findByRole('group', { name: 'Salas a llamar' });
+
+      fireEvent.click(within(recallGroup).getByRole('button', { name: 'Mini sala 2' }));
+      fireEvent.click(screen.getByRole('button', { name: '10 s' }));
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Llamar en 10 s' }));
+      });
+
+      expect(recallBreakoutRooms).toHaveBeenCalledWith(roomCode, roomToken, {
+        breakoutIds: ['breakout-1'],
+        inSeconds: 10,
+      });
+    });
+
+    it('con todas elegidas no manda ids (el servidor llama a todas)', async () => {
+      const { listBreakoutRooms, recallBreakoutRooms } = await import('@/lib/breakouts');
+      (listBreakoutRooms as jest.Mock<typeof listBreakoutRooms>).mockResolvedValue([openBreakout()]);
+      (recallBreakoutRooms as jest.Mock<typeof recallBreakoutRooms>).mockResolvedValue({
+        closesAt: '2026-11-24T20:00:30.000Z',
+      });
+      const { BreakoutHostConsole } = await import('./BreakoutHostConsole');
+      render(
+        <BreakoutHostConsole
+          roomCode={roomCode}
+          roomToken={roomToken}
+          participants={participants}
+          currentParticipantId={currentParticipantId}
+        />,
+      );
+      await screen.findByRole('group', { name: 'Salas a llamar' });
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Llamar en 30 s' }));
+      });
+
+      expect(recallBreakoutRooms).toHaveBeenCalledWith(roomCode, roomToken, { inSeconds: 30 });
+    });
   });
 });

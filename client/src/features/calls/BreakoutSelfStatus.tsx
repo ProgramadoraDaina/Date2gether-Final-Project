@@ -2,20 +2,16 @@
 
 import { useTranslation } from '../translation/useTranslation';
 import type { BreakoutAssignment } from '../chat/useRoomSocket';
+import { formatCountdown, useCountdown } from './useCountdown';
 import styles from './BreakoutSelfStatus.module.css';
 
 interface BreakoutSelfStatusProps {
   assignment: BreakoutAssignment;
   onReturn: () => void;
-  // Disponible para deshabilitar el botón mientras la solicitud HTTP de
-  // retorno está en vuelo (returnFromBreakoutRoom en lib/breakouts.ts).
   returning?: boolean;
 }
 
-// Para el occupant de una mini sala (design.md, tabla de Cliente): etiqueta
-// siempre visible, botón "Volver" solo si la política lo permite, y un
-// texto explícito en vez del botón cuando no -- mitigación del riesgo
-// "percibido como estar atrapado" (D8/leave-policy, design.md).
+// Sin botón "Volver" en salas locked: el texto explícito evita la sensación de estar atrapado.
 export function BreakoutSelfStatus({
   assignment,
   onReturn,
@@ -23,10 +19,21 @@ export function BreakoutSelfStatus({
 }: BreakoutSelfStatusProps) {
   const { t } = useTranslation();
   const canReturnFreely = assignment.leavePolicy === 'free_return';
+  const left = useCountdown(assignment.closesAt ?? null);
 
   return (
     <div className={styles.banner} role="status">
+      <span className={styles.kicker}>{t('Mini sala')}</span>
       <span className={styles.label}>{assignment.label}</span>
+      {left !== null && (
+        <>
+          <span className={styles.divider} aria-hidden="true" />
+          <span className={styles.countdownText}>{t('Volvés a la sala principal en')}</span>
+          <span className={styles.clock} role="timer">
+            {formatCountdown(left)}
+          </span>
+        </>
+      )}
       {canReturnFreely ? (
         <button
           type="button"
@@ -39,6 +46,11 @@ export function BreakoutSelfStatus({
       ) : (
         <span className={styles.lockedNotice}>
           {t('El host te va a devolver a la sala principal.')}
+        </span>
+      )}
+      {left !== null && (
+        <span className={styles.track} aria-hidden="true">
+          <span className={styles.fill} />
         </span>
       )}
     </div>
