@@ -291,6 +291,7 @@ export class BreakoutRoomsService {
       .where(eq(callBreakoutRooms.id, row.id))
       .returning();
     this.scheduleAutoClose(updated.id, updated.livekitRoomName, updated.autoCloseAt);
+    if (patch.autoCloseAt) this.emitClosing(updated);
 
     const occupants = await this.fetchOccupantsByBreakoutIds([updated.id]);
     return this.toView(updated, occupants);
@@ -462,6 +463,12 @@ export class BreakoutRoomsService {
         breakoutId: breakout.id,
         label: breakout.label,
         leavePolicy: breakout.leavePolicy,
+        closesAt: breakout.autoCloseAt?.toISOString() ?? null,
+      });
+      this.roomEvents.emitBreakoutBroadcast({
+        roomCode: parentCode,
+        event: 'breakout:presence',
+        payload: { kind: 'moved', names: [sourceIdentity.displayName], label: breakout.label },
       });
       // Decisión 2 (design.md "Señal de motivo de remoción"): el cliente
       // necesita distinguir ESTE removeParticipant (traslado en curso,
@@ -574,6 +581,7 @@ export class BreakoutRoomsService {
         occupant.id,
         occupant.sourceIdentity,
         targetLivekitIdentity,
+        occupant.displayName,
       );
       return;
     }
@@ -595,6 +603,7 @@ export class BreakoutRoomsService {
       occupant.id,
       requester.sub,
       occupant.livekitIdentity,
+      occupant.displayName,
     );
   }
 
@@ -609,6 +618,7 @@ export class BreakoutRoomsService {
     occupantId: string,
     sourceIdentity: string,
     livekitIdentity: string,
+    displayName: string,
   ): Promise<void> {
     await this.markOccupantReturned(occupantId);
     const parentCode = parseBreakoutRoomName(breakout.livekitRoomName)?.parentCode;
@@ -617,6 +627,11 @@ export class BreakoutRoomsService {
         roomCode: parentCode,
         targetIdentity: sourceIdentity,
         reason: 'BREAKOUT_FORCED_RETURN',
+      });
+      this.roomEvents.emitBreakoutBroadcast({
+        roomCode: parentCode,
+        event: 'breakout:presence',
+        payload: { kind: 'returned', names: [displayName], label: breakout.label },
       });
     }
     try {
@@ -662,6 +677,38 @@ export class BreakoutRoomsService {
     for (const row of rows) {
       await this.closeRow(row);
     }
+  }
+
+  /** "Llamar de vuelta": las salas elegidas (o todas) se cierran en `inSeconds`, con aviso previo. */
+  async recall(
+    roomId: string,
+    actor: RoomParticipant,
+    dto: { breakoutIds?: string[]; inSeconds: number },
+  ): Promise<{ closesAt: Date }> {
+    const role = await this.resolveRole(roomId, actor.userId);
+    if (role !== 'administrador') {
+      throw new ForbiddenException('Solo un administrador puede llamar de vuelta a las mini salas');
+    }
+    const openRows = await this.fetchOpenRows(roomId);
+    const targets = dto.breakoutIds
+      ? openRows.filter((row) => dto.breakoutIds!.includes(row.id))
+      : openRows;
+    if (targets.length === 0) {
+      throw new NotFoundException('No hay mini salas abiertas para llamar de vuelta');
+    }
+
+    const closesAt = new Date(Date.now() + dto.inSeconds * 1000);
+    for (const row of targets) {
+      const [updated] = await this.db
+        .update(callBreakoutRooms)
+        .set({ autoCloseAt: closesAt })
+        .where(and(eq(callBreakoutRooms.id, row.id), isNull(callBreakoutRooms.closedAt)))
+        .returning();
+      if (!updated) continue;
+      this.scheduleAutoClose(updated.id, updated.livekitRoomName, closesAt);
+      this.emitClosing(updated);
+    }
+    return { closesAt };
   }
 
   /**
@@ -710,6 +757,7 @@ export class BreakoutRoomsService {
     if (!claimed) return 'already-closed';
 
     this.cancelAutoCloseTimer(row.id);
+    const returning = await this.fetchOccupantsByBreakoutIds([row.id]);
     await this.db
       .update(callBreakoutOccupants)
       .set({ returnedAt: new Date() })
@@ -726,6 +774,17 @@ export class BreakoutRoomsService {
     const parentCode = parseBreakoutRoomName(row.livekitRoomName)?.parentCode;
     if (parentCode) {
       this.roomEvents.emitBreakoutClosed({ roomCode: parentCode, breakoutId: row.id });
+      if (returning.length > 0) {
+        this.roomEvents.emitBreakoutBroadcast({
+          roomCode: parentCode,
+          event: 'breakout:presence',
+          payload: {
+            kind: 'returned',
+            names: returning.map((occupant) => occupant.displayName),
+            label: claimed.label,
+          },
+        });
+      }
     }
 
     try {
@@ -734,6 +793,16 @@ export class BreakoutRoomsService {
       this.logger.log('La sala de medios de la mini sala ya estaba cerrada');
     }
     return 'closed';
+  }
+
+  private emitClosing(row: CallBreakoutRoom): void {
+    const parentCode = parseBreakoutRoomName(row.livekitRoomName)?.parentCode;
+    if (!parentCode || !row.autoCloseAt) return;
+    this.roomEvents.emitBreakoutBroadcast({
+      roomCode: parentCode,
+      event: 'breakout:closing',
+      payload: { breakoutId: row.id, closesAt: row.autoCloseAt.toISOString() },
+    });
   }
 
   private scheduleAutoClose(id: string, livekitRoomName: string, autoCloseAt: Date | null): void {
@@ -878,9 +947,13 @@ export class BreakoutRoomsService {
   private async findOpenOccupantByLivekitIdentity(
     breakoutRoomId: string,
     livekitIdentity: string,
-  ): Promise<{ id: string; sourceIdentity: string } | undefined> {
+  ): Promise<{ id: string; sourceIdentity: string; displayName: string } | undefined> {
     const [occupant] = await this.db
-      .select({ id: callBreakoutOccupants.id, sourceIdentity: callBreakoutOccupants.sourceIdentity })
+      .select({
+        id: callBreakoutOccupants.id,
+        sourceIdentity: callBreakoutOccupants.sourceIdentity,
+        displayName: callBreakoutOccupants.displayName,
+      })
       .from(callBreakoutOccupants)
       .where(
         and(

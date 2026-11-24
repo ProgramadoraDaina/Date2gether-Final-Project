@@ -24,7 +24,17 @@ export interface BreakoutAssignedEvent {
   breakoutId: string;
   label: string;
   leavePolicy: string;
+  closesAt: string | null;
 }
+
+// Avisos para toda la sala (cuenta regresiva de retorno, idas y vueltas): solo datos de UI.
+export type BreakoutBroadcastEvent =
+  | { roomCode: string; event: 'breakout:closing'; payload: { breakoutId: string; closesAt: string } }
+  | {
+      roomCode: string;
+      event: 'breakout:presence';
+      payload: { kind: 'moved' | 'returned'; names: string[]; label: string };
+    };
 
 export interface BreakoutClosedEvent {
   roomCode: string;
@@ -88,5 +98,13 @@ export class RoomEventsService {
 
   emitBreakoutRemoval(event: BreakoutRemovalEvent): void {
     this.emitter.emit('breakoutRemoval', event);
+  }
+
+  onBreakoutBroadcast(listener: (event: BreakoutBroadcastEvent) => void): void {
+    this.emitter.on('breakoutBroadcast', listener);
+  }
+
+  emitBreakoutBroadcast(event: BreakoutBroadcastEvent): void {
+    this.emitter.emit('breakoutBroadcast', event);
   }
 }

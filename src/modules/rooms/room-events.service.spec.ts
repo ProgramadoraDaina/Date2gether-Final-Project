@@ -47,6 +47,7 @@ describe('RoomEventsService', () => {
       breakoutId: 'breakout-1',
       label: 'Mini sala 1',
       leavePolicy: 'locked',
+      closesAt: null,
     });
 
     expect(listener).toHaveBeenCalledWith({
@@ -55,6 +56,7 @@ describe('RoomEventsService', () => {
       breakoutId: 'breakout-1',
       label: 'Mini sala 1',
       leavePolicy: 'locked',
+      closesAt: null,
     });
   });
 

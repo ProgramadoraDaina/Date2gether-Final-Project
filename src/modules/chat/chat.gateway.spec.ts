@@ -69,6 +69,7 @@ describe('ChatGateway', () => {
       onBreakoutAssigned: vi.fn(),
       onBreakoutClosed: vi.fn(),
       onBreakoutRemoval: vi.fn(),
+      onBreakoutBroadcast: vi.fn(),
     } as unknown as RoomEventsService;
 
     const gateway = new ChatGateway(
@@ -1369,6 +1370,18 @@ describe('ChatGateway', () => {
 
       expect(serverTo).toHaveBeenCalledWith('abc-defg-hij');
       expect(serverEmit).toHaveBeenCalledWith('breakout:closed', { breakoutId: 'breakout-1' });
+    });
+
+    it('los avisos de mini salas (cuenta regresiva, idas y vueltas) se transmiten a toda la sala', () => {
+      const { serverTo, serverEmit, roomEvents } = createGateway();
+      const listener = (roomEvents.onBreakoutBroadcast as unknown as ReturnType<typeof vi.fn>).mock
+        .calls[0][0] as (event: unknown) => void;
+      const payload = { kind: 'moved', names: ['Joni'], label: 'Sala 2' };
+
+      listener({ roomCode: 'abc-defg-hij', event: 'breakout:presence', payload });
+
+      expect(serverTo).toHaveBeenCalledWith('abc-defg-hij');
+      expect(serverEmit).toHaveBeenCalledWith('breakout:presence', payload);
     });
 
     // Decisión 2 (design.md "Señal de motivo de remoción", tasks.md 2.4):

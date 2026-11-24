@@ -164,6 +164,7 @@ function createRoomEventsMock() {
     emitBreakoutAssigned: vi.fn(),
     emitBreakoutClosed: vi.fn(),
     emitBreakoutRemoval: vi.fn(),
+    emitBreakoutBroadcast: vi.fn(),
   };
 }
 
@@ -1262,6 +1263,7 @@ describe('BreakoutRoomsService', () => {
         breakoutId: row.id,
         label: row.label,
         leavePolicy: row.leavePolicy,
+        closesAt: null,
       });
       expect(callOrder).toEqual(['emitBreakoutAssigned', 'removeParticipant']);
     });
@@ -1415,6 +1417,97 @@ describe('BreakoutRoomsService', () => {
         reason: 'BREAKOUT_FORCED_RETURN',
       });
       expect(callOrder).toEqual(['emitBreakoutRemoval', 'removeParticipant']);
+    });
+  });
+
+  describe('llamar de vuelta y avisos de idas y vueltas', () => {
+    it('recall() programa el cierre solo de las salas elegidas, avisa la cuenta regresiva y las cierra al vencer', async () => {
+      vi.useFakeTimers({ now: new Date('2026-11-24T20:00:00Z') });
+      asAdmin();
+      const rowA = buildBreakoutRow({ id: 'b1', livekitRoomName: `${roomCode}::breakout-1` });
+      const rowB = buildBreakoutRow({ id: 'b2', livekitRoomName: `${roomCode}::breakout-2` });
+      const closesAt = new Date('2026-11-24T20:00:30Z');
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([rowA, rowB]));
+      db.breakoutRoomsUpdateReturning
+        .mockResolvedValueOnce([{ ...rowA, autoCloseAt: closesAt }])
+        .mockResolvedValueOnce([{ ...rowA, autoCloseAt: closesAt }]);
+
+      const result = await service.recall(roomId, admin, { breakoutIds: ['b1'], inSeconds: 30 });
+
+      expect(result.closesAt).toEqual(closesAt);
+      expect(db.breakoutRoomsUpdateSet).toHaveBeenCalledWith({ autoCloseAt: closesAt });
+      expect(roomEvents.emitBreakoutBroadcast).toHaveBeenCalledWith({
+        roomCode,
+        event: 'breakout:closing',
+        payload: { breakoutId: 'b1', closesAt: closesAt.toISOString() },
+      });
+      expect(deleteRoom).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      expect(deleteRoom).toHaveBeenCalledTimes(1);
+      expect(deleteRoom).toHaveBeenCalledWith(rowA.livekitRoomName);
+      expect(roomEvents.emitBreakoutClosed).toHaveBeenCalledWith({ roomCode, breakoutId: 'b1' });
+    });
+
+    it('recall() de alguien que no es administrador: 403 y nada se programa', async () => {
+      await expect(service.recall(roomId, guest, { inSeconds: 30 })).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(db.breakoutRoomsUpdateSet).not.toHaveBeenCalled();
+      expect(roomEvents.emitBreakoutBroadcast).not.toHaveBeenCalled();
+    });
+
+    it('moveIn() avisa a la sala que la persona se fue a la mini sala', async () => {
+      asAdmin();
+      const row = buildBreakoutRow({ label: 'Sala 2' });
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
+      db.identitiesSelectWhere.mockReturnValueOnce(
+        chain([{ roomId, userId: null, displayName: 'Joni', roleAtIssue: null }]),
+      );
+
+      await service.moveIn(row.id, roomId, admin, { livekitIdentity: 'guest-sub' });
+
+      expect(roomEvents.emitBreakoutBroadcast).toHaveBeenCalledWith({
+        roomCode,
+        event: 'breakout:presence',
+        payload: { kind: 'moved', names: ['Joni'], label: 'Sala 2' },
+      });
+    });
+
+    it('cerrar una mini sala con ocupantes avisa a la sala quiénes volvieron', async () => {
+      asAdmin();
+      const row = buildBreakoutRow({ label: 'Sala 1' });
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
+      db.breakoutRoomsUpdateReturning.mockResolvedValueOnce([row]);
+      db.breakoutOccupantsSelectWhere.mockReturnValueOnce(
+        chain([{ displayName: 'Gabi' }, { displayName: 'Daina' }]),
+      );
+
+      await service.close(row.id, roomId, admin, 'manual');
+
+      expect(roomEvents.emitBreakoutBroadcast).toHaveBeenCalledWith({
+        roomCode,
+        event: 'breakout:presence',
+        payload: { kind: 'returned', names: ['Gabi', 'Daina'], label: 'Sala 1' },
+      });
+    });
+
+    it('devolver a un ocupante avisa a la sala que volvió', async () => {
+      asAdmin();
+      const row = buildBreakoutRow({ label: 'Sala 3' });
+      db.breakoutRoomsSelectWhere.mockReturnValueOnce(chain([row]));
+      db.breakoutOccupantsSelectWhere.mockReturnValueOnce(
+        chain([{ id: 'occ-1', sourceIdentity: 'occupant-sub', displayName: 'Mati' }]),
+      );
+
+      await service.selfReturn(row.id, roomId, admin, 'mini-room-identity');
+
+      expect(roomEvents.emitBreakoutBroadcast).toHaveBeenCalledWith({
+        roomCode,
+        event: 'breakout:presence',
+        payload: { kind: 'returned', names: ['Mati'], label: 'Sala 3' },
+      });
     });
   });
 });

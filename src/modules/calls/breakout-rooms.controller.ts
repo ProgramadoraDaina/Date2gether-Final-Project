@@ -19,6 +19,7 @@ import {
 } from './breakout-rooms.service';
 import { CreateBreakoutRoomDto } from './dto/create-breakout-room.dto';
 import { MoveParticipantDto } from './dto/move-participant.dto';
+import { RecallBreakoutRoomsDto } from './dto/recall-breakout-rooms.dto';
 import { ReturnOccupantDto } from './dto/return-occupant.dto';
 import { UpdateBreakoutRoomDto } from './dto/update-breakout-room.dto';
 
@@ -89,6 +90,11 @@ export class BreakoutRoomsController {
     @Param('breakoutId') breakoutId: string,
   ): Promise<void> {
     await this.breakoutRooms.close(breakoutId, request.room.id, request.participant, 'manual');
+  }
+
+  @Post(':roomCode/breakouts/recall')
+  recall(@Req() request: ParticipantRequest, @Body() dto: RecallBreakoutRoomsDto) {
+    return this.breakoutRooms.recall(request.room.id, request.participant, dto);
   }
 
   @Delete(':roomCode/breakouts')

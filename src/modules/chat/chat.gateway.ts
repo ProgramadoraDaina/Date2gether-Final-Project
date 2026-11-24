@@ -174,7 +174,11 @@ export class ChatGateway implements OnGatewayDisconnect {
         breakoutId: event.breakoutId,
         label: event.label,
         leavePolicy: event.leavePolicy,
+        closesAt: event.closesAt,
       });
+    });
+    this.roomEvents.onBreakoutBroadcast((event) => {
+      this.server.to(event.roomCode).emit(event.event, event.payload);
     });
     this.roomEvents.onBreakoutClosed((event) => {
       this.server.to(event.roomCode).emit('breakout:closed', { breakoutId: event.breakoutId });
