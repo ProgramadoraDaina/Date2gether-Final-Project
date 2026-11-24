@@ -15,9 +15,7 @@ export interface BreakoutAssignment {
   closesAt?: string | null;
 }
 
-type BreakoutToastInput =
-  | { kind: 'moved' | 'returned'; names: string[]; label: string }
-  | { kind: 'closing'; closesAt: string };
+type BreakoutToastInput = { kind: 'moved' | 'returned'; names: string[]; label: string };
 
 export type BreakoutToast = BreakoutToastInput & { id: number };
 
@@ -107,7 +105,6 @@ export function useRoomSocket(socket: Socket | null): UseRoomSocketResult {
       const next = { ...assignmentRef.current, closesAt: payload.closesAt };
       assignmentRef.current = next;
       setBreakoutAssignment(next);
-      pushToast({ kind: 'closing', closesAt: payload.closesAt });
     }
     function onBreakoutPresence(payload: {
       kind: 'moved' | 'returned';

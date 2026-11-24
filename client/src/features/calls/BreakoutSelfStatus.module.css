@@ -1,21 +1,31 @@
 .banner {
-  position: absolute;
-  top: 16px;
+  position: fixed;
+  top: calc(16px + env(safe-area-inset-top, 0px));
   left: 50%;
   transform: translateX(-50%);
-  z-index: 100;
+  z-index: 950;
+  max-width: calc(100vw - 32px);
+  overflow: hidden;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  box-shadow: var(--shadow-md);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  animation: drop 0.24s steps(6, end) both;
+}
+
+.row {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-3);
-  max-width: calc(100vw - 32px);
   padding: 10px var(--space-4);
-  background: #1b1d22;
-  border: 1px solid #2d3038;
-  border-radius: 2px;
-  color: #edeef1;
-  font-family: var(--font-body);
-  font-size: 14px;
+}
+
+.counting {
+  border-color: var(--color-accent);
 }
 
 .kicker {
@@ -23,7 +33,7 @@
   font-size: 11px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #9aa0ab;
+  color: var(--color-text-muted);
 }
 
 .label {
@@ -34,56 +44,85 @@
 .divider {
   width: 1px;
   height: 20px;
-  background: #2d3038;
+  background: var(--color-border);
 }
 
 .countdownText {
-  color: #9aa0ab;
+  color: var(--color-text-muted);
 }
 
 .clock {
   font-family: 'IBM Plex Mono', ui-monospace, monospace;
-  font-size: 18px;
-  font-weight: 500;
+  font-size: 20px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+
+.urgent .clock {
+  color: var(--color-accent);
 }
 
 .returnButton {
   height: 32px;
   padding: 0 14px;
-  background: transparent;
-  color: #edeef1;
-  border: 1px solid #2d3038;
-  border-radius: 2px;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  border: 0;
+  border-radius: var(--radius-xs);
   font: inherit;
+  font-weight: 600;
   cursor: pointer;
 }
 
 .returnButton:hover {
-  background: #24262c;
+  background: var(--color-accent-hover);
+}
+
+.returnButton:disabled {
+  background: var(--color-disabled);
+  cursor: progress;
 }
 
 .returnButton:focus-visible {
-  outline: 2px solid #b84dff;
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 
 .lockedNotice {
-  color: #9aa0ab;
+  color: var(--color-text-muted);
   font-size: 13px;
 }
 
 .track {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  height: 2px;
-  background: #2d3038;
+  display: block;
+  height: 3px;
+  background: var(--color-chip-bg);
 }
 
 .fill {
   display: block;
-  height: 2px;
-  background: #b84dff;
+  height: 3px;
+  background: var(--color-accent);
+  transform-origin: left;
+  transition: transform 0.25s linear;
+}
+
+@keyframes drop {
+  from {
+    transform: translate(-50%, -12px);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .banner,
+  .fill {
+    animation: none;
+    transition: none;
+  }
 }

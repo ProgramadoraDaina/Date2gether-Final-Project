@@ -85,13 +85,18 @@ export function BreakoutView({
       await returnFromBreakoutRoom(roomCode, roomToken, assignment.breakoutId);
       setReturnedBreakoutId(assignment.breakoutId);
     } catch (cause) {
-      setReturnError(cause instanceof Error ? cause.message : t('No se pudo volver a la sala principal'));
+      setReturnError(
+        cause instanceof Error ? cause.message : t('No se pudo volver a la sala principal'),
+      );
     } finally {
       setReturning(false);
     }
   }, [assignment, roomCode, roomToken, t]);
 
-  const state = resolveBreakoutViewState({ isAdmin: isCurrentUserAdmin, assignment: visibleAssignment });
+  const state = resolveBreakoutViewState({
+    isAdmin: isCurrentUserAdmin,
+    assignment: visibleAssignment,
+  });
 
   if (state === 'guest-idle') {
     // Decisión 5 (design.md): "Nada, salvo que exista alguna sala abierta
@@ -105,7 +110,11 @@ export function BreakoutView({
   if (state === 'guest-occupant') {
     return (
       <>
-        <BreakoutSelfStatus assignment={visibleAssignment!} onReturn={handleReturn} returning={returning} />
+        <BreakoutSelfStatus
+          assignment={visibleAssignment!}
+          onReturn={handleReturn}
+          returning={returning}
+        />
         {returnError && (
           <p role="alert" className={styles.error}>
             {returnError}
@@ -115,12 +124,16 @@ export function BreakoutView({
     );
   }
 
-  // host / host-occupant: la misma consola, con la franja de estado propio
-  // renderizada DENTRO de ella cuando corresponde (host-occupant) -- nunca
-  // como hermana. Es lo que vuelve estructuralmente inexpresable el bug de
-  // Panel+Banner coexistiendo.
+  // La franja propia vive fuera del popover: el admin dentro de una mini sala también ve su tiempo.
   return (
     <div className={styles.breakoutWrap} ref={wrapRef}>
+      {state === 'host-occupant' && (
+        <BreakoutSelfStatus
+          assignment={visibleAssignment!}
+          onReturn={handleReturn}
+          returning={returning}
+        />
+      )}
       <button
         type="button"
         className={`${buttonClassName ?? ''} ${panelOpen && activeButtonClassName ? activeButtonClassName : ''}`}
@@ -143,13 +156,6 @@ export function BreakoutView({
               ×
             </button>
           </div>
-          {state === 'host-occupant' && (
-            <BreakoutSelfStatus
-              assignment={visibleAssignment!}
-              onReturn={handleReturn}
-              returning={returning}
-            />
-          )}
           {returnError && (
             <p role="alert" className={styles.error}>
               {returnError}

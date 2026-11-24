@@ -22,7 +22,11 @@ jest.mock('./BreakoutSelfStatus', () => ({
 const roomCode = 'abc-defg-hij';
 const roomToken = 'room-token';
 const currentParticipantId = 'admin-sub';
-const assignment = { breakoutId: 'breakout-1', label: 'Mini sala 1', leavePolicy: 'locked' as const };
+const assignment = {
+  breakoutId: 'breakout-1',
+  label: 'Mini sala 1',
+  leavePolicy: 'locked' as const,
+};
 
 function baseProps() {
   return {
@@ -83,6 +87,14 @@ describe('BreakoutView', () => {
 
     expect(screen.getByTestId('host-console')).toBeInTheDocument();
     expect(screen.getByTestId('self-status')).toBeInTheDocument();
+  });
+
+  it('host-occupant: la franja propia está visible sin abrir la consola', async () => {
+    const { BreakoutView } = await import('./BreakoutView');
+    render(<BreakoutView {...baseProps()} isCurrentUserAdmin assignment={assignment} />);
+
+    expect(screen.getByTestId('self-status')).toBeInTheDocument();
+    expect(screen.queryByTestId('host-console')).toBeNull();
   });
 
   it('[5.4] "Volver" en el estado propio llama returnFromBreakoutRoom con el breakoutId asignado', async () => {

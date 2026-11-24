@@ -3,87 +3,70 @@
 import { useEffect } from 'react';
 import { useTranslation } from '../translation/useTranslation';
 import type { BreakoutToast } from '../chat/useRoomSocket';
-import { formatCountdown, useCountdown } from './useCountdown';
 import styles from './BreakoutToasts.module.css';
 
-const PRESENCE_TOAST_MS = 6000;
+const TOAST_MS = 6000;
 
 function joinNames(names: string[], and: string): string {
   if (names.length <= 1) return names[0] ?? '';
   return `${names.slice(0, -1).join(', ')} ${and} ${names[names.length - 1]}`;
 }
 
+function ArrowIcon({ direction }: { direction: 'in' | 'out' }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+      {direction === 'out' ? (
+        <path d="M2 8h11M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" fill="none" />
+      ) : (
+        <path d="M14 8H3M7 4L3 8l4 4" stroke="currentColor" strokeWidth="1.6" fill="none" />
+      )}
+    </svg>
+  );
+}
+
 function PresenceToast({
   toast,
   onDismiss,
 }: {
-  toast: Extract<BreakoutToast, { kind: 'moved' | 'returned' }>;
+  toast: BreakoutToast;
   onDismiss: (id: number) => void;
 }) {
   const { t } = useTranslation();
   useEffect(() => {
-    const timer = setTimeout(() => onDismiss(toast.id), PRESENCE_TOAST_MS);
+    const timer = setTimeout(() => onDismiss(toast.id), TOAST_MS);
     return () => clearTimeout(timer);
   }, [toast.id, onDismiss]);
 
+  const moved = toast.kind === 'moved';
   const plural = toast.names.length > 1;
-  const verb =
-    toast.kind === 'moved'
-      ? `${t(plural ? 'se fueron a' : 'se fue a')} ${toast.label}`
-      : t(plural ? 'volvieron' : 'volvió');
-  const detail = toast.kind === 'moved' ? t('Mini sala') : `${t('Desde')} ${toast.label}`;
+  const action = moved
+    ? `${t(plural ? 'se fueron a' : 'se fue a')} ${toast.label}`
+    : t(plural ? 'volvieron a la sala principal' : 'volvió a la sala principal');
 
   return (
-    <li className={styles.toast} role="status">
-      <span className={styles.icon} aria-hidden="true">
-        {toast.kind === 'moved' ? '→' : '←'}
+    <li className={`${styles.toast} ${moved ? styles.moved : styles.returned}`} role="status">
+      <span className={styles.icon}>
+        <ArrowIcon direction={moved ? 'out' : 'in'} />
       </span>
       <div className={styles.body}>
-        <span>
-          <strong>{joinNames(toast.names, t('y'))}</strong> {verb}
+        <span className={styles.kicker}>
+          {moved ? t('Mini sala') : `${t('Desde')} ${toast.label}`}
         </span>
-        <span className={styles.detail}>{detail}</span>
+        <span className={styles.message}>
+          <strong>{joinNames(toast.names, t('y'))}</strong> {action}
+        </span>
       </div>
-      <div className={styles.drain} aria-hidden="true" />
-    </li>
-  );
-}
-
-function ClosingToast({
-  toast,
-  onDismiss,
-}: {
-  toast: Extract<BreakoutToast, { kind: 'closing' }>;
-  onDismiss: (id: number) => void;
-}) {
-  const { t } = useTranslation();
-  const left = useCountdown(toast.closesAt);
-  useEffect(() => {
-    if (left === 0) onDismiss(toast.id);
-  }, [left, toast.id, onDismiss]);
-
-  return (
-    <li className={styles.toast} role="status">
-      <span className={`${styles.icon} ${styles.iconAccent}`} aria-hidden="true">
-        <svg width="14" height="14" viewBox="0 0 14 14">
-          <rect
-            x="1"
-            y="1"
-            width="12"
-            height="12"
-            stroke="currentColor"
-            strokeWidth="1.2"
-            fill="none"
-          />
-          <path d="M7 3.5v3.5l2.5 2" stroke="currentColor" strokeWidth="1.5" fill="none" />
+      <button
+        type="button"
+        className={styles.close}
+        aria-label={t('Cerrar aviso')}
+        onClick={() => onDismiss(toast.id)}
+      >
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" fill="none" />
         </svg>
-      </span>
-      <div className={styles.body}>
-        <strong>{t('El anfitrión los llama a la sala principal')}</strong>
-        <span className={styles.detail}>
-          {t('Vuelven en')} <span className={styles.clock}>{formatCountdown(left ?? 0)}</span>
-        </span>
-      </div>
+      </button>
+      <span className={styles.drain} aria-hidden="true" />
     </li>
   );
 }
@@ -98,15 +81,9 @@ export function BreakoutToasts({
   if (toasts.length === 0) return null;
   return (
     <ul className={styles.stack} aria-live="polite">
-      {toasts
-        .slice(-4)
-        .map((toast) =>
-          toast.kind === 'closing' ? (
-            <ClosingToast key={toast.id} toast={toast} onDismiss={onDismiss} />
-          ) : (
-            <PresenceToast key={toast.id} toast={toast} onDismiss={onDismiss} />
-          ),
-        )}
+      {toasts.slice(-4).map((toast) => (
+        <PresenceToast key={toast.id} toast={toast} onDismiss={onDismiss} />
+      ))}
     </ul>
   );
 }

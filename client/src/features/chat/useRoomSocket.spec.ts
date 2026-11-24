@@ -154,7 +154,7 @@ describe('useRoomSocket', () => {
       expect(result.current.breakoutReturnSignal).toBe(1);
     });
 
-    it('breakout:closing de mi mini sala agrega closesAt a la asignación y muestra el aviso', () => {
+    it('breakout:closing de mi mini sala agrega closesAt a la asignación (la franja de arriba muestra el tiempo)', () => {
       const socket = createFakeSocket();
       const { result } = renderHook(() => useRoomSocket(socket as unknown as Socket));
       act(() => socket.callbacks['breakout:assigned'](assignment));
@@ -163,7 +163,6 @@ describe('useRoomSocket', () => {
       act(() => socket.callbacks['breakout:closing']({ breakoutId: 'breakout-1', closesAt }));
 
       expect(result.current.breakoutAssignment).toEqual({ ...assignment, closesAt });
-      expect(result.current.breakoutToasts).toEqual([{ id: 1, kind: 'closing', closesAt }]);
     });
 
     it('breakout:closing de OTRA mini sala no cambia nada', () => {

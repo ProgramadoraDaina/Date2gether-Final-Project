@@ -58,4 +58,22 @@ describe('BreakoutSelfStatus', () => {
 
     expect(screen.getByRole('button', { name: 'Volver' })).toBeDisabled();
   });
+
+  it('con cuenta regresiva muestra arriba cuánto falta para volver a la principal', () => {
+    const closesAt = new Date(Date.now() + 30_000).toISOString();
+    render(
+      <BreakoutSelfStatus
+        assignment={{
+          breakoutId: 'breakout-1',
+          label: 'Mini sala 1',
+          leavePolicy: 'locked',
+          closesAt,
+        }}
+        onReturn={jest.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Volvés a la sala principal en')).toBeInTheDocument();
+    expect(screen.getByRole('timer')).toHaveTextContent('00:30');
+  });
 });
