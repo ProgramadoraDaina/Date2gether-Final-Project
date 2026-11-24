@@ -76,4 +76,17 @@ describe('BreakoutSelfStatus', () => {
     expect(screen.getByText('Volvés a la sala principal en')).toBeInTheDocument();
     expect(screen.getByRole('timer')).toHaveTextContent('00:30');
   });
+
+  it('un admin ve "Volver" aunque la mini sala sea locked', () => {
+    render(
+      <BreakoutSelfStatus
+        assignment={{ breakoutId: 'breakout-1', label: 'Mini sala 1', leavePolicy: 'locked' }}
+        onReturn={jest.fn()}
+        isAdmin
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Volver' })).toBeInTheDocument();
+    expect(screen.queryByText('El host te va a devolver a la sala principal.')).toBeNull();
+  });
 });

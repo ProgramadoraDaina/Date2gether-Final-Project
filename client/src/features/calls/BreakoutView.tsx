@@ -134,6 +134,7 @@ export function BreakoutView({
           assignment={visibleAssignment!}
           onReturn={handleReturn}
           returning={returning}
+          isAdmin
         />
       )}
       <button

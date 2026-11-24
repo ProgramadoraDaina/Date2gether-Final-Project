@@ -78,7 +78,8 @@ function createDbMock() {
         update: vi.fn().mockReturnValue(chain([])),
       }),
     );
-  return { insert, values, onConflictDoNothing, returning, select, transaction };
+  const update = vi.fn().mockReturnValue({ set: vi.fn().mockReturnValue(chain(undefined)) });
+  return { insert, values, onConflictDoNothing, returning, select, update, transaction };
 }
 
 // tx dedicado para los tests de materialización en room_finished: cada tabla
@@ -659,7 +660,7 @@ describe('CallsWebhookService: expulsión de ocupante locked en participant_join
   });
 
   it('[5.5.8] participant_joined de la principal con una asignación abierta locked: expulsa al ocupante (D8 punto 2, ventana de fuga aceptada)', async () => {
-    db.select.mockReturnValue(chain([{ breakoutRoomId: 'breakout-1' }]));
+    db.select.mockReturnValue(chain([{ occupantId: 'occ-1', leavePolicy: 'locked' }]));
     receive.mockResolvedValue(
       buildEvent({
         event: 'participant_joined',
@@ -678,7 +679,7 @@ describe('CallsWebhookService: expulsión de ocupante locked en participant_join
   // señal propia, distinta de BREAKOUT_MOVE_IN/BREAKOUT_FORCED_RETURN, ANTES
   // de removeParticipant.
   it('[2.6] expulsión de ocupante locked emite breakout:removal con motivo BREAKOUT_RETURN_LOCKED antes de removeParticipant', async () => {
-    db.select.mockReturnValue(chain([{ breakoutRoomId: 'breakout-1' }]));
+    db.select.mockReturnValue(chain([{ occupantId: 'occ-1', leavePolicy: 'locked' }]));
     receive.mockResolvedValue(
       buildEvent({
         event: 'participant_joined',
@@ -749,8 +750,70 @@ describe('CallsWebhookService: expulsión de ocupante locked en participant_join
     expect(removeParticipant).not.toHaveBeenCalled();
   });
 
+  it('un administrador con asignación locked abierta que vuelve a la principal no es expulsado: se cierra su asignación', async () => {
+    db.select
+      .mockReturnValueOnce(chain([{ occupantId: 'occ-admin', leavePolicy: 'locked' }]))
+      .mockReturnValueOnce(chain([{ roleAtIssue: 'administrador' }]));
+    receive.mockResolvedValue(
+      buildEvent({
+        event: 'participant_joined',
+        room: { sid: 'RM_session-A', name: 'abc-defg-hij' },
+        participant: { identity: 'admin-sub' },
+      }),
+    );
+
+    await service.handle(Buffer.from('{}'), 'valid-sig');
+
+    expect(removeParticipant).not.toHaveBeenCalled();
+    expect(roomEvents.emitBreakoutRemoval).not.toHaveBeenCalled();
+    expect(db.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('un participant_joined que llega tarde y es anterior a la asignación no expulsa a nadie', async () => {
+    db.select.mockReturnValueOnce(
+      chain([
+        {
+          occupantId: 'occ-1',
+          leavePolicy: 'locked',
+          assignedAt: new Date((1700000000 + 30) * 1000),
+        },
+      ]),
+    );
+    receive.mockResolvedValue(
+      buildEvent({
+        event: 'participant_joined',
+        createdAt: BigInt(1700000000),
+        room: { sid: 'RM_session-A', name: 'abc-defg-hij' },
+        participant: { identity: 'guest-locked' },
+      }),
+    );
+
+    await service.handle(Buffer.from('{}'), 'valid-sig');
+
+    expect(removeParticipant).not.toHaveBeenCalled();
+    expect(db.update).not.toHaveBeenCalled();
+  });
+
+  it('quien vuelve a la principal desde una mini sala free_return queda marcado como devuelto, sin expulsión', async () => {
+    db.select
+      .mockReturnValueOnce(chain([{ occupantId: 'occ-2', leavePolicy: 'free_return' }]))
+      .mockReturnValueOnce(chain([]));
+    receive.mockResolvedValue(
+      buildEvent({
+        event: 'participant_joined',
+        room: { sid: 'RM_session-A', name: 'abc-defg-hij' },
+        participant: { identity: 'guest-free' },
+      }),
+    );
+
+    await service.handle(Buffer.from('{}'), 'valid-sig');
+
+    expect(removeParticipant).not.toHaveBeenCalled();
+    expect(db.update).toHaveBeenCalledTimes(1);
+  });
+
   it('removeParticipant falla: no relanza, el webhook sigue resolviendo en 200', async () => {
-    db.select.mockReturnValue(chain([{ breakoutRoomId: 'breakout-1' }]));
+    db.select.mockReturnValue(chain([{ occupantId: 'occ-1', leavePolicy: 'locked' }]));
     removeParticipant.mockRejectedValue(new Error('participant not found'));
     receive.mockResolvedValue(
       buildEvent({

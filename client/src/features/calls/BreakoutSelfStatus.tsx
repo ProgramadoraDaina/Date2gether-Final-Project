@@ -11,6 +11,8 @@ interface BreakoutSelfStatusProps {
   assignment: BreakoutAssignment;
   onReturn: () => void;
   returning?: boolean;
+  // El servidor nunca retiene a un admin en una sala locked: siempre puede volver.
+  isAdmin?: boolean;
 }
 
 const URGENT_SECONDS = 10;
@@ -20,9 +22,10 @@ export function BreakoutSelfStatus({
   assignment,
   onReturn,
   returning = false,
+  isAdmin = false,
 }: BreakoutSelfStatusProps) {
   const { t } = useTranslation();
-  const canReturnFreely = assignment.leavePolicy === 'free_return';
+  const canReturnFreely = isAdmin || assignment.leavePolicy === 'free_return';
   const closesAt = assignment.closesAt ?? null;
   const left = useCountdown(closesAt);
   // La barra se vacía respecto del tiempo que quedaba cuando llegó el aviso, no desde cero.

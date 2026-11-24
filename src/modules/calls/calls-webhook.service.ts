@@ -197,20 +197,49 @@ export class CallsWebhookService {
     const roomCode = event.room?.name;
     if (!identity || !roomCode || isBreakoutRoomName(roomCode)) return;
 
-    const [openLockedAssignment] = await this.db
-      .select({ breakoutRoomId: callBreakoutOccupants.breakoutRoomId })
+    const [openAssignment] = await this.db
+      .select({
+        occupantId: callBreakoutOccupants.id,
+        assignedAt: callBreakoutOccupants.assignedAt,
+        leavePolicy: callBreakoutRooms.leavePolicy,
+      })
       .from(callBreakoutOccupants)
       .innerJoin(callBreakoutRooms, eq(callBreakoutOccupants.breakoutRoomId, callBreakoutRooms.id))
       .where(
         and(
           eq(callBreakoutOccupants.sourceIdentity, identity),
           isNull(callBreakoutOccupants.returnedAt),
-          eq(callBreakoutRooms.leavePolicy, 'locked'),
           isNull(callBreakoutRooms.closedAt),
         ),
       )
       .limit(1);
-    if (!openLockedAssignment) return;
+    if (!openAssignment) return;
+
+    // Los webhooks llegan con demora: un join previo a la asignación no es una fuga.
+    const joinedAt = Number(event.createdAt) * 1000;
+    const assignedAt = openAssignment.assignedAt?.getTime();
+    if (assignedAt && joinedAt && joinedAt < assignedAt) return;
+
+    // Mismo criterio que join(): `locked` nunca aplica a un administrador.
+    const [identityRow] = await this.db
+      .select({ roleAtIssue: callParticipantIdentities.roleAtIssue })
+      .from(callParticipantIdentities)
+      .where(eq(callParticipantIdentities.livekitIdentity, identity))
+      .limit(1);
+    const isAdmin = identityRow?.roleAtIssue === 'administrador';
+    if (isAdmin || openAssignment.leavePolicy !== 'locked') {
+      // Volvió a la principal por un camino permitido: deja de figurar en la mini sala.
+      await this.db
+        .update(callBreakoutOccupants)
+        .set({ returnedAt: new Date() })
+        .where(
+          and(
+            eq(callBreakoutOccupants.id, openAssignment.occupantId),
+            isNull(callBreakoutOccupants.returnedAt),
+          ),
+        );
+      return;
+    }
 
     // Decisión 2 (design.md "Señal de motivo de remoción") + spec
     // call-webhook-ingestion "Señal explícita en la expulsión...locked":
