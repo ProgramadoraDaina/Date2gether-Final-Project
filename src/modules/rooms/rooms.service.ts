@@ -39,6 +39,7 @@ export interface OwnedRoomView {
   code: string;
   name: string;
   isPermanent: boolean;
+  hiddenFromMyRooms: boolean;
   isJoinable: boolean;
   createdAt: Date;
   lastEnteredAt: Date;
@@ -125,6 +126,7 @@ export class RoomsService {
         code: rooms.code,
         name: rooms.name,
         isPermanent: rooms.isPermanent,
+        hiddenFromMyRooms: roomMembers.hiddenFromMyRooms,
         createdAt: rooms.createdAt,
         lastEnteredAt: rooms.lastEnteredAt,
       })
@@ -170,6 +172,21 @@ export class RoomsService {
         nextOccurrenceAt: next ? next.toISOString() : null,
       };
     });
+  }
+
+  async setMyRoomVisibility(roomId: string, userId: string, hidden: boolean): Promise<void> {
+    const [membership] = await this.db
+      .update(roomMembers)
+      .set({ hiddenFromMyRooms: hidden })
+      .where(
+        and(
+          eq(roomMembers.roomId, roomId),
+          eq(roomMembers.userId, userId),
+          eq(roomMembers.role, 'administrador'),
+        ),
+      )
+      .returning({ roomId: roomMembers.roomId });
+    if (!membership) throw new NotFoundException('No se encontró la sala en tu lista');
   }
 
   async joinRoom(code: string, userId: string): Promise<void> {

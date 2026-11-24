@@ -19,6 +19,7 @@ jest.mock('@/lib/api', () => ({
 
 function ownedRoom(overrides: Partial<OwnedRoom> = {}): OwnedRoom {
   return {
+    hiddenFromMyRooms: false,
     id: 'room-1',
     code: 'abc-defg-hij',
     name: 'Cita de los lunes',
@@ -56,7 +57,7 @@ describe('MyRoomsPage', () => {
     const MyRoomsPage = (await import('./page')).default;
     render(<MyRoomsPage />);
 
-    await screen.findByText('Cita de los lunes');
+    await screen.findByText('Cita de los lunes', { selector: '.roomName' });
     expect(screen.getByText('Permanente')).toBeInTheDocument();
     expect(screen.getByText(/Lunes 21:30/)).toBeInTheDocument();
     expect(screen.getByText(/Próximo encuentro/)).toBeInTheDocument();
@@ -100,7 +101,7 @@ describe('MyRoomsPage', () => {
     const MyRoomsPage = (await import('./page')).default;
     render(<MyRoomsPage />);
 
-    await screen.findByText('Cita de los lunes');
+    await screen.findByText('Cita de los lunes', { selector: '.roomName' });
     expect(screen.getAllByRole('button', { name: 'Renombrar sala' })).toHaveLength(1);
   });
 
@@ -119,7 +120,7 @@ describe('MyRoomsPage', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
-    await screen.findByText('Grupo de los jueves');
+    await screen.findByText('Grupo de los jueves', { selector: '.roomName' });
     expect(renameRoom).toHaveBeenCalledWith('abc-defg-hij', 'Grupo de los jueves');
   });
 

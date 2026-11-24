@@ -18,6 +18,34 @@ export interface RoomAccess {
   participant: { sub: string; roomId: string; roomCode: string; name: string; userId?: string };
 }
 
+export interface ChatMessage {
+  id: string;
+  authorName: string;
+  kind: 'text' | 'gif';
+  content: string;
+  createdAt: string;
+}
+
+export interface ChatHistoryPage {
+  entries: ChatMessage[];
+  nextCursor: string | null;
+}
+
+export async function getRoomMessages(
+  code: string,
+  token: string,
+  query: URLSearchParams,
+  signal: AbortSignal,
+): Promise<ChatHistoryPage> {
+  const res = await fetch(`${API_URL}/rooms/${encodeURIComponent(code)}/messages?${query}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal,
+  });
+  if (!res.ok)
+    throw new ApiError(await extractErrorMessage(res, 'No se pudieron cargar los mensajes'));
+  return res.json();
+}
+
 export async function getRoomInfo(code: string): Promise<Room> {
   const res = await fetch(`${API_URL}/rooms/${encodeURIComponent(code)}`);
   if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se encontró la sala'));
@@ -194,6 +222,7 @@ export async function renameRoom(code: string, name: string): Promise<void> {
 }
 
 export interface CallHistoryEntry {
+  id: string;
   roomId: string;
   roomCode: string;
   roomName: string;
@@ -201,13 +230,54 @@ export interface CallHistoryEntry {
   sessionId: string | null;
 }
 
+export interface CallHistoryPage {
+  entries: CallHistoryEntry[];
+  nextCursor: string | null;
+  hasArchived: boolean;
+}
+
 // Solo cuentas: no hay historial para invitados (no hay endpoint para ellos).
-export async function getCallHistory(): Promise<CallHistoryEntry[]> {
-  const res = await authFetch('/calls/history');
+export async function getCallHistory(
+  view: 'recent' | 'archive',
+  roomId: string | null,
+  before: string | null,
+  signal?: AbortSignal,
+): Promise<CallHistoryPage> {
+  const query = new URLSearchParams({ view });
+  if (roomId) query.set('roomId', roomId);
+  if (before) query.set('before', before);
+  const res = await authFetch(`/calls/history?${query}`, { signal });
   if (!res.ok) {
     throw new ApiError(await extractErrorMessage(res, 'No se pudo obtener el historial'));
   }
   return res.json();
+}
+
+export async function clearCallHistoryArchive(): Promise<void> {
+  const res = await authFetch('/calls/history/archive', { method: 'DELETE' });
+  if (!res.ok) {
+    throw new ApiError(await extractErrorMessage(res, 'No se pudo borrar el historial anterior'));
+  }
+}
+
+export async function getRoomCallArchive(
+  roomId: string,
+  before: string | null,
+  signal: AbortSignal,
+): Promise<CallHistoryPage> {
+  const query = before ? `?before=${encodeURIComponent(before)}` : '';
+  const res = await authFetch(`/calls/rooms/${encodeURIComponent(roomId)}/archive${query}`, {
+    signal,
+  });
+  if (!res.ok)
+    throw new ApiError(await extractErrorMessage(res, 'No se pudo obtener el historial'));
+  return res.json();
+}
+
+export async function clearRoomArchive(roomId: string): Promise<void> {
+  const res = await authFetch(`/rooms/${encodeURIComponent(roomId)}/archive`, { method: 'DELETE' });
+  if (!res.ok)
+    throw new ApiError(await extractErrorMessage(res, 'No se pudo borrar el archivo de la sala'));
 }
 
 export interface OwnedRoomSlot {
@@ -221,6 +291,7 @@ export interface OwnedRoom {
   code: string;
   name: string;
   isPermanent: boolean;
+  hiddenFromMyRooms: boolean;
   isJoinable: boolean;
   createdAt: string;
   lastEnteredAt: string;
@@ -234,6 +305,15 @@ export async function getOwnedRooms(): Promise<OwnedRoom[]> {
     throw new ApiError(await extractErrorMessage(res, 'No se pudieron cargar tus salas'));
   }
   return res.json();
+}
+
+export async function setMyRoomVisibility(roomId: string, hidden: boolean): Promise<void> {
+  const res = await authFetch(`/rooms/mine/${encodeURIComponent(roomId)}/visibility`, {
+    method: 'PATCH',
+    body: JSON.stringify({ hidden }),
+  });
+  if (!res.ok)
+    throw new ApiError(await extractErrorMessage(res, 'No se pudo actualizar tu lista de salas'));
 }
 
 export interface CallSessionSummary {

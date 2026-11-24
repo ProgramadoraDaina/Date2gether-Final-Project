@@ -162,6 +162,27 @@
       "when": 1795187929012,
       "tag": "0022_room_owner",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1795199751212,
+      "tag": "0023_call_history_retention",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1795211269969,
+      "tag": "0024_permanent_room_archive",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1795213481935,
+      "tag": "0025_my_room_visibility",
+      "breakpoints": true
     }
   ]
 }

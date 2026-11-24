@@ -21,6 +21,7 @@ import { MentionInput } from '@/features/chat/MentionInput';
 import { isSelfMentioned, ROLE_MENTION_KEYWORDS } from '@/features/chat/mentions';
 import { playMentionSound } from '@/features/chat/mentionSound';
 import { MessageText } from '@/features/chat/MessageText';
+import { useChatHistory } from '@/features/chat/useChatHistory';
 import { RoomEmojiShortcuts } from '@/features/chat/RoomEmojiShortcuts';
 import { AppShell } from '@/features/navigation/AppShell';
 import { RoomEmojisDialog } from '@/features/room-emojis/RoomEmojisDialog';
@@ -38,6 +39,8 @@ import {
   ApiError,
   getRoomInfo,
   requestRoomAccess,
+  type ChatHistoryPage,
+  type ChatMessage,
   type RoomAccess,
   type RoomEmoji,
 } from '@/lib/api';
@@ -65,14 +68,6 @@ const AmbientMusicPlayer = dynamic(
 );
 
 const NAME_KEY = 'date2gether:userName';
-
-interface ChatMessage {
-  id: string;
-  authorName: string;
-  kind: 'text' | 'gif';
-  content: string;
-  createdAt: string;
-}
 
 type Notice = { text: string } | { event: 'joined' | 'left'; userName: string };
 
@@ -159,7 +154,18 @@ export default function RoomPage() {
   const [callEndedDismissed, setCallEndedDismissed] = useState(false);
   const [users, setUsers] = useState<RoomPresence[]>([]);
   const [mentionNames, setMentionNames] = useState<string[]>([]);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const chatHistory = useChatHistory(code, access?.token);
+  const { startJoin, receiveHistory, receiveMessage, page: chatPage } = chatHistory;
+  const messageMentionNames = useMemo(
+    () => [
+      ...new Set([
+        ...mentionNames,
+        ...chatPage.entries.map((message) => message.authorName),
+        ...ROLE_MENTION_KEYWORDS,
+      ]),
+    ],
+    [mentionNames, chatPage.entries],
+  );
   const [draft, setDraft] = useState('');
   const [notice, setNotice] = useState<Notice | null>(null);
   useEffect(() => {
@@ -351,6 +357,7 @@ export default function RoomPage() {
     setRoomSocket(socket);
 
     socket.on('connect', () => {
+      startJoin();
       socket.emit('joinRoom', { code });
     });
 
@@ -365,9 +372,9 @@ export default function RoomPage() {
     function rememberNames(names: string[]) {
       setMentionNames((prev) => Array.from(new Set([...prev, ...names])));
     }
-    socket.on('roomHistory', (history: ChatMessage[]) => {
-      setMessages(history);
-      rememberNames(history.map((message) => message.authorName));
+    socket.on('roomHistory', (history: ChatHistoryPage) => {
+      receiveHistory(history);
+      rememberNames(history.entries.map((message) => message.authorName));
     });
     socket.on('roomUsers', (list: RoomPresence[]) => {
       setUsers(list);
@@ -396,7 +403,7 @@ export default function RoomPage() {
     });
 
     socket.on('newMessage', (message: ChatMessage) => {
-      setMessages((prev) => [...prev, message]);
+      receiveMessage(message);
       // Nunca te notifica tu propio mensaje, aunque te auto-menciones.
       if (
         message.kind === 'text' &&
@@ -428,11 +435,20 @@ export default function RoomPage() {
       socketRef.current = null;
       setRoomSocket(null);
     };
-  }, [code, access, myMentionRoleKeywords, refetchMembers, refetchEmojis]);
+  }, [
+    code,
+    access,
+    myMentionRoleKeywords,
+    refetchMembers,
+    refetchEmojis,
+    startJoin,
+    receiveHistory,
+    receiveMessage,
+  ]);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
-  }, [messages]);
+  }, [chatPage.entries]);
 
   function handleSend(e: FormEvent) {
     e.preventDefault();
@@ -594,8 +610,74 @@ export default function RoomPage() {
       </div>
       {chatTab === 'chat' ? (
         <>
+          <div className={styles.chatDateFilter}>
+            <label htmlFor="chat-message-day">{t('Filtrar por día')}</label>
+            <input
+              id="chat-message-day"
+              type="date"
+              value={chatHistory.day}
+              onChange={(event) => chatHistory.changeDay(event.target.value)}
+            />
+            {chatHistory.day && (
+              <button type="button" onClick={() => chatHistory.changeDay('')}>
+                {t('Limpiar filtro')}
+              </button>
+            )}
+            {isPermanentRoom && (
+              <button
+                type="button"
+                aria-pressed={chatHistory.archive}
+                onClick={chatHistory.toggleArchive}
+              >
+                {t(chatHistory.archive ? 'Volver al chat reciente' : 'Ver archivo del chat')}
+              </button>
+            )}
+            {chatHistory.archive && access.participant.userId && (
+              <Link
+                href={`/history?roomId=${encodeURIComponent(access.participant.roomId)}&roomArchive=1`}
+              >
+                {t('Ver archivo de llamadas')}
+              </Link>
+            )}
+          </div>
+          {(chatPage.nextCursor || chatHistory.before) && (
+            <div className={styles.chatDateFilter}>
+              {chatHistory.before && (
+                <button type="button" onClick={() => chatHistory.goTo(null)}>
+                  {t('Volver a la primera página')}
+                </button>
+              )}
+              {chatPage.nextCursor && (
+                <button type="button" onClick={() => chatHistory.goTo(chatPage.nextCursor)}>
+                  {t('Mensajes anteriores')}
+                </button>
+              )}
+            </div>
+          )}
           <ul className={styles.messages} ref={listRef} data-testid="messages">
-            {messages.map((m) => {
+            {chatHistory.loading && (
+              <li className={styles.chatFilterEmpty} role="status">
+                {t('Cargando mensajes…')}
+              </li>
+            )}
+            {chatHistory.error && (
+              <li className={styles.chatFilterEmpty} role="alert">
+                {t(chatHistory.error)}
+              </li>
+            )}
+            {!chatHistory.loading &&
+              !chatHistory.error &&
+              chatPage.entries.length === 0 &&
+              (chatHistory.day || chatHistory.archive || chatHistory.before) && (
+                <li className={styles.chatFilterEmpty} role="status">
+                  {t(
+                    chatHistory.day
+                      ? 'No hay mensajes de ese día.'
+                      : 'No hay mensajes en esta página.',
+                  )}
+                </li>
+              )}
+            {chatPage.entries.map((m) => {
               // No hay un id de autor persistido por mensaje: el color se
               // resuelve cruzando por nombre contra la presencia actual.
               // Es una simplificación aceptada para v1 (ver comentario en
@@ -627,45 +709,49 @@ export default function RoomPage() {
                       text={m.content}
                       roomCode={code}
                       emojisByName={emojisByName}
-                      mentionNames={[...mentionNames, ...ROLE_MENTION_KEYWORDS]}
+                      mentionNames={messageMentionNames}
                     />
                   )}
                 </li>
               );
             })}
           </ul>
-          <RoomEmojiShortcuts
-            roomCode={code}
-            emojis={chatEmojis}
-            onSelect={handleRoomEmojiSelect}
-            onShowAll={() => {
-              setPickerTab('room');
-              setPickerOpen(true);
-            }}
-          />
-          <form className={styles.messageForm} onSubmit={handleSend}>
-            <ExpressionPicker
-              roomCode={code}
-              roomToken={access.token}
-              roomEmojis={chatEmojis}
-              open={pickerOpen}
-              onOpenChange={setPickerOpen}
-              tab={pickerTab}
-              onTabChange={setPickerTab}
-              onEmojiSelect={handleEmojiSelect}
-              onGifSelect={handleGifSelect}
-              onRoomEmojiSelect={handleRoomEmojiSelect}
-            />
-            <MentionInput
-              value={draft}
-              onChange={setDraft}
-              inputRef={draftInputRef}
-              users={mentionSuggestions}
-              placeholder={t('Escribí un mensaje...')}
-              label={t('Mencionar participante')}
-            />
-            <button type="submit">{t('Enviar')}</button>
-          </form>
+          {!chatHistory.archive && (
+            <>
+              <RoomEmojiShortcuts
+                roomCode={code}
+                emojis={chatEmojis}
+                onSelect={handleRoomEmojiSelect}
+                onShowAll={() => {
+                  setPickerTab('room');
+                  setPickerOpen(true);
+                }}
+              />
+              <form className={styles.messageForm} onSubmit={handleSend}>
+                <ExpressionPicker
+                  roomCode={code}
+                  roomToken={access.token}
+                  roomEmojis={chatEmojis}
+                  open={pickerOpen}
+                  onOpenChange={setPickerOpen}
+                  tab={pickerTab}
+                  onTabChange={setPickerTab}
+                  onEmojiSelect={handleEmojiSelect}
+                  onGifSelect={handleGifSelect}
+                  onRoomEmojiSelect={handleRoomEmojiSelect}
+                />
+                <MentionInput
+                  value={draft}
+                  onChange={setDraft}
+                  inputRef={draftInputRef}
+                  users={mentionSuggestions}
+                  placeholder={t('Escribí un mensaje...')}
+                  label={t('Mencionar participante')}
+                />
+                <button type="submit">{t('Enviar')}</button>
+              </form>
+            </>
+          )}
         </>
       ) : chatTab === 'presentes' ? (
         <div className={styles.usersPanel} data-testid="users-panel">
