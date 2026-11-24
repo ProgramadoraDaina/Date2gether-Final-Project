@@ -1,5 +1,6 @@
 packages:
   - client
+  - packages/shared
 
 allowBuilds:
   '@parcel/watcher': true

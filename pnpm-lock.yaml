@@ -15,6 +15,9 @@ importers:
 
   .:
     dependencies:
+      '@date2gether/shared':
+        specifier: workspace:*
+        version: link:packages/shared
       '@nestjs/common':
         specifier: ^12.0.4
         version: 12.0.4(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1)
@@ -142,6 +145,9 @@ importers:
 
   client:
     dependencies:
+      '@date2gether/shared':
+        specifier: workspace:*
+        version: link:../packages/shared
       '@livekit/components-react':
         specifier: 2.9.24
         version: 2.9.24(livekit-client@2.23.0(@types/dom-mediacapture-record@1.0.22))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(tslib@2.8.1)
@@ -209,6 +215,12 @@ importers:
       undici:
         specifier: ^7.30.1
         version: 7.30.1
+
+  packages/shared:
+    devDependencies:
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
 
 packages:
 
