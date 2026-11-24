@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { AvatarSettingsSection } from '@/features/avatar/AvatarSettingsSection';
 import { toAvatar } from '@/features/avatar/catalog';
 import { useAvatarStore } from '@/features/avatar/store';
+import { CallLayoutEditor } from '@/features/calls/layout/CallLayoutEditor';
 import { isMentionSoundEnabled, setMentionSoundEnabled } from '@/features/chat/mentionPreferences';
 import { ApiError, updateNameColor } from '@/lib/api';
 import { getCurrentUser, isLoggedIn } from '@/lib/auth';
@@ -160,6 +161,11 @@ export default function SettingsPage() {
         <div className={styles.section}>
           <p className={styles.subtitle}>{t('Avatar')}</p>
           <AvatarSettingsSection />
+        </div>
+
+        <div className={styles.section}>
+          <p className={styles.subtitle}>{t('Distribución de la pantalla en las llamadas')}</p>
+          <CallLayoutEditor />
         </div>
 
         <p className={styles.subtitle}>{t('Elegí el color de tu nombre')}</p>
