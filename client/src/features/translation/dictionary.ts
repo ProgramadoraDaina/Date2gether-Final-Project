@@ -854,6 +854,7 @@ const en: Record<string, string> = {
   'mensajes sin leer': 'unread messages',
   'Mini salas abiertas': 'Open breakout rooms',
   persona: 'person',
+  'Volumen para todos': 'Volume for everyone',
 };
 
 export default en;

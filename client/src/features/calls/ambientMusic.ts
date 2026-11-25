@@ -22,6 +22,13 @@ export interface MusicState {
   updatedAt: number;
   mode: PlaybackMode;
   shuffle: boolean;
+  // Tope que fija el admin para toda la sala; sin definir equivale a 100.
+  roomVolume?: number;
+}
+
+// Tu volumen se aplica encima del de la sala: si el admin la baja a la mitad, tu 100 suena a 50.
+export function effectiveVolume(personal: number, roomVolume?: number): number {
+  return Math.round((personal * (roomVolume ?? 100)) / 100);
 }
 
 export function currentTrack(state: MusicState): MusicTrack | null {

@@ -503,6 +503,26 @@ describe('ChatGateway', () => {
       );
     });
 
+    it('el admin fija el volumen de la música para toda la sala', async () => {
+      const { gateway, client, serverEmit } = await joinedAdmin('administrador');
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'aaaaaaaaaaa', title: 'Uno' });
+
+      await gateway.handleMusicSetVolume(client as never, { volume: 40 });
+
+      expect(serverEmit).toHaveBeenLastCalledWith(
+        'musicState',
+        expect.objectContaining({ roomVolume: 40 }),
+      );
+    });
+
+    it('rechaza musicSetVolume de alguien que no es administrador', async () => {
+      const { gateway, client, serverEmit } = await joinedAdmin('participante');
+
+      await gateway.handleMusicSetVolume(client as never, { volume: 10 });
+
+      expect(serverEmit).not.toHaveBeenCalled();
+    });
+
     it('rechaza musicSetMode de alguien que no es administrador', async () => {
       const { gateway, client, serverEmit } = await joinedAdmin('participante');
 

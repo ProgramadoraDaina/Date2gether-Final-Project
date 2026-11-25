@@ -23,6 +23,7 @@ import { ChatService } from './chat.service';
 import { RoomPlaylistsService } from './room-playlists.service';
 import { afterTrackEnded, skipToNext, type PlaybackState } from './music-playback';
 import { MusicModeDto } from './dto/music-mode.dto';
+import { MusicVolumeDto } from './dto/music-volume.dto';
 import { MusicTrackEndedDto } from './dto/music-track-ended.dto';
 import { JoinRoomDto } from './dto/join-room.dto';
 import { MusicAddTrackDto } from './dto/music-add-track.dto';
@@ -98,6 +99,8 @@ type RoomUser = Pick<
 
 interface MusicState extends PlaybackState {
   updatedAt: number;
+  // Volumen que fija el admin para toda la sala (0-100); cada persona ajusta el suyo encima.
+  roomVolume?: number;
 }
 
 interface RouletteEventState {
@@ -490,6 +493,15 @@ export class ChatGateway implements OnGatewayDisconnect {
       shuffle: dto.shuffle,
       played: [state.currentIndex],
     }));
+  }
+
+  @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage('musicSetVolume')
+  async handleMusicSetVolume(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() dto: MusicVolumeDto,
+  ) {
+    await this.updateMusicState(client, (state) => ({ ...state, roomVolume: dto.volume }));
   }
 
   // Any listener may report the end: the admin is not necessarily listening.
