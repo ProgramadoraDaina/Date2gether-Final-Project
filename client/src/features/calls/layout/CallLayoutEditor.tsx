@@ -296,7 +296,14 @@ function ZoneCard({ zone, index, open }: { zone: LayoutZone; index: number; open
   );
 }
 
-export function CallLayoutEditor({ showPreview = true }: { showPreview?: boolean }) {
+export function CallLayoutEditor({
+  showPreview = true,
+  wide = false,
+}: {
+  showPreview?: boolean;
+  // Escritorio: la vista previa a la izquierda y los controles a la derecha.
+  wide?: boolean;
+}) {
   const { t } = useTranslation();
   const {
     enabled,
@@ -315,8 +322,24 @@ export function CallLayoutEditor({ showPreview = true }: { showPreview?: boolean
   const tree = useMemo(() => buildLayoutTree(zones), [zones]);
   const zoneIndex = new Map(zones.map((zone, index) => [zone.id, index]));
 
-  return (
-    <div className={styles.editor}>
+  const previewNode = tree && showPreview && (
+    <div className={styles.preview} data-testid="layout-preview">
+      <LayoutView
+        tree={tree}
+        zoneProps={(zone) => ({
+          style: zoneColorStyle(zoneIndex.get(zone.id) ?? 0),
+          focused: zone.id === focusedZoneId,
+        })}
+        renderZone={(zone) => (
+          <span className={styles.previewZone}>
+            {(zoneIndex.get(zone.id) ?? 0) + 1} · {zone.capacity} {t('pers.')}
+          </span>
+        )}
+      />
+    </div>
+  );
+  const top = (
+    <>
       <div className={styles.editorHead}>
         <div className={styles.switchRow}>
           <span>{t('Usar mi distribución en las llamadas')}</span>
@@ -376,22 +399,10 @@ export function CallLayoutEditor({ showPreview = true }: { showPreview?: boolean
           )}
         </div>
       )}
-      {tree && showPreview && (
-        <div className={styles.preview} data-testid="layout-preview">
-          <LayoutView
-            tree={tree}
-            zoneProps={(zone) => ({
-              style: zoneColorStyle(zoneIndex.get(zone.id) ?? 0),
-              focused: zone.id === focusedZoneId,
-            })}
-            renderZone={(zone) => (
-              <span className={styles.previewZone}>
-                {(zoneIndex.get(zone.id) ?? 0) + 1} · {zone.capacity} {t('pers.')}
-              </span>
-            )}
-          />
-        </div>
-      )}
+    </>
+  );
+  const bottom = (
+    <>
       {zones.length === 0 ? (
         <div className={styles.emptyState}>
           <strong>{t('Todavía no hay zonas')}</strong>
@@ -412,6 +423,26 @@ export function CallLayoutEditor({ showPreview = true }: { showPreview?: boolean
       <button type="button" className={styles.addZone} onClick={addZone}>
         <span aria-hidden="true">+</span> {t('Agregar zona')}
       </button>
+    </>
+  );
+
+  if (wide && previewNode) {
+    return (
+      <div className={styles.editorWide}>
+        {previewNode}
+        <div className={styles.editor}>
+          {top}
+          {bottom}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.editor}>
+      {top}
+      {previewNode}
+      {bottom}
     </div>
   );
 }
