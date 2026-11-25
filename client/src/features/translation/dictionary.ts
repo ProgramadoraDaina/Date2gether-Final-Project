@@ -850,6 +850,8 @@ const en: Record<string, string> = {
   'Filtrar por sala': 'Filter by room',
   'Todas las salas': 'All rooms',
   Activar: 'Turn on',
+  'mensaje sin leer': 'unread message',
+  'mensajes sin leer': 'unread messages',
 };
 
 export default en;
