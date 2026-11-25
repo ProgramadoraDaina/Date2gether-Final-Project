@@ -156,3 +156,60 @@ describe('zonesInUse', () => {
     expect(ids(0)).toEqual(['centro']);
   });
 });
+
+describe('zonesInUse con todas las combinaciones', () => {
+  const PLACEMENTS = [
+    'beside-previous',
+    'below-previous',
+    'left',
+    'right',
+    'top',
+    'bottom',
+  ] as const;
+
+  function* configs(): Generator<LayoutZone[]> {
+    for (let count = 1; count <= 4; count++) {
+      const total = PLACEMENTS.length ** (count - 1) * 3 ** count;
+      for (let n = 0; n < total; n++) {
+        let rest = n;
+        const zones: LayoutZone[] = [];
+        for (let i = 0; i < count; i++) {
+          const capacity = (rest % 3) + 1;
+          rest = Math.floor(rest / 3);
+          const placement = i === 0 ? 'bottom' : PLACEMENTS[rest % PLACEMENTS.length];
+          if (i > 0) rest = Math.floor(rest / PLACEMENTS.length);
+          zones.push({
+            id: `z${i}`,
+            capacity,
+            placement,
+            width: 30,
+            height: 30,
+            scale: 100,
+            aspect: '16:9',
+          });
+        }
+        yield zones;
+      }
+    }
+  }
+
+  it('nadie queda afuera, ninguna zona visible queda vacía y la pantalla siempre se arma', () => {
+    let checked = 0;
+    for (const zones of configs()) {
+      for (let people = 0; people <= 12; people++) {
+        const shown = zonesInUse(zones, people);
+        const groups = assignToZones(
+          shown,
+          Array.from({ length: people }, (_, i) => i),
+        );
+        expect(shown.length).toBeGreaterThan(0);
+        expect(shown).toEqual(zones.slice(0, shown.length));
+        expect(groups.flat()).toHaveLength(people);
+        if (people > 0) for (const group of groups) expect(group.length).toBeGreaterThan(0);
+        expect(buildLayoutTree(shown)).not.toBeNull();
+        checked++;
+      }
+    }
+    expect(checked).toBeGreaterThan(100_000);
+  });
+});
