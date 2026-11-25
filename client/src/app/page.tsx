@@ -37,7 +37,9 @@ export default function HomePage() {
     getCurrentUser()
       .then((currentUser) => {
         setUser(currentUser);
-        setLoggedIn(currentUser !== null);
+        // null is not proof of "logged out": /auth/me can fail with 429/5xx while the token is
+        // still valid. A truly dead session (401 after refresh) already cleared the tokens.
+        setLoggedIn(currentUser !== null || isLoggedIn());
         if (currentUser) {
           setName(currentUser.name);
           localStorage.setItem(NAME_KEY, currentUser.name);

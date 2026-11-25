@@ -12,7 +12,8 @@ jest.mock('@/features/translation/useTranslation', () => {
 });
 jest.mock('@/lib/auth', () => ({
   getCurrentUser: jest.fn<() => Promise<null>>().mockResolvedValue(null),
-  isLoggedIn: () => false,
+  getCurrentUserOrThrow: jest.fn<() => Promise<null>>().mockResolvedValue(null),
+  isLoggedIn: jest.fn<() => boolean>().mockReturnValue(false),
   onAuthChange: () => () => {},
   logout: jest.fn(),
 }));
@@ -27,7 +28,8 @@ const loggedInUser = {
 };
 
 async function setSession(user: typeof loggedInUser | null) {
-  const { getCurrentUser } = await import('@/lib/auth');
+  const { getCurrentUser, isLoggedIn } = await import('@/lib/auth');
+  (isLoggedIn as jest.Mock<() => boolean>).mockReturnValue(user !== null);
   (getCurrentUser as jest.Mock<() => Promise<typeof user>>).mockResolvedValue(user);
 }
 
@@ -53,6 +55,30 @@ describe('HomePage', () => {
 
     expect(push).toHaveBeenCalledWith(loginUrlFor('/'));
     expect(createRoom).not.toHaveBeenCalled();
+  });
+
+  it('con token válido pero /auth/me fallando (429/5xx), sigue contando como sesión y crea la sala', async () => {
+    await setSession(null);
+    const { isLoggedIn } = await import('@/lib/auth');
+    (isLoggedIn as jest.Mock<() => boolean>).mockReturnValue(true);
+    localStorage.setItem('date2gether:userName', 'Ana');
+    const { createRoom } = await import('@/lib/api');
+    (createRoom as jest.Mock<typeof createRoom>).mockResolvedValue({
+      id: 'room-1',
+      code: 'abc-defg-hij',
+      name: 'Reunión de Ana',
+      isActive: true,
+      isPermanent: false,
+      createdAt: '2026-01-01',
+    });
+    const HomePage = (await import('./page')).default;
+    render(<HomePage />);
+    await screen.findByText('Iniciar sesión');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Crear reunión' }));
+
+    await waitFor(() => expect(createRoom).toHaveBeenCalled());
+    expect(push).not.toHaveBeenCalledWith(loginUrlFor('/'));
   });
 
   it('sin sesión, no se muestran los campos de sala permanente', async () => {
