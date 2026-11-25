@@ -129,6 +129,29 @@
   height: 100%;
 }
 
+/* El borde de quien habla lo pone .speakerOutline con su color de nombre. */
+.tileWrap :global(.lk-participant-tile[data-lk-speaking='true']) {
+  box-shadow: none;
+}
+
+.speakerOutline {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border: 2px solid transparent;
+  pointer-events: none;
+  transition: border-color var(--dur-ui) var(--ease-out);
+}
+
+.speakerOutline[data-speaking='true'] {
+  border-color: var(--speaker-color);
+}
+
+/* LiveKit solo la muestra al pasar el mouse; acá queda siempre a la vista. */
+.tileWrap :global(.lk-connection-quality) {
+  opacity: 1;
+}
+
 /* La silueta por defecto de LiveKit queda reemplazada por el avatar (TileAvatar). */
 .tileWrap :global(.lk-participant-placeholder) > svg:not([data-testid='avatar-figure']) {
   display: none;

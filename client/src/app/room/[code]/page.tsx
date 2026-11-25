@@ -316,6 +316,14 @@ export default function RoomPage() {
       })),
     [users],
   );
+  const participantColors = useMemo(() => {
+    const colors: Record<string, string> = {};
+    for (const { participantId, nameColor } of users) {
+      const hex = nameColorHex(nameColor);
+      if (hex) colors[participantId] = hex;
+    }
+    return colors;
+  }, [users]);
   useEffect(() => {
     setName(localStorage.getItem(NAME_KEY) ?? '');
   }, []);
@@ -1094,6 +1102,7 @@ export default function RoomPage() {
                       onSetAudioLock={mediaLock.setAudioLock}
                       onSetVideoLock={mediaLock.setVideoLock}
                       participants={breakoutParticipants}
+                      participantColors={participantColors}
                       roomSocket={roomSocket}
                       currentParticipantId={access.participant.sub}
                       nameFocusEnabled={nameFocus.enabled}

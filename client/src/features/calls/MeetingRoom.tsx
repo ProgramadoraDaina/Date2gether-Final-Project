@@ -55,8 +55,10 @@ import { CustomCallLayout } from './layout/CustomCallLayout';
 import { useCallLayoutStore } from './layout/store';
 import { CaptionsButton, CaptionsOverlay } from './transcription/Captions';
 import { TranscriptionProvider } from './transcription/TranscriptionProvider';
+import { ParticipantColorsContext, type ParticipantColors } from './participantColors';
 
 const TRANSITION_TIMEOUT_MS = 12_000;
+const NO_COLORS: ParticipantColors = {};
 
 const options: RoomOptions = {
   adaptiveStream: true,
@@ -299,6 +301,8 @@ interface MeetingRoomProps {
   // acá. Opcional con default vacío para no romper los render() existentes
   // de MeetingRoom.spec.tsx que todavía no pasan esta prop.
   participants?: BreakoutHostConsoleParticipant[];
+  // Color de nombre por identity, para el borde de quien habla y la fila de manos.
+  participantColors?: ParticipantColors;
   // Socket de sala ya conectado (o null mientras conecta): se lo pasa tal
   // cual a useRoomSocket para escuchar breakout:assigned/breakout:closed,
   // mismo patrón que useRoomMediaLock/useRoomEvents en page.tsx.
@@ -594,6 +598,7 @@ export default function MeetingRoom({
   onSetAudioLock,
   onSetVideoLock,
   participants = [],
+  participantColors = NO_COLORS,
   roomSocket = null,
   currentParticipantId = '',
   nameFocusEnabled,
@@ -774,24 +779,26 @@ export default function MeetingRoom({
         data-lk-theme="default"
         className={styles.meetingRoom}
       >
-        <MeetingContent
-          roomCode={roomCode}
-          roomToken={roomToken}
-          roomEmojis={roomEmojis}
-          initialDevices={initialDevices}
-          onTranscriptAvailable={onTranscriptAvailable}
-          isCurrentUserAdmin={isCurrentUserAdmin}
-          audioLocked={audioLocked}
-          videoLocked={videoLocked}
-          onSetAudioLock={onSetAudioLock}
-          onSetVideoLock={onSetVideoLock}
-          participants={participants}
-          currentParticipantId={currentParticipantId}
-          breakoutAssignment={breakoutAssignment}
-          switchRoom={call.switchRoom}
-          nameFocusEnabled={nameFocusEnabled}
-          onSetNameFocus={onSetNameFocus}
-        />
+        <ParticipantColorsContext.Provider value={participantColors}>
+          <MeetingContent
+            roomCode={roomCode}
+            roomToken={roomToken}
+            roomEmojis={roomEmojis}
+            initialDevices={initialDevices}
+            onTranscriptAvailable={onTranscriptAvailable}
+            isCurrentUserAdmin={isCurrentUserAdmin}
+            audioLocked={audioLocked}
+            videoLocked={videoLocked}
+            onSetAudioLock={onSetAudioLock}
+            onSetVideoLock={onSetVideoLock}
+            participants={participants}
+            currentParticipantId={currentParticipantId}
+            breakoutAssignment={breakoutAssignment}
+            switchRoom={call.switchRoom}
+            nameFocusEnabled={nameFocusEnabled}
+            onSetNameFocus={onSetNameFocus}
+          />
+        </ParticipantColorsContext.Provider>
       </LiveKitRoom>
       {transition && <BreakoutTransition transition={transition} />}
       <BreakoutToasts toasts={breakoutToasts} onDismiss={dismissBreakoutToast} />
