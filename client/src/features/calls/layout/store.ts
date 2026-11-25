@@ -26,6 +26,16 @@ function sanitize(zone: LayoutZone): LayoutZone {
   };
 }
 
+const SIDE_BY_SIDE = new Set(['left', 'right', 'beside-previous']);
+
+// A full-size zone docked sideways would leave nothing for its neighbour.
+function sizeForPlacement(zone: LayoutZone, changes: ZoneChanges): ZoneChanges {
+  if (!changes.placement || changes.placement === zone.placement) return {};
+  return SIDE_BY_SIDE.has(changes.placement)
+    ? { width: 30, height: 100 }
+    : { width: 100, height: 30 };
+}
+
 let created = 0;
 const newZoneId = () => `zone-${Date.now().toString(36)}-${(created++).toString(36)}`;
 
@@ -60,7 +70,11 @@ export const useCallLayoutStore = create<CallLayoutState>()(
       addZone: () => set(({ zones }) => ({ zones: [...zones, defaultZone(zones.length === 0)] })),
       updateZone: (id, changes) =>
         set(({ zones }) => ({
-          zones: zones.map((zone) => (zone.id === id ? sanitize({ ...zone, ...changes }) : zone)),
+          zones: zones.map((zone) =>
+            zone.id === id
+              ? sanitize({ ...zone, ...sizeForPlacement(zone, changes), ...changes })
+              : zone,
+          ),
         })),
       removeZone: (id) => set(({ zones }) => ({ zones: zones.filter((zone) => zone.id !== id) })),
     }),

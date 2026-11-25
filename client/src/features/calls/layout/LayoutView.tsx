@@ -7,12 +7,20 @@ interface LayoutViewProps {
   renderZone: (zone: LayoutZone) => ReactNode;
 }
 
-const FILL: CSSProperties = { flex: '1 1 0', minWidth: 0, minHeight: 0 };
+const FILL: CSSProperties = { flex: '1 1 0', alignSelf: 'stretch', minWidth: 0, minHeight: 0 };
+
+// The other side of a split always keeps at least 10%.
+const MAX_SIZED = 90;
 
 function sizedStyle(zone: LayoutZone, direction: 'row' | 'column'): CSSProperties {
   return direction === 'row'
-    ? { flex: `0 1 ${zone.width}%`, height: `${zone.height}%`, minWidth: 0 }
-    : { flex: `0 1 ${zone.height}%`, width: `${zone.width}%`, minHeight: 0 };
+    ? { flex: `0 1 ${Math.min(zone.width, MAX_SIZED)}%`, height: `${zone.height}%`, minWidth: 0 }
+    : { flex: `0 1 ${Math.min(zone.height, MAX_SIZED)}%`, width: `${zone.width}%`, minHeight: 0 };
+}
+
+// A sized zone later split by "beside/below previous" stays first in its split and keeps its size.
+function leadZone(node: LayoutNode): LayoutZone {
+  return node.kind === 'zone' ? node.zone : leadZone(node.children[0]);
 }
 
 function NodeView({
@@ -38,11 +46,7 @@ function NodeView({
           key={index}
           node={child}
           renderZone={renderZone}
-          style={
-            index === node.sized && child.kind === 'zone'
-              ? sizedStyle(child.zone, node.direction)
-              : FILL
-          }
+          style={index === node.sized ? sizedStyle(leadZone(child), node.direction) : FILL}
         />
       ))}
     </div>

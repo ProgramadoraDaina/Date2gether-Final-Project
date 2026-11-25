@@ -28,6 +28,20 @@ describe('useCallLayoutStore', () => {
     expect(state().zones[0]).toMatchObject({ width: 100, height: 10, capacity: 1, tileSize: 480 });
   });
 
+  it('al cambiar la posición, la zona deja lugar a la de al lado', () => {
+    act(() => {
+      state().addZone();
+      state().addZone();
+    });
+    const { id } = state().zones[1];
+    act(() => state().updateZone(id, { placement: 'right' }));
+    expect(state().zones[1]).toMatchObject({ placement: 'right', width: 30, height: 100 });
+    act(() => state().updateZone(id, { placement: 'below-previous' }));
+    expect(state().zones[1]).toMatchObject({ width: 100, height: 30 });
+    act(() => state().updateZone(id, { width: 55 }));
+    expect(state().zones[1]).toMatchObject({ placement: 'below-previous', width: 55 });
+  });
+
   it('quita una zona y persiste en este navegador', () => {
     act(() => {
       state().addZone();
