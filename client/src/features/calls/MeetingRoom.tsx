@@ -51,6 +51,8 @@ import { ReactionsProvider } from './reactions/ReactionsProvider';
 import { ReactionTile } from './reactions/ReactionTile';
 import { CallSettingsButton } from './settings/CallSettings';
 import { useCallSettingsStore } from './settings/store';
+import { CustomCallLayout } from './layout/CustomCallLayout';
+import { useCallLayoutStore } from './layout/store';
 import { CaptionsButton, CaptionsOverlay } from './transcription/Captions';
 import { TranscriptionProvider } from './transcription/TranscriptionProvider';
 
@@ -431,6 +433,8 @@ function MeetingContent({
   const layoutContext = useCreateLayoutContext();
   const pinnedTracks = usePinnedTracks(layoutContext);
   const focusTrack = pinnedTracks[0];
+  const customLayout = useCallLayoutStore();
+  const useCustomLayout = customLayout.enabled && customLayout.zones.length > 0;
   // Misma frase final de transcripción llega a todas las pantallas por el
   // data channel que ya usa TranscriptionProvider (ver TRANSCRIPT_TOPIC): al
   // correr este mismo matching en cada cliente, el pineo termina viéndose
@@ -487,6 +491,12 @@ function MeetingContent({
                 <ReactionTile canFocus={tracks.length > 1} />
               </TrackRefContext.Provider>
             </FocusLayoutContainer>
+          ) : useCustomLayout ? (
+            <CustomCallLayout
+              tracks={tracks}
+              zones={customLayout.zones}
+              editing={customLayout.editing}
+            />
           ) : (
             <GridLayout tracks={tracks} className={styles.meetingGrid}>
               <ReactionTile canFocus={tracks.length > 1} />

@@ -164,6 +164,38 @@ describe('MeetingRoom', () => {
       participantLimit: 6,
     });
   });
+  it('con una distribución propia activada, la usa en vez de la grilla', async () => {
+    const { useCallLayoutStore } = await import('./layout/store');
+    const { useTracks } = await import('@livekit/components-react');
+    jest
+      .mocked(useTracks)
+      .mockReturnValue([{ participant: { identity: 'santi' }, source: 'camera' }] as never);
+    const MeetingRoom = (await import('./MeetingRoom')).default;
+    const props = {
+      call: state(),
+      roomCode: 'abc',
+      roomToken: 'test-room-token',
+      roomEmojis: [],
+      isCurrentUserAdmin: false,
+      audioLocked: false,
+      videoLocked: false,
+      onSetAudioLock: jest.fn(),
+      onSetVideoLock: jest.fn(),
+      nameFocusEnabled: false,
+      onSetNameFocus: jest.fn(),
+    };
+    act(() => useCallLayoutStore.setState({ enabled: false, zones: [] }));
+    act(() => useCallLayoutStore.getState().addZone());
+    const { rerender } = render(<MeetingRoom {...props} />);
+    expect(screen.queryByTestId('layout-zone')).not.toBeInTheDocument();
+
+    act(() => useCallLayoutStore.getState().setEnabled(true));
+    rerender(<MeetingRoom {...props} />);
+    expect(screen.getByTestId('layout-zone')).toBeInTheDocument();
+    expect(screen.getAllByTestId('layout-tile')).toHaveLength(1);
+    act(() => useCallLayoutStore.setState({ enabled: false, zones: [] }));
+    jest.mocked(useTracks).mockReturnValue([]);
+  });
   it('al tocar micrófono o cámara en la llamada recuerda la elección para la próxima vez', async () => {
     const { useCallSettingsStore } = await import('./settings/store');
     useCallSettingsStore.setState({ cameraEnabled: true, microphoneEnabled: true });

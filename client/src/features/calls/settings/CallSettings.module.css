@@ -16,6 +16,21 @@
   color: var(--color-text);
 }
 
+/* Docked to the right edge so the tiles being edited stay visible. */
+.panelWide {
+  position: fixed;
+  right: 16px;
+  bottom: 88px;
+  width: min(340px, calc(100vw - 32px));
+}
+
+.layoutBody {
+  max-height: min(60vh, 520px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
 .menu {
   margin: 0;
   padding: 0;

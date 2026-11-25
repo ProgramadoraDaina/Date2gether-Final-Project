@@ -98,6 +98,24 @@ describe('SettingsPage', () => {
     );
   });
 
+  it('con sesión muestra el apartado para armar la distribución de la pantalla', async () => {
+    const { isLoggedIn, getCurrentUser } = await import('@/lib/auth');
+    (isLoggedIn as jest.Mock<typeof isLoggedIn>).mockReturnValue(true);
+    (getCurrentUser as jest.Mock<typeof getCurrentUser>).mockResolvedValue({
+      id: '1',
+      email: 'a@a.com',
+      name: 'Daina',
+      createdAt: '2026-01-01',
+      nameColor: null,
+    });
+    const SettingsPage = (await import('./page')).default;
+    render(<SettingsPage />);
+
+    await screen.findByText('Distribución de la pantalla en las llamadas');
+    expect(screen.getByRole('button', { name: 'Agregar zona' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Usar mi distribución en las llamadas')).toBeInTheDocument();
+  });
+
   it('el toggle de sonido de mención arranca prendido y persiste al apagarlo', async () => {
     const { isLoggedIn } = await import('@/lib/auth');
     (isLoggedIn as jest.Mock<typeof isLoggedIn>).mockReturnValue(false);
