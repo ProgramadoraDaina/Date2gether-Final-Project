@@ -181,7 +181,8 @@
     justify-content: center;
   }
 
-  .actions > .copied {
+  .actions > .copied,
+  .actions > .dangerAction {
     grid-column: 1 / -1;
   }
 }

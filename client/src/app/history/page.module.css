@@ -117,9 +117,13 @@
 .sectionHead {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   flex-wrap: wrap;
   gap: var(--space-3);
+}
+
+/* El título a la izquierda; filtro y pestañas juntos a la derecha. */
+.sectionHead > :first-child {
+  margin-right: auto;
 }
 
 .tabs {
@@ -317,4 +321,20 @@
     flex: 0 0 78%;
     scroll-snap-align: start;
   }
+}
+
+.roomFilter select {
+  width: auto;
+  max-width: 220px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }

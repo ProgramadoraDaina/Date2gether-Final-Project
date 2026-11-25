@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { Suspense, useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ApiError,
   clearCallHistoryArchive,
@@ -93,6 +93,8 @@ function HistoryList({
   roomArchive: string | null;
 }) {
   const { t, language } = useTranslation();
+  const router = useRouter();
+  const owned = useOwnedRooms();
   const locale = language === 'en' ? 'en-US' : 'es-AR';
   const [view, setView] = useState<'recent' | 'archive'>('recent');
   const [cursors, setCursors] = useState<(string | null)[]>([null]);
@@ -157,7 +159,6 @@ function HistoryList({
   }
 
   const entries = page?.entries ?? [];
-  const filteredRoomName = entries[0]?.roomName;
   const timeFormat = new Intl.DateTimeFormat(locale, {
     hour: '2-digit',
     minute: '2-digit',
@@ -181,32 +182,23 @@ function HistoryList({
 
   const roomScoped = !!roomId;
   const showTabs = !roomArchive && (roomScoped || archive || !!page?.hasArchived);
+  // Opciones del filtro: tus salas más las de las llamadas cargadas; el código distingue salas con el mismo nombre.
+  const roomOptions = new Map<string, string>();
+  for (const room of owned.rooms) roomOptions.set(room.id, `${room.name} · ${room.code}`);
+  for (const entry of entries)
+    if (!roomOptions.has(entry.roomId))
+      roomOptions.set(entry.roomId, `${entry.roomName} · ${entry.roomCode}`);
 
   return (
     <div className={styles.page}>
       <header className={styles.header}>
-        {roomArchive ? (
-          <Link href={`/history?roomId=${encodeURIComponent(roomArchive)}`} className={styles.back}>
+        {roomArchive && (
+          <Link href="/history" className={styles.back}>
             <span aria-hidden="true">← </span>
-            {t('Ver mis llamadas en esta sala')}
+            {t('Volver al historial')}
           </Link>
-        ) : (
-          roomScoped && (
-            <Link href="/history" className={styles.back}>
-              <span aria-hidden="true">← </span>
-              {t('Ver todo el historial')}
-            </Link>
-          )
         )}
-        <h1>
-          {roomArchive
-            ? t('Archivo compartido de la sala')
-            : roomScoped
-              ? filteredRoomName
-                ? `${t('Llamadas de')} ${filteredRoomName}`
-                : t('Llamadas de la sala')
-              : t('Historial')}
-        </h1>
+        <h1>{roomArchive ? t('Archivo compartido de la sala') : t('Historial')}</h1>
         <p>
           {t(
             roomArchive
@@ -218,13 +210,35 @@ function HistoryList({
         </p>
       </header>
 
-      {!roomScoped && <OwnedRoomsSection />}
+      {!roomArchive && <OwnedRoomsSection {...owned} />}
 
       <section className={styles.callsSection} aria-labelledby="calls-title">
         <div className={styles.sectionHead}>
           <h2 id="calls-title" className={styles.sectionTitle}>
             {t('Llamadas')}
           </h2>
+          {!roomArchive && (roomScoped || roomOptions.size > 1) && (
+            <label className={styles.roomFilter}>
+              <span className={styles.srOnly}>{t('Filtrar por sala')}</span>
+              <select
+                value={roomId ?? ''}
+                onChange={(event) =>
+                  router.push(
+                    event.target.value
+                      ? `/history?roomId=${encodeURIComponent(event.target.value)}`
+                      : '/history',
+                  )
+                }
+              >
+                <option value="">{t('Todas las salas')}</option>
+                {[...roomOptions].map(([id, name]) => (
+                  <option key={id} value={id}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {showTabs && (
             <Tabs
               recentActive={!archive}
@@ -397,7 +411,7 @@ function HistoryList({
   );
 }
 
-function OwnedRoomsSection() {
+function useOwnedRooms() {
   const { t } = useTranslation();
   const [rooms, setRooms] = useState<OwnedRoom[]>([]);
   const [loading, setLoading] = useState(true);
@@ -413,6 +427,11 @@ function OwnedRoomsSection() {
       .finally(() => setLoading(false));
   }, []);
 
+  return { rooms, loading, error };
+}
+
+function OwnedRoomsSection({ rooms, loading, error }: ReturnType<typeof useOwnedRooms>) {
+  const { t } = useTranslation();
   return (
     <section aria-label={t('Salas que administrás')} className={styles.roomsSection}>
       <h2 className={styles.sectionTitle}>{t('Salas que administrás')}</h2>
@@ -441,12 +460,6 @@ function OwnedRoomsSection() {
                 ) : (
                   <span className={styles.expired}>{t('Vencida')}</span>
                 )}
-                <Link
-                  href={`/history?roomId=${encodeURIComponent(room.id)}`}
-                  className={styles.action}
-                >
-                  {t('Sus llamadas')}
-                </Link>
               </div>
             </li>
           ))}

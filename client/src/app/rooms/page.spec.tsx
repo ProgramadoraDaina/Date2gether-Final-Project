@@ -77,11 +77,7 @@ describe('MyRoomsPage', () => {
       '/room/abc-defg-hij',
     );
     expect(screen.getByText('Vencida')).toBeInTheDocument();
-    const historyLinks = screen.getAllByRole('link', { name: 'Mis llamadas' });
-    expect(historyLinks.map((link) => link.getAttribute('href'))).toEqual([
-      '/history?roomId=room-1',
-      '/history?roomId=room-2',
-    ]);
+    expect(screen.queryByRole('link', { name: 'Mis llamadas' })).not.toBeInTheDocument();
   });
 
   it('copia el link de la sala al portapapeles', async () => {

@@ -264,9 +264,6 @@ function MyRoomsContent() {
                       {t('Copiar link')}
                     </button>
                   )}
-                  <Link href={`/history?roomId=${room.id}`} className={styles.action}>
-                    {t('Mis llamadas')}
-                  </Link>
                   <button
                     type="button"
                     className={styles.dangerAction}

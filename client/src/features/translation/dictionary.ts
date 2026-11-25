@@ -831,6 +831,9 @@ const en: Record<string, string> = {
   'Mis llamadas': 'My calls',
   'Archivo compartido de llamadas': 'Shared call archive',
   Idioma: 'Language',
+  'Volver al historial': 'Back to history',
+  'Filtrar por sala': 'Filter by room',
+  'Todas las salas': 'All rooms',
 };
 
 export default en;
