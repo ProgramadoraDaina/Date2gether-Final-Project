@@ -5,11 +5,15 @@ export function rmsOf(samples: Uint8Array): number {
   return samples.length ? Math.sqrt(sum / samples.length) : 0;
 }
 
-// Habla sostenida: varias lecturas seguidas sobre el umbral, para no saltar con un golpe o una tos.
-export function createSpeechGate(threshold = 0.05, frames = 5) {
-  let streak = 0;
+// Habla sostenida: promedio y cantidad de lecturas altas en una ventana; tolera pausas entre sílabas pero no un golpe suelto.
+// Con el mic apagado en LiveKit una voz normal promedia ~0.03; el ruido filtrado queda debajo de 0.01.
+export function createSpeechGate(threshold = 0.02, frames = 3, window = 8) {
+  const recent: number[] = [];
   return (level: number): boolean => {
-    streak = level >= threshold ? streak + 1 : 0;
-    return streak >= frames;
+    recent.push(level);
+    if (recent.length > window) recent.shift();
+    if (recent.length < window) return false;
+    const average = recent.reduce((sum, value) => sum + value, 0) / window;
+    return average >= threshold && recent.filter((value) => value >= threshold).length >= frames;
   };
 }
