@@ -124,10 +124,23 @@ export default function HomePage() {
           <div className={styles.authBar} data-testid="auth-bar">
             {user ? (
               <>
-                <span>
+                <span className={styles.authUser}>
                   {t('Conectado como')} <strong>{user.name}</strong>
                 </span>
-                <button type="button" className={styles.linkButton} onClick={handleLogout}>
+                <button type="button" className={styles.logoutButton} onClick={handleLogout}>
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M10 17l5-5-5-5m5 5H3m9-8h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6" />
+                  </svg>
                   {t('Cerrar sesión')}
                 </button>
               </>
