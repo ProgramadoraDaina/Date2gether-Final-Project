@@ -1,3 +1,4 @@
+import { describe, expect, it } from '@jest/globals';
 import { NAME_COLOR_HEX } from '@/lib/nameColors';
 import { colorForIdentity } from './participantColors';
 

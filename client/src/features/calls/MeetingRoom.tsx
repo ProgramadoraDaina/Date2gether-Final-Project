@@ -55,6 +55,8 @@ import { CustomCallLayout } from './layout/CustomCallLayout';
 import { useCallLayoutStore } from './layout/store';
 import { CaptionsButton, CaptionsOverlay } from './transcription/Captions';
 import { TranscriptionProvider } from './transcription/TranscriptionProvider';
+import { HandsProvider } from './hands/HandsProvider';
+import { HandButton, HandQueue } from './hands/HandControls';
 import { ParticipantColorsContext, type ParticipantColors } from './participantColors';
 
 const TRANSITION_TIMEOUT_MS = 12_000;
@@ -466,120 +468,131 @@ function MeetingContent({
     : tracks;
   return (
     <ReactionsProvider roomCode={roomCode} roomEmojis={roomEmojis}>
-      <TranscriptionProvider
-        roomCode={roomCode}
-        roomToken={roomToken}
-        onTranscriptAvailable={onTranscriptAvailable}
-        onFinalPhrase={handleFinalPhrase}
-      >
-        <LayoutContextProvider value={layoutContext}>
-          <InitialCallDevices devices={initialDevices} onDeviceError={showDeviceError} />
-          <RoomAudioRenderer />
-          <StartAudio label={t('Activar sonido de la reunión')} />
-          <ConnectionStateToast />
-          {breakoutSwitchError && (
-            <p className={styles.error} role="alert">
-              {breakoutSwitchError}
-            </p>
-          )}
-          {focusTrack ? (
-            <FocusLayoutContainer className={styles.meetingGrid}>
-              {/* Remount per focus: LiveKit's stable ordering throws when reused across focus changes. */}
-              <CarouselLayout
-                key={`${focusTrack.participant.identity}-${focusTrack.source}`}
-                tracks={carouselTracks}
+      <HandsProvider>
+        <TranscriptionProvider
+          roomCode={roomCode}
+          roomToken={roomToken}
+          onTranscriptAvailable={onTranscriptAvailable}
+          onFinalPhrase={handleFinalPhrase}
+        >
+          <LayoutContextProvider value={layoutContext}>
+            <InitialCallDevices devices={initialDevices} onDeviceError={showDeviceError} />
+            <RoomAudioRenderer />
+            <StartAudio label={t('Activar sonido de la reunión')} />
+            <ConnectionStateToast />
+            {breakoutSwitchError && (
+              <p className={styles.error} role="alert">
+                {breakoutSwitchError}
+              </p>
+            )}
+            {focusTrack ? (
+              <FocusLayoutContainer className={styles.meetingGrid}>
+                {/* Remount per focus: LiveKit's stable ordering throws when reused across focus changes. */}
+                <CarouselLayout
+                  key={`${focusTrack.participant.identity}-${focusTrack.source}`}
+                  tracks={carouselTracks}
+                >
+                  <ReactionTile canFocus={tracks.length > 1} />
+                </CarouselLayout>
+                <TrackRefContext.Provider value={focusTrack}>
+                  <ReactionTile canFocus={tracks.length > 1} />
+                </TrackRefContext.Provider>
+              </FocusLayoutContainer>
+            ) : useCustomLayout ? (
+              <CustomCallLayout
+                tracks={tracks}
+                zones={customLayout.zones}
+                editing={customLayout.editing}
+              />
+            ) : (
+              <GridLayout tracks={tracks} className={styles.meetingGrid}>
+                <ReactionTile canFocus={tracks.length > 1} />
+              </GridLayout>
+            )}
+            <ReactionOverlay />
+            <HandQueue isAdmin={isCurrentUserAdmin} />
+            <CaptionsOverlay />
+            {deviceError && (
+              <p className={styles.error} role="alert">
+                {t(
+                  'No se pudo activar el dispositivo. Revisá los permisos del navegador; podés continuar en la llamada.',
+                )}
+              </p>
+            )}
+            <div className={styles.controlsDock}>
+              <div
+                className={styles.controlsGroup}
+                role="group"
+                aria-label={t('Micrófono y cámara')}
               >
-                <ReactionTile canFocus={tracks.length > 1} />
-              </CarouselLayout>
-              <TrackRefContext.Provider value={focusTrack}>
-                <ReactionTile canFocus={tracks.length > 1} />
-              </TrackRefContext.Provider>
-            </FocusLayoutContainer>
-          ) : useCustomLayout ? (
-            <CustomCallLayout
-              tracks={tracks}
-              zones={customLayout.zones}
-              editing={customLayout.editing}
-            />
-          ) : (
-            <GridLayout tracks={tracks} className={styles.meetingGrid}>
-              <ReactionTile canFocus={tracks.length > 1} />
-            </GridLayout>
-          )}
-          <ReactionOverlay />
-          <CaptionsOverlay />
-          {deviceError && (
-            <p className={styles.error} role="alert">
-              {t(
-                'No se pudo activar el dispositivo. Revisá los permisos del navegador; podés continuar en la llamada.',
-              )}
-            </p>
-          )}
-          <div className={styles.controlsDock}>
-            <div className={styles.controlsGroup} role="group" aria-label={t('Micrófono y cámara')}>
-              <MicToggleButton
-                roomCode={roomCode}
-                roomToken={roomToken}
-                setDeviceError={setDeviceError}
-                locked={enforceAudioLock}
-              />
-              <MediaDeviceMenu
-                kind="audioinput"
-                requestPermissions={false}
-                aria-label={t('Elegir micrófono')}
-              />
-              <CameraToggleButton
-                roomCode={roomCode}
-                roomToken={roomToken}
-                setDeviceError={setDeviceError}
-                locked={enforceVideoLock}
-              />
-              <MediaDeviceMenu
-                kind="videoinput"
-                requestPermissions={false}
-                aria-label={t('Elegir cámara')}
-              />
-              <ScreenShareToggleButton setDeviceError={setDeviceError} />
-            </div>
-            <div className={styles.controlsGroup} role="group" aria-label={t('Interacción')}>
-              <ReactionPicker buttonClassName={styles.iconButton} />
-              <SoundboardPicker buttonClassName={styles.iconButton} />
-              <CaptionsButton
-                buttonClassName={styles.iconButton}
-                activeClassName={styles.iconButtonActive}
-              />
-            </div>
-            <div className={styles.controlsGroup} role="group" aria-label={t('Sala')}>
-              <CallSettingsButton
-                buttonClassName={styles.iconButton}
-                isAdmin={isCurrentUserAdmin}
-                audioLocked={audioLocked}
-                videoLocked={videoLocked}
-                onSetAudioLock={onSetAudioLock}
-                onSetVideoLock={onSetVideoLock}
-                nameFocusEnabled={nameFocusEnabled}
-                onSetNameFocus={onSetNameFocus}
-              />
-              {/* Decisión 5 (design.md): único punto de montaje de toda la UI
+                <MicToggleButton
+                  roomCode={roomCode}
+                  roomToken={roomToken}
+                  setDeviceError={setDeviceError}
+                  locked={enforceAudioLock}
+                />
+                <MediaDeviceMenu
+                  kind="audioinput"
+                  requestPermissions={false}
+                  aria-label={t('Elegir micrófono')}
+                />
+                <CameraToggleButton
+                  roomCode={roomCode}
+                  roomToken={roomToken}
+                  setDeviceError={setDeviceError}
+                  locked={enforceVideoLock}
+                />
+                <MediaDeviceMenu
+                  kind="videoinput"
+                  requestPermissions={false}
+                  aria-label={t('Elegir cámara')}
+                />
+                <ScreenShareToggleButton setDeviceError={setDeviceError} />
+              </div>
+              <div className={styles.controlsGroup} role="group" aria-label={t('Interacción')}>
+                <HandButton
+                  buttonClassName={styles.iconButton}
+                  activeClassName={styles.iconButtonActive}
+                />
+                <ReactionPicker buttonClassName={styles.iconButton} />
+                <SoundboardPicker buttonClassName={styles.iconButton} />
+                <CaptionsButton
+                  buttonClassName={styles.iconButton}
+                  activeClassName={styles.iconButtonActive}
+                />
+              </div>
+              <div className={styles.controlsGroup} role="group" aria-label={t('Sala')}>
+                <CallSettingsButton
+                  buttonClassName={styles.iconButton}
+                  isAdmin={isCurrentUserAdmin}
+                  audioLocked={audioLocked}
+                  videoLocked={videoLocked}
+                  onSetAudioLock={onSetAudioLock}
+                  onSetVideoLock={onSetVideoLock}
+                  nameFocusEnabled={nameFocusEnabled}
+                  onSetNameFocus={onSetNameFocus}
+                />
+                {/* Decisión 5 (design.md): único punto de montaje de toda la UI
                 de mini salas -- reemplaza el disparador del dock
                 (solo-admin) Y el sitio de montaje del banner (eliminado
                 arriba). BreakoutView decide internamente qué renderizar
                 (o nada) según resolveBreakoutViewState. */}
-              <BreakoutView
-                roomCode={roomCode}
-                roomToken={roomToken}
-                isCurrentUserAdmin={isCurrentUserAdmin}
-                assignment={breakoutAssignment}
-                participants={participants}
-                currentParticipantId={currentParticipantId}
-                buttonClassName={styles.iconButton}
-                activeButtonClassName={styles.iconButtonActive}
-              />
+                <BreakoutView
+                  roomCode={roomCode}
+                  roomToken={roomToken}
+                  isCurrentUserAdmin={isCurrentUserAdmin}
+                  assignment={breakoutAssignment}
+                  participants={participants}
+                  currentParticipantId={currentParticipantId}
+                  buttonClassName={styles.iconButton}
+                  activeButtonClassName={styles.iconButtonActive}
+                />
+              </div>
+              <ConnectedHangUpButton />
             </div>
-            <ConnectedHangUpButton />
-          </div>
-        </LayoutContextProvider>
-      </TranscriptionProvider>
+          </LayoutContextProvider>
+        </TranscriptionProvider>
+      </HandsProvider>
     </ReactionsProvider>
   );
 }

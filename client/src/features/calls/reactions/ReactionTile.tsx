@@ -17,6 +17,7 @@ import { FocusIcon } from './FocusIcon';
 import { useReactions } from './useReactions';
 import { avatarIdentityOf } from '@/features/avatar/TileAvatar';
 import { useParticipantColor } from '../participantColors';
+import { HandBadge } from '../hands/HandControls';
 import styles from './Reactions.module.css';
 
 function SpeakerOutline({ participant }: { participant: Participant }) {
@@ -71,6 +72,7 @@ export function ReactionTile({ canFocus = true }: { canFocus?: boolean }) {
     <div className={styles.tileWrap} ref={wrapRef}>
       <ParticipantTile />
       {trackRef && <SpeakerOutline participant={trackRef.participant} />}
+      {trackRef && isCamera && <HandBadge identity={trackRef.participant.identity} />}
       {trackRef && isCamera && placeholder && (
         <TileAvatar participant={trackRef.participant} placeholder={placeholder} />
       )}

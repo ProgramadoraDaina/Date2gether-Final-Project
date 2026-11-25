@@ -743,6 +743,11 @@ const en: Record<string, string> = {
   'Creá una sala permanente desde el inicio para tenerla siempre a mano.':
     'Create a permanent room from the home page to keep it at hand.',
   'Las llamadas en las que participes van a aparecer acá.': 'Calls you join will show up here.',
+  'Levantar la mano': 'Raise hand',
+  'Bajar la mano': 'Lower hand',
+  'Bajar la mano de': 'Lower hand of',
+  'Mano levantada': 'Hand raised',
+  'Manos levantadas': 'Raised hands',
 };
 
 export default en;
