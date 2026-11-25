@@ -221,7 +221,7 @@ const en: Record<string, string> = {
   'La sala ya no existe.': 'The room no longer exists.',
   'Ver línea de tiempo': 'View timeline',
   'Ver gráfico de interacción': 'View interaction chart',
-  'Videollamadas simples, en el navegador.': 'Simple video calls, in the browser.',
+  'Juntarse nunca fue tan simple.': 'Getting together has never been this easy.',
 
   // Inicio
   'Conectado como': 'Signed in as',

@@ -28,7 +28,7 @@ const ibmPlexMono = IBM_Plex_Mono({
   variable: '--font-ibm-plex-mono',
 });
 
-const SITE_DESCRIPTION = 'Videollamadas simples, en el navegador.';
+const SITE_DESCRIPTION = 'Juntarse nunca fue tan simple.';
 
 export async function generateMetadata(): Promise<Metadata> {
   const origin = await requestOrigin();

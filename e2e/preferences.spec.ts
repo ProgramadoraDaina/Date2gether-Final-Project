@@ -149,7 +149,7 @@ test.describe('Idioma (ES/EN)', () => {
     await page.goto('/');
 
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
-    await expect(page.getByTestId('subtitle')).toHaveText('Simple video calls, in the browser.');
+    await expect(page.getByTestId('subtitle')).toHaveText('Getting together has never been this easy.');
     await context.close();
   });
 
@@ -163,7 +163,7 @@ test.describe('Idioma (ES/EN)', () => {
     await page.getByTestId('language-toggle').click();
 
     await expect(page.locator('html')).toHaveAttribute('lang', 'es');
-    await expect(page.getByTestId('subtitle')).toHaveText('Videollamadas simples, en el navegador.');
+    await expect(page.getByTestId('subtitle')).toHaveText('Juntarse nunca fue tan simple.');
     const stored = await page.evaluate(() => localStorage.getItem('date2gether:language'));
     expect(JSON.parse(stored ?? '{}').state.language).toBe('es');
     await context.close();
@@ -175,12 +175,12 @@ test.describe('Idioma (ES/EN)', () => {
     await page.goto('/');
 
     await page.getByTestId('language-toggle').click();
-    await expect(page.getByTestId('subtitle')).toHaveText('Videollamadas simples, en el navegador.');
+    await expect(page.getByTestId('subtitle')).toHaveText('Juntarse nunca fue tan simple.');
 
     await page.reload();
 
     await expect(page.locator('html')).toHaveAttribute('lang', 'es');
-    await expect(page.getByTestId('subtitle')).toHaveText('Videollamadas simples, en el navegador.');
+    await expect(page.getByTestId('subtitle')).toHaveText('Juntarse nunca fue tan simple.');
     await context.close();
   });
 
