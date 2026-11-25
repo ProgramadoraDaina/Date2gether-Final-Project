@@ -829,7 +829,6 @@ const en: Record<string, string> = {
   'Mensajes y llamadas de hace más de 90 días, para todos.':
     'Messages and calls older than 90 days, for everyone.',
   'Mis llamadas': 'My calls',
-  'Archivo compartido de llamadas': 'Shared call archive',
   Idioma: 'Language',
   'Volver al historial': 'Back to history',
   'Filtrar por sala': 'Filter by room',

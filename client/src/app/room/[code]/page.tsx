@@ -722,13 +722,6 @@ export default function RoomPage() {
                 {t(chatHistory.archive ? 'Volver al chat reciente' : 'Ver archivo del chat')}
               </button>
             )}
-            {chatHistory.archive && access.participant.userId && (
-              <Link
-                href={`/history?roomId=${encodeURIComponent(access.participant.roomId)}&roomArchive=1`}
-              >
-                {t('Archivo compartido de llamadas')}
-              </Link>
-            )}
           </div>
           {(chatPage.nextCursor || chatHistory.before) && (
             <div className={styles.chatDateFilter}>
