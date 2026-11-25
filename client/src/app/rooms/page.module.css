@@ -70,7 +70,7 @@
   border: 1px solid var(--color-accent);
   border-radius: var(--radius-xs);
   color: var(--color-accent);
-  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -84,7 +84,7 @@
 .code,
 .slots,
 .next span {
-  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-family: var(--font-mono);
 }
 
 .code {

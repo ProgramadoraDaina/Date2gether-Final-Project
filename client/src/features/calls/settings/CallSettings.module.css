@@ -173,7 +173,8 @@
   width: 36px;
   height: 20px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  /* Excepción a las esquinas rectas: un interruptor se reconoce por su forma de píldora. */
+  border-radius: 999px;
   background: transparent;
   transition: background-color 0.15s ease;
 }

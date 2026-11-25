@@ -43,6 +43,9 @@ function copyStyles(target: Document) {
       target.head.appendChild(link);
     }
   }
+  // next/font define las variables de fuente con clases en <html> y <body>.
+  target.documentElement.className = document.documentElement.className;
+  target.body.className = document.body.className;
   const theme = document.documentElement.getAttribute('data-theme');
   if (theme) target.documentElement.setAttribute('data-theme', theme);
   target.documentElement.lang = document.documentElement.lang;

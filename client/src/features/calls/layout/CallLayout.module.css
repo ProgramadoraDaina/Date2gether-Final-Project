@@ -49,7 +49,7 @@
   padding: 3px 8px;
   background: var(--zone-color, var(--color-accent));
   color: var(--zone-text, var(--color-accent-contrast));
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 600;
   pointer-events: none;
@@ -118,7 +118,7 @@
   border: 1px solid var(--zone-color);
   background: color-mix(in srgb, var(--zone-color) 10%, transparent);
   color: var(--zone-color);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 600;
   text-align: center;
@@ -131,7 +131,7 @@
 
 .zoneCount {
   color: var(--color-text-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -193,7 +193,7 @@
   border-radius: 2px;
   background: var(--zone-color);
   color: var(--zone-text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 700;
 }
@@ -212,7 +212,7 @@
 .zoneSummary {
   overflow: hidden;
   color: var(--color-text-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -297,7 +297,7 @@
 .valueChip {
   min-width: 40px;
   color: var(--color-text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   text-align: right;
 }
@@ -342,7 +342,7 @@
 }
 
 .choiceText {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
 }
 
@@ -386,7 +386,7 @@
   border-radius: 0;
   background: var(--color-bg);
   color: var(--color-text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   text-align: center;
   appearance: textfield;
 }

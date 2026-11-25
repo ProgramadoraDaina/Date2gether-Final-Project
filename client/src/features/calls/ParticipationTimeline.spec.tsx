@@ -40,9 +40,7 @@ describe('ParticipationTimeline', () => {
         endedAt={SESSION_ENDED_AT}
       />,
     );
-    expect(
-      screen.getByText('Esta sesión no tiene participantes registrados.'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('Esta sesión no tiene participantes registrados.')).toBeInTheDocument();
   });
 
   it('muestra una entrada por participante, con su nombre y duración', async () => {

@@ -54,14 +54,10 @@
   color: var(--color-accent-contrast);
 }
 
-/* Mic o cámara apagados: trama roja para que no se confunda con "prendido". */
+/* Mic o cámara apagados: tinte plano en rojo para que no se confunda con "prendido". */
 .iconButtonMuted,
 .iconButtonMuted:hover {
-  background: repeating-linear-gradient(
-    135deg,
-    var(--color-raised) 0 5px,
-    color-mix(in srgb, var(--color-error) 22%, var(--color-raised)) 5px 10px
-  );
+  background: color-mix(in srgb, var(--color-error) 14%, var(--color-raised));
   border-color: var(--color-error);
   color: var(--color-error);
 }
@@ -242,7 +238,7 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-raised);
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   white-space: nowrap;
 }
@@ -303,7 +299,7 @@
 
 .controlsGroup :global(.lk-device-menu-heading) {
   padding: 6px 8px 4px;
-  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;

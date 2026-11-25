@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
-import { IBM_Plex_Sans, Space_Grotesk } from 'next/font/google';
+import { IBM_Plex_Mono, IBM_Plex_Sans, Space_Grotesk } from 'next/font/google';
 import { TopBar } from '@/features/layout/TopBar';
 import { requestOrigin } from '@/features/share/origin';
 import { SHARE_IMAGE_SIZE } from '@/features/share/shareCard';
@@ -20,6 +20,12 @@ const ibmPlexSans = IBM_Plex_Sans({
   subsets: ['latin'],
   weight: ['400', '500', '600'],
   variable: '--font-ibm-plex-sans',
+});
+
+const ibmPlexMono = IBM_Plex_Mono({
+  subsets: ['latin'],
+  weight: ['400', '600'],
+  variable: '--font-ibm-plex-mono',
 });
 
 const SITE_DESCRIPTION = 'Videollamadas simples, en el navegador.';
@@ -72,7 +78,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html
       lang="es"
       suppressHydrationWarning
-      className={`${spaceGrotesk.variable} ${ibmPlexSans.variable}`}
+      className={`${spaceGrotesk.variable} ${ibmPlexSans.variable} ${ibmPlexMono.variable}`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />

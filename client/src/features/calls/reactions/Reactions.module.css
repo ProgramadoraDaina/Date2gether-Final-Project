@@ -60,7 +60,7 @@
 .soundboardTitle {
   margin: 0 0 4px;
   color: var(--color-text-muted);
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -90,7 +90,7 @@
   border-radius: 2px;
   background: transparent;
   color: var(--color-text);
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   white-space: nowrap;
 }
@@ -429,7 +429,7 @@
   border-radius: 2px;
   background: var(--color-surface);
   color: var(--color-text);
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   white-space: nowrap;
 }

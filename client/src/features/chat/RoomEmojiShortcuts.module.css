@@ -43,6 +43,6 @@
 
 .arrow {
   border-color: var(--color-border);
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 16px;
 }
