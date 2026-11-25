@@ -3,6 +3,8 @@ import { persist } from 'zustand/middleware';
 
 export type CaptionSize = 'small' | 'medium' | 'large';
 export type CallDeviceKind = 'camera' | 'microphone';
+export type CallPreference =
+  'mutedNudge' | 'noiseSuppression' | 'joinLeaveSounds' | 'backgroundBlur';
 
 interface CallSettingsState {
   captionSize: CaptionSize;
@@ -11,6 +13,11 @@ interface CallSettingsState {
   cameraEnabled: boolean;
   microphoneEnabled: boolean;
   setDeviceEnabled: (kind: CallDeviceKind, enabled: boolean) => void;
+  mutedNudge: boolean;
+  noiseSuppression: boolean;
+  joinLeaveSounds: boolean;
+  backgroundBlur: boolean;
+  setPreference: (key: CallPreference, value: boolean) => void;
 }
 
 export const useCallSettingsStore = create<CallSettingsState>()(
@@ -22,6 +29,11 @@ export const useCallSettingsStore = create<CallSettingsState>()(
       microphoneEnabled: false,
       setDeviceEnabled: (kind, enabled) =>
         set(kind === 'camera' ? { cameraEnabled: enabled } : { microphoneEnabled: enabled }),
+      mutedNudge: true,
+      noiseSuppression: true,
+      joinLeaveSounds: false,
+      backgroundBlur: false,
+      setPreference: (key, value) => set({ [key]: value }),
     }),
     { name: 'date2gether:call-settings', version: 1 },
   ),

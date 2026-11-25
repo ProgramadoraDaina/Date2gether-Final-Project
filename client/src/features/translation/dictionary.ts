@@ -748,6 +748,8 @@ const en: Record<string, string> = {
   'Bajar la mano de': 'Lower hand of',
   'Mano levantada': 'Hand raised',
   'Manos levantadas': 'Raised hands',
+  "Estás silenciado": "You are muted",
+  "Avisarme si hablo silenciado": "Warn me if I talk while muted",
 };
 
 export default en;

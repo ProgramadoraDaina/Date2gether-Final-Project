@@ -55,6 +55,7 @@ import { CustomCallLayout } from './layout/CustomCallLayout';
 import { useCallLayoutStore } from './layout/store';
 import { CaptionsButton, CaptionsOverlay } from './transcription/Captions';
 import { TranscriptionProvider } from './transcription/TranscriptionProvider';
+import { MutedNudge } from './MutedNudge';
 import { HandsProvider } from './hands/HandsProvider';
 import { HandButton, HandQueue } from './hands/HandControls';
 import { ParticipantColorsContext, type ParticipantColors } from './participantColors';
@@ -511,6 +512,7 @@ function MeetingContent({
             )}
             <ReactionOverlay />
             <HandQueue isAdmin={isCurrentUserAdmin} />
+            <MutedNudge locked={enforceAudioLock} />
             <CaptionsOverlay />
             {deviceError && (
               <p className={styles.error} role="alert">

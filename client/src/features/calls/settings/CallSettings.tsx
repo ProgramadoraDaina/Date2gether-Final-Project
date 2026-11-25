@@ -6,7 +6,7 @@ import { useDismiss } from '@/lib/useDismiss';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { CallLayoutEditor } from '../layout/CallLayoutEditor';
 import { useCallLayoutStore } from '../layout/store';
-import { useCallSettingsStore, type CaptionSize } from './store';
+import { useCallSettingsStore, type CallPreference, type CaptionSize } from './store';
 import { ToggleSwitch } from './ToggleSwitch';
 import styles from './CallSettings.module.css';
 
@@ -14,6 +14,11 @@ const CAPTION_SIZES: { value: CaptionSize; label: string }[] = [
   { value: 'small', label: 'Chica' },
   { value: 'medium', label: 'Mediana' },
   { value: 'large', label: 'Grande' },
+];
+
+// Preferencias de esta persona; las de toda la sala quedan abajo, solo para admins.
+const PERSONAL_TOGGLES: { key: CallPreference; label: string }[] = [
+  { key: 'mutedNudge', label: 'Avisarme si hablo silenciado' },
 ];
 
 function SettingsIcon() {
@@ -59,7 +64,8 @@ export function CallSettingsButton({
   onSetNameFocus,
 }: CallSettingsButtonProps) {
   const { t } = useTranslation();
-  const { captionSize, setCaptionSize } = useCallSettingsStore();
+  const { captionSize, setCaptionSize, setPreference } = useCallSettingsStore();
+  const preferences = useCallSettingsStore();
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<View>('menu');
   const [avatarOpen, setAvatarOpen] = useState(false);
@@ -134,6 +140,16 @@ export function CallSettingsButton({
                   <span className={styles.menuHint}>›</span>
                 </button>
               </li>
+              {PERSONAL_TOGGLES.map(({ key, label: toggleLabel }) => (
+                <li key={key} className={styles.menuItem}>
+                  <span>{t(toggleLabel)}</span>
+                  <ToggleSwitch
+                    checked={preferences[key]}
+                    onChange={(value) => setPreference(key, value)}
+                    aria-label={t(toggleLabel)}
+                  />
+                </li>
+              ))}
               {isAdmin && (
                 <>
                   <li className={styles.menuItem}>
