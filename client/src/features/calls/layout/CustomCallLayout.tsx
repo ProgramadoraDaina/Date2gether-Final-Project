@@ -4,7 +4,13 @@ import { useMemo } from 'react';
 import { TrackRefContext, type TrackReferenceOrPlaceholder } from '@livekit/components-react';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { ReactionTile } from '../reactions/ReactionTile';
-import { assignToZones, buildLayoutTree, zonesInUse, type LayoutZone } from './layout';
+import {
+  assignToZones,
+  buildLayoutTree,
+  orderForZones,
+  zonesInUse,
+  type LayoutZone,
+} from './layout';
 import { LayoutView } from './LayoutView';
 import { ZoneTiles } from './ZoneTiles';
 import { useCallLayoutStore } from './store';
@@ -31,11 +37,7 @@ export function CustomCallLayout({ tracks, zones, editing = false }: CustomCallL
   );
   const tree = useMemo(() => buildLayoutTree(shown), [shown]);
   const groups = useMemo(() => {
-    const ordered = [
-      ...tracks.filter((track) => track.source === 'screen_share'),
-      ...tracks.filter((track) => track.source !== 'screen_share'),
-    ];
-    const assigned = assignToZones(shown, ordered);
+    const assigned = assignToZones(shown, orderForZones(tracks));
     return new Map(shown.map((zone, index) => [zone.id, assigned[index]]));
   }, [tracks, shown]);
   const zoneNumber = useMemo(
