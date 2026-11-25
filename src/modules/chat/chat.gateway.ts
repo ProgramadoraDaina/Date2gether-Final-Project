@@ -130,10 +130,8 @@ function livePosition(state: MusicState, now: number): number {
   return state.positionSeconds + Math.max(0, now - state.updatedAt) / 1000;
 }
 
-@WebSocketGateway({
-  namespace: '/rooms',
-  cors: { origin: process.env.CORS_ORIGIN ?? '*' },
-})
+// CORS origin is applied at runtime by CorsIoAdapter (see app-setup.ts).
+@WebSocketGateway({ namespace: '/rooms' })
 @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
 export class ChatGateway implements OnGatewayDisconnect {
   @WebSocketServer()
