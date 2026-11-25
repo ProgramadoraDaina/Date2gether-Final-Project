@@ -3,6 +3,7 @@ import {
   API_URL,
   SPANISH_STORAGE_STATE,
   CLIENT_URL,
+  CLIENT_PORT,
   TEST_DATABASE_URL,
   TEST_JWT_ACCESS_SECRET,
   TEST_JWT_REFRESH_SECRET,
@@ -60,7 +61,7 @@ export default defineConfig({
       },
     },
     {
-      command: 'pnpm --filter client dev',
+      command: `pnpm --filter client exec next dev -p ${CLIENT_PORT}`,
       url: CLIENT_URL,
       timeout: 120_000,
       reuseExistingServer: false,

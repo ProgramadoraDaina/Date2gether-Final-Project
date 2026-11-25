@@ -1,261 +1,9 @@
 {
-  "id": "d6b53fcc-ea64-4b6a-99b2-431cb2cd2b11",
-  "prevId": "899d3a58-8aca-42e6-9a58-bc3a2270913b",
+  "id": "c6918dc5-2760-4ebf-9b8c-8f9e95e00687",
+  "prevId": "19d816af-609f-46a6-9bfd-9b3c401ee96f",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
-    "public.call_breakout_occupants": {
-      "name": "call_breakout_occupants",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "breakout_room_id": {
-          "name": "breakout_room_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_identity": {
-          "name": "source_identity",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "livekit_identity": {
-          "name": "livekit_identity",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "display_name": {
-          "name": "display_name",
-          "type": "varchar(60)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "assigned_at": {
-          "name": "assigned_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "returned_at": {
-          "name": "returned_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "call_breakout_occupants_breakout_room_id_open_idx": {
-          "name": "call_breakout_occupants_breakout_room_id_open_idx",
-          "columns": [
-            {
-              "expression": "breakout_room_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"call_breakout_occupants\".\"returned_at\" is null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "call_breakout_occupants_source_identity_open_idx": {
-          "name": "call_breakout_occupants_source_identity_open_idx",
-          "columns": [
-            {
-              "expression": "source_identity",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"call_breakout_occupants\".\"returned_at\" is null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "call_breakout_occupants_breakout_room_id_call_breakout_rooms_id_fk": {
-          "name": "call_breakout_occupants_breakout_room_id_call_breakout_rooms_id_fk",
-          "tableFrom": "call_breakout_occupants",
-          "tableTo": "call_breakout_rooms",
-          "columnsFrom": [
-            "breakout_room_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "call_breakout_occupants_user_id_users_id_fk": {
-          "name": "call_breakout_occupants_user_id_users_id_fk",
-          "tableFrom": "call_breakout_occupants",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "call_breakout_occupants_livekit_identity_unique": {
-          "name": "call_breakout_occupants_livekit_identity_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "livekit_identity"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.call_breakout_rooms": {
-      "name": "call_breakout_rooms",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "room_id": {
-          "name": "room_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "livekit_room_name": {
-          "name": "livekit_room_name",
-          "type": "varchar(40)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "parent_livekit_room_sid": {
-          "name": "parent_livekit_room_sid",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "label": {
-          "name": "label",
-          "type": "varchar(60)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "leave_policy": {
-          "name": "leave_policy",
-          "type": "varchar(16)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'locked'"
-        },
-        "join_policy": {
-          "name": "join_policy",
-          "type": "varchar(16)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'admin_only'"
-        },
-        "auto_close_at": {
-          "name": "auto_close_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "closed_at": {
-          "name": "closed_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "call_breakout_rooms_room_id_closed_at_idx": {
-          "name": "call_breakout_rooms_room_id_closed_at_idx",
-          "columns": [
-            {
-              "expression": "room_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "closed_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "call_breakout_rooms_room_id_rooms_id_fk": {
-          "name": "call_breakout_rooms_room_id_rooms_id_fk",
-          "tableFrom": "call_breakout_rooms",
-          "tableTo": "rooms",
-          "columnsFrom": [
-            "room_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "call_breakout_rooms_livekit_room_name_unique": {
-          "name": "call_breakout_rooms_livekit_room_name_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "livekit_room_name"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.call_events": {
       "name": "call_events",
       "schema": "",
@@ -274,7 +22,7 @@
         },
         "room_code": {
           "name": "room_code",
-          "type": "varchar(40)",
+          "type": "varchar(20)",
           "primaryKey": false,
           "notNull": true
         },
@@ -392,7 +140,68 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "call_history_user_started_id_idx": {
+          "name": "call_history_user_started_id_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "started_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "call_history_user_room_started_id_idx": {
+          "name": "call_history_user_room_started_id_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "room_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "started_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "call_history_room_id_rooms_id_fk": {
           "name": "call_history_room_id_rooms_id_fk",
@@ -654,6 +463,33 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "call_session_participants_user_joined_idx": {
+          "name": "call_session_participants_user_joined_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "first_joined_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            },
+            {
+              "expression": "session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -724,7 +560,7 @@
         },
         "room_code": {
           "name": "room_code",
-          "type": "varchar(40)",
+          "type": "varchar(20)",
           "primaryKey": false,
           "notNull": true
         },
@@ -758,9 +594,9 @@
           "primaryKey": false,
           "notNull": false
         },
-        "call_group_id": {
-          "name": "call_group_id",
-          "type": "varchar(64)",
+        "history_purged_at": {
+          "name": "history_purged_at",
+          "type": "timestamp",
           "primaryKey": false,
           "notNull": false
         }
@@ -783,6 +619,34 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "call_sessions_room_ended_history_idx": {
+          "name": "call_sessions_room_ended_history_idx",
+          "columns": [
+            {
+              "expression": "room_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ended_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"call_sessions\".\"ended_at\" is not null and \"call_sessions\".\"history_purged_at\" is null",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -862,7 +726,35 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "messages_room_created_id_idx": {
+          "name": "messages_room_created_id_idx",
+          "columns": [
+            {
+              "expression": "room_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "messages_room_id_rooms_id_fk": {
           "name": "messages_room_id_rooms_id_fk",
@@ -1251,6 +1143,13 @@
           "notNull": true,
           "default": "'participante'"
         },
+        "is_owner": {
+          "name": "is_owner",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "joined_at": {
           "name": "joined_at",
           "type": "timestamp",
@@ -1259,7 +1158,24 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "room_members_one_owner_per_room": {
+          "name": "room_members_one_owner_per_room",
+          "columns": [
+            {
+              "expression": "room_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"room_members\".\"is_owner\"",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "room_members_room_id_rooms_id_fk": {
           "name": "room_members_room_id_rooms_id_fk",
@@ -1299,7 +1215,12 @@
       },
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "room_members_owner_is_admin": {
+          "name": "room_members_owner_is_admin",
+          "value": "not \"room_members\".\"is_owner\" or \"room_members\".\"role\" = 'administrador'"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.room_notes": {
@@ -1553,6 +1474,19 @@
           "notNull": true,
           "default": false
         },
+        "history_deleted_before": {
+          "name": "history_deleted_before",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "history_cleanup_pending": {
+          "name": "history_cleanup_pending",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "last_entered_at": {
           "name": "last_entered_at",
           "type": "timestamp",
@@ -1623,6 +1557,22 @@
           ],
           "isUnique": false,
           "where": "\"rooms\".\"retired_at\" is null and \"rooms\".\"is_permanent\" = false",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "rooms_history_cleanup_pending_idx": {
+          "name": "rooms_history_cleanup_pending_idx",
+          "columns": [
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"rooms\".\"history_cleanup_pending\"",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -1761,6 +1711,12 @@
         "avatar": {
           "name": "avatar",
           "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "call_history_deleted_before": {
+          "name": "call_history_deleted_before",
+          "type": "timestamp",
           "primaryKey": false,
           "notNull": false
         },

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { OwnedRoom } from '@/lib/api';
 
 jest.mock('next/navigation', () => ({ usePathname: () => '/rooms' }));
@@ -11,14 +11,25 @@ jest.mock('@/features/auth/RequireAuth', () => ({
   RequireAuth: ({ children }: { children: React.ReactNode }) => children,
 }));
 jest.mock('@/lib/auth', () => ({ isLoggedIn: jest.fn() }));
+// El riel de navegación pide el rol global; estas pruebas no ejercitan el link de admin.
+jest.mock('@/features/auth/useGlobalRole', () => ({ useGlobalRole: () => 'user' }));
 jest.mock('@/lib/api', () => ({
   getOwnedRooms: jest.fn(),
   renameRoom: jest.fn(),
-  ApiError: class extends Error {},
+  deleteRoom: jest.fn(),
+  ApiError: class extends Error {
+    constructor(
+      message: string,
+      readonly status?: number,
+    ) {
+      super(message);
+    }
+  },
 }));
 
 function ownedRoom(overrides: Partial<OwnedRoom> = {}): OwnedRoom {
   return {
+    hiddenFromMyRooms: false,
     id: 'room-1',
     code: 'abc-defg-hij',
     name: 'Cita de los lunes',
@@ -56,7 +67,7 @@ describe('MyRoomsPage', () => {
     const MyRoomsPage = (await import('./page')).default;
     render(<MyRoomsPage />);
 
-    await screen.findByText('Cita de los lunes');
+    await screen.findByText('Cita de los lunes', { selector: '.roomName' });
     expect(screen.getByText('Permanente')).toBeInTheDocument();
     expect(screen.getByText(/Lunes 21:30/)).toBeInTheDocument();
     expect(screen.getByText(/Próximo encuentro/)).toBeInTheDocument();
@@ -100,7 +111,7 @@ describe('MyRoomsPage', () => {
     const MyRoomsPage = (await import('./page')).default;
     render(<MyRoomsPage />);
 
-    await screen.findByText('Cita de los lunes');
+    await screen.findByText('Cita de los lunes', { selector: '.roomName' });
     expect(screen.getAllByRole('button', { name: 'Renombrar sala' })).toHaveLength(1);
   });
 
@@ -119,11 +130,97 @@ describe('MyRoomsPage', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
-    await screen.findByText('Grupo de los jueves');
+    await screen.findByText('Grupo de los jueves', { selector: '.roomName' });
     expect(renameRoom).toHaveBeenCalledWith('abc-defg-hij', 'Grupo de los jueves');
   });
 
-  it('avisa cuando todavía no creó ninguna sala', async () => {
+  describe('eliminar sala', () => {
+    async function renderWithRoom() {
+      const { isLoggedIn } = await import('@/lib/auth');
+      const { getOwnedRooms } = await import('@/lib/api');
+      (isLoggedIn as jest.Mock<typeof isLoggedIn>).mockReturnValue(true);
+      (getOwnedRooms as jest.Mock<typeof getOwnedRooms>).mockResolvedValue([
+        ownedRoom(),
+        ownedRoom({ id: 'room-2', code: 'xyz-abcd-efg', name: 'Otra sala' }),
+      ]);
+      const MyRoomsPage = (await import('./page')).default;
+      render(<MyRoomsPage />);
+      await screen.findAllByText('Cita de los lunes');
+    }
+
+    it('pide confirmación en la página antes de borrar y cancelar no llama a la API', async () => {
+      await renderWithRoom();
+      const { deleteRoom } = await import('@/lib/api');
+
+      fireEvent.click(screen.getAllByRole('button', { name: 'Eliminar sala' })[0]);
+      const dialog = screen.getByRole('dialog');
+      expect(dialog).toHaveTextContent('Cita de los lunes');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+      expect(deleteRoom).not.toHaveBeenCalled();
+      expect(screen.getAllByText('Cita de los lunes').length).toBeGreaterThan(0);
+    });
+
+    it('al confirmar borra la sala, muestra el estado de carga y la saca de la lista', async () => {
+      await renderWithRoom();
+      const { deleteRoom } = await import('@/lib/api');
+      let finish: () => void = () => {};
+      (deleteRoom as jest.Mock<typeof deleteRoom>).mockReturnValue(
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+      );
+
+      fireEvent.click(screen.getAllByRole('button', { name: 'Eliminar sala' })[0]);
+      fireEvent.click(screen.getByRole('button', { name: 'Sí, eliminar sala' }));
+
+      expect(deleteRoom).toHaveBeenCalledWith('abc-defg-hij');
+      expect(await screen.findByRole('button', { name: 'Eliminando…' })).toBeDisabled();
+
+      finish();
+
+      await waitFor(() => expect(screen.queryAllByText('Cita de los lunes')).toHaveLength(0));
+      expect(screen.getAllByText('Otra sala').length).toBeGreaterThan(0);
+    });
+
+    it('si la sala ya no existe (404) cierra el diálogo, la saca de la lista y avisa', async () => {
+      await renderWithRoom();
+      const { deleteRoom, ApiError } = await import('@/lib/api');
+      (deleteRoom as jest.Mock<typeof deleteRoom>).mockRejectedValue(
+        new ApiError('No existe una sala con el código "abc-defg-hij"', 404),
+      );
+
+      fireEvent.click(screen.getAllByRole('button', { name: 'Eliminar sala' })[0]);
+      fireEvent.click(screen.getByRole('button', { name: 'Sí, eliminar sala' }));
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(screen.queryAllByText('Cita de los lunes')).toHaveLength(0);
+      expect(screen.getAllByText('Otra sala').length).toBeGreaterThan(0);
+      expect(screen.getByRole('status')).toHaveTextContent('La sala ya no existe.');
+    });
+
+    it('si el backend falla muestra el error y deja la sala en la lista', async () => {
+      await renderWithRoom();
+      const { deleteRoom, ApiError } = await import('@/lib/api');
+      (deleteRoom as jest.Mock<typeof deleteRoom>).mockRejectedValue(
+        new ApiError('Solo el administrador de la sala puede borrarla'),
+      );
+
+      fireEvent.click(screen.getAllByRole('button', { name: 'Eliminar sala' })[0]);
+      fireEvent.click(screen.getByRole('button', { name: 'Sí, eliminar sala' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Solo el administrador de la sala puede borrarla',
+      );
+      // El nombre también aparece en el diálogo abierto: se mira la lista.
+      expect(
+        within(screen.getByRole('list')).getAllByText('Cita de los lunes').length,
+      ).toBeGreaterThan(0);
+    });
+  });
+
+  it('avisa cuando no administra salas propias ni heredadas', async () => {
     const { isLoggedIn } = await import('@/lib/auth');
     const { getOwnedRooms } = await import('@/lib/api');
     (isLoggedIn as jest.Mock<typeof isLoggedIn>).mockReturnValue(true);
@@ -131,6 +228,6 @@ describe('MyRoomsPage', () => {
     const MyRoomsPage = (await import('./page')).default;
     render(<MyRoomsPage />);
 
-    await screen.findByText('Todavía no creaste ninguna sala.');
+    await screen.findByText('Todavía no tenés salas como administrador.');
   });
 });

@@ -6,7 +6,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, sql } from 'drizzle-orm';
 import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
 import { randomUUID } from 'node:crypto';
 import type { RoomParticipant } from '../auth/room-access.service';
@@ -21,12 +21,16 @@ import {
   callSessions,
   roomMembers,
   rooms,
+  users,
   type RoomRole,
 } from '../../db/schema';
 import { RoomResolverService } from '../rooms/room-resolver.service';
+import { isRoomSessionVisible } from '../rooms/room-history-policy';
 import { RoomsService } from '../rooms/rooms.service';
 import { BREAKOUT_RETURN_LOCKED_CODE } from './breakout-rooms.service';
 import { CallGroupResolverService } from './call-group-resolver.service';
+import { CALL_HISTORY_PAGE_SIZE, callHistoryCutoff } from './call-history-retention';
+import type { ListCallHistoryDto } from './dto/list-call-history.dto';
 import type { ReportTrackStateDto } from './dto/report-track-state.dto';
 
 // Código estable para el rechazo del gate de anfitrión (D5, design.md): el
@@ -39,9 +43,8 @@ const NO_HOST_CONNECTED_MESSAGE = 'Esperá a que se conecte un anfitrión para u
 // gate de join() sobre la sala principal), así que comparten el código.
 const BREAKOUT_RETURN_LOCKED_MESSAGE = 'El host te va a devolver a la sala principal.';
 
-const HISTORY_LIMIT = 50;
-
 export interface CallHistoryEntry {
+  id: string;
   roomId: string;
   // Etiqueta de visualización únicamente: la ruta y la autorización dejaron
   // de usar el código (D4-C) -- roomId es la clave real.
@@ -49,6 +52,12 @@ export interface CallHistoryEntry {
   roomName: string;
   startedAt: Date;
   sessionId: string | null;
+}
+
+export interface CallHistoryPage {
+  entries: CallHistoryEntry[];
+  nextCursor: string | null;
+  hasArchived: boolean;
 }
 
 @Injectable()
@@ -140,9 +149,9 @@ export class CallsService {
     // sala vive 24h con un participant.sub FIJO, así que este POST puede
     // reenviarse con el MISMO identity (reintento, re-montaje del cliente):
     // por eso es un upsert por livekitIdentity y no un insert simple.
-    // roleAtIssue guarda el snapshot de rol resuelto arriba: es lo que el
-    // gate de futuros solicitantes y el cierre forzado del PR7 usan para
-    // reconocer admins conectados sin volver a consultar roomMembers.
+    // roleAtIssue guarda el rol al entrar como registro histórico.
+    // Las comprobaciones de anfitrión
+    // consultan el rol actual para reconocer administradores recién promovidos.
     await this.db
       .insert(callParticipantIdentities)
       .values({
@@ -301,11 +310,18 @@ export class CallsService {
     const [admin] = await this.db
       .select({ id: callParticipantIdentities.id })
       .from(callParticipantIdentities)
+      .innerJoin(
+        roomMembers,
+        and(
+          eq(roomMembers.roomId, callParticipantIdentities.roomId),
+          eq(roomMembers.userId, callParticipantIdentities.userId),
+        ),
+      )
       .where(
         and(
           eq(callParticipantIdentities.roomId, roomId),
           inArray(callParticipantIdentities.livekitIdentity, identities),
-          eq(callParticipantIdentities.roleAtIssue, 'administrador'),
+          eq(roomMembers.role, 'administrador'),
         ),
       )
       .limit(1);
@@ -402,59 +418,100 @@ export class CallsService {
     }
   }
 
-  async listHistory(userId: string): Promise<CallHistoryEntry[]> {
-    const rows = await this.db
-      .select({
-        roomId: callHistory.roomId,
-        roomCode: rooms.code,
-        roomName: rooms.name,
-        startedAt: callHistory.startedAt,
-      })
+  async listHistory(userId: string, options: ListCallHistoryDto = {}): Promise<CallHistoryPage> {
+    const cutoff = callHistoryCutoff();
+    const isArchive = options.view === 'archive';
+    const userFilter = eq(callHistory.userId, userId);
+    const roomFilter = options.roomId ? eq(callHistory.roomId, options.roomId) : undefined;
+    const expired = lt(callHistory.startedAt, cutoff);
+
+    // Resolve the cursor in SQL to keep the timestamp's full precision and scope it to the user.
+    const boundary = options.before
+      ? this.db
+          .select({ startedAt: callHistory.startedAt, id: callHistory.id })
+          .from(callHistory)
+          .where(and(userFilter, roomFilter, eq(callHistory.id, options.before)))
+      : undefined;
+
+    const page = this.db
+      .select({ id: callHistory.id, roomId: callHistory.roomId, startedAt: callHistory.startedAt })
       .from(callHistory)
-      .innerJoin(rooms, eq(callHistory.roomId, rooms.id))
-      .where(eq(callHistory.userId, userId))
-      .orderBy(desc(callHistory.startedAt))
-      .limit(HISTORY_LIMIT);
+      .where(
+        and(
+          userFilter,
+          roomFilter,
+          isArchive ? expired : gte(callHistory.startedAt, cutoff),
+          boundary && sql`(${callHistory.startedAt}, ${callHistory.id}) < (${boundary})`,
+        ),
+      )
+      .orderBy(
+        sql`${callHistory.startedAt} desc nulls last`,
+        sql`${callHistory.id} desc nulls last`,
+      )
+      .limit(CALL_HISTORY_PAGE_SIZE + 1)
+      .as('history_page');
 
-    if (rows.length === 0) return [];
-
-    // Sin FK entre call_history y call_sessions: se correlaciona acá por
-    // sala + cercanía temporal. firstJoinedAt (cuándo ESTE usuario se
-    // conectó de verdad) es más preciso que el startedAt de la sala
-    // entera, que puede ser antes si otra persona entró primero.
-    const participantSessions = await this.db
-      .select({
-        sessionId: callSessionParticipants.sessionId,
-        firstJoinedAt: callSessionParticipants.firstJoinedAt,
-        roomId: callSessions.roomId,
-      })
+    // Find the first actual join for this user after the attempted join, in the same room.
+    const session = this.db
+      .select({ id: callSessionParticipants.sessionId })
       .from(callSessionParticipants)
       .innerJoin(callSessions, eq(callSessionParticipants.sessionId, callSessions.id))
-      .where(eq(callSessionParticipants.userId, userId));
+      .where(
+        and(
+          eq(callSessionParticipants.userId, userId),
+          eq(callSessions.roomId, page.roomId),
+          isRoomSessionVisible,
+          gte(callSessionParticipants.firstJoinedAt, page.startedAt),
+          lte(callSessionParticipants.firstJoinedAt, sql`${page.startedAt} + interval '5 minutes'`),
+        ),
+      )
+      .orderBy(asc(callSessionParticipants.firstJoinedAt), asc(callSessionParticipants.sessionId))
+      .limit(1)
+      .as('matched_session');
 
-    // Cada intento se empareja con la sesión cuyo primer join de este
-    // usuario ocurrió más cerca DESPUÉS de ese intento (pedir el token de
-    // LiveKit siempre precede a la conexión real). Ventana generosa: no
-    // debería tardar minutos en conectar si conecta.
-    const MATCH_WINDOW_MS = 5 * 60 * 1000;
-    return rows.map((row) => {
-      let bestSessionId: string | null = null;
-      let bestDelta = Infinity;
-      for (const candidate of participantSessions) {
-        if (candidate.roomId !== row.roomId) continue;
-        const delta = candidate.firstJoinedAt.getTime() - row.startedAt.getTime();
-        if (delta >= 0 && delta <= MATCH_WINDOW_MS && delta < bestDelta) {
-          bestDelta = delta;
-          bestSessionId = candidate.sessionId;
-        }
-      }
-      return {
-        roomId: row.roomId,
-        roomCode: row.roomCode,
-        roomName: row.roomName,
-        startedAt: row.startedAt,
-        sessionId: bestSessionId,
-      };
+    const [rows, archived] = await Promise.all([
+      this.db
+        .select({
+          id: page.id,
+          roomId: page.roomId,
+          roomCode: rooms.code,
+          roomName: rooms.name,
+          startedAt: page.startedAt,
+          sessionId: session.id,
+        })
+        .from(page)
+        .innerJoin(rooms, eq(page.roomId, rooms.id))
+        .leftJoinLateral(session, sql`true`)
+        .orderBy(sql`${page.startedAt} desc nulls last`, sql`${page.id} desc nulls last`),
+      isArchive
+        ? []
+        : this.db
+            .select({ id: callHistory.id })
+            .from(callHistory)
+            .where(and(userFilter, roomFilter, expired))
+            .limit(1),
+    ]);
+
+    const entries = rows.slice(0, CALL_HISTORY_PAGE_SIZE);
+    return {
+      entries,
+      nextCursor: rows.length > CALL_HISTORY_PAGE_SIZE ? rows[CALL_HISTORY_PAGE_SIZE - 1].id : null,
+      hasArchived: archived.length > 0,
+    };
+  }
+
+  async clearHistoryArchive(userId: string): Promise<void> {
+    const cutoff = callHistoryCutoff();
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(users)
+        .set({
+          callHistoryDeletedBefore: sql`greatest(${users.callHistoryDeletedBefore}, ${cutoff.toISOString()}::timestamp)`,
+        })
+        .where(eq(users.id, userId));
+      await tx
+        .delete(callHistory)
+        .where(and(eq(callHistory.userId, userId), lt(callHistory.startedAt, cutoff)));
     });
   }
 

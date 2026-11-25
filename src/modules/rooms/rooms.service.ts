@@ -26,6 +26,7 @@ export interface RoomMemberView {
   userId: string;
   name: string;
   role: RoomRole;
+  isOwner: boolean;
 }
 
 export interface CreateRoomOptions {
@@ -38,6 +39,7 @@ export interface OwnedRoomView {
   code: string;
   name: string;
   isPermanent: boolean;
+  hiddenFromMyRooms: boolean;
   isJoinable: boolean;
   createdAt: Date;
   lastEnteredAt: Date;
@@ -87,9 +89,12 @@ export class RoomsService {
             ...(isPermanent ? { waitingRoomEnabled: true } : {}),
           })
           .returning();
-        await tx
-          .insert(roomMembers)
-          .values({ roomId: room.id, userId: creatorId, role: 'administrador' });
+        await tx.insert(roomMembers).values({
+          roomId: room.id,
+          userId: creatorId,
+          role: 'administrador',
+          isOwner: true,
+        });
         if (slots.length > 0) {
           await tx
             .insert(roomScheduleSlots)
@@ -113,7 +118,7 @@ export class RoomsService {
     return this.resolver.resolveJoinable(code);
   }
 
-  // The creator is the room's only administrador (UpdateMemberRoleDto never grants it).
+  // Incluye las salas creadas y las heredadas al recibir el rol de administrador.
   async listOwnedRooms(userId: string, now: Date = new Date()): Promise<OwnedRoomView[]> {
     const owned = await this.db
       .select({
@@ -121,6 +126,7 @@ export class RoomsService {
         code: rooms.code,
         name: rooms.name,
         isPermanent: rooms.isPermanent,
+        hiddenFromMyRooms: roomMembers.hiddenFromMyRooms,
         createdAt: rooms.createdAt,
         lastEnteredAt: rooms.lastEnteredAt,
       })
@@ -168,6 +174,21 @@ export class RoomsService {
     });
   }
 
+  async setMyRoomVisibility(roomId: string, userId: string, hidden: boolean): Promise<void> {
+    const [membership] = await this.db
+      .update(roomMembers)
+      .set({ hiddenFromMyRooms: hidden })
+      .where(
+        and(
+          eq(roomMembers.roomId, roomId),
+          eq(roomMembers.userId, userId),
+          eq(roomMembers.role, 'administrador'),
+        ),
+      )
+      .returning({ roomId: roomMembers.roomId });
+    if (!membership) throw new NotFoundException('No se encontró la sala en tu lista');
+  }
+
   async joinRoom(code: string, userId: string): Promise<void> {
     const room = await this.getByCodeOrThrow(code);
     if (room.waitingRoomEnabled || room.entryLocked) {
@@ -189,7 +210,12 @@ export class RoomsService {
   async listMembers(code: string): Promise<RoomMemberView[]> {
     const room = await this.getByCodeOrThrow(code);
     return this.db
-      .select({ userId: users.id, name: users.name, role: roomMembers.role })
+      .select({
+        userId: users.id,
+        name: users.name,
+        role: roomMembers.role,
+        isOwner: roomMembers.isOwner,
+      })
       .from(roomMembers)
       .innerJoin(users, eq(roomMembers.userId, users.id))
       .where(eq(roomMembers.roomId, room.id));
@@ -208,28 +234,45 @@ export class RoomsService {
   async setMemberRole(
     code: string,
     targetUserId: string,
-    role: 'colaborador' | 'participante',
+    role: RoomRole,
+    requestedByUserId: string,
   ): Promise<void> {
-    const room = await this.getByCodeOrThrow(code);
-    const [target] = await this.db
-      .select({ role: roomMembers.role })
-      .from(roomMembers)
-      .where(and(eq(roomMembers.roomId, room.id), eq(roomMembers.userId, targetUserId)))
-      .limit(1);
-
-    if (!target) {
-      throw new NotFoundException('Esa persona todavía no es parte de la sala');
-    }
-    if (target.role === 'administrador') {
-      throw new ForbiddenException('No se puede cambiar el rol del administrador de la sala');
-    }
-
-    await this.db
-      .update(roomMembers)
-      .set({ role })
-      .where(and(eq(roomMembers.roomId, room.id), eq(roomMembers.userId, targetUserId)));
-
-    this.roomEvents.emitMemberRoleChanged({ roomCode: code });
+    const changed = await this.db.transaction(async (tx) => {
+      // Serializa los cambios de rol para no quitar dos últimos admins a la vez.
+      const room = await this.resolver.lockJoinable(tx, code);
+      const members = await tx
+        .select({
+          userId: roomMembers.userId,
+          role: roomMembers.role,
+          isOwner: roomMembers.isOwner,
+        })
+        .from(roomMembers)
+        .where(eq(roomMembers.roomId, room.id));
+      // El guard pudo autorizar la petición antes de que otro admin le quitara el rol.
+      if (members.find((member) => member.userId === requestedByUserId)?.role !== 'administrador') {
+        throw new ForbiddenException('Tu rol en la sala no permite esta acción');
+      }
+      const target = members.find((member) => member.userId === targetUserId);
+      if (!target) {
+        throw new NotFoundException('Esa persona todavía no es parte de la sala');
+      }
+      if (target.role === role) return false;
+      if (target.isOwner) {
+        throw new ForbiddenException('No se pueden quitar los permisos del propietario de la sala');
+      }
+      if (
+        target.role === 'administrador' &&
+        members.filter((member) => member.role === 'administrador').length === 1
+      ) {
+        throw new ForbiddenException('La sala debe conservar al menos un administrador');
+      }
+      await tx
+        .update(roomMembers)
+        .set({ role })
+        .where(and(eq(roomMembers.roomId, room.id), eq(roomMembers.userId, targetUserId)));
+      return true;
+    });
+    if (changed) this.roomEvents.emitMemberRoleChanged({ roomCode: code });
   }
 
   // Solo permanentes: las temporales se recuperan en 24h (ver D5), un nombre
@@ -242,6 +285,50 @@ export class RoomsService {
       throw new ForbiddenException('Solo las salas permanentes se pueden renombrar');
     }
     await this.db.update(rooms).set({ name }).where(eq(rooms.id, room.id));
+  }
+
+  // Borra la sala y, por ON DELETE CASCADE, todo lo que cuelga de ella (miembros, mensajes,
+  // notas, solicitudes de admisión, horarios, playlist, emojis, transcripción, identidades de
+  // llamada). call_sessions.room_id es SET NULL: el historial de llamadas sobrevive sin sala.
+  // Es una sola sentencia, así que es atómica; la transacción deja explícito el límite si
+  // en el futuro se suman pasos. Busca por ocupación del pool (no por joinability): moderar
+  // una sala vencida pero todavía no retirada también debe poder borrarla.
+  async deleteRoom(code: string): Promise<void> {
+    const room = await this.resolver.findPoolOccupant(code);
+    if (!room) {
+      throw new NotFoundException(`No existe una sala con el código "${code}"`);
+    }
+    await this.removeRoom(room);
+  }
+
+  // Borrado hecho por la propia gente de la sala: solo su administrador. No pasa por
+  // RoomRolesGuard porque ese guard resuelve la sala por "joinable" y respondería 404 para
+  // las salas vencidas que /rooms/mine igual lista (y que sí se deben poder limpiar).
+  async deleteRoomAsAdmin(code: string, userId: string): Promise<void> {
+    const room = await this.resolver.findPoolOccupant(code);
+    if (!room) {
+      throw new NotFoundException(`No existe una sala con el código "${code}"`);
+    }
+    const [member] = await this.db
+      .select({ role: roomMembers.role })
+      .from(roomMembers)
+      .where(and(eq(roomMembers.roomId, room.id), eq(roomMembers.userId, userId)))
+      .limit(1);
+    if (!member) {
+      throw new ForbiddenException('No sos parte de esta sala');
+    }
+    if (member.role !== 'administrador') {
+      throw new ForbiddenException('Solo el administrador de la sala puede borrarla');
+    }
+    await this.removeRoom(room);
+  }
+
+  private async removeRoom(room: Room): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx.delete(rooms).where(eq(rooms.id, room.id));
+    });
+    // Sockets conectados: el gateway los avisa y los desconecta.
+    this.roomEvents.emitRoomDeleted({ roomCode: room.code });
   }
 
   async getRoomNotes(code: string) {

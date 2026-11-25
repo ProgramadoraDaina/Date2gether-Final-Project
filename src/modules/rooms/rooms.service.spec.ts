@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import type { DrizzleDb } from '../../db/drizzle.module';
 import type { Room } from '../../db/schema';
@@ -13,6 +13,8 @@ const room: Room = {
   name: 'Reunión de Daina',
   isActive: true,
   isPermanent: false,
+  historyDeletedBefore: null,
+  historyCleanupPending: false,
   lastEnteredAt: new Date(),
   retiredAt: null,
   waitingRoomEnabled: false,
@@ -23,9 +25,13 @@ const room: Room = {
 
 describe('RoomsService', () => {
   let db: FakeDb;
-  let roomEvents: { emitMemberRoleChanged: ReturnType<typeof vi.fn> };
+  let roomEvents: {
+    emitMemberRoleChanged: ReturnType<typeof vi.fn>;
+    emitRoomDeleted: ReturnType<typeof vi.fn>;
+  };
   let resolver: {
     resolveJoinable: ReturnType<typeof vi.fn>;
+    lockJoinable: Mock<RoomResolverService['lockJoinable']>;
     touchEntry: ReturnType<typeof vi.fn>;
     findPoolOccupant: ReturnType<typeof vi.fn>;
     retireExpired: ReturnType<typeof vi.fn>;
@@ -34,9 +40,10 @@ describe('RoomsService', () => {
 
   beforeEach(() => {
     db = createFakeDb();
-    roomEvents = { emitMemberRoleChanged: vi.fn() };
+    roomEvents = { emitMemberRoleChanged: vi.fn(), emitRoomDeleted: vi.fn() };
     resolver = {
       resolveJoinable: vi.fn().mockResolvedValue(room),
+      lockJoinable: vi.fn<RoomResolverService['lockJoinable']>().mockResolvedValue(room),
       touchEntry: vi.fn().mockResolvedValue(undefined),
       findPoolOccupant: vi.fn().mockResolvedValue(undefined),
       retireExpired: vi.fn().mockResolvedValue(undefined),
@@ -68,9 +75,12 @@ describe('RoomsService', () => {
       expect(inserts[0].values).toHaveBeenCalledWith(
         expect.objectContaining({ name: 'Reunión de Daina' }),
       );
-      expect(inserts[1].values).toHaveBeenCalledWith(
-        expect.objectContaining({ roomId: room.id, userId: 'owner-1', role: 'administrador' }),
-      );
+      expect(inserts[1].values).toHaveBeenCalledWith({
+        roomId: room.id,
+        userId: 'owner-1',
+        role: 'administrador',
+        isOwner: true,
+      });
     });
 
     it('[4.11] corre el sweep de retiro (retireExpired) antes del probe de colisión, dentro de la misma transacción', async () => {
@@ -197,7 +207,9 @@ describe('RoomsService', () => {
 
   describe('listMembers', () => {
     it('devuelve la lista de miembros con su nombre y rol', async () => {
-      const membersView = [{ userId: 'user-1', name: 'Alex', role: 'administrador' as const }];
+      const membersView = [
+        { userId: 'user-1', name: 'Alex', role: 'administrador' as const, isOwner: true },
+      ];
       db.select.mockReturnValueOnce(chain(membersView));
 
       const result = await service.listMembers(room.code);
@@ -221,34 +233,98 @@ describe('RoomsService', () => {
   });
 
   describe('setMemberRole', () => {
-    it('lanza NotFoundException si el destino todavía no es miembro de la sala', async () => {
-      db.select.mockReturnValueOnce(chain([]));
-
-      await expect(service.setMemberRole(room.code, 'ajeno', 'colaborador')).rejects.toThrow(
-        NotFoundException,
+    beforeEach(() => {
+      db.transaction.mockImplementation(async (cb: unknown) =>
+        (cb as (tx: FakeDb) => Promise<unknown>)(db),
       );
+    });
+
+    it('lanza NotFoundException si el destino todavía no es miembro de la sala', async () => {
+      db.select.mockReturnValueOnce(chain([{ userId: 'owner-1', role: 'administrador' }]));
+
+      await expect(
+        service.setMemberRole(room.code, 'ajeno', 'colaborador', 'owner-1'),
+      ).rejects.toThrow(NotFoundException);
       expect(roomEvents.emitMemberRoleChanged).not.toHaveBeenCalled();
     });
 
-    it('impide cambiar el rol de quien es administrador de la sala', async () => {
-      db.select.mockReturnValueOnce(chain([{ role: 'administrador' }]));
+    it('impide quitar o cambiar el rol del último administrador', async () => {
+      db.select.mockReturnValueOnce(chain([{ userId: 'owner-1', role: 'administrador' }]));
 
-      await expect(service.setMemberRole(room.code, 'owner-1', 'participante')).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(
+        service.setMemberRole(room.code, 'owner-1', 'participante', 'owner-1'),
+      ).rejects.toThrow('La sala debe conservar al menos un administrador');
       expect(db.update).not.toHaveBeenCalled();
       expect(roomEvents.emitMemberRoleChanged).not.toHaveBeenCalled();
     });
 
-    it('actualiza el rol y notifica el cambio vía RoomEventsService', async () => {
-      db.select.mockReturnValueOnce(chain([{ role: 'participante' }]));
-      const updateChain = chain([]);
+    it.each(['participante', 'colaborador'] as const)(
+      'protege al propietario de un cambio a %s incluso si hay otros admins',
+      async (role) => {
+        db.select.mockReturnValueOnce(
+          chain([
+            { userId: 'owner-1', role: 'administrador', isOwner: true },
+            { userId: 'user-2', role: 'administrador', isOwner: false },
+          ]),
+        );
+
+        await expect(service.setMemberRole(room.code, 'owner-1', role, 'user-2')).rejects.toThrow(
+          'No se pueden quitar los permisos del propietario de la sala',
+        );
+        expect(db.update).not.toHaveBeenCalled();
+        expect(roomEvents.emitMemberRoleChanged).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      ['participante', 'colaborador'],
+      ['participante', 'administrador'],
+      ['colaborador', 'administrador'],
+      ['colaborador', 'participante'],
+      ['administrador', 'participante'],
+      ['administrador', 'colaborador'],
+    ] as const)('cambia de %s a %s y notifica el cambio', async (previousRole, role) => {
+      db.select.mockReturnValueOnce(
+        chain([
+          { userId: 'owner-1', role: 'administrador' },
+          { userId: 'user-2', role: previousRole },
+        ]),
+      );
+      const updateChain = chain([{ userId: 'user-2' }]);
       db.update.mockReturnValueOnce(updateChain);
 
-      await service.setMemberRole(room.code, 'user-2', 'colaborador');
+      await service.setMemberRole(room.code, 'user-2', role, 'owner-1');
 
-      expect(updateChain.set).toHaveBeenCalledWith({ role: 'colaborador' });
+      expect(updateChain.set).toHaveBeenCalledWith({ role });
+      expect(resolver.lockJoinable.mock.calls).toEqual([[db, room.code]]);
       expect(roomEvents.emitMemberRoleChanged).toHaveBeenCalledWith({ roomCode: room.code });
+    });
+
+    it.each(['colaborador', 'participante', undefined])(
+      'rechaza a quien ya no tiene permisos admin (%s)',
+      async (role) => {
+        db.select.mockReturnValueOnce(
+          chain([
+            { userId: 'owner-1', role: 'administrador' },
+            { userId: 'user-2', role },
+          ]),
+        );
+
+        await expect(
+          service.setMemberRole(room.code, 'owner-1', 'participante', 'user-2'),
+        ).rejects.toThrow(ForbiddenException);
+        expect(db.update).not.toHaveBeenCalled();
+        expect(roomEvents.emitMemberRoleChanged).not.toHaveBeenCalled();
+      },
+    );
+
+    it('mantener el rol actual no modifica la membresía ni emite un cambio', async () => {
+      db.select.mockReturnValueOnce(chain([{ userId: 'owner-1', role: 'administrador' }]));
+
+      await service.setMemberRole(room.code, 'owner-1', 'administrador', 'owner-1');
+
+      expect(db.update).not.toHaveBeenCalled();
+      expect(roomEvents.emitMemberRoleChanged).not.toHaveBeenCalled();
     });
   });
 
@@ -271,6 +347,92 @@ describe('RoomsService', () => {
         ForbiddenException,
       );
       expect(db.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deleteRoom', () => {
+    function stubTransaction() {
+      const deleteChain = chain([]);
+      const tx = { delete: vi.fn().mockReturnValue(deleteChain) };
+      db.transaction.mockImplementationOnce(async (cb: unknown) =>
+        (cb as (transaction: typeof tx) => Promise<void>)(tx),
+      );
+      return { tx, deleteChain };
+    }
+
+    it('borra la sala en una transacción y avisa a los sockets conectados', async () => {
+      resolver.findPoolOccupant.mockResolvedValueOnce(room);
+      const { tx, deleteChain } = stubTransaction();
+
+      await service.deleteRoom(room.code);
+
+      expect(resolver.findPoolOccupant).toHaveBeenCalledWith(room.code);
+      expect(tx.delete).toHaveBeenCalledTimes(1);
+      expect(deleteChain.where).toHaveBeenCalledTimes(1);
+      expect(roomEvents.emitRoomDeleted).toHaveBeenCalledWith({ roomCode: room.code });
+    });
+
+    it('responde 404 si la sala no existe, sin borrar ni avisar', async () => {
+      resolver.findPoolOccupant.mockResolvedValueOnce(undefined);
+
+      await expect(service.deleteRoom('zzz-zzzz-zzz')).rejects.toThrow(NotFoundException);
+      expect(db.transaction).not.toHaveBeenCalled();
+      expect(roomEvents.emitRoomDeleted).not.toHaveBeenCalled();
+    });
+
+    it('no avisa a los sockets si el borrado falla', async () => {
+      resolver.findPoolOccupant.mockResolvedValueOnce(room);
+      db.transaction.mockRejectedValueOnce(new Error('db down'));
+
+      await expect(service.deleteRoom(room.code)).rejects.toThrow('db down');
+      expect(roomEvents.emitRoomDeleted).not.toHaveBeenCalled();
+    });
+
+    describe('deleteRoomAsAdmin', () => {
+      it('borra la sala si quien llama es su administrador', async () => {
+        resolver.findPoolOccupant.mockResolvedValueOnce(room);
+        db.select.mockReturnValueOnce(chain([{ role: 'administrador' }]));
+        const { tx } = stubTransaction();
+
+        await service.deleteRoomAsAdmin(room.code, 'owner-1');
+
+        expect(tx.delete).toHaveBeenCalledTimes(1);
+        expect(roomEvents.emitRoomDeleted).toHaveBeenCalledWith({ roomCode: room.code });
+      });
+
+      it.each(['colaborador', 'participante'] as const)(
+        'responde 403 si quien llama es %s de la sala, sin borrar',
+        async (role) => {
+          resolver.findPoolOccupant.mockResolvedValueOnce(room);
+          db.select.mockReturnValueOnce(chain([{ role }]));
+
+          await expect(service.deleteRoomAsAdmin(room.code, 'user-2')).rejects.toThrow(
+            ForbiddenException,
+          );
+          expect(db.transaction).not.toHaveBeenCalled();
+          expect(roomEvents.emitRoomDeleted).not.toHaveBeenCalled();
+        },
+      );
+
+      it('responde 403 si quien llama ni siquiera es miembro de la sala', async () => {
+        resolver.findPoolOccupant.mockResolvedValueOnce(room);
+        db.select.mockReturnValueOnce(chain([]));
+
+        await expect(service.deleteRoomAsAdmin(room.code, 'ajeno')).rejects.toThrow(
+          ForbiddenException,
+        );
+        expect(db.transaction).not.toHaveBeenCalled();
+      });
+
+      it('responde 404 si la sala no existe', async () => {
+        resolver.findPoolOccupant.mockResolvedValueOnce(undefined);
+
+        await expect(service.deleteRoomAsAdmin('zzz-zzzz-zzz', 'owner-1')).rejects.toThrow(
+          NotFoundException,
+        );
+        expect(db.select).not.toHaveBeenCalled();
+        expect(db.transaction).not.toHaveBeenCalled();
+      });
     });
   });
 });

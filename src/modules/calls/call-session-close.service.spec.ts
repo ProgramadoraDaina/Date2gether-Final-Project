@@ -11,6 +11,7 @@ import {
   callEvents,
   callParticipantIdentities,
   callSessions,
+  roomMembers,
 } from '../../db/schema';
 import { chain } from '../../test-support/fake-drizzle';
 import type { BreakoutRoomsService } from './breakout-rooms.service';
@@ -303,11 +304,13 @@ describe('CallSessionCloseService', () => {
   // antes de generalizarlos a grupo en la Fase 4. Ningún assert de arriba se
   // tocó para agregar estos.
 
-  it('[C4] hasConnectedAdmin hoy NO filtra por roomId: solo por identity + roleAtIssue (fija el alcance antes del filtro de grupo de la Fase 4)', async () => {
+  it('[C4] hasConnectedAdmin hoy NO filtra por roomId: solo por identity + rol actual de administrador (fija el alcance antes del filtro de grupo de la Fase 4)', async () => {
     listParticipants.mockResolvedValue([{ identity: 'admin-sub' } as ParticipantInfo]);
     const whereSpy = vi.fn().mockReturnValue(chain([{ id: 'identity-row-1' }]));
     db.select.mockReturnValueOnce({
-      from: vi.fn().mockReturnValue({ where: whereSpy }),
+      from: vi.fn().mockReturnValue({
+        innerJoin: vi.fn().mockReturnValue({ where: whereSpy }),
+      }),
     });
 
     const target = service as unknown as {
@@ -319,7 +322,7 @@ describe('CallSessionCloseService', () => {
     expect(whereSpy).toHaveBeenCalledWith(
       and(
         inArray(callParticipantIdentities.livekitIdentity, ['admin-sub']),
-        eq(callParticipantIdentities.roleAtIssue, 'administrador'),
+        eq(roomMembers.role, 'administrador'),
       ),
     );
   });
@@ -407,7 +410,11 @@ describe('CallSessionCloseService', () => {
       ),
     );
     const whereSpy = vi.fn().mockReturnValue(chain([{ id: 'identity-row-1' }]));
-    db.select.mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: whereSpy }) });
+    db.select.mockReturnValueOnce({
+      from: vi.fn().mockReturnValue({
+        innerJoin: vi.fn().mockReturnValue({ where: whereSpy }),
+      }),
+    });
 
     const target = service as unknown as {
       hasConnectedAdmin(roomCode: string, roomId: string | null): Promise<boolean>;
@@ -419,7 +426,7 @@ describe('CallSessionCloseService', () => {
     expect(whereSpy).toHaveBeenCalledWith(
       and(
         inArray(callParticipantIdentities.livekitIdentity, ['guest-x', 'admin-sub']),
-        eq(callParticipantIdentities.roleAtIssue, 'administrador'),
+        eq(roomMembers.role, 'administrador'),
         eq(callParticipantIdentities.roomId, 'room-1'),
       ),
     );

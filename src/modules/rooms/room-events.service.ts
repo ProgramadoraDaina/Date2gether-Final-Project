@@ -29,7 +29,11 @@ export interface BreakoutAssignedEvent {
 
 // Avisos para toda la sala (cuenta regresiva de retorno, idas y vueltas): solo datos de UI.
 export type BreakoutBroadcastEvent =
-  | { roomCode: string; event: 'breakout:closing'; payload: { breakoutId: string; closesAt: string } }
+  | {
+      roomCode: string;
+      event: 'breakout:closing';
+      payload: { breakoutId: string; closesAt: string };
+    }
   | {
       roomCode: string;
       event: 'breakout:presence';
@@ -50,6 +54,10 @@ export interface BreakoutRemovalEvent {
   roomCode: string;
   targetIdentity: string;
   reason: string;
+}
+
+export interface RoomDeletedEvent {
+  roomCode: string;
 }
 
 // Puente desacoplado entre RoomsService/CallsModule (REST) y ChatGateway
@@ -106,5 +114,13 @@ export class RoomEventsService {
 
   emitBreakoutBroadcast(event: BreakoutBroadcastEvent): void {
     this.emitter.emit('breakoutBroadcast', event);
+  }
+
+  onRoomDeleted(listener: (event: RoomDeletedEvent) => void): void {
+    this.emitter.on('roomDeleted', listener);
+  }
+
+  emitRoomDeleted(event: RoomDeletedEvent): void {
+    this.emitter.emit('roomDeleted', event);
   }
 }

@@ -33,7 +33,7 @@ describe('TranscriptHistoryService', () => {
 
     await expect(service.getForSession('session-1', 'user-1')).resolves.toEqual([entry]);
 
-    expect(sessionChain.innerJoin).toHaveBeenCalledTimes(1);
+    expect(sessionChain.innerJoin).toHaveBeenCalledTimes(2);
     expect(transcripts.getCall).toHaveBeenCalledWith('room-1', 'RM_abc');
   });
 

@@ -3,7 +3,14 @@ const en: Record<string, string> = {
   'Necesitás ser admitido para unirte a esta sala': 'You must be admitted before joining this room',
   // Moderación de ingreso
   'Sala de espera': 'Waiting room',
-  'El anfitrión debe admitir tu ingreso.': 'The host needs to admit you.',
+  'Código de la sala': 'Room code',
+  'Esperando al anfitrión': 'Waiting for the host',
+  'Vas a entrar automáticamente cuando te admitan.':
+    'You’ll join automatically once the host admits you.',
+  'Esperando la admisión': 'Waiting for admission',
+  'Cancelación pendiente': 'Cancellation pending',
+  'Próximo encuentro programado:': 'Next scheduled meeting:',
+  'Esta sala no tiene un próximo horario programado.': 'No upcoming meeting is scheduled.',
   'El anfitrión rechazó tu solicitud.': 'The host declined your request.',
   'La solicitud fue cancelada.': 'The request was cancelled.',
   'La solicitud venció. Podés volver a solicitar el ingreso.':
@@ -11,7 +18,6 @@ const en: Record<string, string> = {
   'Todavía no estás conectado al chat ni a la llamada.':
     'You are not connected to the chat or call yet.',
   'Volver al formulario': 'Back to the form',
-  'Revisar estado': 'Check status',
   'Cancelar solicitud': 'Cancel request',
   'Cancelando…': 'Cancelling…',
   'Administrar ingresos': 'Manage access',
@@ -182,6 +188,9 @@ const en: Record<string, string> = {
   'La llamada terminó porque el anfitrión se desconectó.':
     'The call ended because the host disconnected.',
   'Volver a la sala': 'Back to the room',
+  'Esta sala fue eliminada por su administrador.': 'This room was deleted by its administrator.',
+  'Ir a mis salas': 'Go to my rooms',
+  'La sala ya no existe.': 'The room no longer exists.',
   'Ver línea de tiempo': 'View timeline',
   'Ver gráfico de interacción': 'View interaction chart',
   'Videollamadas simples, en el navegador.': 'Simple video calls, in the browser.',
@@ -231,6 +240,16 @@ const en: Record<string, string> = {
   'salió de la sala': 'left the room',
   'En la sala': 'In the room',
   'Escribí un mensaje...': 'Write a message...',
+  'Filtrar por día': 'Filter by day',
+  'Limpiar filtro': 'Clear filter',
+  'No hay mensajes de ese día.': 'There are no messages from that day.',
+  'Ver archivo del chat': 'View chat archive',
+  'Volver al chat reciente': 'Back to recent chat',
+  'Volver a la primera página': 'Back to the first page',
+  'Mensajes anteriores': 'Older messages',
+  'Cargando mensajes…': 'Loading messages…',
+  'No se pudieron cargar los mensajes': 'Could not load messages',
+  'No hay mensajes en esta página.': 'There are no messages on this page.',
   Enviar: 'Send',
   'Emojis y GIFs': 'Emojis and GIFs',
   'Buscar emoji...': 'Search emoji...',
@@ -363,6 +382,12 @@ const en: Record<string, string> = {
   'No se pudieron cargar los GIFs. Intentá nuevamente.': 'Could not load GIFs. Please try again.',
   'La búsqueda de GIFs no está configurada': 'GIF search is not configured',
   'Hacer colaborador': 'Make collaborator',
+  'Hacer administrador': 'Make administrator',
+  'Quitar administrador': 'Remove administrator',
+  Propietario: 'Owner',
+  'Permisos de': 'Permissions for',
+  'La sala debe conservar al menos un administrador':
+    'The room must keep at least one administrator',
   'Quitar colaborador': 'Remove collaborator',
   Conversación: 'Conversation',
   Presentes: 'Attendees',
@@ -374,6 +399,19 @@ const en: Record<string, string> = {
   'Agregar música': 'Add music',
   'Unirme a la música': 'Join the music',
   'Mis salas': 'My rooms',
+  'Opciones de la sala': 'Room options for',
+  'Quitar de Mis salas': 'Remove from My rooms',
+  'Ver salas ocultas': 'View hidden rooms',
+  'Volver a Mis salas': 'Back to My rooms',
+  'Volver a mostrar la sala': 'Show room again',
+  'No hay salas ocultas.': 'There are no hidden rooms.',
+  'No hay salas visibles en tu lista.': 'There are no visible rooms in your list.',
+  'La sala se quitó de tu lista.': 'The room was removed from your list.',
+  'La sala volvió a tu lista.': 'The room is back in your list.',
+  'No se pudo actualizar tu lista de salas': 'Could not update your room list',
+  'No se encontró la sala en tu lista': 'The room was not found in your list',
+  'Salas que administrás': 'Rooms you administer',
+  'Todavía no tenés salas como administrador.': 'You do not administer any rooms yet.',
   'Necesitás iniciar sesión para ver tus salas.': 'You need to sign in to see your rooms.',
   'No se pudieron cargar tus salas': 'Could not load your rooms',
   'Cargando salas…': 'Loading rooms…',
@@ -437,6 +475,35 @@ const en: Record<string, string> = {
   'Cargando historial…': 'Loading history…',
   'Todavía no hiciste ninguna llamada.': "You haven't made any calls yet.",
   'No se pudo obtener el historial': 'Could not fetch the history',
+  'Llamadas de los últimos 90 días': 'Calls from the last 90 days',
+  'Historial conservado': 'Archived call history',
+  'Las llamadas de hace más de 90 días se guardan en el archivo de tu cuenta.':
+    'Calls older than 90 days are kept in your account archive.',
+  'Conservar y ver el archivo': 'Keep and view archive',
+  'Volver a las llamadas recientes': 'Back to recent calls',
+  'No hay llamadas conservadas.': 'There are no archived calls.',
+  'No hay llamadas en los últimos 90 días.': 'There have been no calls in the last 90 days.',
+  'Esta sala no tiene llamadas conservadas.': 'This room has no archived calls.',
+  'Esta sala no tiene llamadas recientes.': 'This room has no recent calls.',
+  'Borrar historial anterior': 'Delete older history',
+  '¿Borrar de tu cuenta todas las llamadas de hace más de 90 días? Esta acción es permanente.':
+    'Delete all calls older than 90 days from your account? This is permanent.',
+  'Confirmar borrado': 'Confirm deletion',
+  'Borrando…': 'Deleting…',
+  'No se pudo borrar el historial anterior': 'Could not delete older history',
+  'Se borró el historial anterior de tu cuenta.':
+    'Older call history was deleted from your account.',
+  'Página anterior': 'Previous page',
+  'Página siguiente': 'Next page',
+  'Ver archivo de llamadas': 'View call archive',
+  'Archivo de llamadas de la sala': 'Room call archive',
+  'Ver historial de la sala': 'View room history',
+  'Borrar registros archivados': 'Delete archived records',
+  'Se borrarán los mensajes y los registros compartidos de llamadas de hace más de 90 días para todos los participantes. Esta acción es permanente.':
+    'Messages and shared call records older than 90 days will be deleted for all participants. This is permanent.',
+  'No se pudo borrar el archivo de la sala': 'Could not delete the room archive',
+  'Se retiraron los registros archivados de la sala.':
+    'The archived records were removed from the room.',
 
   // Notas desde el historial
   'Obtener notas': 'Get notes',
@@ -596,6 +663,30 @@ const en: Record<string, string> = {
   'Ver todas': 'View all',
   'Las mini salas siguen funcionando aunque cierres este panel.':
     'Breakout rooms keep running when you close this panel.',
+  // Borrado de salas
+  'Eliminar sala': 'Delete room',
+  'Eliminando…': 'Deleting…',
+  'Sí, eliminar sala': 'Yes, delete room',
+  'Vas a eliminar': 'You are about to delete',
+  'Se borran sus mensajes, notas, horarios y miembros. Esta acción no se puede deshacer.':
+    'Its messages, notes, schedules and members are deleted. This cannot be undone.',
+  'No se pudo eliminar la sala': 'Could not delete the room',
+  // Administración (roles globales)
+  Admin: 'Admin',
+  Administración: 'Administration',
+  'Sin acceso': 'No access',
+  'Necesitás ser administrador de la plataforma para ver esta página.':
+    'You need to be a platform administrator to view this page.',
+  'Usuarios de la plataforma y su rol global.': 'Platform users and their global role.',
+  'Cargando usuarios…': 'Loading users…',
+  'No se pudieron cargar los usuarios': 'Could not load users',
+  'No se pudo cambiar el rol': 'Could not change the role',
+  Rol: 'Role',
+  'Rol de': 'Role of',
+  'No se pudo verificar tu cuenta. Revisá tu conexión e intentá de nuevo.':
+    'Could not verify your account. Check your connection and try again.',
+  Usuario: 'User',
+  Administrador: 'Administrator',
 };
 
 export default en;

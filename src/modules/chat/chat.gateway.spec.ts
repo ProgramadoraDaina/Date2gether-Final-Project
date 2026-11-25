@@ -61,7 +61,9 @@ describe('ChatGateway', () => {
     const resolver = { resolveJoinable, assertBound } as unknown as RoomResolverService;
     const createMessage = vi.fn<ChatService['createMessage']>();
     const chatService = {
-      getHistory: vi.fn<ChatService['getHistory']>().mockResolvedValue([]),
+      getHistory: vi
+        .fn<ChatService['getHistory']>()
+        .mockResolvedValue({ entries: [], nextCursor: null }),
       createMessage,
     } as unknown as ChatService;
     const roomEvents = {
@@ -71,6 +73,7 @@ describe('ChatGateway', () => {
       onBreakoutClosed: vi.fn(),
       onBreakoutRemoval: vi.fn(),
       onBreakoutBroadcast: vi.fn(),
+      onRoomDeleted: vi.fn(),
     } as unknown as RoomEventsService;
 
     const gateway = new ChatGateway(
@@ -83,7 +86,9 @@ describe('ChatGateway', () => {
     );
     const serverEmit = vi.fn();
     const serverTo = vi.fn().mockReturnValue({ emit: serverEmit });
-    gateway.server = { to: serverTo } as unknown as ChatGateway['server'];
+    const disconnectSockets = vi.fn();
+    const serverIn = vi.fn().mockReturnValue({ disconnectSockets });
+    gateway.server = { to: serverTo, in: serverIn } as unknown as ChatGateway['server'];
     return {
       gateway,
       db,
@@ -95,8 +100,10 @@ describe('ChatGateway', () => {
       assertBound,
       serverTo,
       serverEmit,
-      playlists,
+      serverIn,
+      disconnectSockets,
       roomEvents,
+      playlists,
     };
   }
 
@@ -112,6 +119,22 @@ describe('ChatGateway', () => {
       toEmit,
     };
   }
+
+  describe('roomDeleted (evento del bridge RoomEventsService)', () => {
+    it('avisa a la sala y corta los sockets conectados', () => {
+      const { roomEvents, serverTo, serverEmit, serverIn, disconnectSockets } = createGateway();
+      const onRoomDeleted = vi.mocked(roomEvents.onRoomDeleted);
+      expect(onRoomDeleted).toHaveBeenCalledTimes(1);
+      const listener = onRoomDeleted.mock.calls[0][0];
+
+      listener({ roomCode: 'abc-defg-hij' });
+
+      expect(serverTo).toHaveBeenCalledWith('abc-defg-hij');
+      expect(serverEmit).toHaveBeenCalledWith('roomDeleted');
+      expect(serverIn).toHaveBeenCalledWith('abc-defg-hij');
+      expect(disconnectSockets).toHaveBeenCalledWith(true);
+    });
+  });
 
   describe('handleJoinRoom (Categoría E, D4: resolver.resolveJoinable + assertBound)', () => {
     it('código retirado/vencido/inexistente: emite el evento error existente, no lanza', async () => {

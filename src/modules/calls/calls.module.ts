@@ -7,6 +7,7 @@ import { BreakoutRoomsController } from './breakout-rooms.controller';
 import { BreakoutRoomsService } from './breakout-rooms.service';
 import { CallGroupResolverService } from './call-group-resolver.service';
 import { CallHistoryController } from './call-history.controller';
+import { CallRoomTeardownService } from './call-room-teardown.service';
 import { CallSessionCloseService } from './call-session-close.service';
 import { CallTimelineController } from './call-timeline.controller';
 import { CallTimelineService } from './call-timeline.service';
@@ -31,6 +32,7 @@ import { TestSupportController } from './test-support.controller';
     CallsWebhookService,
     CallTimelineService,
     CallSessionCloseService,
+    CallRoomTeardownService,
     CallGroupResolverService,
     BreakoutRoomsService,
   ],

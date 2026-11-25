@@ -9,9 +9,10 @@ const ROLE_LABELS: Record<RoomRole, { short: string; full: string }> = {
 
 interface RoleTagProps {
   role: RoomRole;
+  ownerLabel?: string;
 }
 
-export function RoleTag({ role }: RoleTagProps) {
+export function RoleTag({ role, ownerLabel }: RoleTagProps) {
   // Fallback defensivo: si el backend agrega un rol que el cliente todavía
   // no conoce, se muestra tal cual en vez de romper el render de la sala.
   const { short, full } = ROLE_LABELS[role] ?? { short: role, full: role };
@@ -20,11 +21,11 @@ export function RoleTag({ role }: RoleTagProps) {
   const variantClass = styles[`roleTag${role.charAt(0).toUpperCase()}${role.slice(1)}`] ?? '';
   return (
     <abbr
-      title={full}
+      title={ownerLabel ?? full}
       className={`${styles.roleTag} ${variantClass}`}
       data-testid={`role-tag-${role}`}
     >
-      {short}
+      {ownerLabel ?? short}
     </abbr>
   );
 }

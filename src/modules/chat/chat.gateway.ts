@@ -191,6 +191,11 @@ export class ChatGateway implements OnGatewayDisconnect {
         reason: event.reason,
       });
     });
+    // La sala se borró: se avisa y se corta el chat. handleDisconnect limpia el estado en memoria.
+    this.roomEvents.onRoomDeleted(({ roomCode }) => {
+      this.server.to(roomCode).emit('roomDeleted');
+      this.server.in(roomCode).disconnectSockets(true);
+    });
   }
 
   @UseGuards(WsJwtAuthGuard)
@@ -231,7 +236,7 @@ export class ChatGateway implements OnGatewayDisconnect {
       ...presence,
     });
 
-    const history = await this.chatService.getHistory(room.id);
+    const history = await this.chatService.getHistory(room.id, room.isPermanent);
     client.emit('roomHistory', history);
     client.emit('roomUsers', this.getUsersInRoom(dto.code));
 

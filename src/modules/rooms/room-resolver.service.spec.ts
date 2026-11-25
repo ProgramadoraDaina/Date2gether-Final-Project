@@ -12,6 +12,8 @@ function makeRoom(overrides: Partial<Room> = {}): Room {
     name: 'Reunión de Daina',
     isActive: true,
     isPermanent: false,
+    historyDeletedBefore: null,
+    historyCleanupPending: false,
     lastEnteredAt: new Date(),
     retiredAt: null,
     waitingRoomEnabled: false,

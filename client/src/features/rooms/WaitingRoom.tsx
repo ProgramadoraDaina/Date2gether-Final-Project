@@ -1,10 +1,18 @@
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { BrandMark } from '@/features/brand/BrandMark';
 import { getNextScheduleOccurrence } from '@/lib/api';
 import { useTranslation } from '../translation/useTranslation';
 import { NextOccurrence } from './NextOccurrence';
 import type { useAdmissionRequest } from './useAdmissionRequest';
 import styles from './WaitingRoom.module.css';
+
+const statusMessages = {
+  pending: 'Esperando al anfitrión',
+  rejected: 'El anfitrión rechazó tu solicitud.',
+  cancelled: 'La solicitud fue cancelada.',
+  expired: 'La solicitud venció. Podés volver a solicitar el ingreso.',
+};
 
 export function WaitingRoom({
   code,
@@ -14,64 +22,119 @@ export function WaitingRoom({
   admission: ReturnType<typeof useAdmissionRequest>;
 }) {
   const { t } = useTranslation();
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const terminal = admission.status !== 'pending';
-  const [nextOccurrenceAt, setNextOccurrenceAt] = useState<string | null>(null);
+  const waiting = !terminal && !admission.cancelIntent;
+  const [schedule, setSchedule] = useState<{ code: string; nextOccurrenceAt: string | null }>();
 
-  // D6: informational only -- never gates admission, and the response has
-  // no field that could carry the owner's timezone (public endpoint, same
-  // as the rest of the waiting-room flow).
   useEffect(() => {
+    titleRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    // El horario es informativo y no condiciona el ingreso.
     getNextScheduleOccurrence(code)
-      .then((result) => setNextOccurrenceAt(result.nextOccurrenceAt))
-      .catch(() => setNextOccurrenceAt(null));
+      .then(({ nextOccurrenceAt }) => {
+        if (active) setSchedule({ code, nextOccurrenceAt });
+      })
+      .catch(() => {
+        // Solo mostramos horarios confirmados por el servidor.
+      });
+    return () => {
+      active = false;
+    };
   }, [code]);
-  const message = {
-    pending: 'El anfitrión debe admitir tu ingreso.',
-    rejected: 'El anfitrión rechazó tu solicitud.',
-    cancelled: 'La solicitud fue cancelada.',
-    expired: 'La solicitud venció. Podés volver a solicitar el ingreso.',
-  }[admission.status];
+
+  const message = admission.cancelling
+    ? 'Cancelando…'
+    : admission.cancelIntent
+      ? 'Cancelación pendiente'
+      : statusMessages[admission.status];
+
   return (
     <section className={styles.card} aria-labelledby="waiting-title">
-      <h1 id="waiting-title">{t('Sala de espera')}</h1>
-      <p role="status">{t(message)}</p>
-      <p>{t('Todavía no estás conectado al chat ni a la llamada.')}</p>
-      <NextOccurrence nextOccurrenceAt={nextOccurrenceAt} />
-      {admission.error && (
-        <p className={styles.error} role="alert">
-          {t(admission.error)}
-        </p>
-      )}
-      {terminal ? (
-        <button type="button" onClick={admission.reset}>
-          {t('Volver al formulario')}
-        </button>
-      ) : (
-        <>
-          {!admission.cancelIntent && (
-            <button type="button" onClick={admission.retry}>
-              {t('Revisar estado')}
-            </button>
+      <div className={styles.panels}>
+        <div className={styles.info}>
+          <h1 id="waiting-title" className={styles.title} ref={titleRef} tabIndex={-1}>
+            {t('Sala de espera')}
+          </h1>
+
+          <div className={styles.status}>
+            <p className={styles.message} role="status">
+              {t(message)}
+            </p>
+            {waiting && (
+              <>
+                <p className={styles.hint}>
+                  {t('Vas a entrar automáticamente cuando te admitan.')}
+                </p>
+                <div
+                  className={styles.progress}
+                  role="progressbar"
+                  aria-label={t('Esperando la admisión')}
+                />
+              </>
+            )}
+            {admission.error && (
+              <p className={styles.error} role="alert">
+                {t(admission.error)}
+              </p>
+            )}
+          </div>
+
+          {schedule?.code === code && (
+            <NextOccurrence nextOccurrenceAt={schedule.nextOccurrenceAt} />
           )}
-          <button
-            type="button"
-            disabled={admission.cancelling}
-            onClick={() => {
-              void admission.cancel();
-            }}
-          >
-            {t(admission.cancelling ? 'Cancelando…' : 'Cancelar solicitud')}
-          </button>
-        </>
-      )}
-      <Link
-        href="/"
-        onClick={() => {
-          if (!terminal) void admission.cancel();
-        }}
-      >
-        {t('Volver al inicio')}
-      </Link>
+
+          <div className={styles.controls}>
+            <div className={styles.actions}>
+              {terminal ? (
+                <button type="button" onClick={admission.reset}>
+                  {t('Volver al formulario')}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className={styles.cancel}
+                  disabled={admission.cancelling}
+                  onClick={() => {
+                    void admission.cancel();
+                  }}
+                >
+                  {t(admission.cancelling ? 'Cancelando…' : 'Cancelar solicitud')}
+                </button>
+              )}
+            </div>
+            <Link
+              className={styles.home}
+              href="/"
+              onClick={() => {
+                if (!terminal) void admission.cancel();
+              }}
+            >
+              {t('Volver al inicio')}
+            </Link>
+          </div>
+
+          <p className={styles.privacy}>
+            {t('Todavía no estás conectado al chat ni a la llamada.')}
+          </p>
+        </div>
+
+        <div className={styles.identity}>
+          <div className={styles.brand}>
+            <BrandMark size={100} />
+            <span>Date2Gether</span>
+          </div>
+          <dl className={styles.room}>
+            <dt>{t('Código de la sala')}</dt>
+            <dd>
+              <code>{code}</code>
+            </dd>
+          </dl>
+        </div>
+      </div>
     </section>
   );
 }

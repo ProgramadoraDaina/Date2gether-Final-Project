@@ -9,6 +9,7 @@ import {
   callEvents,
   callParticipantIdentities,
   callSessions,
+  roomMembers,
 } from '../../db/schema';
 import { BreakoutRoomsService } from './breakout-rooms.service';
 import { CallGroupResolverService } from './call-group-resolver.service';
@@ -65,7 +66,7 @@ export class CallSessionCloseService {
 
   /**
    * Se invoca desde el dispatcher de webhooks cuando el identity que generó
-   * un `participant_left` tenía `roleAtIssue = 'administrador'`. No cierra
+   * un `participant_left` tiene el rol actual de administrador. No cierra
    * de inmediato: si en este instante ya no queda ningún admin conectado EN
    * NINGUNA sala del grupo (principal + mini salas activas, D1/D3), agenda
    * un re-chequeo a T+15s (D3) en vez de forzar el cierre ya mismo.
@@ -160,7 +161,7 @@ export class CallSessionCloseService {
 
       const conditions = [
         inArray(callParticipantIdentities.livekitIdentity, identities),
-        eq(callParticipantIdentities.roleAtIssue, 'administrador'),
+        eq(roomMembers.role, 'administrador'),
       ];
       if (groupRoomNames.length > 1 && roomId) {
         conditions.push(eq(callParticipantIdentities.roomId, roomId));
@@ -169,6 +170,13 @@ export class CallSessionCloseService {
       const [admin] = await this.db
         .select({ id: callParticipantIdentities.id })
         .from(callParticipantIdentities)
+        .innerJoin(
+          roomMembers,
+          and(
+            eq(roomMembers.roomId, callParticipantIdentities.roomId),
+            eq(roomMembers.userId, callParticipantIdentities.userId),
+          ),
+        )
         .where(and(...conditions))
         .limit(1);
       return !!admin;

@@ -1,7 +1,9 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, eq, type SQL } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
-import { callSessionParticipants, callSessions } from '../../db/schema';
+import { callSessionParticipants, callSessions, rooms, users } from '../../db/schema';
+import { isSessionVisibleToParticipant } from '../calls/call-history-retention';
+import { isRoomSessionVisible } from '../rooms/room-history-policy';
 import { TranscriptsService, type TranscriptEntry } from './transcripts.service';
 
 @Injectable()
@@ -36,7 +38,16 @@ export class TranscriptHistoryService {
       })
       .from(callSessions)
       .innerJoin(callSessionParticipants, eq(callSessionParticipants.sessionId, callSessions.id))
-      .where(and(match, eq(callSessionParticipants.userId, userId)))
+      .innerJoin(users, eq(callSessionParticipants.userId, users.id))
+      .leftJoin(rooms, eq(callSessions.roomId, rooms.id))
+      .where(
+        and(
+          match,
+          eq(callSessionParticipants.userId, userId),
+          isSessionVisibleToParticipant,
+          isRoomSessionVisible,
+        ),
+      )
       .limit(1);
     if (!session) throw new NotFoundException('Sesión no encontrada');
     return session;

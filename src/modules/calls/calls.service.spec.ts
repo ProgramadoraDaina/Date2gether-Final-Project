@@ -4,10 +4,13 @@ import { ConfigService } from '@nestjs/config';
 import { ForbiddenException, ServiceUnavailableException } from '@nestjs/common';
 import { and, eq, inArray } from 'drizzle-orm';
 import { RoomServiceClient, TokenVerifier, type ParticipantInfo } from 'livekit-server-sdk';
+import type { SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import type { DrizzleDb } from '../../db/drizzle.module';
 import {
   callBreakoutOccupants,
   callBreakoutRooms,
+  callHistory,
   callParticipantIdentities,
   callSessionParticipants,
   roomMembers,
@@ -17,7 +20,7 @@ import type { RoomParticipant } from '../auth/room-access.service';
 import type { RoomResolverService } from '../rooms/room-resolver.service';
 import { RoomsService } from '../rooms/rooms.service';
 import type { CallGroupResolverService } from './call-group-resolver.service';
-import { CallsService } from './calls.service';
+import { CallsService, type CallHistoryEntry } from './calls.service';
 
 const participant: RoomParticipant = {
   kind: 'room-participant',
@@ -54,31 +57,23 @@ function createDbMock() {
     table === callParticipantIdentities ? identityInsert() : historyInsert(),
   );
 
-  // select(...).from(callHistory).innerJoin(rooms, ...).where(...).orderBy(...).limit(...)
-  // — primera mitad de listHistory(): ahora selecciona roomId también.
-  const limit = vi
-    .fn<
-      (
-        n: number,
-      ) => Promise<{ roomId: string; roomCode: string; roomName: string; startedAt: Date }[]>
-    >()
-    .mockResolvedValue([]);
-  const orderBy = vi.fn().mockReturnValue({ limit });
-  const historyWhere = vi.fn().mockReturnValue({ orderBy, limit });
-  const innerJoin = vi.fn().mockReturnValue({ where: historyWhere });
-  // getRoomNotesForHistory() post-fix (D4-C): select({roomId}).from(callHistory)
-  // .where(...).limit(1) -- SIN join a rooms, un solo identificador.
-  const notesLimit = vi.fn<() => Promise<{ roomId: string }[]>>().mockResolvedValue([]);
-  const notesWhere = vi.fn().mockReturnValue({ limit: notesLimit });
-  const historyFrom = vi.fn().mockReturnValue({ innerJoin, where: notesWhere });
+  const page = { id: callHistory.id, roomId: callHistory.roomId, startedAt: callHistory.startedAt };
+  const limit = vi.fn().mockReturnValue({ as: () => page });
+  const pageOrderBy = vi.fn().mockReturnValue({ limit });
+  const orderBy = vi.fn<() => Promise<CallHistoryEntry[]>>().mockResolvedValue([]);
+  const leftJoinLateral = vi.fn().mockReturnValue({ orderBy });
+  const innerJoin = vi.fn().mockReturnValue({ leftJoinLateral });
+  // Both the archive existence check and notes authorization look for one history row.
+  const notesLimit = vi.fn<() => Promise<object[]>>().mockResolvedValue([]);
+  const notesWhere = vi.fn().mockReturnValue({ limit: notesLimit, orderBy: pageOrderBy });
+  const historyFrom = vi.fn().mockReturnValue({ where: notesWhere });
 
-  // select(...).from(callSessionParticipants).innerJoin(callSessions, ...).where(...)
-  // — segunda mitad de listHistory(): candidatos de sesión materializada
-  // para correlacionar por sala + cercanía temporal. Sin .orderBy/.limit,
-  // a diferencia de la cadena de arriba.
+  const sessionAlias = { id: callSessionParticipants.sessionId };
+  const participantSessionsLimit = vi.fn().mockReturnValue({ as: () => sessionAlias });
+  const participantSessionsOrderBy = vi.fn().mockReturnValue({ limit: participantSessionsLimit });
   const participantSessionsWhere = vi
-    .fn<() => Promise<{ sessionId: string; firstJoinedAt: Date; roomId: string | null }[]>>()
-    .mockResolvedValue([]);
+    .fn<(condition: SQL) => unknown>()
+    .mockReturnValue({ orderBy: participantSessionsOrderBy });
   const participantSessionsInnerJoin = vi.fn().mockReturnValue({ where: participantSessionsWhere });
   const participantSessionsFrom = vi
     .fn()
@@ -92,8 +87,8 @@ function createDbMock() {
   const roleWhere = vi.fn().mockReturnValue({ limit: roleLimit });
   const roleFrom = vi.fn().mockReturnValue({ where: roleWhere });
 
-  // select({id}).from(callParticipantIdentities).where(...).limit(1) —
-  // cruce de identities conectadas contra roleAtIssue='administrador' en
+  // select({id}).from(callParticipantIdentities).innerJoin(roomMembers).where(...).limit(1) —
+  // cruce de identities conectadas contra el rol actual de administrador en
   // assertHostConnected(). Default: SÍ hay un admin conectado, para que los
   // tests de join() preexistentes (que no ejercitan el gate en sí) sigan
   // emitiendo token sin tener que mockear un anfitrión por separado.
@@ -101,7 +96,8 @@ function createDbMock() {
     .fn<() => Promise<{ id: string }[]>>()
     .mockResolvedValue([{ id: 'already-connected-admin-identity' }]);
   const adminWhere = vi.fn().mockReturnValue({ limit: adminLimit });
-  const adminFrom = vi.fn().mockReturnValue({ where: adminWhere });
+  const adminInnerJoin = vi.fn().mockReturnValue({ where: adminWhere });
+  const adminFrom = vi.fn().mockReturnValue({ innerJoin: adminInnerJoin });
 
   // select(...).from(callBreakoutRooms)... -- no existe todavía ningún
   // consumidor de producción (Fase 3, C3/C8): este branch solo deja un
@@ -121,6 +117,7 @@ function createDbMock() {
   const breakoutOccupantsFrom = vi.fn().mockReturnValue({ innerJoin: breakoutOccupantsInnerJoin });
 
   const from = vi.fn((table: unknown): unknown => {
+    if (table === page) return { innerJoin };
     if (table === roomMembers) return roleFrom();
     if (table === callParticipantIdentities) return adminFrom();
     if (table === callSessionParticipants) return participantSessionsFrom();
@@ -137,7 +134,6 @@ function createDbMock() {
     select,
     from,
     innerJoin,
-    where: historyWhere,
     notesWhere,
     notesLimit,
     orderBy,
@@ -146,6 +142,7 @@ function createDbMock() {
     adminLimit,
     adminWhere,
     participantSessionsWhere,
+    participantSessionsLimit,
     breakoutRoomsFrom,
     breakoutOccupantsFrom,
     breakoutOccupantsInnerJoin,
@@ -572,7 +569,7 @@ describe('CallsService: gate de administrador (host-gate)', () => {
     expect(listParticipants).toHaveBeenCalledWith(room.code);
   });
 
-  it('[C2] la consulta a call_participant_identities del gate filtra por roomId Y por roleAtIssue="administrador"', async () => {
+  it('[C2] la consulta a call_participant_identities del gate filtra por roomId Y por el rol actual de administrador', async () => {
     listParticipants.mockResolvedValue([{ identity: 'admin-sub' } as ParticipantInfo]);
     db.adminLimit.mockResolvedValueOnce([{ id: 'identity-row-1' }]);
 
@@ -582,7 +579,7 @@ describe('CallsService: gate de administrador (host-gate)', () => {
       and(
         eq(callParticipantIdentities.roomId, room.id),
         inArray(callParticipantIdentities.livekitIdentity, ['admin-sub']),
-        eq(callParticipantIdentities.roleAtIssue, 'administrador'),
+        eq(roomMembers.role, 'administrador'),
       ),
     );
   });
@@ -651,7 +648,7 @@ describe('CallsService: gate de administrador (host-gate)', () => {
       and(
         eq(callParticipantIdentities.roomId, room.id),
         inArray(callParticipantIdentities.livekitIdentity, ['guest-x', 'admin-sub']),
-        eq(callParticipantIdentities.roleAtIssue, 'administrador'),
+        eq(roomMembers.role, 'administrador'),
       ),
     );
   });
@@ -727,7 +724,7 @@ describe('CallsService: gate de administrador (host-gate)', () => {
       and(
         eq(callParticipantIdentities.roomId, room.id),
         inArray(callParticipantIdentities.livekitIdentity, ['breakout-admin-identity']),
-        eq(callParticipantIdentities.roleAtIssue, 'administrador'),
+        eq(roomMembers.role, 'administrador'),
       ),
     );
   });
@@ -867,98 +864,58 @@ describe('CallsService: historial', () => {
     });
   });
 
-  it('lista el historial del usuario más reciente primero, limitado y con roomCode/roomName', async () => {
-    const rows = [
-      {
-        roomId: 'room-1',
-        roomCode: 'abc-defg-hij',
-        roomName: 'Reunión 1',
-        startedAt: new Date('2026-01-02'),
-      },
-      {
-        roomId: 'room-2',
-        roomCode: 'xyz-uvwt-rst',
-        roomName: 'Reunión 2',
-        startedAt: new Date('2026-01-01'),
-      },
-    ];
-    db.limit.mockResolvedValue(rows);
+  it('lista una página del historial y ofrece un cursor si hay más filas', async () => {
+    const rows = Array.from({ length: 51 }, (_, index) => ({
+      id: `entry-${index}`,
+      roomId: 'room-1',
+      roomCode: 'abc-defg-hij',
+      roomName: 'Reunión 1',
+      startedAt: new Date('2026-01-02'),
+      sessionId: null,
+    }));
+    db.orderBy.mockResolvedValue(rows);
+    db.notesLimit.mockResolvedValue([{ id: 'archived-entry' }]);
 
-    const result = await service.listHistory('user-1');
-
-    // Sin sesiones materializadas que correlacionar (mock por defecto: []),
-    // cada intento queda con sessionId: null. roomId pasa a exponerse (ruta
-    // de notas de historial D4-C): ya se seleccionaba internamente, ahora
-    // simplemente se devuelve.
-    expect(result).toEqual(
-      rows.map(({ roomId, roomCode, roomName, startedAt }) => ({
-        roomId,
-        roomCode,
-        roomName,
-        startedAt,
-        sessionId: null,
-      })),
-    );
-    expect(db.where).toHaveBeenCalled();
+    await expect(service.listHistory('user-1')).resolves.toEqual({
+      entries: rows.slice(0, 50),
+      nextCursor: 'entry-49',
+      hasArchived: true,
+    });
     expect(db.orderBy).toHaveBeenCalled();
-    expect(db.limit).toHaveBeenCalledWith(50);
+    expect(db.limit).toHaveBeenCalledWith(51);
   });
 
-  it('correlaciona un intento con la sesión materializada cuyo primer join del usuario cae dentro de la ventana', async () => {
-    db.limit.mockResolvedValue([
-      {
-        roomId: 'room-1',
-        roomCode: 'abc-defg-hij',
-        roomName: 'Reunión 1',
-        startedAt: new Date('2026-01-05T10:00:00.000Z'),
-      },
-    ]);
-    db.participantSessionsWhere.mockResolvedValue([
-      {
-        sessionId: 'sess-1',
-        firstJoinedAt: new Date('2026-01-05T10:00:30.000Z'),
-        roomId: 'room-1',
-      },
-    ]);
+  it('correlaciona cada intento con el primer ingreso del usuario en la sala dentro de cinco minutos', async () => {
+    await service.listHistory('user-1');
 
-    const result = await service.listHistory('user-1');
-
-    expect(result[0].sessionId).toBe('sess-1');
+    const condition = db.participantSessionsWhere.mock.calls[0][0];
+    const { sql, params } = new PgDialect().sqlToQuery(condition);
+    expect(params).toEqual(['user-1']);
+    expect(sql).toContain('"call_sessions"."room_id" = "call_history"."room_id"');
+    expect(sql).toContain('"first_joined_at" >= "call_history"."started_at"');
+    expect(sql).toContain(
+      `"first_joined_at" <= "call_history"."started_at" + interval '5 minutes'`,
+    );
+    expect(db.participantSessionsLimit).toHaveBeenCalledWith(1);
   });
 
-  it('no correlaciona cuando la sala no coincide, el join fue antes del intento, o quedó fuera de la ventana de 5 minutos', async () => {
-    db.limit.mockResolvedValue([
-      {
-        roomId: 'room-1',
-        roomCode: 'abc-defg-hij',
-        roomName: 'Reunión 1',
-        startedAt: new Date('2026-01-05T10:00:00.000Z'),
-      },
-    ]);
-    db.participantSessionsWhere.mockResolvedValue([
-      // Sala distinta.
-      {
-        sessionId: 'sess-wrong-room',
-        firstJoinedAt: new Date('2026-01-05T10:00:30.000Z'),
-        roomId: 'room-2',
-      },
-      // Join anterior al intento (delta negativo).
-      {
-        sessionId: 'sess-before',
-        firstJoinedAt: new Date('2026-01-05T09:59:00.000Z'),
-        roomId: 'room-1',
-      },
-      // Fuera de la ventana de 5 minutos.
-      {
-        sessionId: 'sess-too-late',
-        firstJoinedAt: new Date('2026-01-05T10:06:00.000Z'),
-        roomId: 'room-1',
-      },
-    ]);
+  it('devuelve intentos sin sesión y evita consultar la disponibilidad del archivo desde el archivo', async () => {
+    const row = {
+      id: 'entry-1',
+      roomId: 'room-1',
+      roomCode: 'abc-defg-hij',
+      roomName: 'Reunión 1',
+      startedAt: new Date('2026-01-05T10:00:00.000Z'),
+      sessionId: null,
+    };
+    db.orderBy.mockResolvedValue([row]);
 
-    const result = await service.listHistory('user-1');
-
-    expect(result[0].sessionId).toBeNull();
+    await expect(service.listHistory('user-1', { view: 'archive' })).resolves.toEqual({
+      entries: [row],
+      nextCursor: null,
+      hasArchived: false,
+    });
+    expect(db.notesLimit).not.toHaveBeenCalled();
   });
 });
 

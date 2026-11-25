@@ -5,7 +5,7 @@ import { chain, createFakeDb } from '../../test-support/fake-drizzle';
 import { ChatService } from './chat.service';
 
 describe('ChatService', () => {
-  it('devuelve el historial de la sala ordenado ascendente por fecha de creación', async () => {
+  it('devuelve una página de mensajes de la sala en orden cronológico', async () => {
     const db = createFakeDb();
     const messages: Message[] = [
       {
@@ -25,12 +25,14 @@ describe('ChatService', () => {
         createdAt: new Date('2026-01-02'),
       },
     ];
-    db.select.mockReturnValueOnce(chain(messages));
+    const query = chain([...messages].reverse());
+    db.select.mockReturnValueOnce(query);
     const service = new ChatService(db as unknown as DrizzleDb);
 
-    const history = await service.getHistory('room-1');
+    const history = await service.getHistory('room-1', true);
 
-    expect(history).toBe(messages);
+    expect(history).toEqual({ entries: messages, nextCursor: null });
+    expect(query.limit).toHaveBeenCalledWith(51);
     expect(db.select).toHaveBeenCalledTimes(1);
   });
 

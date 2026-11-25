@@ -1,4 +1,4 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Header, Param, ParseUUIDPipe, Query, UseGuards } from '@nestjs/common';
 import type { AccessTokenPayload } from '../auth/auth.types';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -16,6 +16,16 @@ export class CallTimelineController {
   @Get('sessions')
   listSessions(@CurrentUser() user: AccessTokenPayload) {
     return this.callTimelineService.listSessions(user.sub);
+  }
+
+  @Get('rooms/:roomId/archive')
+  @Header('Cache-Control', 'no-store')
+  listRoomArchive(
+    @Param('roomId', ParseUUIDPipe) roomId: string,
+    @Query('before', new ParseUUIDPipe({ optional: true })) before: string | undefined,
+    @CurrentUser() user: AccessTokenPayload,
+  ) {
+    return this.callTimelineService.listRoomArchive(roomId, user.sub, before);
   }
 
   @Get('sessions/:sessionId/timeline')

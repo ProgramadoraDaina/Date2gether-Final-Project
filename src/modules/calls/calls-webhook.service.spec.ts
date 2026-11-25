@@ -59,12 +59,12 @@ function createDbMock() {
   const onConflictDoNothing = vi.fn().mockReturnValue({ returning });
   const values = vi.fn().mockReturnValue({ onConflictDoNothing });
   const insert = vi.fn().mockReturnValue({ values });
-  // select({roleAtIssue}).from(callParticipantIdentities).where(...).limit(1)
+  // El rol actual de roomMembers se cruza con la identidad que salió.
   // — onParticipantLeft() resolviendo si el identity que se fue era admin.
   // Default: sin fila (no se encuentra ninguna correlación), así que el
   // dispatch de participant_left no llama a CallSessionCloseService salvo
   // que el test particular configure lo contrario.
-  const select = vi.fn().mockReturnValue(chain([] as { roleAtIssue: string | null }[]));
+  const select = vi.fn().mockReturnValue(chain([] as { role: string | null }[]));
   // Default genérico para cualquier dispatch que caiga en una transacción
   // (p. ej. room_finished) sin que el test particular configure su propio
   // tx: selects vacíos, compare-and-set sin filas -> no materializa nada,
@@ -580,10 +580,8 @@ describe('CallsWebhookService: cierre forzado en participant_left (tasks.md 6.10
     vi.restoreAllMocks();
   });
 
-  it('participant_left de un identity con roleAtIssue=administrador invoca a CallSessionCloseService.onAdminLeft con el roomId ya conocido (tasks.md 4.4.8: cero consultas nuevas)', async () => {
-    // Fase 4 (4.4.8): el roomId viaja en la MISMA fila que ya se
-    // consultaba -- ninguna consulta nueva se agrega para obtenerlo.
-    db.select.mockReturnValue(chain([{ roleAtIssue: 'administrador', roomId: 'room-parent-1' }]));
+  it('participant_left de un admin actual, incluso promovido durante la llamada, invoca el cierre', async () => {
+    db.select.mockReturnValue(chain([{ role: 'administrador', roomId: 'room-parent-1' }]));
     receive.mockResolvedValue(
       buildEvent({
         event: 'participant_left',
@@ -601,8 +599,8 @@ describe('CallsWebhookService: cierre forzado en participant_left (tasks.md 6.10
     );
   });
 
-  it('participant_left de un identity sin roleAtIssue=administrador (invitado o no-admin) no invoca el cierre', async () => {
-    db.select.mockReturnValue(chain([{ roleAtIssue: 'participante' }]));
+  it('participant_left de un invitado o no-admin actual no invoca el cierre', async () => {
+    db.select.mockReturnValue(chain([{ role: 'participante' }]));
     receive.mockResolvedValue(
       buildEvent({
         event: 'participant_left',
@@ -753,7 +751,7 @@ describe('CallsWebhookService: expulsión de ocupante locked en participant_join
   it('un administrador con asignación locked abierta que vuelve a la principal no es expulsado: se cierra su asignación', async () => {
     db.select
       .mockReturnValueOnce(chain([{ occupantId: 'occ-admin', leavePolicy: 'locked' }]))
-      .mockReturnValueOnce(chain([{ roleAtIssue: 'administrador' }]));
+      .mockReturnValueOnce(chain([{ role: 'administrador' }]));
     receive.mockResolvedValue(
       buildEvent({
         event: 'participant_joined',

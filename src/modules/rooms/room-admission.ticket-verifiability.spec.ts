@@ -15,6 +15,8 @@ function makeRoom(overrides: Partial<Room> = {}): Room {
     name: 'Sala permanente',
     isActive: true,
     isPermanent: true,
+    historyDeletedBefore: null,
+    historyCleanupPending: false,
     lastEnteredAt: new Date(),
     retiredAt: null,
     waitingRoomEnabled: true,

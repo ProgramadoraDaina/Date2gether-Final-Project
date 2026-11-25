@@ -38,6 +38,12 @@ export const NAME_COLOR_IDS = [
 
 export const nameColorEnum = pgEnum('name_color', NAME_COLOR_IDS);
 
+// Rol GLOBAL de la cuenta (distinto del rol por sala, roomRoleEnum): 'admin' puede moderar
+// usuarios y salas de toda la plataforma.
+export const USER_ROLES = ['user', 'admin'] as const;
+
+export const userRoleEnum = pgEnum('user_role', USER_ROLES);
+
 export const users = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
   email: varchar('email', { length: 255 }).notNull().unique(),
@@ -45,6 +51,8 @@ export const users = pgTable('users', {
   name: varchar('name', { length: 100 }).notNull(),
   nameColor: nameColorEnum('name_color'),
   avatar: jsonb('avatar').$type<UserAvatar>(),
+  role: userRoleEnum('role').notNull().default('user'),
+  callHistoryDeletedBefore: timestamp('call_history_deleted_before'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -66,6 +74,7 @@ export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
+export type UserRole = (typeof userRoleEnum.enumValues)[number];
 export type RefreshToken = typeof refreshTokens.$inferSelect;
 export type NewRefreshToken = typeof refreshTokens.$inferInsert;
 
@@ -78,6 +87,8 @@ export const rooms = pgTable(
     isActive: boolean('is_active').notNull().default(true),
     // Declared at creation and immutable. Permanent rooms never expire and never recycle their code.
     isPermanent: boolean('is_permanent').notNull().default(false),
+    historyDeletedBefore: timestamp('history_deleted_before'),
+    historyCleanupPending: boolean('history_cleanup_pending').notNull().default(false),
     // Drives the rolling 24h window for non-permanent rooms. Touched on "entry".
     lastEnteredAt: timestamp('last_entered_at').notNull().defaultNow(),
     // Code-pool marker, not a joinability source of truth. NULL = this room holds its code.
@@ -96,6 +107,9 @@ export const rooms = pgTable(
     index('rooms_retirement_sweep_idx')
       .on(table.lastEnteredAt)
       .where(sql`${table.retiredAt} is null and ${table.isPermanent} = false`),
+    index('rooms_history_cleanup_pending_idx')
+      .on(table.id)
+      .where(sql`${table.historyCleanupPending}`),
   ],
 );
 
@@ -103,17 +117,21 @@ export const MESSAGE_KINDS = ['text', 'gif'] as const;
 
 export const messageKindEnum = pgEnum('message_kind', MESSAGE_KINDS);
 
-export const messages = pgTable('messages', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  roomId: uuid('room_id')
-    .notNull()
-    .references(() => rooms.id, { onDelete: 'cascade' }),
-  authorName: varchar('author_name', { length: 60 }).notNull(),
-  // En los mensajes 'gif', content es la URL del GIF.
-  kind: messageKindEnum('kind').notNull().default('text'),
-  content: text('content').notNull(),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-});
+export const messages = pgTable(
+  'messages',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    roomId: uuid('room_id')
+      .notNull()
+      .references(() => rooms.id, { onDelete: 'cascade' }),
+    authorName: varchar('author_name', { length: 60 }).notNull(),
+    // En los mensajes 'gif', content es la URL del GIF.
+    kind: messageKindEnum('kind').notNull().default('text'),
+    content: text('content').notNull(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [index('messages_room_created_id_idx').on(table.roomId, table.createdAt, table.id)],
+);
 
 // Bloc compartido de la sala. La clave única permite actualizarlo como un
 // documento único y evita exponer notas personales a otros participantes.
@@ -139,9 +157,20 @@ export const roomMembers = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     role: roomRoleEnum('role').notNull().default('participante'),
+    hiddenFromMyRooms: boolean('hidden_from_my_rooms').notNull().default(false),
+    isOwner: boolean('is_owner').notNull().default(false),
     joinedAt: timestamp('joined_at').notNull().defaultNow(),
   },
-  (table) => [primaryKey({ columns: [table.roomId, table.userId] })],
+  (table) => [
+    primaryKey({ columns: [table.roomId, table.userId] }),
+    uniqueIndex('room_members_one_owner_per_room')
+      .on(table.roomId)
+      .where(sql`${table.isOwner}`),
+    check(
+      'room_members_owner_is_admin',
+      sql`not ${table.isOwner} or ${table.role} = 'administrador'`,
+    ),
+  ],
 );
 
 export const admissionStatusEnum = pgEnum('admission_status', [
@@ -228,16 +257,32 @@ export type RoomPlaylist = typeof roomPlaylists.$inferSelect;
 
 // Historial de llamadas: una fila por cada vez que una cuenta registrada
 // se une exitosamente a una sala. Los invitados sin cuenta no generan fila.
-export const callHistory = pgTable('call_history', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  roomId: uuid('room_id')
-    .notNull()
-    .references(() => rooms.id, { onDelete: 'cascade' }),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  startedAt: timestamp('started_at').notNull().defaultNow(),
-});
+export const callHistory = pgTable(
+  'call_history',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    roomId: uuid('room_id')
+      .notNull()
+      .references(() => rooms.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    startedAt: timestamp('started_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('call_history_user_started_id_idx').on(
+      table.userId,
+      table.startedAt.desc(),
+      table.id.desc(),
+    ),
+    index('call_history_user_room_started_id_idx').on(
+      table.userId,
+      table.roomId,
+      table.startedAt.desc(),
+      table.id.desc(),
+    ),
+  ],
+);
 
 export const CALL_MODES = ['reaction', 'sticker'] as const;
 export const STICKER_POSITIONS = [
@@ -385,8 +430,8 @@ export const callParticipantIdentities = pgTable(
     // null para invitados.
     userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
     displayName: varchar('display_name', { length: 60 }).notNull(),
-    // Snapshot del rol al emitir el token; null para invitados. Promover o
-    // transferir el rol durante la llamada está fuera de alcance (D1).
+    // Snapshot del rol al emitir el token; null para invitados. La presencia
+    // de anfitriones se determina con el rol actual de roomMembers.
     roleAtIssue: roomRoleEnum('role_at_issue'),
     issuedAt: timestamp('issued_at').notNull().defaultNow(),
   },
@@ -398,9 +443,9 @@ export const callParticipantIdentities = pgTable(
 
 // Log append-only de los webhooks de LiveKit. El PK es el id del propio
 // evento de LiveKit: la deduplicación sale gratis con
-// ON CONFLICT (id) DO NOTHING, sin índice único adicional. Sin UPDATE, sin
-// DELETE, sin FK a propósito: el log debe sobrevivir al borrado de salas y
-// usuarios para cumplir la retención indefinida (D7).
+// ON CONFLICT (id) DO NOTHING, sin índice único adicional. Sin FK para
+// conservar el log aunque exista un cambio en salas o usuarios. En salas
+// permanentes, el borrado explícito del archivo también retira sus eventos.
 export const callEvents = pgTable(
   'call_events',
   {
@@ -456,10 +501,14 @@ export const callSessions = pgTable(
     // null = sesión sin mini salas. Sin backfill: solo lo stampea el handler de
     // room_finished de una mini sala al resolver call_breakout_rooms.
     callGroupId: varchar('call_group_id', { length: 64 }),
+    historyPurgedAt: timestamp('history_purged_at'),
   },
   (table) => [
     unique('call_sessions_livekit_room_sid_unique').on(table.livekitRoomSid),
     index('call_sessions_room_id_started_at_idx').on(table.roomId, table.startedAt.desc()),
+    index('call_sessions_room_ended_history_idx')
+      .on(table.roomId, table.endedAt, table.id)
+      .where(sql`${table.endedAt} is not null and ${table.historyPurgedAt} is null`),
   ],
 );
 
@@ -515,6 +564,11 @@ export const callSessionParticipants = pgTable(
       table.participantKey,
     ),
     index('call_session_participants_session_id_idx').on(table.sessionId),
+    index('call_session_participants_user_joined_idx').on(
+      table.userId,
+      table.firstJoinedAt.desc(),
+      table.sessionId,
+    ),
   ],
 );
 

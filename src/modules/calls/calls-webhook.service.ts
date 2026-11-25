@@ -22,6 +22,7 @@ import {
   callParticipantIdentities,
   callSessionParticipants,
   callSessions,
+  roomMembers,
 } from '../../db/schema';
 import { RoomEventsService } from '../rooms/room-events.service';
 import { aggregateSession, type SessionEvent } from './aggregate-session';
@@ -222,11 +223,18 @@ export class CallsWebhookService {
 
     // Mismo criterio que join(): `locked` nunca aplica a un administrador.
     const [identityRow] = await this.db
-      .select({ roleAtIssue: callParticipantIdentities.roleAtIssue })
+      .select({ role: roomMembers.role })
       .from(callParticipantIdentities)
+      .innerJoin(
+        roomMembers,
+        and(
+          eq(roomMembers.roomId, callParticipantIdentities.roomId),
+          eq(roomMembers.userId, callParticipantIdentities.userId),
+        ),
+      )
       .where(eq(callParticipantIdentities.livekitIdentity, identity))
       .limit(1);
-    const isAdmin = identityRow?.roleAtIssue === 'administrador';
+    const isAdmin = identityRow?.role === 'administrador';
     if (isAdmin || openAssignment.leavePolicy !== 'locked') {
       // Volvió a la principal por un camino permitido: deja de figurar en la mini sala.
       await this.db
@@ -262,7 +270,7 @@ export class CallsWebhookService {
 
   /**
    * Cierre forzado idempotente (Fase 6, design.md D3/D4): si el identity que
-   * se fue tenía roleAtIssue='administrador' al emitir su token, se delega
+   * se fue tiene rol actual de administrador, se delega
    * en CallSessionCloseService la decisión de agendar (o no) un cierre.
    */
   private async onParticipantLeft(event: WebhookEvent): Promise<void> {
@@ -276,14 +284,18 @@ export class CallsWebhookService {
     // atribución de grupo que CallSessionCloseService necesita para su
     // propio gate ya está resuelta acá sin tener que volver a preguntarla.
     const [row] = await this.db
-      .select({
-        roleAtIssue: callParticipantIdentities.roleAtIssue,
-        roomId: callParticipantIdentities.roomId,
-      })
+      .select({ role: roomMembers.role, roomId: callParticipantIdentities.roomId })
       .from(callParticipantIdentities)
+      .innerJoin(
+        roomMembers,
+        and(
+          eq(roomMembers.roomId, callParticipantIdentities.roomId),
+          eq(roomMembers.userId, callParticipantIdentities.userId),
+        ),
+      )
       .where(eq(callParticipantIdentities.livekitIdentity, identity))
       .limit(1);
-    if (!row || row.roleAtIssue !== 'administrador') return;
+    if (!row || row.role !== 'administrador') return;
 
     await this.closeService.onAdminLeft(livekitRoomSid, event.room?.name ?? '', row.roomId);
   }
