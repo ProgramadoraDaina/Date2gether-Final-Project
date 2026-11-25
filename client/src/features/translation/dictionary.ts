@@ -176,6 +176,22 @@ const en: Record<string, string> = {
     'It is not in your history yet: it appears when the call ends for everyone.',
   Transcripción: 'Transcript',
   'Esta llamada no tiene transcripción.': 'This call has no transcript.',
+  'Resumen con IA': 'AI summary',
+  'Resumir con IA': 'Summarize with AI',
+  'Generando resumen…': 'Generating summary…',
+  'Generado con IA: puede contener errores.': 'AI-generated: it may contain mistakes.',
+  'No se pudo generar el resumen': 'Could not generate the summary',
+  'Se alcanzó el límite de uso de la IA. Probá de nuevo más tarde.':
+    'The AI usage limit was reached. Please try again later.',
+  'Demasiadas solicitudes. Probá de nuevo en un minuto.':
+    'Too many requests. Please try again in a minute.',
+  'Resumen generado en español.': 'Summary generated in Spanish.',
+  'Resumen generado en inglés.': 'Summary generated in English.',
+  'El resumen con IA no está disponible por ahora. Probá de nuevo más tarde.':
+    'AI summaries are not available right now. Please try again later.',
+  'Esta llamada no tiene transcripción para resumir.': 'This call has no transcript to summarize.',
+  'La transcripción es demasiado larga para resumirla con IA.':
+    'The transcript is too long to summarize with AI.',
   'Descargar PDF': 'Download PDF',
   'No se pudo generar el PDF': 'Could not generate the PDF',
   'Transcripción de la llamada': 'Call transcript',

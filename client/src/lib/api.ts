@@ -181,6 +181,8 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status?: number,
+    // Machine-readable backend error code, when the response carries one.
+    readonly code?: string,
   ) {
     super(message);
   }
@@ -749,4 +751,43 @@ export async function resolveCallSessionBySid(livekitRoomSid: string): Promise<{
     throw new ApiError(await extractErrorMessage(res, 'No se encontró la sesión'), res.status);
   }
   return res.json();
+}
+
+// AI summary of a session's transcript. Stored on the backend: a session is summarized once.
+export interface CallSummary {
+  text: string;
+  model: string;
+  // Language the summary was written in; it can differ from the current UI language.
+  language: 'es' | 'en';
+  createdAt: string;
+}
+
+export async function getCallSummary(sessionId: string): Promise<CallSummary | null> {
+  const res = await authFetch(`/calls/sessions/${encodeURIComponent(sessionId)}/summary`);
+  if (!res.ok) {
+    throw new ApiError(await extractErrorMessage(res, 'No se pudo cargar el resumen'), res.status);
+  }
+  return ((await res.json()) as { summary: CallSummary | null }).summary;
+}
+
+export async function generateCallSummary(
+  sessionId: string,
+  language: 'es' | 'en',
+): Promise<CallSummary> {
+  const res = await authFetch(`/calls/sessions/${encodeURIComponent(sessionId)}/summary`, {
+    method: 'POST',
+    body: JSON.stringify({ language }),
+  });
+  if (!res.ok) {
+    const body = (await res.clone().json().catch(() => null)) as { code?: unknown } | null;
+    const code = typeof body?.code === 'string' ? body.code : undefined;
+    throw new ApiError(
+      await extractErrorMessage(res, 'No se pudo generar el resumen'),
+      res.status,
+      code,
+    );
+  }
+  const { summary } = (await res.json()) as { summary: CallSummary | null };
+  if (!summary) throw new ApiError('No se pudo generar el resumen');
+  return summary;
 }

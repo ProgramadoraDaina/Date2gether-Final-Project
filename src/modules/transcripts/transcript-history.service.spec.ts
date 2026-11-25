@@ -53,6 +53,21 @@ describe('TranscriptHistoryService', () => {
     expect(transcripts.getCall).not.toHaveBeenCalled();
   });
 
+  it('requireSession aplica la misma regla de participación y expone la sesión sin leer el acta', async () => {
+    const found = setup([{ id: 'session-1', roomId: 'room-1', livekitRoomSid: 'RM_abc' }]);
+    await expect(found.service.requireSession('session-1', 'user-1')).resolves.toEqual({
+      id: 'session-1',
+      roomId: 'room-1',
+      livekitRoomSid: 'RM_abc',
+    });
+    expect(found.transcripts.getCall).not.toHaveBeenCalled();
+
+    const missing = setup([]);
+    await expect(missing.service.requireSession('session-1', 'otro')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
   it('resuelve el sid de LiveKit a la sesión del historial solo para quien participó', async () => {
     const found = setup([{ id: 'session-1', roomId: 'room-1', livekitRoomSid: 'RM_abc' }]);
     await expect(found.service.resolveBySid('RM_abc', 'user-1')).resolves.toEqual({
