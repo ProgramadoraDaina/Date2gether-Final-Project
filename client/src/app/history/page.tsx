@@ -273,7 +273,7 @@ function HistoryList({
                       <span className={styles.code}>{entry.roomCode}</span>
                     </div>
                     <div className={styles.callActions}>
-                      {/* Sin sessionId nadie llegó a conectarse: no hay gráfico ni transcripción. */}
+                      {/* Sin sessionId vos no llegaste a conectarte: no hay gráfico ni transcripción. */}
                       {entry.sessionId ? (
                         <>
                           <Link
@@ -292,7 +292,7 @@ function HistoryList({
                           </Link>
                         </>
                       ) : (
-                        <span className={styles.noSession}>{t('Nadie llegó a conectarse')}</span>
+                        <span className={styles.noSession}>{t('No llegaste a conectarte')}</span>
                       )}
                       {/* Las notas son de la sala (por roomId); el code solo arma la clave local. */}
                       {!roomArchive && (

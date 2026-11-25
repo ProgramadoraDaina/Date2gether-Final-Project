@@ -814,7 +814,7 @@ const en: Record<string, string> = {
   'Tus llamadas de hace más de 90 días.': 'Your calls older than 90 days.',
   'Tus llamadas de los últimos 90 días.': 'Your calls from the last 90 days.',
   Gráfico: 'Chart',
-  'Nadie llegó a conectarse': 'Nobody connected',
+  'No llegaste a conectarte': 'You did not connect',
   'Borrar llamadas antiguas': 'Delete old calls',
   'Quita de tu cuenta las llamadas de hace más de 90 días. A los demás participantes no les cambia nada.':
     'Removes calls older than 90 days from your account. Nothing changes for other participants.',
