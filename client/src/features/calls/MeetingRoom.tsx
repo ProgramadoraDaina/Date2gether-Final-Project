@@ -492,7 +492,11 @@ function MeetingContent({
               </TrackRefContext.Provider>
             </FocusLayoutContainer>
           ) : useCustomLayout ? (
-            <CustomCallLayout tracks={tracks} zones={customLayout.zones} />
+            <CustomCallLayout
+              tracks={tracks}
+              zones={customLayout.zones}
+              editing={customLayout.editing}
+            />
           ) : (
             <GridLayout tracks={tracks} className={styles.meetingGrid}>
               <ReactionTile canFocus={tracks.length > 1} />

@@ -129,6 +129,8 @@ const en: Record<string, string> = {
   Mosaicos: 'Tiles',
   Personalizados: 'Custom',
   Grilla: 'Grid',
+  'Las personas van llenando la Zona 1, después la 2, y así. Las que no entran van a la última.':
+    'People fill Zone 1 first, then Zone 2, and so on. Anyone who does not fit goes to the last one.',
   Chica: 'Small',
   Mediana: 'Medium',
   'Tu navegador no tiene subtítulos en vivo. Probá con Chrome o Edge.':

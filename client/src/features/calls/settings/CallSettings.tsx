@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AvatarDialog } from '@/features/avatar/AvatarDialog';
 import { useDismiss } from '@/lib/useDismiss';
 import { useTranslation } from '@/features/translation/useTranslation';
@@ -73,7 +73,13 @@ export function CallSettingsButton({
   const captionsLabel = t('Tamaño de los subtítulos');
   const currentSize = CAPTION_SIZES.find((size) => size.value === captionSize);
   const layoutEnabled = useCallLayoutStore((state) => state.enabled && state.zones.length > 0);
+  const setLayoutEditing = useCallLayoutStore((state) => state.setEditing);
   const layoutLabel = t('Mosaicos');
+  const editingLayout = open && view === 'layout';
+  useEffect(() => {
+    setLayoutEditing(editingLayout);
+    return () => setLayoutEditing(false);
+  }, [editingLayout, setLayoutEditing]);
 
   return (
     <div className={styles.wrap} ref={wrapRef}>

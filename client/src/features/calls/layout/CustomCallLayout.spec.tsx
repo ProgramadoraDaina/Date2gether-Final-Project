@@ -3,6 +3,10 @@ import { render, screen, within } from '@testing-library/react';
 import type { TrackReferenceOrPlaceholder } from '@livekit/components-react';
 import type { LayoutZone } from './layout';
 
+jest.mock('@/features/translation/useTranslation', () => {
+  const t = (key: string) => key;
+  return { useTranslation: () => ({ t }) };
+});
 jest.mock('@livekit/components-react', () => {
   const { createContext, useContext } = jest.requireActual<typeof import('react')>('react');
   const TrackRefContext = createContext<{ participant: { identity: string } } | undefined>(
@@ -73,5 +77,22 @@ describe('CustomCallLayout', () => {
     );
     const [big] = screen.getAllByTestId('layout-zone');
     expect(within(big).getByText('gabi-screen')).toBeInTheDocument();
+  });
+
+  it('mientras se edita, cada zona muestra su número y cuántos ocupan sus lugares', async () => {
+    const { CustomCallLayout } = await import('./CustomCallLayout');
+    const props = {
+      tracks: [track('santi'), track('gabi'), track('daina'), track('joni')],
+      zones: [zone('big', 1), zone('mid', 2), zone('small', 5)],
+    };
+    const { rerender } = render(<CustomCallLayout {...props} />);
+    expect(screen.queryByText(/^Zona 1/)).not.toBeInTheDocument();
+
+    rerender(<CustomCallLayout {...props} editing />);
+    const [big, mid, small] = screen.getAllByTestId('layout-zone');
+    expect(within(big).getByText('Zona 1 · 1/1')).toBeInTheDocument();
+    expect(within(mid).getByText('Zona 2 · 2/2')).toBeInTheDocument();
+    expect(within(small).getByText('Zona 3 · 1/5')).toBeInTheDocument();
+    expect(screen.getByTestId('layout-stage')).toHaveAttribute('data-editing', 'true');
   });
 });

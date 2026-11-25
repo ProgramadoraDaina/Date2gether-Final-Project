@@ -7,6 +7,9 @@ type ZoneChanges = Partial<Omit<LayoutZone, 'id'>>;
 interface CallLayoutState {
   enabled: boolean;
   zones: LayoutZone[];
+  // True while the tiles editor is open; never persisted.
+  editing: boolean;
+  setEditing: (editing: boolean) => void;
   setEnabled: (enabled: boolean) => void;
   addZone: () => void;
   updateZone: (id: string, changes: ZoneChanges) => void;
@@ -66,6 +69,8 @@ export const useCallLayoutStore = create<CallLayoutState>()(
     (set) => ({
       enabled: false,
       zones: [],
+      editing: false,
+      setEditing: (editing) => set({ editing }),
       setEnabled: (enabled) => set({ enabled }),
       addZone: () => set(({ zones }) => ({ zones: [...zones, defaultZone(zones.length === 0)] })),
       updateZone: (id, changes) =>

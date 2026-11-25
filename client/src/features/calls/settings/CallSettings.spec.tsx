@@ -154,6 +154,12 @@ describe('Ajustes de la llamada', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Ajustes de la llamada' }));
     fireEvent.click(screen.getByRole('button', { name: /Mosaicos/ }));
+    expect(useCallLayoutStore.getState().editing).toBe(true);
+    expect(
+      screen.getByText(
+        'Las personas van llenando la Zona 1, después la 2, y así. Las que no entran van a la última.',
+      ),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByLabelText('Usar mi distribución en las llamadas'));
     fireEvent.click(screen.getByRole('button', { name: 'Agregar zona' }));
@@ -170,5 +176,6 @@ describe('Ajustes de la llamada', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Volver' }));
     expect(screen.getByRole('button', { name: /Mosaicos/ })).toBeInTheDocument();
+    expect(useCallLayoutStore.getState().editing).toBe(false);
   });
 });

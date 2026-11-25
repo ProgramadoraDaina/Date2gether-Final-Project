@@ -158,6 +158,11 @@ export function CallLayoutEditor({ showPreview = true }: { showPreview?: boolean
         />
         <span>{t('Usar mi distribución en las llamadas')}</span>
       </label>
+      <p className={styles.editorHint}>
+        {t(
+          'Las personas van llenando la Zona 1, después la 2, y así. Las que no entran van a la última.',
+        )}
+      </p>
       {tree && showPreview && (
         <div className={styles.preview} data-testid="layout-preview">
           <LayoutView
