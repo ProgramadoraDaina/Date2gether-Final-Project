@@ -9,6 +9,13 @@ describe('linkFromMessage', () => {
     });
   });
 
+  it('quita los dos puntos o guiones que quedan al final del título', () => {
+    expect(linkFromMessage('Apunte de hoy: https://docs.example.com/clase-1')?.title).toBe(
+      'Apunte de hoy',
+    );
+    expect(linkFromMessage('Video - https://example.com/v')?.title).toBe('Video');
+  });
+
   it('sin texto alrededor no manda título', () => {
     expect(linkFromMessage('http://example.com/a?b=1')).toEqual({
       url: 'http://example.com/a?b=1',

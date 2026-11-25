@@ -1018,7 +1018,7 @@ describe('RoomPage: biblioteca de links', () => {
     await waitFor(() =>
       expect(addRoomLink).toHaveBeenCalledWith('abc-defg-hij', {
         url: 'https://docs.example.com/clase-1',
-        title: 'Apunte de hoy:',
+        title: 'Apunte de hoy',
       }),
     );
     expect(await screen.findByTestId('notice')).toHaveTextContent('Link fijado en la biblioteca');
