@@ -853,8 +853,8 @@ const en: Record<string, string> = {
   'Mini salas abiertas': 'Open breakout rooms',
   persona: 'person',
   'Volumen para todos': 'Volume for everyone',
-  'La primera vez descarga el modelo de Google. Usa más procesador: si tu equipo va lento, dejalo apagado.':
-    'Downloads a Google model the first time. Uses more CPU: leave it off if your computer is slow.',
+  'Usa más procesador: si tu equipo va lento, dejalo apagado.':
+    'Uses more CPU: leave it off if your computer is slow.',
 };
 
 export default en;
