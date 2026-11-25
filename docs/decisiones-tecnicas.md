@@ -673,3 +673,31 @@ Después de desplegar las mini salas, aparecieron tres problemas de UX/robustez 
 ### Verificación
 
 Backend: `pnpm vitest run` — 549 tests, 535 pasan (las 14 fallas restantes son integración contra Postgres sin conexión local disponible, preexistentes a este cambio, mismo set antes/después confirmado con `git stash`). Frontend: `pnpm jest` en `client/` — 68 suites / 478 tests, todo verde. `tsc --noEmit` sin errores nuevos en ninguno de los dos paquetes (los únicos preexistentes son los ya documentados en `calls-webhook.service.spec.ts`, dos specs de integración de `rooms`, y el uso de `exact` en `page.spec.tsx` de `room/[code]`, ninguno tocado por este cambio).
+
+---
+
+## 25. Endurecimiento R7: filtro global de excepciones explícito y CORS sin fallback `*`
+
+**Fecha:** 2026-11-25
+**Rama:** `fix/r7-exception-filter-and-cors`
+
+### Contexto
+
+El requisito R7 del curso exige que los errores del backend nunca expongan trazas, consultas ni datos internos al cliente, y que CORS apunte al dominio propio del frontend, no a `*`. Antes de este cambio, el primer punto dependía solo del comportamiento por defecto de Nest y el segundo tenía un fallback silencioso: `process.env.CORS_ORIGIN ?? '*'` tanto en `app-setup.ts` como en el decorador de `ChatGateway`.
+
+### Decisión
+
+- **Filtro global explícito (`src/common/all-exceptions.filter.ts`).** Las `HttpException` (validación, 401, 403, 404, throttling) se devuelven con su status y body originales, así que el formato que ya consumen cliente y tests no cambia. Cualquier otro error se registra completo (mensaje, stack, método y URL) con el `Logger` de Nest y el cliente recibe siempre `{ statusCode: 500, message: 'Internal server error' }`. Se registra en `createApp()` para que lo ejerciten también los tests. Solo responde en contexto `http`; los filtros globales de `useGlobalFilters` no alcanzan a los gateways, así que el chat por Socket.IO y el webhook de LiveKit no cambian.
+- **Errores 4xx de body-parser y `headersSent`.** Los errores que no son `HttpException` pero traen `status`/`statusCode` 4xx y `expose === true` (p. ej. 413 por body demasiado grande, 415) conservan su status; el body solo lleva la frase estándar (`http.STATUS_CODES`), nunca `err.message`, y se registran como `warn` sin stack. Un 5xx o un `expose` distinto de `true` sigue siendo el 500 genérico. Si `response.headersSent` ya es `true` (handlers con `@Res()`), el filtro no escribe nada: registra el error con método y URL y cierra la respuesta.
+- **CORS con falla temprana (`src/common/cors-origin.ts`).** `getCorsOrigin()` lanza un error claro si `CORS_ORIGIN` falta, está vacío, es `*` o no es un origen simple (`new URL(v).origin === v`: sin barra final, path ni esquema faltante; formato esperado `https://app.example.com`). `createApp()` lo llama antes de crear la app, por lo que el servidor no arranca (falla en el boot, no en la primera request). Solo se admite un origen único, que es lo que usan hoy desarrollo, e2e y EC2.
+- **CORS del gateway en runtime (`CorsIoAdapter`).** El decorador `@WebSocketGateway` se evalúa al importar el módulo, antes de que `ConfigModule` cargue el `.env`, de modo que leer `process.env` ahí era frágil. El origen se inyecta ahora desde un `IoAdapter` propio registrado en `createApp()`.
+
+### Justificación
+
+- Los errores de Drizzle/pg incluyen el SQL y los parámetros en `error.message`. Confiar en el default de Nest hoy los oculta, pero un filtro explícito con tests que lo prueban es evidencia defendible de R7 y no depende de un detalle de implementación del framework.
+- Un fallback a `*` convierte un olvido de configuración en una apertura silenciosa de la API. Es preferible que el despliegue falle de forma visible.
+
+### Consecuencias
+
+- Todo entorno que arranque la app debe definir `CORS_ORIGIN`: `.env` local (ver `.env.example`), Playwright (`playwright.config.ts`) y EC2 (`deploy/ec2/configure.py`) ya lo hacen. Cualquier script o test nuevo que llame a `createApp()` debe definirlo también.
+- Los errores 500 pierden el detalle en la respuesta; para diagnosticar hay que mirar los logs del servidor.

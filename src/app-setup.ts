@@ -2,6 +2,9 @@ import { ValidationPipe, type Type } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
+import { AllExceptionsFilter } from './common/all-exceptions.filter';
+import { CorsIoAdapter } from './common/cors-io.adapter';
+import { getCorsOrigin } from './common/cors-origin';
 
 // Content-Type que usa LiveKit para sus webhooks. El parser JSON de Express
 // por defecto solo atiende 'application/json': sin declarar este tipo
@@ -25,6 +28,8 @@ const LIVEKIT_WEBHOOK_CONTENT_TYPE = 'application/webhook+json';
  * importa y pasa AppModule explícitamente; los tests pasan un módulo mínimo.
  */
 export async function createApp(module: Type<unknown>): Promise<NestExpressApplication> {
+  // Fail fast at boot (before anything is created) if CORS_ORIGIN is unusable.
+  const corsOrigin = getCorsOrigin();
   const app = await NestFactory.create<NestExpressApplication>(module, { rawBody: true });
 
   // rawBody: true es aditivo: Nest sigue parseando JSON como siempre y solo
@@ -39,7 +44,13 @@ export async function createApp(module: Type<unknown>): Promise<NestExpressAppli
       crossOriginResourcePolicy: { policy: 'cross-origin' },
     }),
   );
-  app.enableCors({ origin: process.env.CORS_ORIGIN ?? '*' });
+  app.enableCors({ origin: corsOrigin });
+  // The gateway's own cors option is evaluated at import time (before .env is
+  // loaded), so Socket.IO gets its origin here at runtime instead.
+  app.useWebSocketAdapter(new CorsIoAdapter(app, corsOrigin));
+  // Explicit R7 guarantee: unexpected errors never reach the client with
+  // stack traces, SQL or internal messages.
+  app.useGlobalFilters(new AllExceptionsFilter());
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
