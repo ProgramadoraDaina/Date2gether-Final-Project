@@ -755,6 +755,7 @@ const en: Record<string, string> = {
   'Activar o desactivar la cámara': 'Turn camera on or off',
   'Levantar o bajar la mano': 'Raise or lower hand',
   'Ver los atajos de teclado': 'Show keyboard shortcuts',
+  'sin leer': 'unread',
 };
 
 export default en;
