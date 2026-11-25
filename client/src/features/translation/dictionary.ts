@@ -774,6 +774,10 @@ const en: Record<string, string> = {
   'Todos iguales, en una sola grilla.': 'Everyone the same size, in one grid.',
   Referencias: 'Legend',
   Pantalla: 'Screen',
+  predeterminado: 'default',
+  'Usar al entrar a una llamada': 'Use when joining a call',
+  'Se usa al entrar a una llamada': 'Used when joining a call',
+  Restablecer: 'Reset',
 };
 
 export default en;

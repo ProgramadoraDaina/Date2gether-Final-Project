@@ -298,7 +298,20 @@ function ZoneCard({ zone, index, open }: { zone: LayoutZone; index: number; open
 
 export function CallLayoutEditor({ showPreview = true }: { showPreview?: boolean }) {
   const { t } = useTranslation();
-  const { enabled, zones, focusedZoneId, setEnabled, addZone, applyPreset } = useCallLayoutStore();
+  const {
+    enabled,
+    zones,
+    focusedZoneId,
+    setEnabled,
+    addZone,
+    applyPreset,
+    activePreset,
+    savedPresets,
+    defaultPreset,
+    resetPreset,
+    setDefaultPreset,
+  } = useCallLayoutStore();
+  const active = LAYOUT_PRESETS.find((preset) => preset.id === activePreset);
   const tree = useMemo(() => buildLayoutTree(zones), [zones]);
   const zoneIndex = new Map(zones.map((zone, index) => [zone.id, index]));
 
@@ -325,13 +338,44 @@ export function CallLayoutEditor({ showPreview = true }: { showPreview?: boolean
             key={preset.id}
             type="button"
             className={styles.preset}
+            aria-pressed={preset.id === activePreset}
             onClick={() => applyPreset(preset.id)}
             title={t(preset.hint)}
           >
             {t(preset.label)}
+            {preset.id === defaultPreset && (
+              <span className={styles.presetStar} aria-label={t('predeterminado')}>
+                ★
+              </span>
+            )}
           </button>
         ))}
       </div>
+      {active && (
+        <div className={styles.presetActions}>
+          <button
+            type="button"
+            className={styles.presetAction}
+            aria-pressed={defaultPreset === active.id}
+            onClick={() => setDefaultPreset(defaultPreset === active.id ? null : active.id)}
+          >
+            {t(
+              defaultPreset === active.id
+                ? 'Se usa al entrar a una llamada'
+                : 'Usar al entrar a una llamada',
+            )}
+          </button>
+          {savedPresets[active.id] && (
+            <button
+              type="button"
+              className={styles.presetAction}
+              onClick={() => resetPreset(active.id)}
+            >
+              {t('Restablecer')} {t(active.label)}
+            </button>
+          )}
+        </div>
+      )}
       {tree && showPreview && (
         <div className={styles.preview} data-testid="layout-preview">
           <LayoutView

@@ -445,6 +445,9 @@ function MeetingContent({
   const pinnedTracks = usePinnedTracks(layoutContext);
   const focusTrack = pinnedTracks[0];
   const customLayout = useCallLayoutStore();
+  useEffect(() => {
+    useCallLayoutStore.getState().applyDefaultPreset();
+  }, []);
   const useCustomLayout = customLayout.enabled && customLayout.zones.length > 0;
   // Misma frase final de transcripción llega a todas las pantallas por el
   // data channel que ya usa TranscriptionProvider (ver TRANSCRIPT_TOPIC): al
