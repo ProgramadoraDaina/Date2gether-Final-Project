@@ -852,6 +852,8 @@ const en: Record<string, string> = {
   Activar: 'Turn on',
   'mensaje sin leer': 'unread message',
   'mensajes sin leer': 'unread messages',
+  'Mini salas abiertas': 'Open breakout rooms',
+  persona: 'person',
 };
 
 export default en;
