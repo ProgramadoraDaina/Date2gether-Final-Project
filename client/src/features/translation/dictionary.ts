@@ -803,8 +803,6 @@ const en: Record<string, string> = {
     'Listens to your microphone only in this browser while it is off.',
   'Filtra ruidos de fondo constantes, como un ventilador.':
     'Filters steady background noise, like a fan.',
-  'Usa más procesador; si tu equipo va lento, dejalo apagado.':
-    'Uses more CPU; leave it off if your computer is slow.',
   'Un tono corto al entrar y otro al salir.':
     'A short tone when someone joins and another when they leave.',
   'Suena cuando alguien te nombra con @ en el chat.':
@@ -855,6 +853,8 @@ const en: Record<string, string> = {
   'Mini salas abiertas': 'Open breakout rooms',
   persona: 'person',
   'Volumen para todos': 'Volume for everyone',
+  'La primera vez descarga el modelo de Google. Usa más procesador: si tu equipo va lento, dejalo apagado.':
+    'Downloads a Google model the first time. Uses more CPU: leave it off if your computer is slow.',
 };
 
 export default en;

@@ -52,7 +52,7 @@ const CALL_TOGGLES: { key: CallPreference; label: string; hint: string }[] = [
   {
     key: 'backgroundBlur',
     label: 'Desenfocar el fondo',
-    hint: 'Usa más procesador; si tu equipo va lento, dejalo apagado.',
+    hint: 'La primera vez descarga el modelo de Google. Usa más procesador: si tu equipo va lento, dejalo apagado.',
   },
   {
     key: 'joinLeaveSounds',
