@@ -319,8 +319,10 @@
 
 .chatTabs {
   display: flex;
-  gap: var(--space-5);
-  padding: var(--space-4) var(--space-5) 0;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  /* Right padding keeps the tabs clear of the floating hide-chat button. */
+  padding: var(--space-4) 56px 0 var(--space-5);
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -429,6 +431,25 @@
   margin-bottom: var(--space-3);
   font-size: 14px;
   line-height: 1.4;
+}
+
+.pinLink {
+  display: block;
+  width: auto;
+  margin-top: var(--space-1);
+  padding: 2px 8px;
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.pinLink:hover {
+  background: none;
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 
 /* Te mencionaron a vos (por nombre o por rol/"invitados", ver

@@ -125,6 +125,43 @@ export async function getRoomNotesFromHistory(roomId: string): Promise<RoomNotes
   return res.json();
 }
 
+export interface RoomLink {
+  id: string;
+  roomId: string;
+  url: string;
+  title: string | null;
+  addedByName: string;
+  createdAt: string;
+}
+
+export async function getRoomLinks(code: string, token: string): Promise<RoomLink[]> {
+  const res = await fetch(`${API_URL}/rooms/${encodeURIComponent(code)}/links`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok)
+    throw new ApiError(await extractErrorMessage(res, 'No se pudieron cargar los links'));
+  return res.json();
+}
+
+export async function addRoomLink(
+  code: string,
+  link: { url: string; title?: string },
+): Promise<RoomLink> {
+  const res = await authFetch(`/rooms/${encodeURIComponent(code)}/links`, {
+    method: 'POST',
+    body: JSON.stringify(link),
+  });
+  if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudo guardar el link'));
+  return res.json();
+}
+
+export async function deleteRoomLink(code: string, id: string): Promise<void> {
+  const res = await authFetch(`/rooms/${encodeURIComponent(code)}/links/${id}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudo quitar el link'));
+}
+
 export type RoomRole = 'administrador' | 'colaborador' | 'participante';
 
 export interface RoomMember {

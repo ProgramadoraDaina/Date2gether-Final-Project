@@ -196,6 +196,9 @@ export class ChatGateway implements OnGatewayDisconnect {
       this.server.to(roomCode).emit('roomDeleted');
       this.server.in(roomCode).disconnectSockets(true);
     });
+    this.roomEvents.onRoomLinksChanged(({ roomCode }) => {
+      this.server.to(roomCode).emit('roomLinksChanged');
+    });
   }
 
   @UseGuards(WsJwtAuthGuard)
