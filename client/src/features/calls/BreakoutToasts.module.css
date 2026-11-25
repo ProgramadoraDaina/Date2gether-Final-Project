@@ -22,14 +22,8 @@
   grid-template-columns: 32px minmax(0, 1fr) 28px;
   align-items: center;
   gap: var(--space-3);
+  composes: surface from '../layout/Toast.module.css';
   padding: 12px 10px 14px 12px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xs);
-  box-shadow: var(--shadow-md);
-  color: var(--color-text);
-  font-size: 14px;
-  animation: enter 0.24s steps(6, end) both;
 }
 
 .moved {
@@ -59,7 +53,7 @@
 }
 
 .kicker {
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -110,17 +104,6 @@
   animation: drain 6s linear both;
 }
 
-@keyframes enter {
-  from {
-    transform: translateX(16px);
-    opacity: 0;
-  }
-  to {
-    transform: none;
-    opacity: 1;
-  }
-}
-
 @keyframes drain {
   from {
     transform: scaleX(1);
@@ -138,7 +121,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .toast,
   .drain {
     animation: none;
   }

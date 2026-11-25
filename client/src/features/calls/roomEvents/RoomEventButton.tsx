@@ -18,6 +18,8 @@ interface RoomEventButtonProps {
     options: string[],
     config: { multipleChoice: boolean; anonymous: boolean },
   ): void;
+  // Solo para el admin durante una llamada.
+  onOpenBreakouts?: () => void;
 }
 
 const EMPTY_OPTIONS = ['', ''];
@@ -28,6 +30,7 @@ export function RoomEventButton({
   participants,
   onStartRoulette,
   onStartPoll,
+  onOpenBreakouts,
 }: RoomEventButtonProps) {
   const { t } = useTranslation();
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -176,6 +179,19 @@ export function RoomEventButton({
             >
               📊 {t('Encuesta')}
             </button>
+            {onOpenBreakouts && (
+              <button
+                type="button"
+                role="menuitem"
+                className={styles.menuItem}
+                onClick={() => {
+                  setMenuOpen(false);
+                  onOpenBreakouts();
+                }}
+              >
+                🚪 {t('Mini salas')}
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -206,7 +222,11 @@ export function RoomEventButton({
           >
             {t('Seleccionar todos')}
           </button>
-          <button type="button" onClick={() => setSelected(new Set())} disabled={selected.size === 0}>
+          <button
+            type="button"
+            onClick={() => setSelected(new Set())}
+            disabled={selected.size === 0}
+          >
             {t('Vaciar selección')}
           </button>
         </div>

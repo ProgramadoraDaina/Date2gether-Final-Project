@@ -3,6 +3,7 @@ import {
   assignToZones,
   buildLayoutTree,
   fitTiles,
+  zonesInUse,
   type LayoutZone,
   type ZonePlacement,
 } from './layout';
@@ -120,5 +121,95 @@ describe('assignToZones', () => {
       ['p0'],
       [],
     ]);
+  });
+});
+
+describe('zonesInUse', () => {
+  const zone = (id: string, capacity: number) =>
+    ({
+      id,
+      capacity,
+      placement: 'bottom',
+      width: 100,
+      height: 30,
+      scale: 100,
+      aspect: '16:9',
+    }) as const;
+  const party = [zone('centro', 1), zone('abajo', 2), zone('derecha', 3)];
+  const ids = (count: number) => zonesInUse(party, count).map((z) => z.id);
+
+  it('solo: una zona que ocupa todo', () => {
+    expect(ids(1)).toEqual(['centro']);
+  });
+
+  it('de 2 a 3 personas: centro y abajo', () => {
+    expect(ids(2)).toEqual(['centro', 'abajo']);
+    expect(ids(3)).toEqual(['centro', 'abajo']);
+  });
+
+  it('desde 4 personas aparece la zona de la derecha', () => {
+    expect(ids(4)).toEqual(['centro', 'abajo', 'derecha']);
+    expect(ids(6)).toEqual(['centro', 'abajo', 'derecha']);
+  });
+
+  it('sin nadie todavía se muestra la primera zona', () => {
+    expect(ids(0)).toEqual(['centro']);
+  });
+});
+
+describe('zonesInUse con todas las combinaciones', () => {
+  const PLACEMENTS = [
+    'beside-previous',
+    'below-previous',
+    'left',
+    'right',
+    'top',
+    'bottom',
+  ] as const;
+
+  function* configs(): Generator<LayoutZone[]> {
+    for (let count = 1; count <= 4; count++) {
+      const total = PLACEMENTS.length ** (count - 1) * 3 ** count;
+      for (let n = 0; n < total; n++) {
+        let rest = n;
+        const zones: LayoutZone[] = [];
+        for (let i = 0; i < count; i++) {
+          const capacity = (rest % 3) + 1;
+          rest = Math.floor(rest / 3);
+          const placement = i === 0 ? 'bottom' : PLACEMENTS[rest % PLACEMENTS.length];
+          if (i > 0) rest = Math.floor(rest / PLACEMENTS.length);
+          zones.push({
+            id: `z${i}`,
+            capacity,
+            placement,
+            width: 30,
+            height: 30,
+            scale: 100,
+            aspect: '16:9',
+          });
+        }
+        yield zones;
+      }
+    }
+  }
+
+  it('nadie queda afuera, ninguna zona visible queda vacía y la pantalla siempre se arma', () => {
+    let checked = 0;
+    for (const zones of configs()) {
+      for (let people = 0; people <= 12; people++) {
+        const shown = zonesInUse(zones, people);
+        const groups = assignToZones(
+          shown,
+          Array.from({ length: people }, (_, i) => i),
+        );
+        expect(shown.length).toBeGreaterThan(0);
+        expect(shown).toEqual(zones.slice(0, shown.length));
+        expect(groups.flat()).toHaveLength(people);
+        if (people > 0) for (const group of groups) expect(group.length).toBeGreaterThan(0);
+        expect(buildLayoutTree(shown)).not.toBeNull();
+        checked++;
+      }
+    }
+    expect(checked).toBeGreaterThan(100_000);
   });
 });

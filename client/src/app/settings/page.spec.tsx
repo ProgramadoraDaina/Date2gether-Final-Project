@@ -44,7 +44,11 @@ describe('SettingsPage', () => {
     expect(screen.getByRole('button', { name: 'Púrpura' })).toBeInTheDocument();
     // Se escopea al grupo de la paleta, no a toda la página: el toggle de
     // tema (ThemeToggle) también es un <button> en esta pantalla.
-    expect(within(screen.getByRole('group')).getAllByRole('button')).toHaveLength(8);
+    expect(
+      within(screen.getByRole('group', { name: 'Elegí el color de tu nombre' })).getAllByRole(
+        'button',
+      ),
+    ).toHaveLength(8);
   });
 
   it('elegir un color llama a updateNameColor y lo marca como seleccionado', async () => {

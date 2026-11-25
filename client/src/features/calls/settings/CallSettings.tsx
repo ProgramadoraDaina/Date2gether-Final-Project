@@ -6,14 +6,25 @@ import { useDismiss } from '@/lib/useDismiss';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { CallLayoutEditor } from '../layout/CallLayoutEditor';
 import { useCallLayoutStore } from '../layout/store';
-import { useCallSettingsStore, type CaptionSize } from './store';
+import { useCallSettingsStore, type CallPreference, type CaptionSize } from './store';
 import { ToggleSwitch } from './ToggleSwitch';
+import type { PictureInPictureControl } from '../PictureInPicture';
+import { useTheme } from '@/features/theme/useTheme';
+import { LanguagePicker } from '@/features/translation/LanguagePicker';
 import styles from './CallSettings.module.css';
 
 const CAPTION_SIZES: { value: CaptionSize; label: string }[] = [
   { value: 'small', label: 'Chica' },
   { value: 'medium', label: 'Mediana' },
   { value: 'large', label: 'Grande' },
+];
+
+// Preferencias de esta persona; las de toda la sala quedan abajo, solo para admins.
+const PERSONAL_TOGGLES: { key: CallPreference; label: string }[] = [
+  { key: 'mutedNudge', label: 'Avisarme si hablo silenciado' },
+  { key: 'noiseSuppression', label: 'Supresión de ruido' },
+  { key: 'backgroundBlur', label: 'Desenfocar el fondo' },
+  { key: 'joinLeaveSounds', label: 'Sonido cuando alguien entra o sale' },
 ];
 
 function SettingsIcon() {
@@ -46,6 +57,8 @@ interface CallSettingsButtonProps {
   onSetVideoLock: (locked: boolean) => void;
   nameFocusEnabled: boolean;
   onSetNameFocus: (enabled: boolean) => void;
+  onShowShortcuts?: () => void;
+  pictureInPicture?: PictureInPictureControl;
 }
 
 export function CallSettingsButton({
@@ -57,9 +70,13 @@ export function CallSettingsButton({
   onSetVideoLock,
   nameFocusEnabled,
   onSetNameFocus,
+  onShowShortcuts,
+  pictureInPicture,
 }: CallSettingsButtonProps) {
   const { t } = useTranslation();
-  const { captionSize, setCaptionSize } = useCallSettingsStore();
+  const { captionSize, setCaptionSize, setPreference } = useCallSettingsStore();
+  const preferences = useCallSettingsStore();
+  const { theme, toggle: toggleTheme } = useTheme();
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<View>('menu');
   const [avatarOpen, setAvatarOpen] = useState(false);
@@ -134,8 +151,68 @@ export function CallSettingsButton({
                   <span className={styles.menuHint}>›</span>
                 </button>
               </li>
+              {pictureInPicture?.supported && (
+                <li>
+                  <button
+                    type="button"
+                    className={styles.menuItem}
+                    aria-pressed={pictureInPicture.open}
+                    onClick={() => {
+                      close();
+                      pictureInPicture.toggle();
+                    }}
+                  >
+                    <span>
+                      {t(
+                        pictureInPicture.open
+                          ? 'Cerrar ventana flotante'
+                          : 'Abrir ventana flotante',
+                      )}
+                    </span>
+                    <span className={styles.menuHint}>↗</span>
+                  </button>
+                </li>
+              )}
+              {onShowShortcuts && (
+                <li className={styles.pointerOnly}>
+                  <button
+                    type="button"
+                    className={styles.menuItem}
+                    onClick={() => {
+                      close();
+                      onShowShortcuts();
+                    }}
+                  >
+                    <span>{t('Atajos de teclado')}</span>
+                    <span className={styles.menuHint}>?</span>
+                  </button>
+                </li>
+              )}
+              <li className={styles.menuItem}>
+                <span>{t('Modo oscuro')}</span>
+                <ToggleSwitch
+                  checked={theme === 'dark'}
+                  onChange={toggleTheme}
+                  aria-label={t('Modo oscuro')}
+                />
+              </li>
+              <li className={styles.menuItem}>
+                <span>{t('Idioma')}</span>
+                <LanguagePicker />
+              </li>
+              {PERSONAL_TOGGLES.map(({ key, label: toggleLabel }) => (
+                <li key={key} className={styles.menuItem}>
+                  <span>{t(toggleLabel)}</span>
+                  <ToggleSwitch
+                    checked={preferences[key]}
+                    onChange={(value) => setPreference(key, value)}
+                    aria-label={t(toggleLabel)}
+                  />
+                </li>
+              ))}
               {isAdmin && (
                 <>
+                  <li className={styles.menuHeading}>{t('Para toda la sala')}</li>
                   <li className={styles.menuItem}>
                     <span>{t('Mutear a todos')}</span>
                     <ToggleSwitch

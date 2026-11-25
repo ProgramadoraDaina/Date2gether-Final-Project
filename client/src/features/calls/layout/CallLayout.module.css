@@ -49,7 +49,7 @@
   padding: 3px 8px;
   background: var(--zone-color, var(--color-accent));
   color: var(--zone-text, var(--color-accent-contrast));
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 600;
   pointer-events: none;
@@ -118,7 +118,7 @@
   border: 1px solid var(--zone-color);
   background: color-mix(in srgb, var(--zone-color) 10%, transparent);
   color: var(--zone-color);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 600;
   text-align: center;
@@ -131,7 +131,7 @@
 
 .zoneCount {
   color: var(--color-text-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -193,7 +193,7 @@
   border-radius: 2px;
   background: var(--zone-color);
   color: var(--zone-text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 700;
 }
@@ -212,7 +212,7 @@
 .zoneSummary {
   overflow: hidden;
   color: var(--color-text-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -297,7 +297,7 @@
 .valueChip {
   min-width: 40px;
   color: var(--color-text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   text-align: right;
 }
@@ -342,7 +342,7 @@
 }
 
 .choiceText {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
 }
 
@@ -386,7 +386,7 @@
   border-radius: 0;
   background: var(--color-bg);
   color: var(--color-text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   text-align: center;
   appearance: textfield;
 }
@@ -437,4 +437,86 @@
 
 .addZone:hover {
   background: var(--color-accent-hover);
+}
+
+.presets {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+}
+
+.preset {
+  width: auto;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-raised);
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.preset:hover {
+  border-color: var(--color-accent);
+}
+
+.editorWide {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.editorWide > .preview {
+  position: sticky;
+  top: var(--space-5);
+}
+
+@media (max-width: 900px) {
+  .editorWide {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .editorWide > .preview {
+    position: static;
+  }
+}
+
+.preset[aria-pressed='true'] {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 14%, var(--color-raised));
+}
+
+.presetStar {
+  margin-left: 4px;
+  color: var(--color-accent);
+}
+
+.presetActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.presetAction {
+  width: auto;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.presetAction:hover {
+  background: transparent;
+  color: var(--color-text);
+}
+
+.presetAction[aria-pressed='true'] {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }

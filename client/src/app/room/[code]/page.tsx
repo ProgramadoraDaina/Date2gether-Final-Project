@@ -22,6 +22,7 @@ import { isSelfMentioned, ROLE_MENTION_KEYWORDS } from '@/features/chat/mentions
 import { playMentionSound } from '@/features/chat/mentionSound';
 import { MessageText } from '@/features/chat/MessageText';
 import { useChatHistory } from '@/features/chat/useChatHistory';
+import { startsGroup } from '@/features/chat/grouping';
 import { RoomEmojiShortcuts } from '@/features/chat/RoomEmojiShortcuts';
 import { AppShell } from '@/features/navigation/AppShell';
 import { RoomEmojisDialog } from '@/features/room-emojis/RoomEmojisDialog';
@@ -63,6 +64,7 @@ import { useNameFocusSetting } from '@/features/calls/useNameFocusSetting';
 import { createRoomSocket } from '@/lib/socket';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { NAME_COLOR_HEX, isNameColorId } from '@/lib/nameColors';
+import { BreakoutHostDialog } from '@/features/calls/BreakoutView';
 import styles from './page.module.css';
 
 const MeetingRoom = dynamic(() => import('@/features/calls/MeetingRoom'), { ssr: false });
@@ -197,6 +199,8 @@ export default function RoomPage() {
     conflict: 'Otra persona actualizó las notas. Revisá ambas versiones antes de guardar.',
   }[sharedNotes.status];
   const [chatOpen, setChatOpen] = useState(true);
+  const [breakoutsOpen, setBreakoutsOpen] = useState(false);
+  const [unread, setUnread] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   // On phones each panel covers the whole screen, so opening one closes the other.
   const isPhone = () => window.matchMedia?.('(max-width: 640px)').matches ?? false;
@@ -247,6 +251,8 @@ export default function RoomPage() {
   });
   const socketRef = useRef<Socket | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  // El socket se registra una vez; lee por ref si el chat está a la vista.
+  const chatVisibleRef = useRef(true);
   const draftInputRef = useRef<HTMLInputElement>(null);
   const callSession = useCallSession();
   const { joinCall } = callSession;
@@ -316,6 +322,14 @@ export default function RoomPage() {
       })),
     [users],
   );
+  const participantColors = useMemo(() => {
+    const colors: Record<string, string> = {};
+    for (const { participantId, nameColor } of users) {
+      const hex = nameColorHex(nameColor);
+      if (hex) colors[participantId] = hex;
+    }
+    return colors;
+  }, [users]);
   useEffect(() => {
     setName(localStorage.getItem(NAME_KEY) ?? '');
   }, []);
@@ -422,6 +436,8 @@ export default function RoomPage() {
 
     socket.on('newMessage', (message: ChatMessage) => {
       receiveMessage(message);
+      if (message.authorName !== access.participant.name && !chatVisibleRef.current)
+        setUnread((count) => count + 1);
       // Nunca te notifica tu propio mensaje, aunque te auto-menciones.
       if (
         message.kind === 'text' &&
@@ -470,6 +486,12 @@ export default function RoomPage() {
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [chatPage.entries]);
+
+  const chatVisible = chatOpen && chatTab === 'chat';
+  useEffect(() => {
+    chatVisibleRef.current = chatVisible;
+    if (chatVisible) setUnread(0);
+  }, [chatVisible]);
 
   function handleSend(e: FormEvent) {
     e.preventDefault();
@@ -648,6 +670,15 @@ export default function RoomPage() {
           onClick={() => setChatTab('chat')}
         >
           {t('Conversación')}
+          {unread > 0 && (
+            <span
+              className={styles.unreadBadge}
+              aria-hidden="true"
+              title={`${unread} ${t('sin leer')}`}
+            >
+              {unread > 99 ? '99+' : unread}
+            </span>
+          )}
         </button>
         <button
           type="button"
@@ -697,13 +728,6 @@ export default function RoomPage() {
                 {t(chatHistory.archive ? 'Volver al chat reciente' : 'Ver archivo del chat')}
               </button>
             )}
-            {chatHistory.archive && access.participant.userId && (
-              <Link
-                href={`/history?roomId=${encodeURIComponent(access.participant.roomId)}&roomArchive=1`}
-              >
-                {t('Ver archivo de llamadas')}
-              </Link>
-            )}
           </div>
           {(chatPage.nextCursor || chatHistory.before) && (
             <div className={styles.chatDateFilter}>
@@ -742,7 +766,8 @@ export default function RoomPage() {
                   )}
                 </li>
               )}
-            {chatPage.entries.map((m) => {
+            {chatPage.entries.map((m, index) => {
+              const continued = !startsGroup(chatPage.entries[index - 1], m);
               // No hay un id de autor persistido por mensaje: el color se
               // resuelve cruzando por nombre contra la presencia actual.
               // Es una simplificación aceptada para v1 (ver comentario en
@@ -764,9 +789,11 @@ export default function RoomPage() {
               return (
                 <li
                   key={m.id}
-                  className={
-                    mentionsMe ? `${styles.message} ${styles.messageMentioned}` : styles.message
-                  }
+                  className={[
+                    styles.message,
+                    mentionsMe ? styles.messageMentioned : '',
+                    continued ? styles.messageContinued : '',
+                  ].join(' ')}
                 >
                   <span className={styles.author} style={color ? { color } : undefined}>
                     {m.authorName}
@@ -1008,9 +1035,24 @@ export default function RoomPage() {
               participants={eventParticipants}
               onStartRoulette={roomEvents.startRoulette}
               onStartPoll={roomEvents.startPoll}
+              onOpenBreakouts={
+                isCurrentUserAdmin && callSession.status === 'in-call'
+                  ? () => setBreakoutsOpen(true)
+                  : undefined
+              }
             />
           }
         />
+        {isCurrentUserAdmin && (
+          <BreakoutHostDialog
+            open={breakoutsOpen && callSession.status === 'in-call'}
+            onClose={() => setBreakoutsOpen(false)}
+            roomCode={code}
+            roomToken={access.token}
+            participants={breakoutParticipants}
+            currentParticipantId={access.participant.sub}
+          />
+        )}
         <button
           type="button"
           className={styles.sidebarToggleButton}
@@ -1094,6 +1136,7 @@ export default function RoomPage() {
                       onSetAudioLock={mediaLock.setAudioLock}
                       onSetVideoLock={mediaLock.setVideoLock}
                       participants={breakoutParticipants}
+                      participantColors={participantColors}
                       roomSocket={roomSocket}
                       currentParticipantId={access.participant.sub}
                       nameFocusEnabled={nameFocus.enabled}
@@ -1136,6 +1179,11 @@ export default function RoomPage() {
               aria-label={chatOpen ? t('Ocultar chat') : t('Mostrar chat')}
               title={chatOpen ? t('Ocultar chat') : t('Mostrar chat')}
             >
+              {!chatOpen && unread > 0 && (
+                <span className={styles.unreadDot} aria-hidden="true">
+                  {unread > 99 ? '99+' : unread}
+                </span>
+              )}
               {chatOpen ? (
                 <CloseIcon />
               ) : (

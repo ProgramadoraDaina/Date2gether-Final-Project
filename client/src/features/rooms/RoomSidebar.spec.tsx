@@ -11,7 +11,7 @@ jest.mock('@/features/translation/LanguageToggle', () => ({
 }));
 
 describe('RoomSidebar', () => {
-  it('muestra "Hacer evento" en la misma fila que el tema y el idioma', async () => {
+  it('muestra "Hacer evento" y deja tema e idioma para el menú de ajustes', async () => {
     const { RoomSidebar } = await import('./RoomSidebar');
     render(
       <RoomSidebar
@@ -27,7 +27,8 @@ describe('RoomSidebar', () => {
       />,
     );
 
-    const event = screen.getByRole('button', { name: 'Hacer evento' });
-    expect(event.parentElement).toBe(screen.getByRole('button', { name: 'Tema' }).parentElement);
+    expect(screen.getByRole('button', { name: 'Hacer evento' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Tema' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'EN' })).not.toBeInTheDocument();
   });
 });

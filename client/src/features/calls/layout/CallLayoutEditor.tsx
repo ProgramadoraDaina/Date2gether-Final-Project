@@ -7,6 +7,7 @@ import { buildLayoutTree, type LayoutZone, type TileAspect, type ZonePlacement }
 import { LayoutView } from './LayoutView';
 import { useCallLayoutStore } from './store';
 import { zoneColorStyle } from './zoneColors';
+import { LAYOUT_PRESETS } from './presets';
 import styles from './CallLayout.module.css';
 
 const PLACEMENTS: { value: ZonePlacement; label: string }[] = [
@@ -275,7 +276,7 @@ function ZoneCard({ zone, index, open }: { zone: LayoutZone; index: number; open
             <Stepper value={zone.capacity} onChange={(capacity) => update({ capacity })} />
           </div>
           <ChoiceGroup
-            label={t('Forma')}
+            label={t('Forma del video')}
             options={ASPECTS}
             value={zone.aspect}
             onChange={(aspect) => update({ aspect })}
@@ -295,14 +296,50 @@ function ZoneCard({ zone, index, open }: { zone: LayoutZone; index: number; open
   );
 }
 
-export function CallLayoutEditor({ showPreview = true }: { showPreview?: boolean }) {
+export function CallLayoutEditor({
+  showPreview = true,
+  wide = false,
+}: {
+  showPreview?: boolean;
+  // Escritorio: la vista previa a la izquierda y los controles a la derecha.
+  wide?: boolean;
+}) {
   const { t } = useTranslation();
-  const { enabled, zones, focusedZoneId, setEnabled, addZone } = useCallLayoutStore();
+  const {
+    enabled,
+    zones,
+    focusedZoneId,
+    setEnabled,
+    addZone,
+    applyPreset,
+    activePreset,
+    savedPresets,
+    defaultPreset,
+    resetPreset,
+    setDefaultPreset,
+  } = useCallLayoutStore();
+  const active = LAYOUT_PRESETS.find((preset) => preset.id === activePreset);
   const tree = useMemo(() => buildLayoutTree(zones), [zones]);
   const zoneIndex = new Map(zones.map((zone, index) => [zone.id, index]));
 
-  return (
-    <div className={styles.editor}>
+  const previewNode = tree && showPreview && (
+    <div className={styles.preview} data-testid="layout-preview">
+      <LayoutView
+        tree={tree}
+        zoneProps={(zone) => ({
+          style: zoneColorStyle(zoneIndex.get(zone.id) ?? 0),
+          focused: zone.id === focusedZoneId,
+        })}
+        renderZone={(zone) => (
+          <span className={styles.previewZone}>
+            {(zoneIndex.get(zone.id) ?? 0) + 1} · {zone.capacity} {t('pers.')}
+          </span>
+        )}
+      />
+    </div>
+  );
+  const top = (
+    <>
       <div className={styles.editorHead}>
         <div className={styles.switchRow}>
           <span>{t('Usar mi distribución en las llamadas')}</span>
@@ -317,23 +354,58 @@ export function CallLayoutEditor({ showPreview = true }: { showPreview?: boolean
             'Las personas van llenando la Zona 1, después la 2, y así. Las que no entran van a la última.',
           )}
         </p>
+        <p className={styles.editorHint}>
+          {t('Una zona sin nadie no ocupa lugar: con poca gente, las primeras se agrandan.')}
+        </p>
       </div>
-      {tree && showPreview && (
-        <div className={styles.preview} data-testid="layout-preview">
-          <LayoutView
-            tree={tree}
-            zoneProps={(zone) => ({
-              style: zoneColorStyle(zoneIndex.get(zone.id) ?? 0),
-              focused: zone.id === focusedZoneId,
-            })}
-            renderZone={(zone) => (
-              <span className={styles.previewZone}>
-                {(zoneIndex.get(zone.id) ?? 0) + 1} · {zone.capacity} {t('pers.')}
+      <div className={styles.presets} role="group" aria-label={t('Distribuciones listas')}>
+        {LAYOUT_PRESETS.map((preset) => (
+          <button
+            key={preset.id}
+            type="button"
+            className={styles.preset}
+            aria-pressed={preset.id === activePreset}
+            onClick={() => applyPreset(preset.id)}
+            title={t(preset.hint)}
+          >
+            {t(preset.label)}
+            {preset.id === defaultPreset && (
+              <span className={styles.presetStar} aria-label={t('predeterminado')}>
+                ★
               </span>
             )}
-          />
+          </button>
+        ))}
+      </div>
+      {active && (
+        <div className={styles.presetActions}>
+          <button
+            type="button"
+            className={styles.presetAction}
+            aria-pressed={defaultPreset === active.id}
+            onClick={() => setDefaultPreset(defaultPreset === active.id ? null : active.id)}
+          >
+            {t(
+              defaultPreset === active.id
+                ? 'Se usa al entrar a una llamada'
+                : 'Usar al entrar a una llamada',
+            )}
+          </button>
+          {savedPresets[active.id] && (
+            <button
+              type="button"
+              className={styles.presetAction}
+              onClick={() => resetPreset(active.id)}
+            >
+              {t('Restablecer')} {t(active.label)}
+            </button>
+          )}
         </div>
       )}
+    </>
+  );
+  const bottom = (
+    <>
       {zones.length === 0 ? (
         <div className={styles.emptyState}>
           <strong>{t('Todavía no hay zonas')}</strong>
@@ -354,6 +426,26 @@ export function CallLayoutEditor({ showPreview = true }: { showPreview?: boolean
       <button type="button" className={styles.addZone} onClick={addZone}>
         <span aria-hidden="true">+</span> {t('Agregar zona')}
       </button>
+    </>
+  );
+
+  if (wide && previewNode) {
+    return (
+      <div className={styles.editorWide}>
+        {previewNode}
+        <div className={styles.editor}>
+          {top}
+          {bottom}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.editor}>
+      {top}
+      {previewNode}
+      {bottom}
     </div>
   );
 }

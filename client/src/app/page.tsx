@@ -113,11 +113,11 @@ export default function HomePage() {
     <AppShell>
       <div className={styles.card}>
         <h1 className={styles.brandTitle}>
-          <BrandMark size={46} />
+          <BrandMark size={60} />
           Date2gether
         </h1>
         <p className={styles.subtitle} data-testid="subtitle">
-          {t('Videollamadas simples, en el navegador.')}
+          {t('Juntarse nunca fue tan simple.')}
         </p>
 
         {!checkingSession && (

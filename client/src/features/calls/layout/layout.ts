@@ -91,6 +91,17 @@ export function buildLayoutTree(zones: readonly LayoutZone[]): LayoutNode | null
   return root;
 }
 
+// Zonas que reciben al menos una persona: las vacías no ocupan lugar y su espacio se reparte.
+export function zonesInUse(zones: readonly LayoutZone[], count: number): LayoutZone[] {
+  let seated = 0;
+  let used = 0;
+  while (used < zones.length && (used === 0 || seated < count)) {
+    seated += zones[used].capacity;
+    used++;
+  }
+  return zones.slice(0, used);
+}
+
 export function assignToZones<T>(zones: readonly LayoutZone[], items: readonly T[]): T[][] {
   const groups: T[][] = [];
   let next = 0;

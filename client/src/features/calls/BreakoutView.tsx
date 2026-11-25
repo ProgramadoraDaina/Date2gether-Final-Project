@@ -43,6 +43,59 @@ interface BreakoutViewProps {
   // resto del dock (mismo patrón que CallSettingsButton.buttonClassName).
   buttonClassName?: string;
   activeButtonClassName?: string;
+  // El panel de admin se abre desde "Hacer evento"; acá solo queda la franja de estado.
+  showHostTrigger?: boolean;
+}
+
+interface BreakoutHostDialogProps {
+  open: boolean;
+  onClose: () => void;
+  roomCode: string;
+  roomToken: string;
+  participants: BreakoutHostConsoleParticipant[];
+  currentParticipantId: string;
+}
+
+export function BreakoutHostDialog({
+  open,
+  onClose,
+  roomCode,
+  roomToken,
+  participants,
+  currentParticipantId,
+}: BreakoutHostDialogProps) {
+  const { t } = useTranslation();
+  const panelRef = useRef<HTMLDivElement>(null);
+  useDismiss(open, panelRef, onClose);
+  if (!open) return null;
+  // Portal: el dock y la barra lateral crean su propio contexto de apilado.
+  return createPortal(
+    <div
+      className={styles.breakoutPanelPopover}
+      role="dialog"
+      aria-label={t('Mini salas')}
+      ref={panelRef}
+    >
+      <div className={styles.breakoutPanelHeader}>
+        <button type="button" className={styles.closeButton} onClick={onClose}>
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M14 8H3M7 4L3 8l4 4" stroke="currentColor" strokeWidth="1.6" fill="none" />
+          </svg>
+          {t('Volver a la llamada')}
+        </button>
+        <span className={styles.panelHint}>
+          {t('Las mini salas siguen funcionando aunque cierres este panel.')}
+        </span>
+      </div>
+      <BreakoutHostConsole
+        roomCode={roomCode}
+        roomToken={roomToken}
+        participants={participants}
+        currentParticipantId={currentParticipantId}
+      />
+    </div>,
+    document.body,
+  );
 }
 
 /**
@@ -61,13 +114,12 @@ export function BreakoutView({
   currentParticipantId,
   buttonClassName,
   activeButtonClassName,
+  showHostTrigger = true,
 }: BreakoutViewProps) {
   const { t } = useTranslation();
   const [panelOpen, setPanelOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
   const closePanel = useCallback(() => setPanelOpen(false), []);
-  useDismiss(panelOpen, panelRef, closePanel);
 
   const [returning, setReturning] = useState(false);
   const [returnError, setReturnError] = useState<string | null>(null);
@@ -137,55 +189,31 @@ export function BreakoutView({
           isAdmin
         />
       )}
-      <button
-        type="button"
-        className={`${buttonClassName ?? ''} ${panelOpen && activeButtonClassName ? activeButtonClassName : ''}`}
-        onClick={() => setPanelOpen((open) => !open)}
-        title={t('Mini salas')}
-        aria-label={t('Mini salas')}
-        aria-expanded={panelOpen}
-      >
-        <BreakoutRoomsIcon />
-      </button>
-      {panelOpen &&
-        // Portal: el dock crea su propio contexto de apilado y dejaba controles de la página encima.
-        createPortal(
-          <div
-            className={styles.breakoutPanelPopover}
-            role="dialog"
-            aria-label={t('Mini salas')}
-            ref={panelRef}
-          >
-            <div className={styles.breakoutPanelHeader}>
-              <button type="button" className={styles.closeButton} onClick={closePanel}>
-                <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                  <path
-                    d="M14 8H3M7 4L3 8l4 4"
-                    stroke="currentColor"
-                    strokeWidth="1.6"
-                    fill="none"
-                  />
-                </svg>
-                {t('Volver a la llamada')}
-              </button>
-              <span className={styles.panelHint}>
-                {t('Las mini salas siguen funcionando aunque cierres este panel.')}
-              </span>
-            </div>
-            {returnError && (
-              <p role="alert" className={styles.error}>
-                {returnError}
-              </p>
-            )}
-            <BreakoutHostConsole
-              roomCode={roomCode}
-              roomToken={roomToken}
-              participants={participants}
-              currentParticipantId={currentParticipantId}
-            />
-          </div>,
-          document.body,
-        )}
+      {showHostTrigger && (
+        <button
+          type="button"
+          className={`${buttonClassName ?? ''} ${panelOpen && activeButtonClassName ? activeButtonClassName : ''}`}
+          onClick={() => setPanelOpen((open) => !open)}
+          title={t('Mini salas')}
+          aria-label={t('Mini salas')}
+          aria-expanded={panelOpen}
+        >
+          <BreakoutRoomsIcon />
+        </button>
+      )}
+      {returnError && (
+        <p role="alert" className={styles.error}>
+          {returnError}
+        </p>
+      )}
+      <BreakoutHostDialog
+        open={panelOpen}
+        onClose={closePanel}
+        roomCode={roomCode}
+        roomToken={roomToken}
+        participants={participants}
+        currentParticipantId={currentParticipantId}
+      />
     </div>
   );
 }

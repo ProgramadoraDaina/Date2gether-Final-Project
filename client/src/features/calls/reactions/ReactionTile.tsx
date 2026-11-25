@@ -2,11 +2,12 @@
 
 import {
   ParticipantTile,
+  useIsSpeaking,
   useMaybeLayoutContext,
   useMaybeTrackRefContext,
   usePinnedTracks,
 } from '@livekit/components-react';
-import { Track } from 'livekit-client';
+import { Track, type Participant } from 'livekit-client';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { TileAvatar } from '@/features/avatar/TileAvatar';
 import { useTranslation } from '../../translation/useTranslation';
@@ -14,7 +15,23 @@ import { customReactionKey } from './reactions';
 import { ReactionGlyph } from './ReactionGlyph';
 import { FocusIcon } from './FocusIcon';
 import { useReactions } from './useReactions';
+import { avatarIdentityOf } from '@/features/avatar/TileAvatar';
+import { useParticipantColor } from '../participantColors';
+import { HandBadge } from '../hands/HandControls';
 import styles from './Reactions.module.css';
+
+function SpeakerOutline({ participant }: { participant: Participant }) {
+  const speaking = useIsSpeaking(participant);
+  const color = useParticipantColor(avatarIdentityOf(participant));
+  return (
+    <span
+      className={styles.speakerOutline}
+      data-speaking={speaking}
+      style={{ '--speaker-color': color } as CSSProperties}
+      aria-hidden="true"
+    />
+  );
+}
 
 // GridLayout/CarouselLayout clonan este componente por cada participante y
 // le dan su TrackRef por contexto (ver MeetingRoom.tsx: el tile en foco usa
@@ -54,6 +71,8 @@ export function ReactionTile({ canFocus = true }: { canFocus?: boolean }) {
   return (
     <div className={styles.tileWrap} ref={wrapRef}>
       <ParticipantTile />
+      {trackRef && <SpeakerOutline participant={trackRef.participant} />}
+      {trackRef && isCamera && <HandBadge identity={trackRef.participant.identity} />}
       {trackRef && isCamera && placeholder && (
         <TileAvatar participant={trackRef.participant} placeholder={placeholder} />
       )}

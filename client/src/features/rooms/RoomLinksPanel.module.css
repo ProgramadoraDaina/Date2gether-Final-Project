@@ -48,7 +48,7 @@
 .meta {
   grid-column: 1;
   color: var(--color-text-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
 }
 

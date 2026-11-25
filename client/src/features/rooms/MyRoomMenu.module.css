@@ -31,7 +31,7 @@
   right: 0;
   top: calc(100% + 4px);
   width: max-content;
-  max-width: min(240px, 75vw);
+  max-width: min(300px, 80vw);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -98,4 +98,24 @@
   color: var(--color-error);
   border: 1px solid currentColor;
   background: transparent;
+}
+
+.optionLabel {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.optionHint {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.35;
+  color: var(--color-text-muted);
+  white-space: normal;
+}
+
+.options a {
+  text-decoration: none;
 }

@@ -70,7 +70,7 @@
   border: 1px solid var(--color-accent);
   border-radius: var(--radius-xs);
   color: var(--color-accent);
-  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -84,7 +84,7 @@
 .code,
 .slots,
 .next span {
-  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-family: var(--font-mono);
 }
 
 .code {
@@ -164,5 +164,25 @@
 @media (max-width: 640px) {
   .card {
     padding: 24px 16px;
+  }
+
+  /* Dos columnas parejas: ningún botón queda suelto en una fila propia. */
+  .actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .actions > a,
+  .actions > button {
+    width: 100%;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .actions > .copied,
+  .actions > .dangerAction {
+    grid-column: 1 / -1;
   }
 }

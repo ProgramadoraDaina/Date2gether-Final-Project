@@ -21,7 +21,7 @@
 .badge {
   flex-shrink: 0;
   padding: 2px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--color-accent);
   color: var(--color-accent-contrast);
   font-size: 11px;

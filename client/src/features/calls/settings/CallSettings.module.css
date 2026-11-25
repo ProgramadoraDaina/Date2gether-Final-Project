@@ -173,7 +173,8 @@
   width: 36px;
   height: 20px;
   border: 1px solid var(--color-border);
-  border-radius: 10px;
+  /* Excepción a las esquinas rectas: un interruptor se reconoce por su forma de píldora. */
+  border-radius: 999px;
   background: transparent;
   transition: background-color 0.15s ease;
 }
@@ -214,5 +215,23 @@
     right: 0;
     width: auto;
     min-width: 0;
+  }
+}
+
+.menuHeading {
+  padding: 12px 12px 4px;
+  border-top: 1px solid var(--color-border);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* Sin teclado físico los atajos no sirven. */
+@media (hover: none) {
+  .pointerOnly {
+    display: none;
   }
 }

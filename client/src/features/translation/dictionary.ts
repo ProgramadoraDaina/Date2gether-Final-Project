@@ -221,7 +221,7 @@ const en: Record<string, string> = {
   'La sala ya no existe.': 'The room no longer exists.',
   'Ver línea de tiempo': 'View timeline',
   'Ver gráfico de interacción': 'View interaction chart',
-  'Videollamadas simples, en el navegador.': 'Simple video calls, in the browser.',
+  'Juntarse nunca fue tan simple.': 'Getting together has never been this easy.',
 
   // Inicio
   'Conectado como': 'Signed in as',
@@ -615,7 +615,7 @@ const en: Record<string, string> = {
   Personas: 'People',
   personas: 'people',
   'Tamaño (%)': 'Size (%)',
-  Forma: 'Shape',
+  'Forma del video': 'Video shape',
   'Alargada (16:9)': 'Wide (16:9)',
   'Clásica (4:3)': 'Classic (4:3)',
   'Cuadrada (1:1)': 'Square (1:1)',
@@ -737,6 +737,103 @@ const en: Record<string, string> = {
     'Could not verify your account. Check your connection and try again.',
   Usuario: 'User',
   Administrador: 'Administrator',
+  Interacción: 'Interaction',
+  'Micrófono y cámara': 'Microphone and camera',
+  'Crear una sala': 'Create a room',
+  'Creá una sala permanente desde el inicio para tenerla siempre a mano.':
+    'Create a permanent room from the home page to keep it at hand.',
+  'Las llamadas en las que participes van a aparecer acá.': 'Calls you join will show up here.',
+  'Levantar la mano': 'Raise hand',
+  'Bajar la mano': 'Lower hand',
+  'Bajar la mano de': 'Lower hand of',
+  'Mano levantada': 'Hand raised',
+  'Manos levantadas': 'Raised hands',
+  'Estás silenciado': 'You are muted',
+  'Avisarme si hablo silenciado': 'Warn me if I talk while muted',
+  'Atajos de teclado': 'Keyboard shortcuts',
+  'Activar o desactivar el micrófono': 'Turn microphone on or off',
+  'Activar o desactivar la cámara': 'Turn camera on or off',
+  'Levantar o bajar la mano': 'Raise or lower hand',
+  'Ver los atajos de teclado': 'Show keyboard shortcuts',
+  'sin leer': 'unread',
+  'Probar parlante': 'Test speaker',
+  'Sonando…': 'Playing…',
+  'Supresión de ruido': 'Noise suppression',
+  'Sonido cuando alguien entra o sale': 'Sound when someone joins or leaves',
+  'Abrir ventana flotante': 'Open floating window',
+  'Cerrar ventana flotante': 'Close floating window',
+  'Desenfocar el fondo': 'Blur background',
+  'Distribuciones listas': 'Ready-made layouts',
+  Clase: 'Class',
+  Charla: 'Talk',
+  Juntada: 'Hangout',
+  'Una persona grande y el resto en una fila abajo.':
+    'One person large and everyone else in a row below.',
+  'Dos personas lado a lado y el resto en una columna a la derecha.':
+    'Two people side by side and everyone else in a column on the right.',
+  'Todos iguales, en una sola grilla.': 'Everyone the same size, in one grid.',
+  Referencias: 'Legend',
+  Pantalla: 'Screen',
+  predeterminado: 'default',
+  'Usar al entrar a una llamada': 'Use when joining a call',
+  'Se usa al entrar a una llamada': 'Used when joining a call',
+  Restablecer: 'Reset',
+  'Se guarda en este navegador, salvo el color de tu nombre y tu avatar.':
+    'Saved in this browser, except your name color and avatar.',
+  Secciones: 'Sections',
+  Perfil: 'Profile',
+  Llamadas: 'Calls',
+  'Escucha tu micrófono solo en este navegador mientras está apagado.':
+    'Listens to your microphone only in this browser while it is off.',
+  'Filtra ruidos de fondo constantes, como un ventilador.':
+    'Filters steady background noise, like a fan.',
+  'Usa más procesador; si tu equipo va lento, dejalo apagado.':
+    'Uses more CPU; leave it off if your computer is slow.',
+  'Un tono corto al entrar y otro al salir.':
+    'A short tone when someone joins and another when they leave.',
+  'Suena cuando alguien te nombra con @ en el chat.':
+    'Plays when someone mentions you with @ in the chat.',
+  'Se muestra cuando tenés la cámara apagada.': 'Shown when your camera is off.',
+  'Aparece en el chat y en el borde de tu video cuando hablás.':
+    'Shown in the chat and around your video when you speak.',
+  Presente: 'Present',
+  'Para toda la sala': 'For the whole room',
+  'Una zona sin nadie no ocupa lugar: con poca gente, las primeras se agrandan.':
+    'An empty zone takes no space: with few people, the first zones grow.',
+  Período: 'Period',
+  'Últimos 90 días': 'Last 90 days',
+  'Más antiguas': 'Older',
+  Hoy: 'Today',
+  Ayer: 'Yesterday',
+  'Ver mis llamadas en esta sala': 'See my calls in this room',
+  'Archivo compartido de la sala': 'Room shared archive',
+  'Llamadas de': 'Calls in',
+  'Llamadas de la sala': 'Room calls',
+  'Llamadas de hace más de 90 días de todas las personas que usaron esta sala. Solo lo ven quienes la administran.':
+    'Calls older than 90 days from everyone who used this room. Only its admins can see it.',
+  'Tus llamadas de hace más de 90 días.': 'Your calls older than 90 days.',
+  'Tus llamadas de los últimos 90 días.': 'Your calls from the last 90 days.',
+  Gráfico: 'Chart',
+  'No llegaste a conectarte': 'You did not connect',
+  'Borrar llamadas antiguas': 'Delete old calls',
+  'Quita de tu cuenta las llamadas de hace más de 90 días. A los demás participantes no les cambia nada.':
+    'Removes calls older than 90 days from your account. Nothing changes for other participants.',
+  'Sus llamadas': 'Its calls',
+  'Vuelve a aparecer en esta lista.': 'It shows up in this list again.',
+  'La sala no se borra: solo deja de aparecer en esta lista.':
+    'The room is not deleted: it just stops showing in this list.',
+  'Archivo compartido': 'Shared archive',
+  'Llamadas de hace más de 90 días de todos los que usaron la sala.':
+    'Calls older than 90 days from everyone who used the room.',
+  'Borrar archivo compartido': 'Delete shared archive',
+  'Mensajes y llamadas de hace más de 90 días, para todos.':
+    'Messages and calls older than 90 days, for everyone.',
+  'Mis llamadas': 'My calls',
+  Idioma: 'Language',
+  'Volver al historial': 'Back to history',
+  'Filtrar por sala': 'Filter by room',
+  'Todas las salas': 'All rooms',
+  Activar: 'Turn on',
 };
 
 export default en;

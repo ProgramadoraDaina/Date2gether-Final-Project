@@ -83,3 +83,51 @@ describe('useCallLayoutStore', () => {
     expect(saved.state).toMatchObject({ enabled: true, zones: [{ placement: 'bottom' }] });
   });
 });
+
+describe('applyPreset', () => {
+  it('reemplaza las zonas por las del preset y activa la distribución', () => {
+    useCallLayoutStore.setState({ enabled: false, zones: [], focusedZoneId: null });
+    useCallLayoutStore.getState().applyPreset('class');
+    const { enabled, zones } = useCallLayoutStore.getState();
+    expect(enabled).toBe(true);
+    expect(zones.map((zone) => zone.capacity)).toEqual([1, 12]);
+    expect(new Set(zones.map((zone) => zone.id)).size).toBe(2);
+  });
+});
+
+describe('presets guardados', () => {
+  beforeEach(() => {
+    useCallLayoutStore.setState({
+      enabled: false,
+      zones: [],
+      focusedZoneId: null,
+      activePreset: null,
+      savedPresets: {},
+      defaultPreset: null,
+    });
+  });
+
+  it('los cambios hechos en un preset se conservan al volver a él', () => {
+    state().applyPreset('talk');
+    state().updateZone(state().zones[0].id, { capacity: 3 });
+    state().applyPreset('hangout');
+    state().applyPreset('talk');
+    expect(state().zones[0].capacity).toBe(3);
+  });
+
+  it('restablecer vuelve el preset a sus valores de fábrica', () => {
+    state().applyPreset('talk');
+    state().updateZone(state().zones[0].id, { capacity: 3 });
+    state().resetPreset('talk');
+    expect(state().zones[0].capacity).toBe(2);
+    expect(state().savedPresets.talk).toBeUndefined();
+  });
+
+  it('al entrar a una llamada se aplica el preset predeterminado', () => {
+    state().applyPreset('class');
+    state().setDefaultPreset('hangout');
+    state().applyDefaultPreset();
+    expect(state().activePreset).toBe('hangout');
+    expect(state().zones.map((zone) => zone.capacity)).toEqual([50]);
+  });
+});
