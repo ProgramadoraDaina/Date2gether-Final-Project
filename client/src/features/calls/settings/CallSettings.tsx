@@ -4,6 +4,8 @@ import { useCallback, useRef, useState } from 'react';
 import { AvatarDialog } from '@/features/avatar/AvatarDialog';
 import { useDismiss } from '@/lib/useDismiss';
 import { useTranslation } from '@/features/translation/useTranslation';
+import { CallLayoutEditor } from '../layout/CallLayoutEditor';
+import { useCallLayoutStore } from '../layout/store';
 import { useCallSettingsStore, type CaptionSize } from './store';
 import { ToggleSwitch } from './ToggleSwitch';
 import styles from './CallSettings.module.css';
@@ -33,7 +35,7 @@ function SettingsIcon() {
   );
 }
 
-type View = 'menu' | 'captions';
+type View = 'menu' | 'captions' | 'layout';
 
 interface CallSettingsButtonProps {
   buttonClassName: string;
@@ -70,6 +72,8 @@ export function CallSettingsButton({
   const label = t('Ajustes de la llamada');
   const captionsLabel = t('Tamaño de los subtítulos');
   const currentSize = CAPTION_SIZES.find((size) => size.value === captionSize);
+  const layoutEnabled = useCallLayoutStore((state) => state.enabled && state.zones.length > 0);
+  const layoutLabel = t('Mosaicos');
 
   return (
     <div className={styles.wrap} ref={wrapRef}>
@@ -84,7 +88,11 @@ export function CallSettingsButton({
         <SettingsIcon />
       </button>
       {open && (
-        <div className={styles.panel} role="dialog" aria-label={label}>
+        <div
+          className={`${styles.panel} ${view === 'layout' ? styles.panelWide : ''}`}
+          role="dialog"
+          aria-label={label}
+        >
           {view === 'menu' ? (
             <ul className={styles.menu}>
               <li>
@@ -96,6 +104,14 @@ export function CallSettingsButton({
                   <span>{captionsLabel}</span>
                   <span className={styles.menuHint}>
                     {currentSize ? t(currentSize.label) : ''} ›
+                  </span>
+                </button>
+              </li>
+              <li>
+                <button type="button" className={styles.menuItem} onClick={() => setView('layout')}>
+                  <span>{layoutLabel}</span>
+                  <span className={styles.menuHint}>
+                    {t(layoutEnabled ? 'Personalizados' : 'Grilla')} ›
                   </span>
                 </button>
               </li>
@@ -153,7 +169,9 @@ export function CallSettingsButton({
                 >
                   ‹
                 </button>
-                <span className={styles.subTitle}>{captionsLabel}</span>
+                <span className={styles.subTitle}>
+                  {view === 'layout' ? layoutLabel : captionsLabel}
+                </span>
                 <button
                   type="button"
                   className={styles.iconButton}
@@ -164,23 +182,29 @@ export function CallSettingsButton({
                   ×
                 </button>
               </div>
-              <fieldset className={styles.field}>
-                <legend className={styles.srOnly}>{captionsLabel}</legend>
-                <div className={styles.segmented}>
-                  {CAPTION_SIZES.map(({ value, label: optionLabel }) => (
-                    <label key={value} className={styles.option}>
-                      <input
-                        type="radio"
-                        name="caption-size"
-                        value={value}
-                        checked={captionSize === value}
-                        onChange={() => setCaptionSize(value)}
-                      />
-                      <span>{t(optionLabel)}</span>
-                    </label>
-                  ))}
+              {view === 'layout' ? (
+                <div className={styles.layoutBody}>
+                  <CallLayoutEditor showPreview={false} />
                 </div>
-              </fieldset>
+              ) : (
+                <fieldset className={styles.field}>
+                  <legend className={styles.srOnly}>{captionsLabel}</legend>
+                  <div className={styles.segmented}>
+                    {CAPTION_SIZES.map(({ value, label: optionLabel }) => (
+                      <label key={value} className={styles.option}>
+                        <input
+                          type="radio"
+                          name="caption-size"
+                          value={value}
+                          checked={captionSize === value}
+                          onChange={() => setCaptionSize(value)}
+                        />
+                        <span>{t(optionLabel)}</span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              )}
             </>
           )}
         </div>

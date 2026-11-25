@@ -126,6 +126,9 @@ const en: Record<string, string> = {
   'Desactivar subtítulos': 'Turn off captions',
   'Ajustes de la llamada': 'Call settings',
   'Tamaño de los subtítulos': 'Caption size',
+  Mosaicos: 'Tiles',
+  Personalizados: 'Custom',
+  Grilla: 'Grid',
   Chica: 'Small',
   Mediana: 'Medium',
   'Tu navegador no tiene subtítulos en vivo. Probá con Chrome o Edge.':

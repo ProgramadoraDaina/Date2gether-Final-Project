@@ -141,7 +141,7 @@ function ZoneFields({ zone, index }: { zone: LayoutZone; index: number }) {
   );
 }
 
-export function CallLayoutEditor() {
+export function CallLayoutEditor({ showPreview = true }: { showPreview?: boolean }) {
   const { t } = useTranslation();
   const { enabled, zones, setEnabled, addZone } = useCallLayoutStore();
   const tree = useMemo(() => buildLayoutTree(zones), [zones]);
@@ -149,18 +149,16 @@ export function CallLayoutEditor() {
 
   return (
     <div className={styles.editor}>
-      <label className={styles.field}>
-        <span>
-          <input
-            type="checkbox"
-            checked={enabled}
-            onChange={(e) => setEnabled(e.target.checked)}
-            aria-label={t('Usar mi distribución en las llamadas')}
-          />{' '}
-          {t('Usar mi distribución en las llamadas')}
-        </span>
+      <label className={styles.toggleRow}>
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => setEnabled(e.target.checked)}
+          aria-label={t('Usar mi distribución en las llamadas')}
+        />
+        <span>{t('Usar mi distribución en las llamadas')}</span>
       </label>
-      {tree && (
+      {tree && showPreview && (
         <div className={styles.preview} data-testid="layout-preview">
           <LayoutView
             tree={tree}
