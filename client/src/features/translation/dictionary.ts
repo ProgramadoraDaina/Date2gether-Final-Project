@@ -591,7 +591,7 @@ const en: Record<string, string> = {
   'Alto (%)': 'Height (%)',
   Personas: 'People',
   personas: 'people',
-  'Tamaño de cámara (px)': 'Camera size (px)',
+  'Tamaño (%)': 'Size (%)',
   Forma: 'Shape',
   'Alargada (16:9)': 'Wide (16:9)',
   'Clásica (4:3)': 'Classic (4:3)',

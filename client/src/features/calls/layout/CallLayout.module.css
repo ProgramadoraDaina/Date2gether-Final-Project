@@ -13,12 +13,18 @@
 
 .zone {
   position: relative;
+  overflow: hidden;
+}
+
+/* Measured box the tiles are fitted into; gap must match TILE_GAP in layout.ts. */
+.zoneFill {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-wrap: wrap;
   align-content: center;
   justify-content: center;
   gap: 6px;
-  overflow: auto;
 }
 
 .stage[data-editing='true'] .zone {
@@ -50,6 +56,14 @@
   flex: 0 0 auto;
   max-width: 100%;
   max-height: 100%;
+}
+
+.tile[data-fit='cover'] :global(.lk-participant-media-video) {
+  object-fit: cover;
+}
+
+.tile[data-fit='contain'] :global(.lk-participant-media-video) {
+  object-fit: contain;
 }
 
 /* Settings editor */

@@ -16,16 +16,45 @@ describe('useCallLayoutStore', () => {
       state().addZone();
     });
     const [first, second] = state().zones;
-    expect(first).toMatchObject({ capacity: 1, width: 100, height: 100 });
-    expect(second).toMatchObject({ placement: 'bottom', capacity: 4 });
+    expect(first).toMatchObject({ capacity: 1, width: 100, height: 100, scale: 100 });
+    expect(second).toMatchObject({ placement: 'bottom', capacity: 4, scale: 100 });
     expect(first.id).not.toBe(second.id);
   });
 
   it('actualiza una zona y limita los valores a rangos válidos', () => {
     act(() => state().addZone());
     const { id } = state().zones[0];
-    act(() => state().updateZone(id, { width: 250, height: 0, capacity: -3, tileSize: 5000 }));
-    expect(state().zones[0]).toMatchObject({ width: 100, height: 10, capacity: 1, tileSize: 480 });
+    act(() => state().updateZone(id, { width: 250, height: 0, capacity: -3, scale: 5000 }));
+    expect(state().zones[0]).toMatchObject({ width: 100, height: 10, capacity: 1, scale: 100 });
+    act(() => state().updateZone(id, { scale: 5 }));
+    expect(state().zones[0].scale).toBe(30);
+  });
+
+  it('una distribución guardada con el tamaño viejo en px pasa a llenar la zona', async () => {
+    localStorage.setItem(
+      'date2gether:call-layout',
+      JSON.stringify({
+        version: 1,
+        state: {
+          enabled: true,
+          zones: [
+            {
+              id: 'z1',
+              capacity: 1,
+              placement: 'bottom',
+              width: 100,
+              height: 100,
+              tileSize: 480,
+              aspect: '16:9',
+            },
+          ],
+        },
+      }),
+    );
+    await act(() => useCallLayoutStore.persist.rehydrate());
+    expect(state().zones[0]).toMatchObject({ id: 'z1', scale: 100 });
+    expect(state().zones[0]).not.toHaveProperty('tileSize');
+    expect(state().enabled).toBe(true);
   });
 
   it('al cambiar la posición, la zona deja lugar a la de al lado', () => {

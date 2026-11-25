@@ -10,9 +10,32 @@ export interface LayoutZone {
   // Percent of the space the zone is placed into.
   width: number;
   height: number;
-  // Camera tile width in px.
-  tileSize: number;
+  // Percent of the largest tile size that fits the zone.
+  scale: number;
   aspect: TileAspect;
+}
+
+export const TILE_GAP = 6;
+
+// Largest tile width that fits `count` tiles of this aspect in the zone, trying every column count.
+export function fitTiles(
+  size: { width: number; height: number },
+  count: number,
+  aspect: TileAspect,
+  scale: number,
+  gap = TILE_GAP,
+): { width: number } | null {
+  if (count <= 0 || size.width <= 0 || size.height <= 0) return null;
+  const [w, h] = aspect.split(':').map(Number);
+  const ratio = w / h;
+  let best = 0;
+  for (let columns = 1; columns <= count; columns++) {
+    const rows = Math.ceil(count / columns);
+    const byWidth = (size.width - gap * (columns - 1)) / columns;
+    const byHeight = ((size.height - gap * (rows - 1)) / rows) * ratio;
+    best = Math.max(best, Math.min(byWidth, byHeight));
+  }
+  return { width: Math.floor((best * scale) / 100) };
 }
 
 export type LayoutNode =

@@ -25,7 +25,7 @@ function sanitize(zone: LayoutZone): LayoutZone {
     capacity: clamp(zone.capacity, 1, 50),
     width: clamp(zone.width, 10, 100),
     height: clamp(zone.height, 10, 100),
-    tileSize: clamp(zone.tileSize, 60, 480),
+    scale: clamp(zone.scale, 30, 100),
   };
 }
 
@@ -50,7 +50,7 @@ function defaultZone(isFirst: boolean): LayoutZone {
         placement: 'bottom',
         width: 100,
         height: 100,
-        tileSize: 480,
+        scale: 100,
         aspect: '16:9',
       }
     : {
@@ -59,7 +59,7 @@ function defaultZone(isFirst: boolean): LayoutZone {
         placement: 'bottom',
         width: 100,
         height: 30,
-        tileSize: 160,
+        scale: 100,
         aspect: '16:9',
       };
 }
@@ -85,8 +85,22 @@ export const useCallLayoutStore = create<CallLayoutState>()(
     }),
     {
       name: 'date2gether:call-layout',
-      version: 1,
+      version: 2,
       partialize: ({ enabled, zones }) => ({ enabled, zones }),
+      // v1 stored a fixed tile width in px; tiles now fill their zone.
+      migrate: (persisted, version) => {
+        const saved = persisted as {
+          enabled?: boolean;
+          zones?: (LayoutZone & { tileSize?: number })[];
+        };
+        if (version < 2) {
+          saved.zones = (saved.zones ?? []).map(({ tileSize: _old, ...zone }) => ({
+            ...zone,
+            scale: 100,
+          }));
+        }
+        return saved as Pick<CallLayoutState, 'enabled' | 'zones'>;
+      },
     },
   ),
 );

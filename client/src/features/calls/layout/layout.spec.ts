@@ -1,8 +1,41 @@
 import { describe, expect, it } from '@jest/globals';
-import { assignToZones, buildLayoutTree, type LayoutZone, type ZonePlacement } from './layout';
+import {
+  assignToZones,
+  buildLayoutTree,
+  fitTiles,
+  type LayoutZone,
+  type ZonePlacement,
+} from './layout';
+
+describe('fitTiles', () => {
+  it('una sola cámara 16:9 llena la zona hasta tocar el lado que limita', () => {
+    expect(fitTiles({ width: 1600, height: 1000 }, 1, '16:9', 100)).toEqual({ width: 1600 });
+    expect(fitTiles({ width: 1600, height: 450 }, 1, '16:9', 100)).toEqual({ width: 800 });
+  });
+
+  it('elige filas y columnas que dejan las cámaras lo más grandes posible', () => {
+    // 4 squares in a wide zone fit best as one row.
+    expect(fitTiles({ width: 1000, height: 260 }, 4, '1:1', 100, 0)).toEqual({ width: 250 });
+    // 4 squares in a square zone fit best as 2x2.
+    expect(fitTiles({ width: 500, height: 500 }, 4, '1:1', 100, 0)).toEqual({ width: 250 });
+  });
+
+  it('descuenta el espacio entre cámaras', () => {
+    expect(fitTiles({ width: 506, height: 250 }, 2, '1:1', 100, 6)).toEqual({ width: 250 });
+  });
+
+  it('el tamaño en % achica las cámaras respecto del máximo que entra', () => {
+    expect(fitTiles({ width: 1600, height: 1000 }, 1, '16:9', 50)).toEqual({ width: 800 });
+  });
+
+  it('sin gente o sin medida todavía no calcula nada', () => {
+    expect(fitTiles({ width: 0, height: 0 }, 3, '16:9', 100)).toBeNull();
+    expect(fitTiles({ width: 800, height: 600 }, 0, '16:9', 100)).toBeNull();
+  });
+});
 
 function zone(id: string, placement: ZonePlacement = 'bottom', capacity = 1): LayoutZone {
-  return { id, capacity, placement, width: 30, height: 40, tileSize: 160, aspect: '16:9' };
+  return { id, capacity, placement, width: 30, height: 40, scale: 100, aspect: '16:9' };
 }
 
 describe('buildLayoutTree', () => {

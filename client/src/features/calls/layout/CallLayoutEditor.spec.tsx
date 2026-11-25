@@ -54,7 +54,7 @@ describe('CallLayoutEditor', () => {
     fireEvent.change(within(second).getByLabelText('Ancho (%)'), { target: { value: '40' } });
     fireEvent.change(within(second).getByLabelText('Alto (%)'), { target: { value: '60' } });
     fireEvent.change(within(second).getByLabelText('Personas'), { target: { value: '10' } });
-    fireEvent.change(within(second).getByLabelText('Tamaño de cámara (px)'), {
+    fireEvent.change(within(second).getByLabelText('Tamaño (%)'), {
       target: { value: '90' },
     });
     fireEvent.change(within(second).getByLabelText('Forma'), { target: { value: '1:1' } });
@@ -64,7 +64,7 @@ describe('CallLayoutEditor', () => {
       width: 40,
       height: 60,
       capacity: 10,
-      tileSize: 90,
+      scale: 90,
       aspect: '1:1',
     });
   });

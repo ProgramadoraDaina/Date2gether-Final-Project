@@ -4,7 +4,7 @@ import { buildLayoutTree, type LayoutZone, type ZonePlacement } from './layout';
 import { LayoutView } from './LayoutView';
 
 function zone(id: string, placement: ZonePlacement, width = 100, height = 30): LayoutZone {
-  return { id, capacity: 1, placement, width, height, tileSize: 160, aspect: '16:9' };
+  return { id, capacity: 1, placement, width, height, scale: 100, aspect: '16:9' };
 }
 
 function renderTree(zones: LayoutZone[]) {

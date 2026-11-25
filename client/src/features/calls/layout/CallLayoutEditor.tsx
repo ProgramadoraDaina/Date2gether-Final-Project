@@ -117,11 +117,11 @@ function ZoneFields({ zone, index }: { zone: LayoutZone; index: number }) {
         />
       </label>
       <RangeField
-        label={t('Tamaño de cámara (px)')}
-        value={zone.tileSize}
-        min={60}
-        max={480}
-        onChange={(tileSize) => update({ tileSize })}
+        label={t('Tamaño (%)')}
+        value={zone.scale}
+        min={30}
+        max={100}
+        onChange={(scale) => update({ scale })}
       />
       <label className={styles.field}>
         <span>{t('Forma')}</span>

@@ -6,6 +6,7 @@ import { useTranslation } from '@/features/translation/useTranslation';
 import { ReactionTile } from '../reactions/ReactionTile';
 import { assignToZones, buildLayoutTree, type LayoutZone } from './layout';
 import { LayoutView } from './LayoutView';
+import { ZoneTiles } from './ZoneTiles';
 import styles from './CallLayout.module.css';
 
 interface CustomCallLayoutProps {
@@ -48,18 +49,19 @@ export function CustomCallLayout({ tracks, zones, editing = false }: CustomCallL
                   {`${t('Zona')} ${zoneNumber.get(zone.id)} · ${members.length}/${zone.capacity}`}
                 </span>
               )}
-              {members.map((track) => (
-                <div
-                  key={trackKey(track)}
-                  className={styles.tile}
-                  style={{ width: zone.tileSize, aspectRatio: zone.aspect.replace(':', ' / ') }}
-                  data-testid="layout-tile"
-                >
-                  <TrackRefContext.Provider value={track}>
-                    <ReactionTile canFocus={tracks.length > 1} />
-                  </TrackRefContext.Provider>
-                </div>
-              ))}
+              <ZoneTiles
+                zone={zone}
+                items={members.map((track) => ({
+                  key: trackKey(track),
+                  // A shared screen must stay whole; cameras are cropped to the tile shape.
+                  fit: track.source === 'screen_share' ? 'contain' : 'cover',
+                  content: (
+                    <TrackRefContext.Provider value={track}>
+                      <ReactionTile canFocus={tracks.length > 1} />
+                    </TrackRefContext.Provider>
+                  ),
+                }))}
+              />
             </>
           );
         }}

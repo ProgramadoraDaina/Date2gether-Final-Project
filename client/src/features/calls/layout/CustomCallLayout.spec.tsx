@@ -26,6 +26,19 @@ jest.mock('../reactions/ReactionTile', () => {
   };
 });
 
+// jsdom has no layout: every measured zone reports 1000x500.
+class FakeResizeObserver {
+  constructor(private readonly callback: ResizeObserverCallback) {}
+  observe(target: Element) {
+    this.callback(
+      [{ target, contentRect: { width: 1000, height: 500 } } as unknown as ResizeObserverEntry],
+      this as unknown as ResizeObserver,
+    );
+  }
+  disconnect() {}
+}
+globalThis.ResizeObserver = FakeResizeObserver as unknown as typeof ResizeObserver;
+
 function track(identity: string, source = 'camera') {
   return { participant: { identity }, source } as unknown as TrackReferenceOrPlaceholder;
 }
@@ -37,22 +50,19 @@ function zone(id: string, capacity: number, overrides: Partial<LayoutZone> = {})
     placement: 'bottom',
     width: 100,
     height: 30,
-    tileSize: 160,
+    scale: 100,
     aspect: '16:9',
     ...overrides,
   };
 }
 
 describe('CustomCallLayout', () => {
-  it('pone a cada persona en su zona, con el tamaño y la forma de esa zona', async () => {
+  it('pone a cada persona en su zona y las cámaras llenan el espacio de esa zona', async () => {
     const { CustomCallLayout } = await import('./CustomCallLayout');
     render(
       <CustomCallLayout
         tracks={[track('santi'), track('gabi'), track('daina'), track('joni')]}
-        zones={[
-          zone('big', 1, { tileSize: 480 }),
-          zone('small', 2, { tileSize: 90, aspect: '1:1' }),
-        ]}
+        zones={[zone('big', 1), zone('small', 2, { aspect: '1:1' })]}
       />,
     );
 
@@ -63,8 +73,32 @@ describe('CustomCallLayout', () => {
         .getAllByTestId('layout-tile')
         .map((t) => t.textContent),
     ).toEqual(['gabi', 'daina', 'joni']);
-    const tile = within(small).getAllByTestId('layout-tile')[0];
-    expect(tile).toHaveStyle({ width: '90px', aspectRatio: '1 / 1' });
+    // 1 wide camera in 1000x500 is limited by the height: 500 * 16/9.
+    expect(within(big).getByTestId('layout-tile')).toHaveStyle({ width: '888px' });
+    // 3 squares in 1000x500 fit best in one row: (1000 - 2 gaps of 6) / 3.
+    expect(within(small).getAllByTestId('layout-tile')[0]).toHaveStyle({
+      width: '329px',
+      aspectRatio: '1 / 1',
+    });
+  });
+
+  it('el tamaño en % achica las cámaras de esa zona', async () => {
+    const { CustomCallLayout } = await import('./CustomCallLayout');
+    render(<CustomCallLayout tracks={[track('santi')]} zones={[zone('big', 1, { scale: 50 })]} />);
+    expect(screen.getByTestId('layout-tile')).toHaveStyle({ width: '444px' });
+  });
+
+  it('las cámaras se recortan a la forma elegida, pero una pantalla compartida se ve entera', async () => {
+    const { CustomCallLayout } = await import('./CustomCallLayout');
+    render(
+      <CustomCallLayout
+        tracks={[track('santi'), track('gabi-screen', 'screen_share')]}
+        zones={[zone('big', 2)]}
+      />,
+    );
+    const [screenTile, camTile] = screen.getAllByTestId('layout-tile');
+    expect(screenTile).toHaveAttribute('data-fit', 'contain');
+    expect(camTile).toHaveAttribute('data-fit', 'cover');
   });
 
   it('una pantalla compartida entra primero, a la zona más importante', async () => {
