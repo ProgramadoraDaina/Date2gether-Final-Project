@@ -49,6 +49,21 @@ sudo tail -n 80 /var/log/cloud-init-output.log
 sudo docker compose -f /opt/date2gether/deploy/ec2/compose.yaml ps
 ```
 
+### Resúmenes con IA (opcional)
+
+El resumen de llamadas usa la API de Gemini y necesita `GEMINI_API_KEY`. La clave no se guarda en el repositorio: se agrega una sola vez en el servidor, en `deploy/ec2/runtime/runtime.env`, y `configure.py` la conserva en las siguientes ejecuciones. Desde la terminal de Session Manager, con la clave copiada al portapapeles:
+
+```bash
+cd /opt/date2gether   # carpeta del repositorio en la instancia
+read -rsp 'GEMINI_API_KEY: ' GEMINI_API_KEY && echo
+sudo sed -i '/^GEMINI_API_KEY=/d' deploy/ec2/runtime/runtime.env
+echo "GEMINI_API_KEY=$GEMINI_API_KEY" | sudo tee -a deploy/ec2/runtime/runtime.env >/dev/null
+unset GEMINI_API_KEY
+sudo docker compose -f deploy/ec2/compose.yaml up -d --force-recreate backend
+```
+
+`read -s` evita que la clave quede en pantalla o en el historial de la terminal. Sin la clave la aplicación funciona igual y el resumen responde 503.
+
 No compartir logs que incluyan datos de usuarios, nombres de sala o tokens. `configure.py` no imprime secretos. Si hay dominio propio, esperar a que los tres registros DNS resuelvan a la IP antes de exigir que HTTPS responda.
 
 Abrir `ApplicationUrl` por **HTTPS**. Crear una cuenta, crear una sala, copiar el enlace y abrirlo en otro dispositivo. El invitado solo confirma un nombre. Cada persona puede seleccionar y probar sus dispositivos en el lobby antes de pulsar Entrar a la reunión; también puede cambiarlos desde los controles de la llamada. Se puede participar escuchando sin otorgar permisos de cámara o micrófono.
