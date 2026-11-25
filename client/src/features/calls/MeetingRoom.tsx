@@ -57,6 +57,7 @@ import { CaptionsButton, CaptionsOverlay } from './transcription/Captions';
 import { TranscriptionProvider } from './transcription/TranscriptionProvider';
 import { MutedNudge } from './MutedNudge';
 import { CallShortcuts } from './CallShortcuts';
+import { audioProcessing, CallPreferenceEffects } from './CallPreferenceEffects';
 import { HandsProvider } from './hands/HandsProvider';
 import { HandButton, HandQueue } from './hands/HandControls';
 import { ParticipantColorsContext, type ParticipantColors } from './participantColors';
@@ -480,6 +481,7 @@ function MeetingContent({
         >
           <LayoutContextProvider value={layoutContext}>
             <InitialCallDevices devices={initialDevices} onDeviceError={showDeviceError} />
+            <CallPreferenceEffects />
             <RoomAudioRenderer />
             <StartAudio label={t('Activar sonido de la reunión')} />
             <ConnectionStateToast />
@@ -727,7 +729,10 @@ export default function MeetingRoom({
   const roomOptions = useMemo(
     () => ({
       ...options,
-      audioCaptureDefaults: { deviceId: initialDevices.microphoneId || undefined },
+      audioCaptureDefaults: {
+        ...audioProcessing(useCallSettingsStore.getState().noiseSuppression),
+        deviceId: initialDevices.microphoneId || undefined,
+      },
       videoCaptureDefaults: {
         ...options.videoCaptureDefaults,
         deviceId: initialDevices.cameraId || undefined,

@@ -758,6 +758,8 @@ const en: Record<string, string> = {
   'sin leer': 'unread',
   'Probar parlante': 'Test speaker',
   'Sonando…': 'Playing…',
+  'Supresión de ruido': 'Noise suppression',
+  'Sonido cuando alguien entra o sale': 'Sound when someone joins or leaves',
 };
 
 export default en;

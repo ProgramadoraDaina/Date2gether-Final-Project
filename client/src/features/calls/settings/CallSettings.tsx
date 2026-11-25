@@ -19,6 +19,8 @@ const CAPTION_SIZES: { value: CaptionSize; label: string }[] = [
 // Preferencias de esta persona; las de toda la sala quedan abajo, solo para admins.
 const PERSONAL_TOGGLES: { key: CallPreference; label: string }[] = [
   { key: 'mutedNudge', label: 'Avisarme si hablo silenciado' },
+  { key: 'noiseSuppression', label: 'Supresión de ruido' },
+  { key: 'joinLeaveSounds', label: 'Sonido cuando alguien entra o sale' },
 ];
 
 function SettingsIcon() {
