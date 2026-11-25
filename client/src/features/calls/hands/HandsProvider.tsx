@@ -13,6 +13,7 @@ import {
   type ReactNode,
 } from 'react';
 import {
+  canLowerHandOf,
   decodeHand,
   encodeHand,
   handQueue,
@@ -20,6 +21,7 @@ import {
   type HandMessage,
   type RaisedHand,
 } from './hands';
+import { avatarIdentityOf } from '@/features/avatar/TileAvatar';
 
 interface HandsContextValue {
   own: string;
@@ -39,7 +41,13 @@ const HandsContext = createContext<HandsContextValue>({
 
 export const useHands = () => useContext(HandsContext);
 
-export function HandsProvider({ children }: { children: ReactNode }) {
+export function HandsProvider({
+  children,
+  adminIdentities = [],
+}: {
+  children: ReactNode;
+  adminIdentities?: string[];
+}) {
   const room = useRoomContext();
   const { localParticipant } = useLocalParticipant();
   const [hands, setHands] = useState<Record<string, RaisedHand>>({});
@@ -69,6 +77,8 @@ export function HandsProvider({ children }: { children: ReactNode }) {
         at: message.at,
       });
     } else if (message.target) {
+      // Solo un admin puede bajarle la mano a otro; en una mini sala se compara con su identity de la principal.
+      if (!canLowerHandOf(avatarIdentityOf(from), adminIdentities)) return;
       setHand(message.target, null);
       if (message.target === own)
         void send(encodeHand({ raised: false }), { reliable: true, topic: HANDS_TOPIC });

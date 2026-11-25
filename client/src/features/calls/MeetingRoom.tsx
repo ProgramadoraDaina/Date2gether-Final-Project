@@ -65,6 +65,7 @@ import { ParticipantColorsContext, type ParticipantColors } from './participantC
 
 const TRANSITION_TIMEOUT_MS = 12_000;
 const NO_COLORS: ParticipantColors = {};
+const NO_ADMINS: string[] = [];
 
 const options: RoomOptions = {
   adaptiveStream: true,
@@ -309,6 +310,8 @@ interface MeetingRoomProps {
   participants?: BreakoutHostConsoleParticipant[];
   // Color de nombre por identity, para el borde de quien habla y la fila de manos.
   participantColors?: ParticipantColors;
+  // Solo estas identities pueden bajarle la mano a otra persona.
+  adminIdentities?: string[];
   // Socket de sala ya conectado (o null mientras conecta): se lo pasa tal
   // cual a useRoomSocket para escuchar breakout:assigned/breakout:closed,
   // mismo patrón que useRoomMediaLock/useRoomEvents en page.tsx.
@@ -370,6 +373,7 @@ function MeetingContent({
   switchRoom,
   nameFocusEnabled,
   onSetNameFocus,
+  adminIdentities = NO_ADMINS,
 }: Omit<MeetingRoomProps, 'call' | 'onHangUp' | 'roomSocket'> & {
   // Mini salas (breakout-rooms, Fase 6.13): traslado REAL de medios al
   // recibir breakout:assigned. Se pasa solo esta función de `call` (no el
@@ -477,7 +481,7 @@ function MeetingContent({
     : tracks;
   return (
     <ReactionsProvider roomCode={roomCode} roomEmojis={roomEmojis}>
-      <HandsProvider>
+      <HandsProvider adminIdentities={adminIdentities}>
         <TranscriptionProvider
           roomCode={roomCode}
           roomToken={roomToken}
@@ -633,6 +637,7 @@ export default function MeetingRoom({
   onSetVideoLock,
   participants = [],
   participantColors = NO_COLORS,
+  adminIdentities = NO_ADMINS,
   roomSocket = null,
   currentParticipantId = '',
   nameFocusEnabled,
@@ -834,6 +839,7 @@ export default function MeetingRoom({
             switchRoom={call.switchRoom}
             nameFocusEnabled={nameFocusEnabled}
             onSetNameFocus={onSetNameFocus}
+            adminIdentities={adminIdentities}
           />
         </ParticipantColorsContext.Provider>
       </LiveKitRoom>

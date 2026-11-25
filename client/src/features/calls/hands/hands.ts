@@ -31,6 +31,11 @@ export function decodeHand(payload: Uint8Array): HandMessage | null {
   }
 }
 
+// Bajarle la mano a otra persona es cosa de admins; cualquiera puede bajar la propia.
+export function canLowerHandOf(sender: string, admins: readonly string[]): boolean {
+  return admins.includes(sender);
+}
+
 // Turno por orden de llegada; a igual hora desempata la identity para que todos vean la misma fila.
 export function handQueue(hands: Record<string, RaisedHand>): RaisedHand[] {
   return Object.values(hands).sort((a, b) => a.at - b.at || a.identity.localeCompare(b.identity));
