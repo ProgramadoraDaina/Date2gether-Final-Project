@@ -65,7 +65,6 @@ import { ParticipantColorsContext, type ParticipantColors } from './participantC
 
 const TRANSITION_TIMEOUT_MS = 12_000;
 const NO_COLORS: ParticipantColors = {};
-const NO_ADMINS: string[] = [];
 
 const options: RoomOptions = {
   adaptiveStream: true,
@@ -310,8 +309,6 @@ interface MeetingRoomProps {
   participants?: BreakoutHostConsoleParticipant[];
   // Color de nombre por identity, para el borde de quien habla y la fila de manos.
   participantColors?: ParticipantColors;
-  // Solo estas identities pueden bajarle la mano a otra persona.
-  adminIdentities?: string[];
   // Socket de sala ya conectado (o null mientras conecta): se lo pasa tal
   // cual a useRoomSocket para escuchar breakout:assigned/breakout:closed,
   // mismo patrón que useRoomMediaLock/useRoomEvents en page.tsx.
@@ -373,7 +370,7 @@ function MeetingContent({
   switchRoom,
   nameFocusEnabled,
   onSetNameFocus,
-  adminIdentities = NO_ADMINS,
+  handsSocket = null,
 }: Omit<MeetingRoomProps, 'call' | 'onHangUp' | 'roomSocket'> & {
   // Mini salas (breakout-rooms, Fase 6.13): traslado REAL de medios al
   // recibir breakout:assigned. Se pasa solo esta función de `call` (no el
@@ -389,6 +386,8 @@ function MeetingContent({
   // (Socket.io admite múltiples listeners), pero duplica trabajo sin
   // necesidad.
   breakoutAssignment: ReturnType<typeof useRoomSocket>['breakoutAssignment'];
+  // Para pedirle al servidor que le baje la mano a otra persona.
+  handsSocket?: Socket | null;
 }) {
   const { t } = useTranslation();
   const [deviceError, setDeviceError] = useState(false);
@@ -481,7 +480,7 @@ function MeetingContent({
     : tracks;
   return (
     <ReactionsProvider roomCode={roomCode} roomEmojis={roomEmojis}>
-      <HandsProvider adminIdentities={adminIdentities}>
+      <HandsProvider socket={handsSocket}>
         <TranscriptionProvider
           roomCode={roomCode}
           roomToken={roomToken}
@@ -637,7 +636,6 @@ export default function MeetingRoom({
   onSetVideoLock,
   participants = [],
   participantColors = NO_COLORS,
-  adminIdentities = NO_ADMINS,
   roomSocket = null,
   currentParticipantId = '',
   nameFocusEnabled,
@@ -839,7 +837,7 @@ export default function MeetingRoom({
             switchRoom={call.switchRoom}
             nameFocusEnabled={nameFocusEnabled}
             onSetNameFocus={onSetNameFocus}
-            adminIdentities={adminIdentities}
+            handsSocket={roomSocket}
           />
         </ParticipantColorsContext.Provider>
       </LiveKitRoom>

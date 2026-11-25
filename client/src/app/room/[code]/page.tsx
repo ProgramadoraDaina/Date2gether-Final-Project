@@ -322,17 +322,6 @@ export default function RoomPage() {
       })),
     [users],
   );
-  // Identities de quienes administran la sala: solo ellos pueden bajarle la mano a otro.
-  const adminIdentities = useMemo(
-    () =>
-      users
-        .filter(
-          ({ userId }) =>
-            userId && members.some((m) => m.userId === userId && m.role === 'administrador'),
-        )
-        .map(({ participantId }) => participantId),
-    [users, members],
-  );
   const participantColors = useMemo(() => {
     const colors: Record<string, string> = {};
     for (const { participantId, nameColor } of users) {
@@ -1154,7 +1143,6 @@ export default function RoomPage() {
                       onSetVideoLock={mediaLock.setVideoLock}
                       participants={breakoutParticipants}
                       participantColors={participantColors}
-                      adminIdentities={adminIdentities}
                       roomSocket={roomSocket}
                       currentParticipantId={access.participant.sub}
                       nameFocusEnabled={nameFocus.enabled}

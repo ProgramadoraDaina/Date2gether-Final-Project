@@ -24,6 +24,7 @@ import { RoomPlaylistsService } from './room-playlists.service';
 import { afterTrackEnded, skipToNext, type PlaybackState } from './music-playback';
 import { MusicModeDto } from './dto/music-mode.dto';
 import { MusicVolumeDto } from './dto/music-volume.dto';
+import { LowerHandDto } from './dto/lower-hand.dto';
 import { MusicTrackEndedDto } from './dto/music-track-ended.dto';
 import { JoinRoomDto } from './dto/join-room.dto';
 import { MusicAddTrackDto } from './dto/music-add-track.dto';
@@ -504,6 +505,19 @@ export class ChatGateway implements OnGatewayDisconnect {
     await this.updateMusicState(client, (state) => ({ ...state, roomVolume: dto.volume }));
   }
 
+  // Bajar la mano de otro pasa por acá: el servidor sabe quién es admin, un invitado no.
+  @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage('lowerHand')
+  async handleLowerHand(@ConnectedSocket() client: Socket, @MessageBody() dto: LowerHandDto) {
+    const user = await this.requireHandAdmin(client);
+    if (!user) return;
+    for (const [socketId, other] of this.connectedUsers) {
+      if (other.roomCode === user.roomCode && other.participantId === dto.participantId) {
+        this.server.to(socketId).emit('lowerHand');
+      }
+    }
+  }
+
   // Any listener may report the end: the admin is not necessarily listening.
   @UseGuards(WsJwtAuthGuard)
   @SubscribeMessage('musicTrackEnded')
@@ -673,6 +687,13 @@ export class ChatGateway implements OnGatewayDisconnect {
 
   // Devuelve al usuario conectado si es administrador de la sala; si no,
   // emite el error correspondiente y devuelve undefined.
+  private async requireHandAdmin(client: Socket): Promise<ConnectedUser | undefined> {
+    const user = this.connectedUsers.get(client.id);
+    if (!user?.userId) return undefined;
+    const role = await this.roomsService.getMemberRole(user.roomCode, user.userId);
+    return role === 'administrador' ? user : undefined;
+  }
+
   private async requireMusicAdmin(client: Socket): Promise<ConnectedUser | undefined> {
     const user = this.connectedUsers.get(client.id);
     if (!user) {

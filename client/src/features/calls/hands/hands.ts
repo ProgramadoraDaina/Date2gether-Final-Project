@@ -2,6 +2,8 @@ export const HANDS_TOPIC = 'hands';
 
 export interface RaisedHand {
   identity: string;
+  // Identity en la sala principal (en una mini sala la de LiveKit es otra): la usa el servidor.
+  source: string;
   name: string;
   at: number;
 }
@@ -29,11 +31,6 @@ export function decodeHand(payload: Uint8Array): HandMessage | null {
   } catch {
     return null;
   }
-}
-
-// Bajarle la mano a otra persona es cosa de admins; cualquiera puede bajar la propia.
-export function canLowerHandOf(sender: string, admins: readonly string[]): boolean {
-  return admins.includes(sender);
 }
 
 // Turno por orden de llegada; a igual hora desempata la identity para que todos vean la misma fila.

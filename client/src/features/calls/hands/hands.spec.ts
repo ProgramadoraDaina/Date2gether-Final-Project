@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@jest/globals';
-import { canLowerHandOf, decodeHand, encodeHand, handQueue } from './hands';
+import { decodeHand, encodeHand, handQueue } from './hands';
 
 describe('hands', () => {
   it('ida y vuelta de levantar, bajar y bajar a otra persona', () => {
@@ -18,15 +18,10 @@ describe('hands', () => {
 
   it('ordena la fila por quién levantó primero', () => {
     const queue = handQueue({
-      beto: { identity: 'beto', name: 'Beto', at: 20 },
-      ana: { identity: 'ana', name: 'Ana', at: 10 },
-      caro: { identity: 'caro', name: 'Caro', at: 20 },
+      beto: { identity: 'beto', source: 'beto', name: 'Beto', at: 20 },
+      ana: { identity: 'ana', source: 'ana', name: 'Ana', at: 10 },
+      caro: { identity: 'caro', source: 'caro', name: 'Caro', at: 20 },
     });
     expect(queue.map((hand) => hand.identity)).toEqual(['ana', 'beto', 'caro']);
-  });
-
-  it('solo un admin puede bajarle la mano a otra persona', () => {
-    expect(canLowerHandOf('admin-1', ['admin-1'])).toBe(true);
-    expect(canLowerHandOf('invitado', ['admin-1'])).toBe(false);
   });
 });
