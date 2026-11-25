@@ -748,8 +748,13 @@ const en: Record<string, string> = {
   'Bajar la mano de': 'Lower hand of',
   'Mano levantada': 'Hand raised',
   'Manos levantadas': 'Raised hands',
-  "Estás silenciado": "You are muted",
-  "Avisarme si hablo silenciado": "Warn me if I talk while muted",
+  'Estás silenciado': 'You are muted',
+  'Avisarme si hablo silenciado': 'Warn me if I talk while muted',
+  'Atajos de teclado': 'Keyboard shortcuts',
+  'Activar o desactivar el micrófono': 'Turn microphone on or off',
+  'Activar o desactivar la cámara': 'Turn camera on or off',
+  'Levantar o bajar la mano': 'Raise or lower hand',
+  'Ver los atajos de teclado': 'Show keyboard shortcuts',
 };
 
 export default en;

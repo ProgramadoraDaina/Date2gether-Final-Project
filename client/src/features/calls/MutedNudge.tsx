@@ -11,9 +11,9 @@ const SAMPLE_MS = 100;
 const VISIBLE_MS = 5000;
 const COOLDOWN_MS = 20_000;
 
-async function microphoneAllowed(): Promise<boolean> {
+async function permissionGranted(name: string): Promise<boolean> {
   try {
-    const status = await navigator.permissions?.query({ name: 'microphone' });
+    const status = await navigator.permissions?.query({ name: name as PermissionName });
     return status?.state === 'granted';
   } catch {
     return false;
@@ -31,7 +31,7 @@ function useSpeakingWhileMuted(active: boolean, deviceId: string | undefined) {
     let timer: ReturnType<typeof setInterval> | undefined;
     let mutedUntil = 0;
     void (async () => {
-      if (!(await microphoneAllowed()) || stopped) return;
+      if (!(await permissionGranted('microphone')) || stopped) return;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           audio: deviceId ? { deviceId: { exact: deviceId } } : true,

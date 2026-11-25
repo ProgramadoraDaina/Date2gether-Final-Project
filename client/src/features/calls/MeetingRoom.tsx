@@ -56,6 +56,7 @@ import { useCallLayoutStore } from './layout/store';
 import { CaptionsButton, CaptionsOverlay } from './transcription/Captions';
 import { TranscriptionProvider } from './transcription/TranscriptionProvider';
 import { MutedNudge } from './MutedNudge';
+import { CallShortcuts } from './CallShortcuts';
 import { HandsProvider } from './hands/HandsProvider';
 import { HandButton, HandQueue } from './hands/HandControls';
 import { ParticipantColorsContext, type ParticipantColors } from './participantColors';
@@ -385,6 +386,7 @@ function MeetingContent({
 }) {
   const { t } = useTranslation();
   const [deviceError, setDeviceError] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const showDeviceError = useCallback(() => setDeviceError(true), []);
   // Traslado real de medios (Fase 6.13, Flujo 1 de design.md): pide el token
   // de la mini sala y reemplaza la sesión con switchRoom -- nunca joinCall,
@@ -513,6 +515,12 @@ function MeetingContent({
             <ReactionOverlay />
             <HandQueue isAdmin={isCurrentUserAdmin} />
             <MutedNudge locked={enforceAudioLock} />
+            <CallShortcuts
+              audioLocked={enforceAudioLock}
+              videoLocked={enforceVideoLock}
+              helpOpen={shortcutsOpen}
+              onHelpOpenChange={setShortcutsOpen}
+            />
             <CaptionsOverlay />
             {deviceError && (
               <p className={styles.error} role="alert">

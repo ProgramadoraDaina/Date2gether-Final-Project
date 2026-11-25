@@ -51,6 +51,7 @@ interface CallSettingsButtonProps {
   onSetVideoLock: (locked: boolean) => void;
   nameFocusEnabled: boolean;
   onSetNameFocus: (enabled: boolean) => void;
+  onShowShortcuts?: () => void;
 }
 
 export function CallSettingsButton({
@@ -62,6 +63,7 @@ export function CallSettingsButton({
   onSetVideoLock,
   nameFocusEnabled,
   onSetNameFocus,
+  onShowShortcuts,
 }: CallSettingsButtonProps) {
   const { t } = useTranslation();
   const { captionSize, setCaptionSize, setPreference } = useCallSettingsStore();
@@ -140,6 +142,21 @@ export function CallSettingsButton({
                   <span className={styles.menuHint}>›</span>
                 </button>
               </li>
+              {onShowShortcuts && (
+                <li>
+                  <button
+                    type="button"
+                    className={styles.menuItem}
+                    onClick={() => {
+                      close();
+                      onShowShortcuts();
+                    }}
+                  >
+                    <span>{t('Atajos de teclado')}</span>
+                    <span className={styles.menuHint}>?</span>
+                  </button>
+                </li>
+              )}
               {PERSONAL_TOGGLES.map(({ key, label: toggleLabel }) => (
                 <li key={key} className={styles.menuItem}>
                   <span>{t(toggleLabel)}</span>
