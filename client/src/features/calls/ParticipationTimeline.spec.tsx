@@ -217,3 +217,23 @@ describe('ParticipationTimeline', () => {
     expect(container.querySelectorAll('.segmentWrap')).toHaveLength(0);
   });
 });
+
+describe('buildClockTicks', () => {
+  const start = new Date('2026-01-05T10:00:30.000Z').getTime();
+  const end = new Date('2026-01-05T10:09:40.000Z').getTime();
+
+  it('pone las marcas en minutos redondos del reloj', async () => {
+    const { buildClockTicks } = await import('./ParticipationTimeline');
+    const ticks = buildClockTicks(start, end, 800);
+    expect(ticks.length).toBeGreaterThan(0);
+    for (const at of ticks) expect(at % 60_000).toBe(0);
+  });
+
+  it('en un eje angosto usa menos marcas para que las horas no se pisen', async () => {
+    const { buildClockTicks } = await import('./ParticipationTimeline');
+    expect(buildClockTicks(start, end, 180).length).toBeLessThan(
+      buildClockTicks(start, end, 800).length,
+    );
+    expect(buildClockTicks(start, end, 100)).toEqual([]);
+  });
+});

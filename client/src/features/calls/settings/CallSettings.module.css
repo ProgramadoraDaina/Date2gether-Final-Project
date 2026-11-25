@@ -217,3 +217,21 @@
     min-width: 0;
   }
 }
+
+.menuHeading {
+  padding: 12px 12px 4px;
+  border-top: 1px solid var(--color-border);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* Sin teclado físico los atajos no sirven. */
+@media (hover: none) {
+  .pointerOnly {
+    display: none;
+  }
+}

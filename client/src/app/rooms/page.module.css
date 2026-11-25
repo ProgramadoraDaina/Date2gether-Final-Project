@@ -165,4 +165,23 @@
   .card {
     padding: 24px 16px;
   }
+
+  /* Dos columnas parejas: ningún botón queda suelto en una fila propia. */
+  .actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .actions > a,
+  .actions > button {
+    width: 100%;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .actions > .copied {
+    grid-column: 1 / -1;
+  }
 }

@@ -276,11 +276,24 @@
    disparador y popover (único punto de montaje). */
 
 @media (max-width: 640px) {
+  /* En celular los grupos se aplanan: dos filas parejas en vez de divisores colgando al final de cada línea. */
   .controlsDock {
     --dock-pad-y: 8px;
-    gap: 6px;
-    padding: var(--dock-pad-y) 10px;
+    width: calc(100% - 16px);
+    max-width: 420px;
+    gap: 8px 6px;
+    padding: var(--dock-pad-y) 8px;
     margin-top: -16px;
+  }
+
+  .controlsGroup {
+    display: contents;
+  }
+
+  .iconButton,
+  .hangUpButton {
+    width: 42px;
+    height: 42px;
   }
 }
 

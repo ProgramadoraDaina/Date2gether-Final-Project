@@ -1,5 +1,6 @@
 import type { CallSessionParticipantSummary, TrackInterval, TrackIntervalSource } from '@/lib/api';
 import { useTranslation } from '@/features/translation/useTranslation';
+import { useEffect, useRef, useState } from 'react';
 import { InitialsAvatar } from './InitialsAvatar';
 import styles from './ParticipationTimeline.module.css';
 
@@ -19,22 +20,39 @@ function formatDuration(totalSeconds: number): string {
 }
 
 const MINUTE_MS = 60_000;
-// Pasos del eje en minutos: se usa el primero que deje como mucho 6 marcas.
 const TICK_STEPS_MIN = [1, 2, 5, 10, 15, 30, 60, 120];
-// Una marca intermedia pegada al inicio o al fin taparía la hora exacta del borde.
-const EDGE_GAP_PCT = 9;
+// Espacio que ocupa una hora "17:21" con aire a los costados.
+const LABEL_SPACE_PX = 52;
 
-// Marcas en horas redondas del reloj (18:36, 18:38…), no en minutos desde el inicio.
-export function buildClockTicks(startMs: number, endMs: number): number[] {
+// Marcas en horas redondas del reloj (18:36, 18:38…), tantas como entren en el ancho del eje.
+export function buildClockTicks(startMs: number, endMs: number, widthPx: number): number[] {
   const total = endMs - startMs;
+  const maxTicks = Math.max(0, Math.min(6, Math.floor(widthPx / LABEL_SPACE_PX) - 2));
+  if (maxTicks === 0) return [];
   const step =
-    (TICK_STEPS_MIN.find((minutes) => total / (minutes * MINUTE_MS) <= 6) ?? 120) * MINUTE_MS;
+    (TICK_STEPS_MIN.find((minutes) => total / (minutes * MINUTE_MS) <= maxTicks) ?? 120) *
+    MINUTE_MS;
+  // La hora del borde va alineada a un costado: necesita más aire que una marca centrada.
+  const edgePct = ((LABEL_SPACE_PX * 1.3) / widthPx) * 100;
   const ticks: number[] = [];
   for (let at = Math.ceil(startMs / step) * step; at < endMs; at += step) {
     const pct = ((at - startMs) / total) * 100;
-    if (pct > EDGE_GAP_PCT && pct < 100 - EDGE_GAP_PCT) ticks.push(at);
+    if (pct > edgePct && pct < 100 - edgePct) ticks.push(at);
   }
   return ticks;
+}
+
+function useWidth<T extends HTMLElement>(fallback: number) {
+  const ref = useRef<T>(null);
+  const [width, setWidth] = useState(fallback);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, width] as const;
 }
 
 // Un intervalo de un segundo tiene que seguir viéndose.
@@ -63,8 +81,14 @@ export function ParticipationTimeline({
   endedAt,
 }: ParticipationTimelineProps) {
   const { t, language } = useTranslation();
+  const [axisRef, axisWidth] = useWidth<HTMLDivElement>(600);
   const locale = language === 'en' ? 'en-US' : 'es-AR';
-  const clock = new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' });
+  // En español va en 24 h: "17:21" entra en el eje, "05:21 p. m." se pisa con la marca vecina.
+  const clock = new Intl.DateTimeFormat(locale, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: language === 'en' ? 'h12' : 'h23',
+  });
 
   function formatTime(value: string | number | null): string {
     if (value === null) return '—';
@@ -84,7 +108,7 @@ export function ParticipationTimeline({
   const sessionEndMs = endedAt ? new Date(endedAt).getTime() : fallbackEndMs;
   const totalDurationMs = Math.max(sessionEndMs - sessionStartMs, 1000);
   const totalDurationSeconds = Math.round(totalDurationMs / 1000);
-  const ticks = buildClockTicks(sessionStartMs, sessionStartMs + totalDurationMs);
+  const ticks = buildClockTicks(sessionStartMs, sessionStartMs + totalDurationMs, axisWidth);
 
   const pctAt = (ms: number) => clampPct(((ms - sessionStartMs) / totalDurationMs) * 100);
   const pctFor = (iso: string) => pctAt(new Date(iso).getTime());
@@ -115,7 +139,7 @@ export function ParticipationTimeline({
       <div className={styles.panel}>
         <div className={styles.axisRow} aria-hidden="true">
           <span />
-          <div className={styles.axis}>
+          <div className={styles.axis} ref={axisRef}>
             <span className={`${styles.tick} ${styles.tickStart}`} style={{ left: '0%' }}>
               {formatTime(sessionStartMs)}
             </span>
@@ -166,7 +190,7 @@ export function ParticipationTimeline({
 
                 <div className={styles.rows}>
                   <div className={styles.row}>
-                    <span className={styles.rowLabel}>{t('En la llamada')}</span>
+                    <span className={styles.rowLabel}>{t('Presente')}</span>
                     <div className={styles.timelineArea}>
                       <div
                         className={styles.presence}

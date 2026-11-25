@@ -58,7 +58,7 @@
 }
 
 .code {
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   background: var(--color-chip-bg);
   padding: 2px var(--space-2);
@@ -127,6 +127,11 @@
 @media (max-width: 640px) {
   .card {
     padding: 24px 16px;
+  }
+
+  /* Nombre y código ocupan su propia línea; si no, la fila se sale de la pantalla. */
+  .entryMain {
+    flex: 1 1 100%;
   }
 
   /* Without this the three links keep a single row and overflow the screen. */

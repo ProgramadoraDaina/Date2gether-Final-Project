@@ -778,6 +778,26 @@ const en: Record<string, string> = {
   'Usar al entrar a una llamada': 'Use when joining a call',
   'Se usa al entrar a una llamada': 'Used when joining a call',
   Restablecer: 'Reset',
+  'Se guarda en este navegador, salvo el color de tu nombre y tu avatar.':
+    'Saved in this browser, except your name color and avatar.',
+  Secciones: 'Sections',
+  Perfil: 'Profile',
+  Llamadas: 'Calls',
+  'Escucha tu micrófono solo en este navegador mientras está apagado.':
+    'Listens to your microphone only in this browser while it is off.',
+  'Filtra ruidos de fondo constantes, como un ventilador.':
+    'Filters steady background noise, like a fan.',
+  'Usa más procesador; si tu equipo va lento, dejalo apagado.':
+    'Uses more CPU; leave it off if your computer is slow.',
+  'Un tono corto al entrar y otro al salir.':
+    'A short tone when someone joins and another when they leave.',
+  'Suena cuando alguien te nombra con @ en el chat.':
+    'Plays when someone mentions you with @ in the chat.',
+  'Se muestra cuando tenés la cámara apagada.': 'Shown when your camera is off.',
+  'Aparece en el chat y en el borde de tu video cuando hablás.':
+    'Shown in the chat and around your video when you speak.',
+  Presente: 'Present',
+  'Para toda la sala': 'For the whole room',
 };
 
 export default en;

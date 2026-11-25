@@ -146,7 +146,7 @@ export function CallSettingsButton({
                 </button>
               </li>
               {onShowShortcuts && (
-                <li>
+                <li className={styles.pointerOnly}>
                   <button
                     type="button"
                     className={styles.menuItem}
@@ -172,6 +172,7 @@ export function CallSettingsButton({
               ))}
               {isAdmin && (
                 <>
+                  <li className={styles.menuHeading}>{t('Para toda la sala')}</li>
                   <li className={styles.menuItem}>
                     <span>{t('Mutear a todos')}</span>
                     <ToggleSwitch
