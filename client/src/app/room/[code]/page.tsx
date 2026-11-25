@@ -268,7 +268,7 @@ export default function RoomPage() {
     error: membersError,
     changeRole,
     refetchMembers,
-  } = useRoomMembers(access ? code : undefined);
+  } = useRoomMembers(access ? code : undefined, access?.participant.userId);
   // Sin userId = sin cuenta en la sala (room_members no tiene invitados):
   // es la señal para la @mención colectiva 'invitados' en mentions.ts.
   const isGuest = !access?.participant.userId;

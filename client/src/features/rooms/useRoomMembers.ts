@@ -15,7 +15,7 @@ function describeError(err: unknown, fallback: string): string {
   return err instanceof ApiError ? err.message : fallback;
 }
 
-export function useRoomMembers(code: string | undefined) {
+export function useRoomMembers(code: string | undefined, selfUserId?: string | null) {
   const [members, setMembers] = useState<RoomMember[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +66,9 @@ export function useRoomMembers(code: string | undefined) {
     await refetchMembers();
   }
 
-  const currentUserRole = members.find((member) => member.userId === currentUserId)?.role;
+  // El pase de sala ya trae el id: /auth/me puede fallar (429) y ocultar las herramientas de admin.
+  const ownId = selfUserId ?? currentUserId;
+  const currentUserRole = members.find((member) => member.userId === ownId)?.role;
   const isCurrentUserAdmin = currentUserRole === 'administrador';
 
   return { members, currentUserRole, isCurrentUserAdmin, error, changeRole, refetchMembers };
