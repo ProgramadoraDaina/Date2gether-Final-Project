@@ -1,144 +1,320 @@
-/* 720px (no 560px): cada fila ahora puede llevar nombre + chip de código +
-   fecha + el botón "Ver gráfico de interacción" — a 560px se amontonaban. */
-.card {
-  composes: card from '../../styles/form.module.css';
-  max-width: 720px;
-  padding: 40px;
+.page {
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-5) var(--space-8);
+  display: grid;
+  gap: var(--space-6);
+}
+
+.header {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.header h1 {
+  margin: 0;
+}
+
+.header p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+.back {
+  justify-self: start;
+  font-size: 13px;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-text-muted);
 }
 
 .error {
   composes: error from '../../styles/form.module.css';
 }
 
-.authLinks {
-  composes: authLinks from '../../styles/form.module.css';
-}
-
+/* Salas: tarjetas compactas, distintas de la lista de llamadas. */
 .roomsSection {
-  margin: var(--space-4) 0;
-  padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.roomsSection h2 {
-  font-size: 16px;
-}
-
-.list {
-  list-style: none;
-  margin: var(--space-4) 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.entry {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
+  display: grid;
   gap: var(--space-3);
-  padding: 10px var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
 }
 
-.entryMain {
-  display: flex;
-  align-items: center;
+.rooms {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.room {
+  display: grid;
+  gap: var(--space-3);
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.roomText {
+  display: grid;
+  gap: 2px;
   min-width: 0;
 }
 
-.entryMain strong {
+.roomText strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.code {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  background: var(--color-chip-bg);
-  padding: 2px var(--space-2);
-  border-radius: var(--radius-sm);
-  flex-shrink: 0;
-}
-
-.entryMeta {
+.roomActions {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-  flex-shrink: 0;
+  gap: var(--space-2);
 }
 
-.date {
+.enter {
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.enter:hover {
+  background: var(--color-accent-hover);
+}
+
+.expired {
   font-size: 13px;
   color: var(--color-text-muted);
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
 }
 
-/* Botón pill chico, mismo lenguaje que .callLoadingButton en
-   room/[code]/page.module.css pero más compacto: acá vive adentro de una
-   fila de lista densa, no solo en un panel centrado. */
-.sessionLink {
-  width: auto;
-  flex-shrink: 0;
-  white-space: nowrap;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 4px 12px;
-  border-radius: var(--radius-sm);
+/* Llamadas: lista agrupada por día, con la hora como primera columna. */
+.callsSection {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.sectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.tabs {
+  display: inline-flex;
   border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.tab {
+  width: auto;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 0;
   background: transparent;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.tab + .tab {
+  border-left: 1px solid var(--color-border);
+}
+
+.tab:hover {
+  background: var(--color-chip-bg);
+  color: var(--color-text);
+}
+
+.tab[aria-pressed='true'],
+.tab[aria-current='page'] {
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  color: var(--color-text);
+}
+
+.day {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.dayTitle {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.dayTitle::first-letter {
+  text-transform: uppercase;
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.call {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.call:last-child {
+  border-bottom: none;
+}
+
+.time {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+
+.callMain {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.callMain strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.callActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.action {
+  padding: 4px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.action:hover {
+  border-color: var(--color-accent);
   color: var(--color-accent);
 }
 
-.sessionLink:hover {
-  background: var(--color-chip-bg);
+.noSession {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
 }
 
-.filter {
-  margin: var(--space-2) 0 0;
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.pager button {
+  width: auto;
+}
+
+.dangerZone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--color-error) 45%, var(--color-border));
+  border-radius: var(--radius-sm);
+}
+
+.dangerZone p {
+  margin: var(--space-1) 0 0;
   font-size: 13px;
   color: var(--color-text-muted);
 }
 
-.archive {
-  margin-top: var(--space-5);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--color-border);
-}
-
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
-}
-
-.danger {
+.dangerButton {
+  width: auto;
+  border: 1px solid var(--color-error);
+  background: transparent;
   color: var(--color-error);
 }
 
+.dangerButton:hover {
+  background: color-mix(in srgb, var(--color-error) 12%, transparent);
+}
+
 @media (max-width: 640px) {
-  .card {
-    padding: 24px 16px;
+  .page {
+    padding: var(--space-4) var(--space-4) var(--space-7);
+    gap: var(--space-5);
   }
 
-  /* Nombre y código ocupan su propia línea; si no, la fila se sale de la pantalla. */
-  .entryMain {
-    flex: 1 1 100%;
+  /* La hora y el nombre arriba, las acciones en una línea propia debajo. */
+  .call {
+    grid-template-columns: 44px minmax(0, 1fr);
+    row-gap: var(--space-2);
+    padding: 10px 12px;
   }
 
-  /* Without this the three links keep a single row and overflow the screen. */
-  .entryMeta {
-    flex-shrink: 1;
-    min-width: 0;
-    width: 100%;
-    gap: var(--space-2);
+  .callMain {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+  }
+
+  .callActions {
+    grid-column: 2;
+    flex-wrap: wrap;
+  }
+
+  /* Las salas se deslizan de costado para no empujar las llamadas hacia abajo. */
+  .rooms {
+    display: flex;
+    overflow-x: auto;
+    margin: 0 calc(-1 * var(--space-4));
+    padding: 0 var(--space-4) var(--space-1);
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+
+  .room {
+    flex: 0 0 78%;
+    scroll-snap-align: start;
   }
 }

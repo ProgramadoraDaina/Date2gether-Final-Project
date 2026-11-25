@@ -77,7 +77,7 @@ describe('MyRoomsPage', () => {
       '/room/abc-defg-hij',
     );
     expect(screen.getByText('Vencida')).toBeInTheDocument();
-    const historyLinks = screen.getAllByRole('link', { name: 'Ver historial' });
+    const historyLinks = screen.getAllByRole('link', { name: 'Mis llamadas' });
     expect(historyLinks.map((link) => link.getAttribute('href'))).toEqual([
       '/history?roomId=room-1',
       '/history?roomId=room-2',

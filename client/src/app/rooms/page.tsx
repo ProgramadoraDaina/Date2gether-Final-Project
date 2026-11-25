@@ -265,7 +265,7 @@ function MyRoomsContent() {
                     </button>
                   )}
                   <Link href={`/history?roomId=${room.id}`} className={styles.action}>
-                    {t('Ver historial')}
+                    {t('Mis llamadas')}
                   </Link>
                   <button
                     type="button"

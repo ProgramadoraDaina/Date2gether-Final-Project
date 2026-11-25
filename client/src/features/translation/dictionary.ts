@@ -800,6 +800,36 @@ const en: Record<string, string> = {
   'Para toda la sala': 'For the whole room',
   'Una zona sin nadie no ocupa lugar: con poca gente, las primeras se agrandan.':
     'An empty zone takes no space: with few people, the first zones grow.',
+  Período: 'Period',
+  'Últimos 90 días': 'Last 90 days',
+  'Más antiguas': 'Older',
+  Hoy: 'Today',
+  Ayer: 'Yesterday',
+  'Ver mis llamadas en esta sala': 'See my calls in this room',
+  'Archivo compartido de la sala': 'Room shared archive',
+  'Llamadas de': 'Calls in',
+  'Llamadas de la sala': 'Room calls',
+  'Llamadas de hace más de 90 días de todas las personas que usaron esta sala. Solo lo ven quienes la administran.':
+    'Calls older than 90 days from everyone who used this room. Only its admins can see it.',
+  'Tus llamadas de hace más de 90 días.': 'Your calls older than 90 days.',
+  'Tus llamadas de los últimos 90 días.': 'Your calls from the last 90 days.',
+  Gráfico: 'Chart',
+  'Nadie llegó a conectarse': 'Nobody connected',
+  'Borrar llamadas antiguas': 'Delete old calls',
+  'Quita de tu cuenta las llamadas de hace más de 90 días. A los demás participantes no les cambia nada.':
+    'Removes calls older than 90 days from your account. Nothing changes for other participants.',
+  'Sus llamadas': 'Its calls',
+  'Vuelve a aparecer en esta lista.': 'It shows up in this list again.',
+  'La sala no se borra: solo deja de aparecer en esta lista.':
+    'The room is not deleted: it just stops showing in this list.',
+  'Archivo compartido': 'Shared archive',
+  'Llamadas de hace más de 90 días de todos los que usaron la sala.':
+    'Calls older than 90 days from everyone who used the room.',
+  'Borrar archivo compartido': 'Delete shared archive',
+  'Mensajes y llamadas de hace más de 90 días, para todos.':
+    'Messages and calls older than 90 days, for everyone.',
+  'Mis llamadas': 'My calls',
+  'Archivo compartido de llamadas': 'Shared call archive',
 };
 
 export default en;

@@ -185,7 +185,7 @@ describe('HistoryPage', () => {
     const HistoryPage = (await import('./page')).default;
     render(<HistoryPage />);
 
-    await screen.findByText('Mostrando solo las llamadas de Cita de los lunes.');
+    await screen.findByRole('heading', { name: 'Llamadas de Cita de los lunes' });
     expect(getCallHistory).toHaveBeenCalledWith('recent', 'room-2', null, expect.any(AbortSignal));
     expect(screen.queryByText('Reunión de Daina')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Ver todo el historial' })).toHaveAttribute(

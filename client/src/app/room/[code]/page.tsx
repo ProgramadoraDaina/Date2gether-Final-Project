@@ -726,7 +726,7 @@ export default function RoomPage() {
               <Link
                 href={`/history?roomId=${encodeURIComponent(access.participant.roomId)}&roomArchive=1`}
               >
-                {t('Ver archivo de llamadas')}
+                {t('Archivo compartido de llamadas')}
               </Link>
             )}
           </div>
