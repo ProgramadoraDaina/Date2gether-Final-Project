@@ -737,6 +737,8 @@ const en: Record<string, string> = {
     'Could not verify your account. Check your connection and try again.',
   Usuario: 'User',
   Administrador: 'Administrator',
+  Interacción: 'Interaction',
+  'Micrófono y cámara': 'Microphone and camera',
 };
 
 export default en;

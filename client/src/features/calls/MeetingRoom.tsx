@@ -204,7 +204,7 @@ function MicToggleButton({ roomCode, roomToken, setDeviceError, locked }: Toggle
       }}
       type="button"
       disabled={locked}
-      className={`${styles.iconButton} ${enabled ? styles.iconButtonActive : ''}`}
+      className={`${styles.iconButton} ${enabled ? styles.iconButtonActive : styles.iconButtonMuted}`}
       title={label}
       aria-label={label}
     >
@@ -244,7 +244,7 @@ function CameraToggleButton({ roomCode, roomToken, setDeviceError, locked }: Tog
       }}
       type="button"
       disabled={locked}
-      className={`${styles.iconButton} ${enabled ? styles.iconButtonActive : ''}`}
+      className={`${styles.iconButton} ${enabled ? styles.iconButtonActive : styles.iconButtonMuted}`}
       title={label}
       aria-label={label}
     >
@@ -512,7 +512,7 @@ function MeetingContent({
             </p>
           )}
           <div className={styles.controlsDock}>
-            <div className={styles.controlsGroup}>
+            <div className={styles.controlsGroup} role="group" aria-label={t('Micrófono y cámara')}>
               <MicToggleButton
                 roomCode={roomCode}
                 roomToken={roomToken}
@@ -536,6 +536,8 @@ function MeetingContent({
                 aria-label={t('Elegir cámara')}
               />
               <ScreenShareToggleButton setDeviceError={setDeviceError} />
+            </div>
+            <div className={styles.controlsGroup} role="group" aria-label={t('Interacción')}>
               <ReactionPicker buttonClassName={styles.iconButton} />
               <SoundboardPicker buttonClassName={styles.iconButton} />
               <CaptionsButton
@@ -543,31 +545,33 @@ function MeetingContent({
                 activeClassName={styles.iconButtonActive}
               />
             </div>
-            <CallSettingsButton
-              buttonClassName={styles.iconButton}
-              isAdmin={isCurrentUserAdmin}
-              audioLocked={audioLocked}
-              videoLocked={videoLocked}
-              onSetAudioLock={onSetAudioLock}
-              onSetVideoLock={onSetVideoLock}
-              nameFocusEnabled={nameFocusEnabled}
-              onSetNameFocus={onSetNameFocus}
-            />
-            {/* Decisión 5 (design.md): único punto de montaje de toda la UI
+            <div className={styles.controlsGroup} role="group" aria-label={t('Sala')}>
+              <CallSettingsButton
+                buttonClassName={styles.iconButton}
+                isAdmin={isCurrentUserAdmin}
+                audioLocked={audioLocked}
+                videoLocked={videoLocked}
+                onSetAudioLock={onSetAudioLock}
+                onSetVideoLock={onSetVideoLock}
+                nameFocusEnabled={nameFocusEnabled}
+                onSetNameFocus={onSetNameFocus}
+              />
+              {/* Decisión 5 (design.md): único punto de montaje de toda la UI
                 de mini salas -- reemplaza el disparador del dock
                 (solo-admin) Y el sitio de montaje del banner (eliminado
                 arriba). BreakoutView decide internamente qué renderizar
                 (o nada) según resolveBreakoutViewState. */}
-            <BreakoutView
-              roomCode={roomCode}
-              roomToken={roomToken}
-              isCurrentUserAdmin={isCurrentUserAdmin}
-              assignment={breakoutAssignment}
-              participants={participants}
-              currentParticipantId={currentParticipantId}
-              buttonClassName={styles.iconButton}
-              activeButtonClassName={styles.iconButtonActive}
-            />
+              <BreakoutView
+                roomCode={roomCode}
+                roomToken={roomToken}
+                isCurrentUserAdmin={isCurrentUserAdmin}
+                assignment={breakoutAssignment}
+                participants={participants}
+                currentParticipantId={currentParticipantId}
+                buttonClassName={styles.iconButton}
+                activeButtonClassName={styles.iconButtonActive}
+              />
+            </div>
             <ConnectedHangUpButton />
           </div>
         </LayoutContextProvider>
