@@ -44,7 +44,11 @@ describe('SettingsPage', () => {
     expect(screen.getByRole('button', { name: 'Púrpura' })).toBeInTheDocument();
     // Se escopea al grupo de la paleta, no a toda la página: el toggle de
     // tema (ThemeToggle) también es un <button> en esta pantalla.
-    expect(within(screen.getByRole('group')).getAllByRole('button')).toHaveLength(8);
+    expect(
+      within(screen.getByRole('group', { name: 'Elegí el color de tu nombre' })).getAllByRole(
+        'button',
+      ),
+    ).toHaveLength(8);
   });
 
   it('elegir un color llama a updateNameColor y lo marca como seleccionado', async () => {
@@ -96,6 +100,24 @@ describe('SettingsPage', () => {
     await waitFor(() =>
       expect(updateAvatar).toHaveBeenCalledWith({ head: ['crown'], sticker: true }),
     );
+  });
+
+  it('con sesión muestra el apartado para armar la distribución de la pantalla', async () => {
+    const { isLoggedIn, getCurrentUser } = await import('@/lib/auth');
+    (isLoggedIn as jest.Mock<typeof isLoggedIn>).mockReturnValue(true);
+    (getCurrentUser as jest.Mock<typeof getCurrentUser>).mockResolvedValue({
+      id: '1',
+      email: 'a@a.com',
+      name: 'Daina',
+      createdAt: '2026-01-01',
+      nameColor: null,
+    });
+    const SettingsPage = (await import('./page')).default;
+    render(<SettingsPage />);
+
+    await screen.findByText('Distribución de la pantalla en las llamadas');
+    expect(screen.getByRole('button', { name: 'Agregar zona' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Usar mi distribución en las llamadas')).toBeInTheDocument();
   });
 
   it('el toggle de sonido de mención arranca prendido y persiste al apagarlo', async () => {

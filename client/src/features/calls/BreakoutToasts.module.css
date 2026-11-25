@@ -1,0 +1,127 @@
+.stack {
+  position: fixed;
+  right: var(--space-6);
+  bottom: 104px;
+  z-index: 900;
+  width: min(360px, calc(100vw - 32px));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-family: var(--font-body);
+}
+
+.toast {
+  --tone: var(--color-accent);
+  --tone-bg: var(--color-chip-bg);
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: var(--space-3);
+  composes: surface from '../layout/Toast.module.css';
+  padding: 12px 10px 14px 12px;
+}
+
+.moved {
+  --tone: var(--color-accent);
+}
+
+.returned {
+  --tone: var(--color-success);
+  --tone-bg: var(--color-success-bg);
+}
+
+.icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--tone-bg);
+  color: var(--tone);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.kicker {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.message {
+  line-height: 1.35;
+}
+
+.message strong {
+  font-weight: 600;
+}
+
+.close {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  border: 0;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+
+.close:hover {
+  background: var(--color-chip-bg);
+  color: var(--color-text);
+}
+
+.close:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.drain {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--tone);
+  transform-origin: left;
+  animation: drain 6s linear both;
+}
+
+@keyframes drain {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+@media (max-width: 600px) {
+  .stack {
+    right: 16px;
+    bottom: 96px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drain {
+    animation: none;
+  }
+}

@@ -1,0 +1,122 @@
+.badge {
+  position: absolute;
+  left: 10px;
+  bottom: 40px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 8px 0 6px;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  animation: hand-in var(--dur-pop) var(--ease-out);
+}
+
+.badge svg {
+  width: 16px;
+  height: 16px;
+}
+
+.turn {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.queue {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 5;
+  min-width: 190px;
+  max-width: min(260px, calc(100% - 24px));
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-overlay);
+  box-shadow: var(--shadow-overlay);
+  animation: hand-in var(--dur-pop) var(--ease-out);
+}
+
+.title {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 0 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.count {
+  color: var(--color-accent);
+}
+
+.list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 18px 8px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  font-size: 13px;
+}
+
+.row .turn {
+  color: var(--color-text-muted);
+}
+
+.swatch {
+  width: 8px;
+  height: 8px;
+}
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lower {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.lower:hover {
+  background: var(--color-chip-bg);
+  color: var(--color-text);
+}
+
+@keyframes hand-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .badge,
+  .queue {
+    animation: none;
+  }
+}

@@ -8,6 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import {
+  RoomServiceClient,
   TrackSource,
   WebhookReceiver,
   trackSourceToString,
@@ -15,13 +16,17 @@ import {
 } from 'livekit-server-sdk';
 import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
 import {
+  callBreakoutOccupants,
+  callBreakoutRooms,
   callEvents,
   callParticipantIdentities,
   callSessionParticipants,
   callSessions,
   roomMembers,
 } from '../../db/schema';
+import { RoomEventsService } from '../rooms/room-events.service';
 import { aggregateSession, type SessionEvent } from './aggregate-session';
+import { isBreakoutRoomName, parseBreakoutRoomName } from './call-group';
 import { CallSessionCloseService } from './call-session-close.service';
 
 // Los 6 tipos de evento que esta fase sabe identificar y despachar (spec
@@ -50,13 +55,22 @@ type SupportedEventType = (typeof SUPPORTED_EVENT_TYPES)[number];
 export class CallsWebhookService {
   private readonly logger = new Logger(CallsWebhookService.name);
   private readonly receiver: WebhookReceiver;
+  private readonly client: RoomServiceClient;
 
   constructor(
     config: ConfigService,
     @Inject(DRIZZLE) private readonly db: DrizzleDb,
     private readonly closeService: CallSessionCloseService,
+    private readonly roomEvents: RoomEventsService,
   ) {
     this.receiver = new WebhookReceiver(
+      config.get<string>('LIVEKIT_API_KEY', ''),
+      config.get<string>('LIVEKIT_API_SECRET', ''),
+    );
+    const wsUrl = config.get<string>('LIVEKIT_URL') ?? '';
+    const apiUrl = config.get<string>('LIVEKIT_API_URL') || wsUrl.replace(/^ws/, 'http');
+    this.client = new RoomServiceClient(
+      apiUrl,
       config.get<string>('LIVEKIT_API_KEY', ''),
       config.get<string>('LIVEKIT_API_SECRET', ''),
     );
@@ -140,7 +154,7 @@ export class CallsWebhookService {
         await this.onRoomFinished(event);
         break;
       case 'participant_joined':
-        this.onParticipantJoined(event);
+        await this.onParticipantJoined(event);
         break;
       case 'participant_left':
         await this.onParticipantLeft(event);
@@ -159,30 +173,56 @@ export class CallsWebhookService {
   }
 
   // --- Huecos para PR7 (ver design.md), deliberadamente vacíos aquí ---
-  // Solo participant_left se conecta en este PR (tasks.md 6.10): es el único
-  // punto de enganche que Fase 6 pide. room_started/participant_joined/
-  // track_* quedan vacíos a propósito — nada en Fase 5/6 de este cambio los
-  // necesita.
+  // room_started/track_* quedan vacíos a propósito — nada en este cambio
+  // los necesita. participant_joined se conecta en la Fase 5 (ver abajo).
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private onRoomStarted(event: WebhookEvent): void {}
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  private onParticipantJoined(event: WebhookEvent): void {}
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private onTrackPublished(event: WebhookEvent): void {}
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private onTrackUnpublished(event: WebhookEvent): void {}
 
   /**
-   * Cierre forzado idempotente (Fase 6, design.md D3/D4): si el identity que
-   * se fue tiene rol actual de administrador, se delega
-   * en CallSessionCloseService la decisión de agendar (o no) un cierre.
+   * Expulsión de un ocupante `locked` que reconecta a la principal con su
+   * token previo todavía vigente (D8 punto 2, design.md): el rechazo en
+   * join() no alcanza por sí solo porque ese token sigue siendo
+   * técnicamente válido. Ventana de fuga de 1-2s declarada y aceptada (spec
+   * breakout-rooms/expulsión-locked) -- es el techo de lo que LiveKit
+   * permite sin un hook de admisión del lado servidor.
+   *
+   * Solo aplica a `participant_joined` de la sala PRINCIPAL: un join a una
+   * mini sala (identity NUEVA, D7) no está sujeto a esta regla.
    */
-  private async onParticipantLeft(event: WebhookEvent): Promise<void> {
-    const livekitRoomSid = event.room?.sid;
+  private async onParticipantJoined(event: WebhookEvent): Promise<void> {
     const identity = event.participant?.identity;
-    if (!livekitRoomSid || !identity) return;
+    const roomCode = event.room?.name;
+    if (!identity || !roomCode || isBreakoutRoomName(roomCode)) return;
 
-    const [row] = await this.db
+    const [openAssignment] = await this.db
+      .select({
+        occupantId: callBreakoutOccupants.id,
+        assignedAt: callBreakoutOccupants.assignedAt,
+        leavePolicy: callBreakoutRooms.leavePolicy,
+      })
+      .from(callBreakoutOccupants)
+      .innerJoin(callBreakoutRooms, eq(callBreakoutOccupants.breakoutRoomId, callBreakoutRooms.id))
+      .where(
+        and(
+          eq(callBreakoutOccupants.sourceIdentity, identity),
+          isNull(callBreakoutOccupants.returnedAt),
+          isNull(callBreakoutRooms.closedAt),
+        ),
+      )
+      .limit(1);
+    if (!openAssignment) return;
+
+    // Los webhooks llegan con demora: un join previo a la asignación no es una fuga.
+    const joinedAt = Number(event.createdAt) * 1000;
+    const assignedAt = openAssignment.assignedAt?.getTime();
+    if (assignedAt && joinedAt && joinedAt < assignedAt) return;
+
+    // Mismo criterio que join(): `locked` nunca aplica a un administrador.
+    const [identityRow] = await this.db
       .select({ role: roomMembers.role })
       .from(callParticipantIdentities)
       .innerJoin(
@@ -194,9 +234,70 @@ export class CallsWebhookService {
       )
       .where(eq(callParticipantIdentities.livekitIdentity, identity))
       .limit(1);
-    if (row?.role !== 'administrador') return;
+    const isAdmin = identityRow?.role === 'administrador';
+    if (isAdmin || openAssignment.leavePolicy !== 'locked') {
+      // Volvió a la principal por un camino permitido: deja de figurar en la mini sala.
+      await this.db
+        .update(callBreakoutOccupants)
+        .set({ returnedAt: new Date() })
+        .where(
+          and(
+            eq(callBreakoutOccupants.id, openAssignment.occupantId),
+            isNull(callBreakoutOccupants.returnedAt),
+          ),
+        );
+      return;
+    }
 
-    await this.closeService.onAdminLeft(livekitRoomSid, event.room?.name ?? '');
+    // Decisión 2 (design.md "Señal de motivo de remoción") + spec
+    // call-webhook-ingestion "Señal explícita en la expulsión...locked":
+    // motivo propio, distinto de BREAKOUT_MOVE_IN/BREAKOUT_FORCED_RETURN --
+    // debe sobrevivir al tratamiento de "no es error" que el cliente aplica
+    // a esas dos. `identity` ya es el de la principal (= sub) para este
+    // camino: el ocupante reconectó CON ESE identity, así que coincide con
+    // sourceIdentity sin necesidad de una consulta extra.
+    this.roomEvents.emitBreakoutRemoval({
+      roomCode,
+      targetIdentity: identity,
+      reason: 'BREAKOUT_RETURN_LOCKED',
+    });
+    try {
+      await this.client.removeParticipant(roomCode, identity);
+    } catch {
+      this.logger.warn('No se pudo expulsar a un ocupante locked reconectado a la sala principal');
+    }
+  }
+
+  /**
+   * Cierre forzado idempotente (Fase 6, design.md D3/D4): si el identity que
+   * se fue tiene rol actual de administrador, se delega
+   * en CallSessionCloseService la decisión de agendar (o no) un cierre.
+   */
+  private async onParticipantLeft(event: WebhookEvent): Promise<void> {
+    const livekitRoomSid = event.room?.sid;
+    const identity = event.participant?.identity;
+    if (!livekitRoomSid || !identity) return;
+
+    // roomId se lee de la MISMA fila que ya se consultaba (cero consultas
+    // nuevas en el camino de webhook, tasks.md 4.4.8): es el roomId de la
+    // sala PADRE (D7) incluso para una identity de mini sala -- la
+    // atribución de grupo que CallSessionCloseService necesita para su
+    // propio gate ya está resuelta acá sin tener que volver a preguntarla.
+    const [row] = await this.db
+      .select({ role: roomMembers.role, roomId: callParticipantIdentities.roomId })
+      .from(callParticipantIdentities)
+      .innerJoin(
+        roomMembers,
+        and(
+          eq(roomMembers.roomId, callParticipantIdentities.roomId),
+          eq(roomMembers.userId, callParticipantIdentities.userId),
+        ),
+      )
+      .where(eq(callParticipantIdentities.livekitIdentity, identity))
+      .limit(1);
+    if (!row || row.role !== 'administrador') return;
+
+    await this.closeService.onAdminLeft(livekitRoomSid, event.room?.name ?? '', row.roomId);
   }
 
   /**
@@ -264,9 +365,28 @@ export class CallsWebhookService {
         : [];
       const roomId = identities[0]?.roomId ?? null;
 
+      // Vínculo de grupo (design.md D5.3, D6; spec call-participation-timeline
+      // ADDED "Vínculo de grupo en la sesión de una mini sala"). Atribución
+      // en el dispatcher: un roomCode sin '::' no dispara ninguna consulta
+      // nueva (cero costo para toda llamada sin mini salas, spec
+      // webhook-ingestion/verificación-sin-cambios); un roomCode con '::'
+      // resuelve call_breakout_rooms.livekit_room_name -> parent_livekit_room_sid.
+      // Si no hay match (grupo desconocido), degrada a null -- mismo
+      // tratamiento que una sala sin mini salas (spec
+      // webhook-ingestion/roomCode-sin-grupo): sin efecto de negocio.
+      let callGroupId: string | null = null;
+      if (parseBreakoutRoomName(roomCode)) {
+        const [breakout] = await tx
+          .select({ parentLivekitRoomSid: callBreakoutRooms.parentLivekitRoomSid })
+          .from(callBreakoutRooms)
+          .where(eq(callBreakoutRooms.livekitRoomName, roomCode))
+          .limit(1);
+        callGroupId = breakout?.parentLivekitRoomSid ?? null;
+      }
+
       await tx
         .insert(callSessions)
-        .values({ livekitRoomSid, roomId, roomCode, startedAt })
+        .values({ livekitRoomSid, roomId, roomCode, startedAt, callGroupId })
         .onConflictDoNothing();
 
       const claimed = await tx

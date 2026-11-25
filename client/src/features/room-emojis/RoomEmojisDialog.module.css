@@ -28,7 +28,7 @@
 
 .counter {
   color: var(--color-text-muted);
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 
@@ -96,7 +96,7 @@
 .name {
   min-width: 0;
   overflow: hidden;
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -187,11 +187,11 @@
   display: flex;
   align-items: baseline;
   gap: 4px;
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
 }
 
 .nameField input {
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
 }
 
 .fileRow {

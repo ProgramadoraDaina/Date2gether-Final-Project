@@ -22,6 +22,7 @@ import { isSelfMentioned, ROLE_MENTION_KEYWORDS } from '@/features/chat/mentions
 import { playMentionSound } from '@/features/chat/mentionSound';
 import { MessageText } from '@/features/chat/MessageText';
 import { useChatHistory } from '@/features/chat/useChatHistory';
+import { startsGroup } from '@/features/chat/grouping';
 import { RoomEmojiShortcuts } from '@/features/chat/RoomEmojiShortcuts';
 import { AppShell } from '@/features/navigation/AppShell';
 import { RoomEmojisDialog } from '@/features/room-emojis/RoomEmojisDialog';
@@ -35,7 +36,10 @@ import { WaitingRoom } from '@/features/rooms/WaitingRoom';
 import { useAdmissionRequest } from '@/features/rooms/useAdmissionRequest';
 import { useRoomMembers } from '@/features/rooms/useRoomMembers';
 import { useRoomNotes } from '@/features/rooms/useRoomNotes';
+import { RoomLinksPanel } from '@/features/rooms/RoomLinksPanel';
+import { linkFromMessage } from '@/features/rooms/roomLinks';
 import {
+  addRoomLink,
   ApiError,
   getRoomInfo,
   requestRoomAccess,
@@ -55,10 +59,12 @@ import { RoomEventButton } from '@/features/calls/roomEvents/RoomEventButton';
 import { RouletteWheel } from '@/features/calls/roomEvents/RouletteWheel';
 import { useRoomEvents } from '@/features/calls/roomEvents/useRoomEvents';
 import { useRoomMediaLock } from '@/features/calls/useRoomMediaLock';
+import { resolveBreakoutEndCopy } from '@/lib/breakouts';
 import { useNameFocusSetting } from '@/features/calls/useNameFocusSetting';
 import { createRoomSocket } from '@/lib/socket';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { NAME_COLOR_HEX, isNameColorId } from '@/lib/nameColors';
+import { BreakoutHostDialog } from '@/features/calls/BreakoutView';
 import styles from './page.module.css';
 
 const MeetingRoom = dynamic(() => import('@/features/calls/MeetingRoom'), { ssr: false });
@@ -173,7 +179,7 @@ export default function RoomPage() {
     const timer = setTimeout(() => setNotice(null), 'text' in notice ? 6000 : 2500);
     return () => clearTimeout(timer);
   }, [notice]);
-  const [chatTab, setChatTab] = useState<'chat' | 'presentes' | 'notas'>('chat');
+  const [chatTab, setChatTab] = useState<'chat' | 'presentes' | 'notas' | 'links'>('chat');
   const [notesTab, setNotesTab] = useState<'personal' | 'sala'>('personal');
   const [personalNotes, setPersonalNotes] = useState('');
   const [notesStatus, setNotesStatus] = useState('');
@@ -193,6 +199,8 @@ export default function RoomPage() {
     conflict: 'Otra persona actualizó las notas. Revisá ambas versiones antes de guardar.',
   }[sharedNotes.status];
   const [chatOpen, setChatOpen] = useState(true);
+  const [breakoutsOpen, setBreakoutsOpen] = useState(false);
+  const [unread, setUnread] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   // On phones each panel covers the whole screen, so opening one closes the other.
   const isPhone = () => window.matchMedia?.('(max-width: 640px)').matches ?? false;
@@ -243,6 +251,8 @@ export default function RoomPage() {
   });
   const socketRef = useRef<Socket | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  // El socket se registra una vez; lee por ref si el chat está a la vista.
+  const chatVisibleRef = useRef(true);
   const draftInputRef = useRef<HTMLInputElement>(null);
   const callSession = useCallSession();
   const { joinCall } = callSession;
@@ -264,7 +274,7 @@ export default function RoomPage() {
     error: membersError,
     changeRole,
     refetchMembers,
-  } = useRoomMembers(access ? code : undefined);
+  } = useRoomMembers(access ? code : undefined, access?.participant.userId);
   // Sin userId = sin cuenta en la sala (room_members no tiene invitados):
   // es la señal para la @mención colectiva 'invitados' en mentions.ts.
   const isGuest = !access?.participant.userId;
@@ -299,6 +309,27 @@ export default function RoomPage() {
     () => users.map(({ participantId, userName }) => ({ participantId, userName })),
     [users],
   );
+  // Mini salas (breakout-rooms, Fase 6.12): el identity de LiveKit de cada
+  // presente en la sala principal es el mismo participantId del socket
+  // (ver RoomPresence arriba), que el backend asigna como `participant.sub`
+  // del pase de sala (ver chat.gateway.ts: `participantId: participant.sub`)
+  // -- no se deriva ni inventa uno nuevo acá.
+  const breakoutParticipants = useMemo(
+    () =>
+      users.map(({ participantId, userName }) => ({
+        livekitIdentity: participantId,
+        displayName: userName,
+      })),
+    [users],
+  );
+  const participantColors = useMemo(() => {
+    const colors: Record<string, string> = {};
+    for (const { participantId, nameColor } of users) {
+      const hex = nameColorHex(nameColor);
+      if (hex) colors[participantId] = hex;
+    }
+    return colors;
+  }, [users]);
   useEffect(() => {
     setName(localStorage.getItem(NAME_KEY) ?? '');
   }, []);
@@ -405,6 +436,8 @@ export default function RoomPage() {
 
     socket.on('newMessage', (message: ChatMessage) => {
       receiveMessage(message);
+      if (message.authorName !== access.participant.name && !chatVisibleRef.current)
+        setUnread((count) => count + 1);
       // Nunca te notifica tu propio mensaje, aunque te auto-menciones.
       if (
         message.kind === 'text' &&
@@ -454,6 +487,12 @@ export default function RoomPage() {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [chatPage.entries]);
 
+  const chatVisible = chatOpen && chatTab === 'chat';
+  useEffect(() => {
+    chatVisibleRef.current = chatVisible;
+    if (chatVisible) setUnread(0);
+  }, [chatVisible]);
+
   function handleSend(e: FormEvent) {
     e.preventDefault();
     if (!draft.trim()) return;
@@ -479,6 +518,15 @@ export default function RoomPage() {
 
   function handleRoomEmojiSelect(emoji: RoomEmoji) {
     handleEmojiSelect(`:${emoji.name}: `);
+  }
+
+  async function handlePinLink(link: { url: string; title?: string }) {
+    try {
+      await addRoomLink(code, link);
+      setNotice({ text: t('Link fijado en la biblioteca') });
+    } catch (err) {
+      setNotice({ text: t(err instanceof ApiError ? err.message : 'No se pudo guardar el link') });
+    }
   }
 
   async function handleCopyLink() {
@@ -580,9 +628,20 @@ export default function RoomPage() {
   // room_finished, de forma asíncrona). "Volver a la sala" solo descarta
   // este panel; la sala y el chat siguen disponibles sin cambios (alcance
   // exclusivo a la videollamada, spec host-gate/alcance-exclusivo).
+  // Decisión 2 (design.md "Señal de motivo de remoción"): el panel
+  // terminal ya no asume host-left para cualquier cierre -- distingue
+  // breakout-closed (endedForBreakout, vuelta forzada por el admin) y
+  // breakout-locked (removedByPolicy, expulsión por política) con la
+  // copia de resolveBreakoutEndCopy, y cae al texto de host-left para
+  // cualquier otro caso (null incluido, aunque el panel solo se muestra
+  // con status 'ended').
+  const callEndedMessage =
+    callSession.endReason === 'breakout-closed' || callSession.endReason === 'breakout-locked'
+      ? resolveBreakoutEndCopy(callSession.endReason)
+      : t('La llamada terminó porque el anfitrión se desconectó.');
   const callEndedPanel = (
     <div className={styles.callLoadingPanel} role="status" aria-live="polite">
-      <p>{t('La llamada terminó porque el anfitrión se desconectó.')}</p>
+      <p>{callEndedMessage}</p>
       <div className={styles.callEndedActions}>
         <Link href="/history" className={styles.callLoadingButton}>
           {t('Ver línea de tiempo')}
@@ -611,6 +670,15 @@ export default function RoomPage() {
           onClick={() => setChatTab('chat')}
         >
           {t('Conversación')}
+          {unread > 0 && (
+            <span
+              className={styles.unreadBadge}
+              aria-hidden="true"
+              title={`${unread} ${t('sin leer')}`}
+            >
+              {unread > 99 ? '99+' : unread}
+            </span>
+          )}
         </button>
         <button
           type="button"
@@ -626,6 +694,15 @@ export default function RoomPage() {
         >
           {t('Notas')}
         </button>
+        {isPermanentRoom && (
+          <button
+            type="button"
+            className={`${styles.chatTab} ${chatTab === 'links' ? styles.chatTabActive : ''}`}
+            onClick={() => setChatTab('links')}
+          >
+            {t('Links')}
+          </button>
+        )}
       </div>
       {chatTab === 'chat' ? (
         <>
@@ -650,13 +727,6 @@ export default function RoomPage() {
               >
                 {t(chatHistory.archive ? 'Volver al chat reciente' : 'Ver archivo del chat')}
               </button>
-            )}
-            {chatHistory.archive && access.participant.userId && (
-              <Link
-                href={`/history?roomId=${encodeURIComponent(access.participant.roomId)}&roomArchive=1`}
-              >
-                {t('Ver archivo de llamadas')}
-              </Link>
             )}
           </div>
           {(chatPage.nextCursor || chatHistory.before) && (
@@ -696,7 +766,8 @@ export default function RoomPage() {
                   )}
                 </li>
               )}
-            {chatPage.entries.map((m) => {
+            {chatPage.entries.map((m, index) => {
+              const continued = !startsGroup(chatPage.entries[index - 1], m);
               // No hay un id de autor persistido por mensaje: el color se
               // resuelve cruzando por nombre contra la presencia actual.
               // Es una simplificación aceptada para v1 (ver comentario en
@@ -711,12 +782,18 @@ export default function RoomPage() {
                   name: access?.participant.name ?? '',
                   roleKeywords: myMentionRoleKeywords,
                 });
+              const pinnable =
+                isPermanentRoom && canManageEvents && m.kind === 'text'
+                  ? linkFromMessage(m.content)
+                  : null;
               return (
                 <li
                   key={m.id}
-                  className={
-                    mentionsMe ? `${styles.message} ${styles.messageMentioned}` : styles.message
-                  }
+                  className={[
+                    styles.message,
+                    mentionsMe ? styles.messageMentioned : '',
+                    continued ? styles.messageContinued : '',
+                  ].join(' ')}
                 >
                   <span className={styles.author} style={color ? { color } : undefined}>
                     {m.authorName}
@@ -730,6 +807,15 @@ export default function RoomPage() {
                       emojisByName={emojisByName}
                       mentionNames={messageMentionNames}
                     />
+                  )}
+                  {pinnable && (
+                    <button
+                      type="button"
+                      className={styles.pinLink}
+                      onClick={() => void handlePinLink(pinnable)}
+                    >
+                      {t('Fijar link')}
+                    </button>
                   )}
                 </li>
               );
@@ -813,6 +899,13 @@ export default function RoomPage() {
             })}
           </ul>
         </div>
+      ) : chatTab === 'links' ? (
+        <RoomLinksPanel
+          code={code}
+          token={access.token}
+          socket={roomSocket}
+          canManage={canManageEvents}
+        />
       ) : (
         <section className={styles.notesPanel}>
           <div className={styles.notesTabs}>
@@ -942,9 +1035,24 @@ export default function RoomPage() {
               participants={eventParticipants}
               onStartRoulette={roomEvents.startRoulette}
               onStartPoll={roomEvents.startPoll}
+              onOpenBreakouts={
+                isCurrentUserAdmin && callSession.status === 'in-call'
+                  ? () => setBreakoutsOpen(true)
+                  : undefined
+              }
             />
           }
         />
+        {isCurrentUserAdmin && (
+          <BreakoutHostDialog
+            open={breakoutsOpen && callSession.status === 'in-call'}
+            onClose={() => setBreakoutsOpen(false)}
+            roomCode={code}
+            roomToken={access.token}
+            participants={breakoutParticipants}
+            currentParticipantId={access.participant.sub}
+          />
+        )}
         <button
           type="button"
           className={styles.sidebarToggleButton}
@@ -1027,6 +1135,10 @@ export default function RoomPage() {
                       videoLocked={mediaLock.videoLocked}
                       onSetAudioLock={mediaLock.setAudioLock}
                       onSetVideoLock={mediaLock.setVideoLock}
+                      participants={breakoutParticipants}
+                      participantColors={participantColors}
+                      roomSocket={roomSocket}
+                      currentParticipantId={access.participant.sub}
                       nameFocusEnabled={nameFocus.enabled}
                       onSetNameFocus={nameFocus.setEnabled}
                     />
@@ -1067,6 +1179,11 @@ export default function RoomPage() {
               aria-label={chatOpen ? t('Ocultar chat') : t('Mostrar chat')}
               title={chatOpen ? t('Ocultar chat') : t('Mostrar chat')}
             >
+              {!chatOpen && unread > 0 && (
+                <span className={styles.unreadDot} aria-hidden="true">
+                  {unread > 99 ? '99+' : unread}
+                </span>
+              )}
               {chatOpen ? (
                 <CloseIcon />
               ) : (

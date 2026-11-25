@@ -1,0 +1,1 @@
+ALTER TABLE "call_breakout_rooms" ADD COLUMN "join_policy" varchar(16) DEFAULT 'admin_only' NOT NULL;

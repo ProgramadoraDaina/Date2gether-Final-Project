@@ -2,7 +2,12 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react';
 import { useLanguageStore } from '../../translation/store';
 
-jest.mock('@/lib/api', () => ({ getSessionTranscript: jest.fn() }));
+jest.mock('@/lib/api', () => ({
+  ApiError: Error,
+  getSessionTranscript: jest.fn(),
+  getCallSummary: jest.fn(() => Promise.resolve(null)),
+  generateCallSummary: jest.fn(),
+}));
 
 async function renderTranscript() {
   const { SessionTranscript } = await import('./SessionTranscript');
@@ -33,6 +38,7 @@ describe('Acta en el historial', () => {
     expect(screen.getByText('Ana')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Descargar TXT' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Descargar PDF' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Resumir con IA' })).toBeInTheDocument();
   });
 
   it('si nadie activó los subtítulos lo dice, sin botones de descarga', async () => {
@@ -41,6 +47,7 @@ describe('Acta en el historial', () => {
     await renderTranscript();
     expect(await screen.findByText('Esta llamada no tiene transcripción.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Descargar TXT' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Resumir con IA' })).not.toBeInTheDocument();
   });
 
   it('si falla la carga muestra el error', async () => {

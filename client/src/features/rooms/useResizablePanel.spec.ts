@@ -15,7 +15,13 @@ describe('useResizablePanel', () => {
 
   it('arranca en defaultWidth cuando no hay nada guardado', () => {
     const { result } = renderHook(() =>
-      useResizablePanel({ storageKey: 'panel-a', defaultWidth: 300, min: 200, max: 400, edge: 'right' }),
+      useResizablePanel({
+        storageKey: 'panel-a',
+        defaultWidth: 300,
+        min: 200,
+        max: 400,
+        edge: 'right',
+      }),
     );
     expect(result.current.width).toBe(300);
   });
@@ -23,7 +29,13 @@ describe('useResizablePanel', () => {
   it('restaura el ancho guardado si está dentro del rango', () => {
     localStorage.setItem('panel-b', '350');
     const { result } = renderHook(() =>
-      useResizablePanel({ storageKey: 'panel-b', defaultWidth: 300, min: 200, max: 400, edge: 'right' }),
+      useResizablePanel({
+        storageKey: 'panel-b',
+        defaultWidth: 300,
+        min: 200,
+        max: 400,
+        edge: 'right',
+      }),
     );
     expect(result.current.width).toBe(350);
   });
@@ -31,14 +43,26 @@ describe('useResizablePanel', () => {
   it('ignora un valor guardado fuera de rango o no numérico', () => {
     localStorage.setItem('panel-c', '9999');
     const { result } = renderHook(() =>
-      useResizablePanel({ storageKey: 'panel-c', defaultWidth: 300, min: 200, max: 400, edge: 'right' }),
+      useResizablePanel({
+        storageKey: 'panel-c',
+        defaultWidth: 300,
+        min: 200,
+        max: 400,
+        edge: 'right',
+      }),
     );
     expect(result.current.width).toBe(300);
   });
 
   it('arrastrar actualiza el ancho, lo recorta al rango y lo persiste al soltar', () => {
     const { result } = renderHook(() =>
-      useResizablePanel({ storageKey: 'panel-d', defaultWidth: 300, min: 200, max: 400, edge: 'right' }),
+      useResizablePanel({
+        storageKey: 'panel-d',
+        defaultWidth: 300,
+        min: 200,
+        max: 400,
+        edge: 'right',
+      }),
     );
 
     act(() => {
@@ -67,7 +91,13 @@ describe('useResizablePanel', () => {
     const removeSpy = jest.spyOn(window, 'removeEventListener');
 
     const { result, unmount } = renderHook(() =>
-      useResizablePanel({ storageKey: 'panel-e', defaultWidth: 300, min: 200, max: 400, edge: 'left' }),
+      useResizablePanel({
+        storageKey: 'panel-e',
+        defaultWidth: 300,
+        min: 200,
+        max: 400,
+        edge: 'left',
+      }),
     );
 
     act(() => {
@@ -82,7 +112,9 @@ describe('useResizablePanel', () => {
     // colgados en `window` para siempre.
     unmount();
 
-    const moveListenersRemoved = removeSpy.mock.calls.filter(([type]) => type === 'mousemove').length;
+    const moveListenersRemoved = removeSpy.mock.calls.filter(
+      ([type]) => type === 'mousemove',
+    ).length;
     const upListenersRemoved = removeSpy.mock.calls.filter(([type]) => type === 'mouseup').length;
     expect(moveListenersRemoved).toBe(1);
     expect(upListenersRemoved).toBe(1);

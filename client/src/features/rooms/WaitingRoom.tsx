@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { ThemeToggle } from '@/features/theme/ThemeToggle';
+import { LanguageToggle } from '@/features/translation/LanguageToggle';
 import { useEffect, useRef, useState } from 'react';
 import { BrandMark } from '@/features/brand/BrandMark';
 import { getNextScheduleOccurrence } from '@/lib/api';
@@ -54,6 +56,10 @@ export function WaitingRoom({
 
   return (
     <section className={styles.card} aria-labelledby="waiting-title">
+      <div className={styles.toggles}>
+        <ThemeToggle />
+        <LanguageToggle />
+      </div>
       <div className={styles.panels}>
         <div className={styles.info}>
           <h1 id="waiting-title" className={styles.title} ref={titleRef} tabIndex={-1}>

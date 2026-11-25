@@ -11,6 +11,7 @@ let searchParams = new URLSearchParams();
 jest.mock('next/navigation', () => ({
   usePathname: () => '/history',
   useSearchParams: () => searchParams,
+  useRouter: () => ({ push: jest.fn() }),
 }));
 jest.mock('@/features/translation/useTranslation', () => {
   const t = (key: string) => key;
@@ -165,7 +166,7 @@ describe('HistoryPage', () => {
     );
   });
 
-  it('con ?roomId= muestra solo las llamadas de esa sala y ofrece volver a todo el historial', async () => {
+  it('con ?roomId= muestra solo las llamadas de esa sala con el filtro elegido', async () => {
     searchParams = new URLSearchParams({ roomId: 'room-2' });
     const { isLoggedIn } = await import('@/lib/auth');
     const { getCallHistory } = await import('@/lib/api');
@@ -185,13 +186,10 @@ describe('HistoryPage', () => {
     const HistoryPage = (await import('./page')).default;
     render(<HistoryPage />);
 
-    await screen.findByText('Mostrando solo las llamadas de Cita de los lunes.');
+    await screen.findByText('Cita de los lunes', { selector: 'strong' });
     expect(getCallHistory).toHaveBeenCalledWith('recent', 'room-2', null, expect.any(AbortSignal));
     expect(screen.queryByText('Reunión de Daina')).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Ver todo el historial' })).toHaveAttribute(
-      'href',
-      '/history',
-    );
+    expect(screen.getByRole('combobox', { name: 'Filtrar por sala' })).toHaveValue('room-2');
     expect(screen.getByRole('link', { name: 'Ver transcripción' })).toHaveAttribute(
       'href',
       '/history/session-2#transcript',

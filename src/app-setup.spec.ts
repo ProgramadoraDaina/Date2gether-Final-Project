@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { Controller, Get, Module, Post, Req, type RawBodyRequest } from '@nestjs/common';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Controller, Get, Logger, Module, Post, Req, type RawBodyRequest } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { Request } from 'express';
@@ -24,7 +24,13 @@ class RawBodyProbeModule {}
 
 const openApps: NestExpressApplication[] = [];
 
+beforeEach(() => {
+  vi.stubEnv('CORS_ORIGIN', 'http://localhost:3002');
+});
+
 afterEach(async () => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
   await Promise.all(openApps.splice(0).map((app) => app.close()));
 });
 
@@ -133,5 +139,61 @@ describe('bootstrap: client IP behind the reverse proxy', () => {
     const body = (await response.json()) as { ip: string };
 
     expect(body.ip).toBe('203.0.113.7');
+  });
+});
+
+@Controller()
+class FailingController {
+  @Get('boom')
+  boom() {
+    throw new Error('Failed query: select "password_hash" from "users"');
+  }
+}
+
+@Module({ controllers: [FailingController] })
+class FailingModule {}
+
+describe('bootstrap: R7 (errores y CORS)', () => {
+  it('createApp() falla al arrancar si CORS_ORIGIN falta', async () => {
+    vi.stubEnv('CORS_ORIGIN', '');
+
+    await expect(createApp(FailingModule)).rejects.toThrow(/CORS_ORIGIN/);
+  });
+
+  it('un error inesperado responde 500 genérico sin filtrar SQL', async () => {
+    vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const app = await createApp(FailingModule);
+    const port = await listenOnEphemeralPort(app);
+
+    const response = await fetch(`http://127.0.0.1:${port}/boom`);
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ statusCode: 500, message: 'Internal server error' });
+  });
+
+  it('CORS responde solo con el origen configurado, no con *', async () => {
+    const app = await createApp(FailingModule);
+    const port = await listenOnEphemeralPort(app);
+
+    const response = await fetch(`http://127.0.0.1:${port}/boom`, {
+      headers: { Origin: 'http://localhost:3002' },
+    });
+
+    expect(response.headers.get('access-control-allow-origin')).toBe('http://localhost:3002');
+  });
+
+  it('un body JSON mayor al límite responde 413 genérico (no 500)', async () => {
+    vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const app = await createApp(RawBodyProbeModule);
+    const port = await listenOnEphemeralPort(app);
+
+    const response = await fetch(`http://127.0.0.1:${port}/probe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ blob: 'x'.repeat(200 * 1024) }),
+    });
+
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({ statusCode: 413, message: 'Payload Too Large' });
   });
 });

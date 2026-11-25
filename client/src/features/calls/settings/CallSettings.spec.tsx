@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { useLanguageStore } from '../../translation/store';
+import { useCallLayoutStore } from '../layout/store';
 import { CallSettingsButton } from './CallSettings';
 import { useCallSettingsStore } from './store';
 
@@ -135,5 +136,47 @@ describe('Ajustes de la llamada', () => {
     expect(
       screen.queryByRole('checkbox', { name: 'Enfocar automáticamente al nombrar a alguien' }),
     ).not.toBeInTheDocument();
+  });
+
+  it('desde la tuerca se editan los mosaicos de la llamada en vivo y se vuelve al menú', () => {
+    useCallLayoutStore.setState({ enabled: false, zones: [] });
+    render(
+      <CallSettingsButton
+        buttonClassName="btn"
+        isAdmin={false}
+        audioLocked={false}
+        videoLocked={false}
+        onSetAudioLock={jest.fn()}
+        onSetVideoLock={jest.fn()}
+        nameFocusEnabled={false}
+        onSetNameFocus={jest.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Ajustes de la llamada' }));
+    fireEvent.click(screen.getByRole('button', { name: /Mosaicos/ }));
+    expect(useCallLayoutStore.getState().editing).toBe(true);
+    expect(
+      screen.getByText(
+        'Las personas van llenando la Zona 1, después la 2, y así. Las que no entran van a la última.',
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('Usar mi distribución en las llamadas'));
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar zona' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar zona' }));
+    const firstZone = screen.getByRole('group', { name: 'Zona 1' });
+    fireEvent.click(within(firstZone).getByRole('button', { name: /Zona 1/ }));
+    fireEvent.change(within(firstZone).getByLabelText('Personas'), { target: { value: '2' } });
+
+    expect(useCallLayoutStore.getState()).toMatchObject({
+      enabled: true,
+      zones: [{ capacity: 2 }, { capacity: 4 }],
+    });
+    // In the call the screen itself is the preview.
+    expect(screen.queryByTestId('layout-preview')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Volver' }));
+    expect(screen.getByRole('button', { name: /Mosaicos/ })).toBeInTheDocument();
+    expect(useCallLayoutStore.getState().editing).toBe(false);
   });
 });

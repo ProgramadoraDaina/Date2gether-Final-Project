@@ -34,7 +34,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--color-border);
   background: var(--color-chip-bg);
   color: var(--color-text);
@@ -43,13 +43,23 @@
 }
 
 .iconButton:hover {
-  border-color: var(--color-accent);
+  background: var(--color-overlay);
+  border-color: var(--color-text-muted);
 }
 
-.iconButtonActive {
+.iconButtonActive,
+.iconButtonActive:hover {
   background: var(--color-accent);
   border-color: var(--color-accent);
   color: var(--color-accent-contrast);
+}
+
+/* Mic o cámara apagados: tinte plano en rojo para que no se confunda con "prendido". */
+.iconButtonMuted,
+.iconButtonMuted:hover {
+  background: color-mix(in srgb, var(--color-error) 14%, var(--color-raised));
+  border-color: var(--color-error);
+  color: var(--color-error);
 }
 
 /* Dock flotante centrado, estilo pill, que imita la barra de controles de
@@ -69,17 +79,25 @@
   width: fit-content;
   max-width: calc(100% - 24px);
   margin: -28px auto var(--space-3);
-  --dock-pad-y: var(--space-3);
-  padding: var(--dock-pad-y) var(--space-4);
-  border-radius: 999px;
+  --dock-pad-y: var(--space-2);
+  padding: var(--dock-pad-y) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   background: var(--color-surface);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-overlay);
 }
 
+/* Grupos medios · interacción · sala, separados por un divisor de 1px. */
 .controlsGroup {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1);
+  padding-right: var(--space-3);
+  border-right: 1px solid var(--color-border);
+}
+
+.controlsGroup:empty {
+  display: none;
 }
 
 /* Selector de micrófono/cámara de LiveKit: trae padding de píldora y su flecha
@@ -89,7 +107,7 @@
   height: 32px;
   padding: 0;
   border: 1px solid var(--color-border);
-  border-radius: 50%;
+  border-radius: var(--radius-sm);
   background: var(--color-chip-bg);
   color: var(--color-text);
 }
@@ -102,7 +120,7 @@
   border-color: var(--color-accent);
 }
 
-/* Botón de colgar: ícono redondo con la misma forma que .iconButton, pero
+/* Botón de colgar: misma forma que .iconButton, más ancho, pero
    con esquema "danger" (fondo var(--color-error)). El color del ícono usa
    var(--color-bg) a propósito en vez de un blanco fijo: ese token ya es
    claro en tema claro y oscuro en tema oscuro, que es justo la polaridad
@@ -110,13 +128,13 @@
    error (oscuro en claro, claro en oscuro) sin tener que duplicar reglas
    por tema. */
 .hangUpButton {
-  width: 44px;
+  width: 56px;
   height: 44px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
+  border-radius: var(--radius-sm);
   border: none;
   background: var(--color-error);
   color: var(--color-bg);
@@ -128,6 +146,55 @@
   filter: brightness(0.9);
 }
 
+.mutedNudge {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 8px 8px 8px 14px;
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius-sm);
+  background: var(--color-overlay);
+  box-shadow: var(--shadow-overlay);
+  color: var(--color-text);
+  font-size: 14px;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  animation: nudge-in var(--dur-pop) var(--ease-out);
+}
+
+.mutedNudgeAction {
+  width: auto;
+  height: 30px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.mutedNudgeClose {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  border: 0;
+}
+
+@keyframes nudge-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mutedNudge {
+    animation: none;
+  }
+}
+
 .confirmDialog {
   width: min(360px, calc(100% - 32px));
   padding: var(--space-5);
@@ -136,6 +203,44 @@
   background: var(--color-surface);
   color: var(--color-text);
   box-shadow: var(--shadow-md);
+}
+
+.shortcutsDialog {
+  width: min(420px, calc(100% - 32px));
+}
+
+.shortcutsTitle {
+  margin: 0 0 var(--space-4);
+  font-size: 16px;
+}
+
+.shortcutsList {
+  display: grid;
+  margin: 0 0 var(--space-5);
+}
+
+.shortcutRow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 14px;
+}
+
+.shortcutRow dt,
+.shortcutRow dd {
+  margin: 0;
+}
+
+.shortcutRow kbd {
+  padding: 2px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-raised);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .confirmDialog::backdrop {
@@ -166,12 +271,29 @@
   filter: brightness(0.9);
 }
 
+/* Decisión 5 (design.md): el botón + popover de Mini salas se movió a
+   BreakoutView.module.css -- BreakoutView ahora es dueña de su propio
+   disparador y popover (único punto de montaje). */
+
 @media (max-width: 640px) {
+  /* En celular los grupos se aplanan: dos filas parejas en vez de divisores colgando al final de cada línea. */
   .controlsDock {
     --dock-pad-y: 8px;
-    gap: 6px;
-    padding: var(--dock-pad-y) 10px;
+    width: calc(100% - 16px);
+    max-width: 420px;
+    gap: 8px 6px;
+    padding: var(--dock-pad-y) 8px;
     margin-top: -16px;
+  }
+
+  .controlsGroup {
+    display: contents;
+  }
+
+  .iconButton,
+  .hangUpButton {
+    width: 42px;
+    height: 42px;
   }
 }
 
@@ -190,7 +312,7 @@
 
 .controlsGroup :global(.lk-device-menu-heading) {
   padding: 6px 8px 4px;
-  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;

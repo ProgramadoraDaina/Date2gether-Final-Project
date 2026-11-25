@@ -642,7 +642,113 @@ Las salas se podían crear, listar (`/rooms/mine`) y renombrar, pero no borrar. 
 - Los clientes conectados reciben `roomDeleted` pero la pantalla de sala todavía no reacciona a ese evento más allá de perder la conexión; queda como mejora.
 - Las sesiones de llamada de una sala borrada siguen apareciendo en la línea de tiempo de quienes participaron, con `roomName: null` (la consulta usa `leftJoin`). Las filas de `call_history` (listado "Historial") sí se borran junto con la sala.
 
-## 25. IP real del cliente detrás de Caddy (PROXY protocol y `trust proxy`)
+---
+
+## 24. Mini salas: separación `joinPolicy`/`leavePolicy`, señal explícita de motivo de remoción y mitigación de R1 (admin sola trasladándose)
+
+**Fecha:** 2026-11-23
+**Rama:** `feature/breakout-rooms`
+
+### Contexto
+
+Después de desplegar las mini salas, aparecieron tres problemas de UX/robustez distintos pero relacionados, todos resueltos en el mismo cambio porque el diseño de uno condicionaba al de los otros (ver `openspec/changes/breakout-rooms-ux-fix/`):
+
+1. **R1 — riesgo de carrera cuando la única administradora conectada se traslada sola a una mini sala.** `moveIn` inserta la asignación nueva y recién después ejecuta `removeParticipant` sobre la identity vieja, lo que dispara `onAdminLeft` → `hasConnectedAdmin` evaluando presencia con la mini sala todavía vacía (la persona no llegó a reconectarse) → se agenda el cierre del grupo a T+15s. Si la reconexión (pedir token nuevo + `switchRoom`) tarda más de 15s — red lenta, cold start del endpoint de token — `claimAndClose` borra la principal y las mini salas sin que nadie haya hecho nada mal.
+2. **Expulsión indistinguible.** El cliente recibía `PARTICIPANT_REMOVED` de LiveKit en tres situaciones muy distintas (traslado en curso, vuelta forzada por el admin, expulsión por política `locked`) y las trataba todas igual (`call.failed(...)`), mostrando un error genérico donde no correspondía.
+3. **Auto-ingreso a mini salas.** No existía ninguna forma de que alguien se moviera a una mini sala por su cuenta: todo traslado requería que un admin lo ejecutara desde el panel.
+
+### Decisión
+
+- **R1**: en vez de ensanchar la ventana de gracia (retrasa *todo* cierre forzado legítimo) o introducir una supresión en memoria (no sobrevive un restart y crea un ciclo de dependencias entre servicios), `hasConnectedAdmin` ahora consulta `hasAdminAssignmentInFlight(roomId)` **solo** cuando la evaluación de presencia iba a devolver `false` y hay más de una sala en el grupo: un admin con una fila de `call_breakout_occupants` abierta y con `assigned_at` de menos de 30s cuenta como "en tránsito", sin necesitar ninguna columna ni tabla nueva (la fila ya existe, se escribe antes de `removeParticipant`). Cero costo en el camino feliz (llamadas sin mini salas) y cero costo cuando la presencia ya resuelve `true`.
+- **Señal de motivo de remoción**: un evento de socket nuevo, `breakout:removal`, viaja **antes** de `removeParticipant` (mismo orden que `breakout:assigned`) con un código cerrado (`BREAKOUT_MOVE_IN` / `BREAKOUT_FORCED_RETURN` / `BREAKOUT_RETURN_LOCKED`) y nada de texto — la traducción vive del lado del cliente. `useRoomSocket.consumeRemovalNotice()` lo guarda en un `useRef` (no en estado) con lectura destructiva y ventana de frescura de 10s, porque `onDisconnected` dispara a milisegundos del evento y un `setState` puede no haber flusheado todavía — leer estado stale ahí clasificaría una expulsión legítima como fallo genérico.
+- **`joinPolicy` separado de `leavePolicy`**: columna aditiva nueva (`admin_only` por default) en `call_breakout_rooms`, exclusivamente para gobernar quién puede **entrar** por iniciativa propia; `leavePolicy` sigue gobernando exclusivamente la vuelta a la principal. Son preguntas de producto independientes (una mini sala puede ser fácil de entrar y difícil de dejar, o viceversa) y mezclarlas en una sola columna haría imposible expresar esa combinación.
+- **Frontend**: los dos *gates* que antes vivían por separado (`BreakoutPanel` solo-admin, `BreakoutBanner` solo-ocupante) se colapsan en un selector puro de 4 estados (`resolveBreakoutViewState`: `guest-idle` / `guest-occupant` / `host` / `host-occupant`) y un único punto de montaje (`BreakoutView`), estructuralmente incapaz de renderizar dos vistas de mini sala a la vez — el bug que motivó este cambio.
+
+### Consecuencias
+
+- La mitigación de R1 cubre ~30s desde `assigned_at`; una reconexión más lenta todavía no está protegida por este marcador (aunque sigue protegida por la convergencia de `room_finished` de LiveKit, no por un cierre forzado).
+- `room_finished` de la sala principal **no** ejecuta la cascada de cierre de mini salas (divergencia respecto del diseño original de breakout-rooms) — eso es lo que protege hoy a la admin sola; fijado como contrato por un test de caracterización (R1-C5) para que un cambio futuro no lo rompa sin darse cuenta.
+- `BREAKOUT_FORCED_RETURN` termina la sesión del cliente (no hay reingreso automático a la principal todavía); la persona vuelve a entrar con un clic desde la página de la sala.
+
+### Verificación
+
+Backend: `pnpm vitest run` — 549 tests, 535 pasan (las 14 fallas restantes son integración contra Postgres sin conexión local disponible, preexistentes a este cambio, mismo set antes/después confirmado con `git stash`). Frontend: `pnpm jest` en `client/` — 68 suites / 478 tests, todo verde. `tsc --noEmit` sin errores nuevos en ninguno de los dos paquetes (los únicos preexistentes son los ya documentados en `calls-webhook.service.spec.ts`, dos specs de integración de `rooms`, y el uso de `exact` en `page.spec.tsx` de `room/[code]`, ninguno tocado por este cambio).
+
+---
+
+## 25. Endurecimiento R7: filtro global de excepciones explícito y CORS sin fallback `*`
+
+**Fecha:** 2026-11-25
+**Rama:** `fix/r7-exception-filter-and-cors`
+
+### Contexto
+
+El requisito R7 del curso exige que los errores del backend nunca expongan trazas, consultas ni datos internos al cliente, y que CORS apunte al dominio propio del frontend, no a `*`. Antes de este cambio, el primer punto dependía solo del comportamiento por defecto de Nest y el segundo tenía un fallback silencioso: `process.env.CORS_ORIGIN ?? '*'` tanto en `app-setup.ts` como en el decorador de `ChatGateway`.
+
+### Decisión
+
+- **Filtro global explícito (`src/common/all-exceptions.filter.ts`).** Las `HttpException` (validación, 401, 403, 404, throttling) se devuelven con su status y body originales, así que el formato que ya consumen cliente y tests no cambia. Cualquier otro error se registra completo (mensaje, stack, método y URL) con el `Logger` de Nest y el cliente recibe siempre `{ statusCode: 500, message: 'Internal server error' }`. Se registra en `createApp()` para que lo ejerciten también los tests. Solo responde en contexto `http`; los filtros globales de `useGlobalFilters` no alcanzan a los gateways, así que el chat por Socket.IO y el webhook de LiveKit no cambian.
+- **Errores 4xx de body-parser y `headersSent`.** Los errores que no son `HttpException` pero traen `status`/`statusCode` 4xx y `expose === true` (p. ej. 413 por body demasiado grande, 415) conservan su status; el body solo lleva la frase estándar (`http.STATUS_CODES`), nunca `err.message`, y se registran como `warn` sin stack. Un 5xx o un `expose` distinto de `true` sigue siendo el 500 genérico. Si `response.headersSent` ya es `true` (handlers con `@Res()`), el filtro no escribe nada: registra el error con método y URL y cierra la respuesta.
+- **CORS con falla temprana (`src/common/cors-origin.ts`).** `getCorsOrigin()` lanza un error claro si `CORS_ORIGIN` falta, está vacío, es `*` o no es un origen simple (`new URL(v).origin === v`: sin barra final, path ni esquema faltante; formato esperado `https://app.example.com`). `createApp()` lo llama antes de crear la app, por lo que el servidor no arranca (falla en el boot, no en la primera request). Solo se admite un origen único, que es lo que usan hoy desarrollo, e2e y EC2.
+- **CORS del gateway en runtime (`CorsIoAdapter`).** El decorador `@WebSocketGateway` se evalúa al importar el módulo, antes de que `ConfigModule` cargue el `.env`, de modo que leer `process.env` ahí era frágil. El origen se inyecta ahora desde un `IoAdapter` propio registrado en `createApp()`.
+
+### Justificación
+
+- Los errores de Drizzle/pg incluyen el SQL y los parámetros en `error.message`. Confiar en el default de Nest hoy los oculta, pero un filtro explícito con tests que lo prueban es evidencia defendible de R7 y no depende de un detalle de implementación del framework.
+- Un fallback a `*` convierte un olvido de configuración en una apertura silenciosa de la API. Es preferible que el despliegue falle de forma visible.
+
+### Consecuencias
+
+- Todo entorno que arranque la app debe definir `CORS_ORIGIN`: `.env` local (ver `.env.example`), Playwright (`playwright.config.ts`) y EC2 (`deploy/ec2/configure.py`) ya lo hacen. Cualquier script o test nuevo que llame a `createApp()` debe definirlo también.
+- Los errores 500 pierden el detalle en la respuesta; para diagnosticar hay que mirar los logs del servidor.
+
+---
+
+## 26. Resumen de llamadas con IA: Gemini API (nivel gratuito) llamada solo desde el backend
+
+**Fecha:** 2026-11-25
+**Rama:** `feature/ai-call-summary`
+
+### Contexto
+
+El curso pide una funcionalidad de producto que consuma un modelo de IA por API, siempre desde el backend, con la clave en variables de entorno, manejo de errores y límites de uso. La funcionalidad elegida es resumir la transcripción guardada de una llamada del historial.
+
+El proveedor se eligió después de probar Amazon Bedrock el 2026-11-25 en la cuenta AWS del proyecto (plan FREE):
+
+- Todos los modelos Claude respondieron `AccessDenied` ("not available for this account").
+- Amazon Nova Lite fue limitado ya en la primera llamada con "Too many tokens per day".
+- Los perfiles de inferencia entre Regiones no están permitidos por la cuenta.
+
+### Decisión
+
+- **Proveedor: Google Gemini API, nivel gratuito**, con el SDK oficial `@google/genai`. Modelo por defecto `gemini-3.5-flash-lite`, configurable con `GEMINI_MODEL`. Se verificó en la página de precios de la Gemini API que figura con costo cero en el nivel gratuito y que no está marcado como obsoleto (`gemini-2.5-flash` figura como obsoleto desde el 1 de diciembre de 2026).
+- **Clave solo en el backend** (`GEMINI_API_KEY`). Nunca se envía al cliente ni se registra en logs. Si falta, la aplicación arranca igual y el endpoint responde 503 "AI summaries are not configured".
+- **Un resumen por sesión.** Tabla `call_summaries` (migración `0031_call_summaries`) con la sesión como clave primaria y borrado en cascada con `call_sessions`. `POST` solo llama al modelo si no existe resumen; `GET` devuelve el guardado, aunque se haya pedido otro idioma después: la respuesta incluye `language` y el cliente avisa cuando difiere del idioma de la interfaz. Esto protege la cuota gratuita y evita pagar o gastar cuota dos veces por la misma llamada. Se eligió una tabla propia y no columnas en `call_sessions` para no ensanchar una tabla que escriben los webhooks de LiveKit y para poder guardar modelo, idioma y autor.
+- **Autorización reutilizada.** Los endpoints `GET/POST /calls/sessions/:sessionId/summary` validan `sessionId` como UUID (`ParseUUIDPipe`, 400 si no lo es), usan `JwtAuthGuard` y la misma regla que el acta (`TranscriptHistoryService.requireSession`): solo quien participó de la sesión, con 404 tanto si no existe como si no participó.
+- **Límite de tasa más estricto** en el `POST`: 5 por minuto (el global es 60), con `@Throttle` de `@nestjs/throttler`.
+- **Prompt seguro.** La instrucción de sistema indica que la transcripción son datos y no instrucciones; la transcripción va entre delimitadores `<transcript>` y se neutraliza cualquier cierre inyectado. Si supera 100 000 caracteres se responde 413 en lugar de truncar en silencio. Sin frases, 422.
+- **Errores controlados.** Cuota agotada del proveedor: 429 con `code: "AI_QUOTA"` (el límite propio de 5 por minuto también responde 429, pero sin ese código, y el cliente muestra un mensaje distinto). Red, error del proveedor o respuesta bloqueada o vacía: 503.
+- **Solo se guardan generaciones completas.** Se lee `finishReason` del primer candidato: solo `STOP` es válido. `MAX_TOKENS` (o cualquier otro fin distinto de `STOP`) se trata como no disponible (503) y los motivos de seguridad, lista de bloqueo, contenido prohibido, recitación o datos personales sensibles como bloqueo; en ambos casos no se persiste nada. El límite de salida es de 2048 tokens (`MAX_OUTPUT_TOKENS`).
+- **Línea única por entrada.** Al armar el prompt, los saltos de línea (CR, LF, NEL, U+2028, U+2029) del nombre y del texto se reemplazan por espacios, para que una frase no pueda falsificar líneas `[hh:mm:ss] Nombre:` de la transcripción.
+- **Sesiones en curso.** No se agrega una regla 409: `requireSession` exige filas en `call_session_participants`, que se insertan en la misma transacción que fija `ended_at` (`calls-webhook.service.ts`), por lo que una llamada en curso responde 404 y nunca llega a generar. El cliente solo recibe mensajes genéricos; el detalle del SDK queda en los logs del servidor, sin la clave.
+- **Proveedor detrás de una interfaz** (`AiTextGenerator`), de modo que cambiar de modelo o proveedor solo toca una clase.
+
+### Alternativas descartadas
+
+- **API de Anthropic (de pago):** buena calidad, pero exige tarjeta y costo recurrente para un proyecto de curso.
+- **Plan de pago de AWS (Bedrock):** habilitaría Claude, pero implica salir del plan gratuito y asumir costos.
+- **Amazon Nova Lite en Bedrock:** probado y limitado desde la primera llamada.
+
+### Consecuencias y tradeoffs
+
+- El nivel gratuito tiene límites de solicitudes y tokens por minuto y por día; por eso existen el resumen único por sesión y el límite de 5 por minuto. Una cuota agotada se muestra al usuario como un mensaje claro, sin romper la página.
+- Google puede usar el contenido enviado en el nivel gratuito para mejorar sus productos. Es aceptable para datos de demostración, pero debe informarse: no se deben resumir llamadas con datos sensibles reales.
+- Se suma un segundo proveedor y una segunda clave para administrar (`GEMINI_API_KEY`, y opcionalmente `GEMINI_MODEL`, en el entorno del backend y en EC2).
+- La numeración de la migración (0031) puede colisionar con otras ramas aún sin integrar que usan el mismo número; hay que renumerar la que se integre segunda.
+
+---
+
+## 27. IP real del cliente detrás de Caddy (PROXY protocol y `trust proxy`)
 
 **Fecha:** 2026-11-24
 **Rama:** `fix/trust-proxy`

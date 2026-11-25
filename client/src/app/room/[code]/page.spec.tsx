@@ -14,6 +14,7 @@ jest.mock('@/features/translation/useTranslation', () => {
 const mockRoomMembersState = {
   members: [] as unknown[],
   isCurrentUserAdmin: false,
+  currentUserRole: undefined as string | undefined,
   error: null as string | null,
   changeRole: jest.fn(),
   refetchMembers: jest.fn(),
@@ -37,6 +38,8 @@ jest.mock('@/lib/api', () => ({
     updatedAt: '2026-11-04T00:00:00Z',
   }),
   saveRoomNotes: jest.fn(),
+  addRoomLink: jest.fn<() => Promise<unknown>>().mockResolvedValue({}),
+  getRoomLinks: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
   getNextScheduleOccurrence: jest
     .fn<() => Promise<unknown>>()
     .mockResolvedValue({ nextOccurrenceAt: null }),
@@ -80,18 +83,26 @@ let mockError: string | null = null;
 // setean a mano junto con mockStatus.
 let mockSession: { url: string; token: string; roomName: string; participantLimit: number } | null =
   null;
+// Decisión 2 (design.md "Señal de motivo de remoción"): mutable, igual que
+// mockStatus/mockError -- por defecto 'host-left' (el caso D5 ya cubierto),
+// pero los tests de [5.5] lo cambian para probar el mensaje de
+// resolveBreakoutEndCopy sin depender de un socket real disparando
+// endedForBreakout()/removedByPolicy().
+let mockEndReason: 'host-left' | 'breakout-closed' | 'breakout-locked' | null = 'host-left';
 const mockEndedByHost = jest.fn();
 jest.mock('@/features/calls/useCallSession', () => ({
   useCallSession: () => ({
     status: mockStatus,
     error: mockError,
-    endReason: mockStatus === 'ended' ? 'host-left' : null,
+    endReason: mockStatus === 'ended' ? mockEndReason : null,
     session: mockSession,
     joinCall: mockJoinCall,
     leaveCall: mockLeaveCall,
     connected: jest.fn(),
     failed: jest.fn(),
     endedByHost: mockEndedByHost,
+    endedForBreakout: jest.fn(),
+    removedByPolicy: jest.fn(),
   }),
 }));
 
@@ -101,6 +112,7 @@ describe('RoomPage: enlace de invitado', () => {
     jest.clearAllMocks();
     mockStatus = 'in-call';
     mockError = null;
+    mockEndReason = 'host-left';
     mockRoomMembersState.isCurrentUserAdmin = false;
   });
   it('solicita el nombre y no conecta automáticamente al abrir el enlace', async () => {
@@ -337,6 +349,45 @@ describe('RoomPage: enlace de invitado', () => {
       expect.objectContaining({ socket: fake, isAdmin: true }),
     );
   });
+
+  // Decisión 5 (design.md "Frontend: un punto de montaje...", tasks.md
+  // 5.6): mismo patrón que PollPanel (page.tsx:951) -- BreakoutView
+  // necesita la identity propia para filtrar su fila del selector genérico
+  // de traslado y habilitar el auto-traslado explícito.
+  it('[5.6] le pasa a MeetingRoom currentParticipantId con el sub del propio participante', async () => {
+    mockSession = {
+      url: 'wss://media.example.test',
+      token: 'token',
+      roomName: 'abc-defg-hij',
+      participantLimit: 6,
+    };
+    const { requestRoomAccess } = await import('@/lib/api');
+    const { createRoomSocket } = await import('@/lib/socket');
+    (requestRoomAccess as jest.Mock<typeof requestRoomAccess>).mockResolvedValue({
+      token: 'guest-token',
+      participant: { sub: 'guest-1', roomId: 'room-1', name: 'Alex', roomCode: 'abc-defg-hij' },
+    });
+    const fake = {
+      on: jest.fn(),
+      connect: jest.fn(),
+      emit: jest.fn(),
+      disconnect: jest.fn(),
+      off: jest.fn(),
+      removeAllListeners: jest.fn(),
+    };
+    (createRoomSocket as jest.Mock<typeof createRoomSocket>).mockReturnValue(fake as never);
+    const Page = (await import('./page')).default;
+    render(<Page />);
+    fireEvent.change(screen.getByLabelText('Tu nombre en la reunión'), {
+      target: { value: 'Alex' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar a la reunión' }));
+    await waitFor(() => expect(mockJoinCall).toHaveBeenCalledTimes(1));
+
+    expect(mockMeetingRoom).toHaveBeenCalledWith(
+      expect.objectContaining({ currentParticipantId: 'guest-1' }),
+    );
+  });
 });
 
 describe('RoomPage: transición de carga antes de entrar a la llamada', () => {
@@ -490,6 +541,107 @@ describe('RoomPage: transición de carga antes de entrar a la llamada', () => {
     ).not.toBeInTheDocument();
     // El chat sigue disponible sin cambios, aun con la llamada terminada.
     expect(screen.getByPlaceholderText('Escribí un mensaje...')).toBeInTheDocument();
+  });
+
+  // Decisión 2 (design.md "Señal de motivo de remoción", tasks.md 5.5):
+  // cierra la brecha señalada en apply-progress.md ("Deviations from
+  // Design" #1) -- resolveBreakoutEndCopy ya existía pero el panel
+  // terminal todavía mostraba el texto fijo de host-left para cualquier
+  // endReason. callEndedPanel ahora distingue el motivo real.
+  it('[5.5] cuando el admin devuelve a alguien a la fuerza (endedForBreakout), el panel terminal muestra la copia de breakout-closed, no la de host-left', async () => {
+    mockStatus = 'in-call';
+    mockSession = {
+      url: 'wss://media.example.test',
+      token: 'token',
+      roomName: 'abc-defg-hij',
+      participantLimit: 6,
+    };
+    const { requestRoomAccess } = await import('@/lib/api');
+    const { createRoomSocket } = await import('@/lib/socket');
+    (requestRoomAccess as jest.Mock<typeof requestRoomAccess>).mockResolvedValue({
+      token: 'guest-token',
+      participant: { sub: 'guest-1', roomId: 'room-1', name: 'Alex', roomCode: 'abc-defg-hij' },
+    });
+    const fake = {
+      on: jest.fn(),
+      connect: jest.fn(),
+      emit: jest.fn(),
+      disconnect: jest.fn(),
+      off: jest.fn(),
+      removeAllListeners: jest.fn(),
+    };
+    (createRoomSocket as jest.Mock<typeof createRoomSocket>).mockReturnValue(fake as never);
+    const Page = (await import('./page')).default;
+    render(<Page />);
+    fireEvent.change(screen.getByLabelText('Tu nombre en la reunión'), {
+      target: { value: 'Alex' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar a la reunión' }));
+    await waitFor(() => expect(mockJoinCall).toHaveBeenCalledTimes(1));
+    await screen.findByText('Video de la llamada');
+
+    mockStatus = 'ended';
+    mockEndReason = 'breakout-closed';
+    mockSession = null;
+    act(() => {
+      fireEvent.change(screen.getByPlaceholderText('Escribí un mensaje...'), {
+        target: { value: 'x' },
+      });
+    });
+
+    expect(screen.getByText('El host te devolvió a la sala principal.')).toBeInTheDocument();
+    expect(
+      screen.queryByText('La llamada terminó porque el anfitrión se desconectó.'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('[5.5] cuando a alguien lo expulsan por política locked (removedByPolicy), el panel terminal muestra el mensaje de política, no el de host-left', async () => {
+    mockStatus = 'in-call';
+    mockSession = {
+      url: 'wss://media.example.test',
+      token: 'token',
+      roomName: 'abc-defg-hij',
+      participantLimit: 6,
+    };
+    const { requestRoomAccess } = await import('@/lib/api');
+    const { createRoomSocket } = await import('@/lib/socket');
+    (requestRoomAccess as jest.Mock<typeof requestRoomAccess>).mockResolvedValue({
+      token: 'guest-token',
+      participant: { sub: 'guest-1', roomId: 'room-1', name: 'Alex', roomCode: 'abc-defg-hij' },
+    });
+    const fake = {
+      on: jest.fn(),
+      connect: jest.fn(),
+      emit: jest.fn(),
+      disconnect: jest.fn(),
+      off: jest.fn(),
+      removeAllListeners: jest.fn(),
+    };
+    (createRoomSocket as jest.Mock<typeof createRoomSocket>).mockReturnValue(fake as never);
+    const Page = (await import('./page')).default;
+    render(<Page />);
+    fireEvent.change(screen.getByLabelText('Tu nombre en la reunión'), {
+      target: { value: 'Alex' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar a la reunión' }));
+    await waitFor(() => expect(mockJoinCall).toHaveBeenCalledTimes(1));
+    await screen.findByText('Video de la llamada');
+
+    mockStatus = 'ended';
+    mockEndReason = 'breakout-locked';
+    mockSession = null;
+    act(() => {
+      fireEvent.change(screen.getByPlaceholderText('Escribí un mensaje...'), {
+        target: { value: 'x' },
+      });
+    });
+
+    expect(
+      screen.getByText('El host te va a devolver a la sala principal.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('La llamada terminó porque el anfitrión se desconectó.'),
+    ).not.toBeInTheDocument();
   });
 
   it('una vez que la llamada queda in-call, transiciona a la sala completa', async () => {
@@ -805,5 +957,87 @@ describe('RoomPage: concesión de permisos', () => {
       callbacks.userJoined({ participantId: 'new', userName: 'Nueva', userId: 'user-new' }),
     );
     expect(mockRoomMembersState.refetchMembers).toHaveBeenCalled();
+  });
+});
+
+describe('RoomPage: biblioteca de links', () => {
+  const LINK_MESSAGE = {
+    id: 'm-link',
+    authorName: 'Santi',
+    kind: 'text',
+    content: 'Apunte de hoy: https://docs.example.com/clase-1',
+    createdAt: new Date().toISOString(),
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+    jest.clearAllMocks();
+    mockStatus = 'in-call';
+    mockRoomMembersState.currentUserRole = undefined;
+  });
+
+  async function enterRoom(isPermanent: boolean) {
+    const { requestRoomAccess, getRoomInfo } = await import('@/lib/api');
+    const { createRoomSocket } = await import('@/lib/socket');
+    jest.mocked(getRoomInfo).mockResolvedValue({ isPermanent } as never);
+    jest.mocked(requestRoomAccess).mockResolvedValue({
+      token: 'room-token',
+      participant: { sub: 'u-1', roomId: 'room-1', name: 'Gabi', roomCode: 'abc-defg-hij' },
+    });
+    const callbacks: Record<string, (...args: unknown[]) => void> = {};
+    const fake = {
+      on: jest.fn((event: string, cb: (...args: unknown[]) => void) => {
+        callbacks[event] = cb;
+      }),
+      connect: jest.fn(() => callbacks.connect?.()),
+      emit: jest.fn(),
+      disconnect: jest.fn(),
+      off: jest.fn(),
+      removeAllListeners: jest.fn(),
+    };
+    jest.mocked(createRoomSocket).mockReturnValue(fake as never);
+    const Page = (await import('./page')).default;
+    render(<Page />);
+    fireEvent.change(screen.getByLabelText('Tu nombre en la reunión'), {
+      target: { value: 'Gabi' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar a la reunión' }));
+    await waitFor(() => expect(createRoomSocket).toHaveBeenCalled());
+    await waitFor(() => expect(getRoomInfo).toHaveBeenCalled());
+    act(() => callbacks.newMessage?.(LINK_MESSAGE));
+    await screen.findByText(/Apunte de hoy/);
+  }
+
+  it('en una sala permanente, un colaborador fija el link de un mensaje en la biblioteca', async () => {
+    mockRoomMembersState.currentUserRole = 'colaborador';
+    const { addRoomLink } = await import('@/lib/api');
+    await enterRoom(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Fijar link' }));
+
+    await waitFor(() =>
+      expect(addRoomLink).toHaveBeenCalledWith('abc-defg-hij', {
+        url: 'https://docs.example.com/clase-1',
+        title: 'Apunte de hoy',
+      }),
+    );
+    expect(await screen.findByTestId('notice')).toHaveTextContent('Link fijado en la biblioteca');
+    expect(screen.getByRole('button', { name: 'Links' })).toBeInTheDocument();
+  });
+
+  it('un participante sin rol ve la pestaña Links pero no puede fijar', async () => {
+    mockRoomMembersState.currentUserRole = 'participante';
+    await enterRoom(true);
+
+    await screen.findByRole('button', { name: 'Links' });
+    expect(screen.queryByRole('button', { name: 'Fijar link' })).not.toBeInTheDocument();
+  });
+
+  it('una sala temporal no tiene biblioteca de links', async () => {
+    mockRoomMembersState.currentUserRole = 'administrador';
+    await enterRoom(false);
+
+    expect(screen.queryByRole('button', { name: 'Links' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Fijar link' })).not.toBeInTheDocument();
   });
 });

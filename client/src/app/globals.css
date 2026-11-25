@@ -2,26 +2,32 @@
   color-scheme: light;
   --color-bg: #f3f4f6;
   --color-surface: #fff;
+  --color-raised: #f7f7f9;
+  --color-overlay: #fff;
   --color-text: #15171c;
-  --color-text-muted: #5b6069;
+  --color-text-muted: #555a63;
   --color-border: #dcdfe3;
   --color-chip-bg: #eceef1;
   --color-accent: #9d00ff;
   --color-accent-hover: #7a00cc;
   --color-accent-contrast: #fff;
   --color-disabled: #a3a8b0;
-  --color-error: #d93025;
+  --color-error: #c5221f;
+  --color-warn: #a15c00;
   --color-success: #137333;
   --color-success-bg: #e6f4ea;
   --color-notice-bg: #e8f0fe;
 
-  --shadow-sm:
-    0 1px 2px rgba(15, 17, 20, 0.06),
-    0 1px 1px rgba(15, 17, 20, 0.04);
-  --shadow-md:
-    0 8px 20px rgba(15, 17, 20, 0.08),
-    0 2px 6px rgba(15, 17, 20, 0.05);
+  --shadow-sm: 0 1px 2px rgba(15, 17, 20, 0.06), 0 1px 1px rgba(15, 17, 20, 0.04);
+  --shadow-md: 0 8px 20px rgba(15, 17, 20, 0.08), 0 2px 6px rgba(15, 17, 20, 0.05);
   --shadow-card: var(--shadow-sm);
+  --shadow-overlay: 0 10px 28px rgba(15, 17, 20, 0.16);
+
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --dur-press: 90ms;
+  --dur-ui: 120ms;
+  --dur-pop: 200ms;
+  --dur-modal: 240ms;
 
   --space-1: 4px;
   --space-2: 8px;
@@ -33,26 +39,21 @@
   --space-8: 32px;
 
   --radius-xs: 2px;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
 
   --font-display: var(--font-space-grotesk), 'Segoe UI', Arial, sans-serif;
   --font-body: var(--font-ibm-plex-sans), 'Segoe UI', Roboto, Arial, sans-serif;
+  --font-mono: var(--font-ibm-plex-mono), ui-monospace, Consolas, monospace;
 
-  /* Paleta categórica de la línea de tiempo de participación (cámara/mic/
-     pantalla compartida), validada con el validador de paleta del skill de
-     dataviz para que las 3 se distingan entre sí en modo claro Y oscuro,
-     tanto para daltonismo (deutan/protan/tritan ΔE) como a ojo normal. No
-     reutiliza --color-success para "mic": en modo oscuro ese verde (#81c995)
-     cae demasiado cerca del teal de "cámara" (ΔE 9.2, piso es 15) — de ahí
-     este naranja dedicado, que sí separa limpio de los otros dos en ambos
-     temas. --timeline-rejoin es un color de estado fijo (no cambia con el
-     tema), igual que warning/error en cualquier design system. */
-  --timeline-camera: #2a9d8f;
-  --timeline-mic: #d9631a;
+  /* Línea de tiempo del historial: presencia y cámara neutras, la voz lleva el
+     acento y la pantalla el mismo acento rayado; la reconexión es un aviso. */
+  --timeline-presence: #cfd2d8;
+  --timeline-camera: #5f6570;
+  --timeline-mic: var(--color-accent);
   --timeline-screen-share: var(--color-accent);
-  --timeline-rejoin: #3f6fb3;
+  --timeline-rejoin: var(--color-warn);
 
   /* Mensaje que te menciona a vos (no a cualquiera, ver mentions.ts
      isSelfMentioned): dorado fijo, independiente del tema, igual que el
@@ -65,8 +66,10 @@
   color-scheme: dark;
   --color-bg: #121317;
   --color-surface: #1b1d22;
+  --color-raised: #23262d;
+  --color-overlay: #2c3038;
   --color-text: #edeef1;
-  --color-text-muted: #9aa0ab;
+  --color-text-muted: #a3a9b4;
   --color-border: #2d3038;
   --color-chip-bg: #24262c;
   --color-accent: #b84dff;
@@ -74,24 +77,18 @@
   --color-accent-contrast: #15171c;
   --color-disabled: #595d66;
   --color-error: #f28b82;
+  --color-warn: #e9a23b;
   --color-success: #81c995;
   --color-success-bg: #1e3a2a;
   --color-notice-bg: #28344a;
 
-  --shadow-sm:
-    0 1px 2px rgba(0, 0, 0, 0.35),
-    0 1px 1px rgba(0, 0, 0, 0.25);
-  --shadow-md:
-    0 10px 24px rgba(0, 0, 0, 0.45),
-    0 2px 6px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 1px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 10px 24px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
   --shadow-card: var(--shadow-sm);
+  --shadow-overlay: 0 10px 28px rgba(0, 0, 0, 0.45);
 
-  /* Mismo naranja de --timeline-mic pero un paso más oscuro: el de modo
-     claro queda por encima de la banda de luminosidad válida para una marca
-     categórica sobre fondo oscuro (ver validador). --timeline-camera no
-     necesita su propio valor acá: el teal ya cae dentro de la banda en los
-     dos temas. */
-  --timeline-mic: #cf6500;
+  --timeline-presence: #3a3e47;
+  --timeline-camera: #9aa0ab;
 }
 
 /* Tema interno de LiveKit (separado de nuestros tokens): se sobreescribe acá
@@ -208,6 +205,11 @@ input:focus {
   border-color: transparent;
 }
 
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
 button {
   width: 100%;
   padding: 10px var(--space-3);
@@ -220,8 +222,10 @@ button {
   font-family: var(--font-body);
   cursor: pointer;
   transition:
-    background-color 0.15s ease,
-    transform 0.1s ease;
+    background-color var(--dur-ui) var(--ease-out),
+    border-color var(--dur-ui) var(--ease-out),
+    color var(--dur-ui) var(--ease-out),
+    transform var(--dur-press) var(--ease-out);
 }
 
 /* Touch screens keep :hover stuck after a tap, so hover colors only apply with a real pointer. */
@@ -231,8 +235,45 @@ button {
   }
 }
 
-button:active {
-  transform: translateY(1px);
+button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* Carga: el texto se oculta y una línea se barre de izquierda a derecha. */
+button[aria-busy='true'] {
+  position: relative;
+  color: transparent;
+  pointer-events: none;
+}
+
+button[aria-busy='true']::after {
+  content: '';
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  top: 50%;
+  height: 2px;
+  background: var(--color-accent-contrast);
+  transform-origin: left;
+  animation: button-sweep 900ms var(--ease-out) infinite;
+}
+
+button.secondary[aria-busy='true']::after {
+  background: var(--color-accent);
+}
+
+@keyframes button-sweep {
+  0% {
+    transform: scaleX(0);
+  }
+  60% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scaleX(1);
+    opacity: 0;
+  }
 }
 
 button:disabled {
@@ -250,5 +291,16 @@ button.secondary {
 @media (hover: hover) {
   button.secondary:hover {
     background: var(--color-chip-bg);
+    border-color: var(--color-text-muted);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
   }
 }

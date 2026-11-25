@@ -15,9 +15,6 @@
 .linkButton {
   composes: linkButton from '../styles/form.module.css';
 }
-.hintBelowButton {
-  composes: hintBelowButton from '../styles/form.module.css';
-}
 .divider {
   composes: divider from '../styles/form.module.css';
 }
@@ -55,5 +52,13 @@
 .brandTitle {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  font-size: 40px;
+  letter-spacing: -0.02em;
+}
+
+@media (max-width: 640px) {
+  .brandTitle {
+    font-size: 34px;
+  }
 }
