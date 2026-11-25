@@ -40,6 +40,10 @@ import { buildTestUser } from './support/test-data';
 // siguen confirmando el contrato real sin depender de ese render perdido.
 test.describe.configure({ mode: 'serial' });
 test.setTimeout(120_000);
+// CI no levanta LiveKit: sin él, POST /calls/:code responde 503 y ningún caso puede correr.
+test.beforeEach(() => {
+  test.skip(!process.env.E2E_LIVEKIT, 'Requiere un servidor LiveKit real (E2E_LIVEKIT=1)');
+});
 
 interface MeetingAccess {
   roomToken: string;
