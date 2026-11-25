@@ -641,3 +641,35 @@ Las salas se podían crear, listar (`/rooms/mine`) y renombrar, pero no borrar. 
 - El borrado es irreversible (sin papelera). La confirmación en la UI es la única barrera, de ahí el texto explícito del diálogo.
 - Los clientes conectados reciben `roomDeleted` pero la pantalla de sala todavía no reacciona a ese evento más allá de perder la conexión; queda como mejora.
 - Las sesiones de llamada de una sala borrada siguen apareciendo en la línea de tiempo de quienes participaron, con `roomName: null` (la consulta usa `leftJoin`). Las filas de `call_history` (listado "Historial") sí se borran junto con la sala.
+
+## 25. IP real del cliente detrás de Caddy (PROXY protocol y `trust proxy`)
+
+**Fecha:** 2026-11-24
+**Rama:** `fix/trust-proxy`
+
+### Contexto
+
+El límite global de 60 peticiones por minuto (`ThrottlerModule`) cuenta por `req.ip`. En el despliegue, la capa 4 de Caddy recibe la conexión en `:443` y la reenvía por TCP a su servidor HTTP en `127.0.0.1:8080`, que a su vez la pasa al backend. Ese reenvío no conservaba la dirección del cliente: el servidor HTTP de Caddy veía a todos como `127.0.0.1`, completaba `X-Forwarded-For` con ese valor, y el backend tampoco confiaba en ese encabezado. Resultado: todas las personas compartían un único cupo de 60 peticiones.
+
+Un primer intento solo activó `trust proxy` en el backend. La revisión del cambio detectó que no alcanzaba, porque el encabezado ya llegaba con la IP equivocada; las pruebas unitarias pasaban porque no reproducían la cadena de Caddy.
+
+### Alternativas consideradas
+
+- **Solo `trust proxy` en el backend.** Insuficiente por lo explicado arriba.
+- **`trust proxy: true`.** Permitiría que cualquier cliente falsee su IP con `X-Forwarded-For`.
+- **Subir o quitar el límite.** Esconde el problema y deja la API sin límite por cliente.
+- **PROXY protocol entre la capa 4 y la capa HTTP de Caddy, más `trust proxy: 'loopback'` (elegida).**
+
+### Decisión
+
+- `deploy/ec2/configure.py`: la ruta de la aplicación en la capa 4 envía un encabezado PROXY v2 (`proxy_protocol: 'v2'`), y el servidor HTTP lo lee con el listener `proxy_protocol`, aceptado solo desde `127.0.0.1/32`. Las rutas de TURN y de LiveKit no cambian.
+- `src/app-setup.ts`: `app.set('trust proxy', 'loopback')`, de modo que el backend toma la IP del `X-Forwarded-For` que agrega Caddy.
+
+### Justificación
+
+- Se verificó con la imagen fijada en `compose.yaml` (Caddy v2.11.3): `caddy validate` acepta el `caddy.json` generado, y una réplica de la cadena mostró que sin PROXY protocol el backend recibe `127.0.0.1` y con PROXY protocol recibe la IP del cliente, ignorando un `X-Forwarded-For` falso enviado por el cliente.
+
+### Consecuencias
+
+- Para aplicarlo en el EC2 hay que volver a ejecutar `configure.py` (conserva las claves existentes) y reiniciar Caddy. Si la configuración fallara, el sitio entero deja de responder: se debe aplicar con la posibilidad de volver al `caddy.json` anterior.
+- Pendiente de comprobar en producción: que dos dispositivos distintos tengan cupos separados.

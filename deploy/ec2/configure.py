@@ -66,6 +66,10 @@ def main():
     routes = [tls_route(hosts['turn'], private_ip + ':5349'), tls_route(hosts['media'], '127.0.0.1:7880'), tls_route(hosts['app'], '127.0.0.1:8080')]
     # TURN does not use HTTP ALPN negotiation.
     routes[0]['handle'][0].pop('connection_policies')
+    # The layer4 proxy hands the app connection to the HTTP server over loopback,
+    # which hides the client address. A PROXY protocol v2 header carries it, so
+    # X-Forwarded-For (and the backend's req.ip and rate limit) see the real client.
+    routes[2]['handle'][1]['proxy_protocol'] = 'v2'
     caddy = {
         'admin': {'listen': '127.0.0.1:2019'},
         'storage': {'module': 'file_system', 'root': '/data'},
@@ -75,6 +79,8 @@ def main():
             'layer4': {'servers': {'main': {'listen': [':443'], 'routes': routes}}},
             'http': {'servers': {'application': {
                 'listen': ['127.0.0.1:8080'],
+                # Accept the PROXY header only from the local layer4 proxy.
+                'listener_wrappers': [{'wrapper': 'proxy_protocol', 'allow': ['127.0.0.1/32']}],
                 'routes': [
                     {'match': [{'path': ['/api/*']}], 'handle': [
                         {'handler': 'rewrite', 'strip_path_prefix': '/api'},

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { Controller, Module, Post, Req, type RawBodyRequest } from '@nestjs/common';
+import { Controller, Get, Module, Post, Req, type RawBodyRequest } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { Request } from 'express';
@@ -89,5 +89,49 @@ describe('bootstrap: rawBody + Content-Type de webhooks de LiveKit (design.md D6
 
     expect(response.status).toBe(200);
     expect(body).toEqual({ status: 'ok' });
+  });
+});
+
+// Probe that exposes req.ip, the value @nestjs/throttler uses to track clients.
+@Controller()
+class ClientIpProbeController {
+  @Get('ip')
+  ip(@Req() req: Request) {
+    return { ip: req.ip };
+  }
+}
+
+@Module({ controllers: [ClientIpProbeController] })
+class ClientIpProbeModule {}
+
+describe('bootstrap: client IP behind the reverse proxy', () => {
+  // In production Caddy forwards every request from 127.0.0.1 and sets
+  // X-Forwarded-For with the real client IP. Without trusting the loopback
+  // proxy, every client shares the proxy's IP and therefore one rate-limit bucket.
+  it('uses X-Forwarded-For when the request comes from the loopback proxy', async () => {
+    const app = await createApp(ClientIpProbeModule);
+    const port = await listenOnEphemeralPort(app);
+
+    const response = await fetch(`http://127.0.0.1:${port}/ip`, {
+      headers: { 'X-Forwarded-For': '203.0.113.7' },
+    });
+    const body = (await response.json()) as { ip: string };
+
+    expect(body.ip).toBe('203.0.113.7');
+  });
+
+  it('takes the right-most untrusted hop when X-Forwarded-For has several entries', async () => {
+    const app = await createApp(ClientIpProbeModule);
+    const port = await listenOnEphemeralPort(app);
+
+    // Express walks the list from the right and stops at the first address it
+    // does not trust, so earlier entries cannot replace the address the proxy saw.
+    // Spoofing protection itself comes from Caddy, which overwrites the header.
+    const response = await fetch(`http://127.0.0.1:${port}/ip`, {
+      headers: { 'X-Forwarded-For': '198.51.100.9, 203.0.113.7' },
+    });
+    const body = (await response.json()) as { ip: string };
+
+    expect(body.ip).toBe('203.0.113.7');
   });
 });
