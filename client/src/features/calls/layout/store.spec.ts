@@ -83,3 +83,14 @@ describe('useCallLayoutStore', () => {
     expect(saved.state).toMatchObject({ enabled: true, zones: [{ placement: 'bottom' }] });
   });
 });
+
+describe('applyPreset', () => {
+  it('reemplaza las zonas por las del preset y activa la distribución', () => {
+    useCallLayoutStore.setState({ enabled: false, zones: [], focusedZoneId: null });
+    useCallLayoutStore.getState().applyPreset('class');
+    const { enabled, zones } = useCallLayoutStore.getState();
+    expect(enabled).toBe(true);
+    expect(zones.map((zone) => zone.capacity)).toEqual([1, 12]);
+    expect(new Set(zones.map((zone) => zone.id)).size).toBe(2);
+  });
+});

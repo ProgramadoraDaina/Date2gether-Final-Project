@@ -763,6 +763,15 @@ const en: Record<string, string> = {
   'Abrir ventana flotante': 'Open floating window',
   'Cerrar ventana flotante': 'Close floating window',
   'Desenfocar el fondo': 'Blur background',
+  'Distribuciones listas': 'Ready-made layouts',
+  Clase: 'Class',
+  Charla: 'Talk',
+  Juntada: 'Hangout',
+  'Una persona grande y el resto en una fila abajo.':
+    'One person large and everyone else in a row below.',
+  'Dos personas lado a lado y el resto en una columna a la derecha.':
+    'Two people side by side and everyone else in a column on the right.',
+  'Todos iguales, en una sola grilla.': 'Everyone the same size, in one grid.',
 };
 
 export default en;

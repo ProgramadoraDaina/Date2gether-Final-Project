@@ -7,6 +7,7 @@ import { buildLayoutTree, type LayoutZone, type TileAspect, type ZonePlacement }
 import { LayoutView } from './LayoutView';
 import { useCallLayoutStore } from './store';
 import { zoneColorStyle } from './zoneColors';
+import { LAYOUT_PRESETS } from './presets';
 import styles from './CallLayout.module.css';
 
 const PLACEMENTS: { value: ZonePlacement; label: string }[] = [
@@ -297,7 +298,7 @@ function ZoneCard({ zone, index, open }: { zone: LayoutZone; index: number; open
 
 export function CallLayoutEditor({ showPreview = true }: { showPreview?: boolean }) {
   const { t } = useTranslation();
-  const { enabled, zones, focusedZoneId, setEnabled, addZone } = useCallLayoutStore();
+  const { enabled, zones, focusedZoneId, setEnabled, addZone, applyPreset } = useCallLayoutStore();
   const tree = useMemo(() => buildLayoutTree(zones), [zones]);
   const zoneIndex = new Map(zones.map((zone, index) => [zone.id, index]));
 
@@ -317,6 +318,19 @@ export function CallLayoutEditor({ showPreview = true }: { showPreview?: boolean
             'Las personas van llenando la Zona 1, después la 2, y así. Las que no entran van a la última.',
           )}
         </p>
+      </div>
+      <div className={styles.presets} role="group" aria-label={t('Distribuciones listas')}>
+        {LAYOUT_PRESETS.map((preset) => (
+          <button
+            key={preset.id}
+            type="button"
+            className={styles.preset}
+            onClick={() => applyPreset(preset.id)}
+            title={t(preset.hint)}
+          >
+            {t(preset.label)}
+          </button>
+        ))}
       </div>
       {tree && showPreview && (
         <div className={styles.preview} data-testid="layout-preview">

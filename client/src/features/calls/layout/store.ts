@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { LayoutZone } from './layout';
+import { LAYOUT_PRESETS, type LayoutPresetId } from './presets';
 
 type ZoneChanges = Partial<Omit<LayoutZone, 'id'>>;
 
@@ -17,6 +18,7 @@ interface CallLayoutState {
   addZone: () => void;
   updateZone: (id: string, changes: ZoneChanges) => void;
   removeZone: (id: string) => void;
+  applyPreset: (id: LayoutPresetId) => void;
 }
 
 const clamp = (value: number, min: number, max: number) =>
@@ -90,6 +92,15 @@ export const useCallLayoutStore = create<CallLayoutState>()(
               : zone,
           ),
         })),
+      applyPreset: (id) => {
+        const preset = LAYOUT_PRESETS.find((candidate) => candidate.id === id);
+        if (!preset) return;
+        set({
+          enabled: true,
+          focusedZoneId: null,
+          zones: preset.zones.map((zone) => ({ ...zone, id: newZoneId() })),
+        });
+      },
       removeZone: (id) =>
         set(({ zones, focusedZoneId }) => ({
           zones: zones.filter((zone) => zone.id !== id),

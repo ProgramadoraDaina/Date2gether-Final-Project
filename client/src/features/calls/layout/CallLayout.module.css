@@ -438,3 +438,25 @@
 .addZone:hover {
   background: var(--color-accent-hover);
 }
+
+.presets {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+}
+
+.preset {
+  width: auto;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-raised);
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.preset:hover {
+  border-color: var(--color-accent);
+}
