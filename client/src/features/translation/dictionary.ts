@@ -772,6 +772,8 @@ const en: Record<string, string> = {
   'Dos personas lado a lado y el resto en una columna a la derecha.':
     'Two people side by side and everyone else in a column on the right.',
   'Todos iguales, en una sola grilla.': 'Everyone the same size, in one grid.',
+  Referencias: 'Legend',
+  Pantalla: 'Screen',
 };
 
 export default en;

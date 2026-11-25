@@ -18,12 +18,8 @@
   --color-success-bg: #e6f4ea;
   --color-notice-bg: #e8f0fe;
 
-  --shadow-sm:
-    0 1px 2px rgba(15, 17, 20, 0.06),
-    0 1px 1px rgba(15, 17, 20, 0.04);
-  --shadow-md:
-    0 8px 20px rgba(15, 17, 20, 0.08),
-    0 2px 6px rgba(15, 17, 20, 0.05);
+  --shadow-sm: 0 1px 2px rgba(15, 17, 20, 0.06), 0 1px 1px rgba(15, 17, 20, 0.04);
+  --shadow-md: 0 8px 20px rgba(15, 17, 20, 0.08), 0 2px 6px rgba(15, 17, 20, 0.05);
   --shadow-card: var(--shadow-sm);
   --shadow-overlay: 0 10px 28px rgba(15, 17, 20, 0.16);
 
@@ -49,20 +45,15 @@
 
   --font-display: var(--font-space-grotesk), 'Segoe UI', Arial, sans-serif;
   --font-body: var(--font-ibm-plex-sans), 'Segoe UI', Roboto, Arial, sans-serif;
+  --font-mono: var(--font-ibm-plex-mono), ui-monospace, Consolas, monospace;
 
-  /* Paleta categórica de la línea de tiempo de participación (cámara/mic/
-     pantalla compartida), validada con el validador de paleta del skill de
-     dataviz para que las 3 se distingan entre sí en modo claro Y oscuro,
-     tanto para daltonismo (deutan/protan/tritan ΔE) como a ojo normal. No
-     reutiliza --color-success para "mic": en modo oscuro ese verde (#81c995)
-     cae demasiado cerca del teal de "cámara" (ΔE 9.2, piso es 15) — de ahí
-     este naranja dedicado, que sí separa limpio de los otros dos en ambos
-     temas. --timeline-rejoin es un color de estado fijo (no cambia con el
-     tema), igual que warning/error en cualquier design system. */
-  --timeline-camera: #2a9d8f;
-  --timeline-mic: #d9631a;
+  /* Línea de tiempo del historial: presencia y cámara neutras, la voz lleva el
+     acento y la pantalla el mismo acento rayado; la reconexión es un aviso. */
+  --timeline-presence: #cfd2d8;
+  --timeline-camera: #5f6570;
+  --timeline-mic: var(--color-accent);
   --timeline-screen-share: var(--color-accent);
-  --timeline-rejoin: #3f6fb3;
+  --timeline-rejoin: var(--color-warn);
 
   /* Mensaje que te menciona a vos (no a cualquiera, ver mentions.ts
      isSelfMentioned): dorado fijo, independiente del tema, igual que el
@@ -91,21 +82,13 @@
   --color-success-bg: #1e3a2a;
   --color-notice-bg: #28344a;
 
-  --shadow-sm:
-    0 1px 2px rgba(0, 0, 0, 0.35),
-    0 1px 1px rgba(0, 0, 0, 0.25);
-  --shadow-md:
-    0 10px 24px rgba(0, 0, 0, 0.45),
-    0 2px 6px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 1px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 10px 24px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
   --shadow-card: var(--shadow-sm);
   --shadow-overlay: 0 10px 28px rgba(0, 0, 0, 0.45);
 
-  /* Mismo naranja de --timeline-mic pero un paso más oscuro: el de modo
-     claro queda por encima de la banda de luminosidad válida para una marca
-     categórica sobre fondo oscuro (ver validador). --timeline-camera no
-     necesita su propio valor acá: el teal ya cae dentro de la banda en los
-     dos temas. */
-  --timeline-mic: #cf6500;
+  --timeline-presence: #3a3e47;
+  --timeline-camera: #9aa0ab;
 }
 
 /* Tema interno de LiveKit (separado de nuestros tokens): se sobreescribe acá

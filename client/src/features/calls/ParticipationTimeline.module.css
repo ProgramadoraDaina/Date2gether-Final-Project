@@ -1,15 +1,39 @@
 .wrapper {
+  --person-w: 200px;
+  --label-w: 88px;
+  --col-gap: 12px;
+  --pad-x: var(--space-5);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
 }
 
+/* Colores con significado fijo: presencia neutra, voz con el acento, pantalla con el acento suave. */
+.wrapper [data-source='camera'] {
+  background: var(--timeline-camera);
+}
+
+.wrapper [data-source='microphone'] {
+  background: var(--timeline-mic);
+}
+
+.wrapper [data-source='screen_share'] {
+  background: color-mix(in srgb, var(--timeline-screen-share) 40%, var(--color-surface));
+  box-shadow: inset 0 0 0 1px var(--timeline-screen-share);
+}
+
+.wrapper [data-source='rejoin'] {
+  background: var(--timeline-rejoin);
+}
+
 .legend {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-5);
+  gap: var(--space-2) var(--space-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
   font-size: 13px;
-  font-weight: 600;
   color: var(--color-text);
 }
 
@@ -19,254 +43,207 @@
   gap: var(--space-2);
 }
 
-/* Reemplaza el puntito de color: ahora cada ítem de la leyenda lleva el
-   mismo ícono que su carril, para que la identidad no dependa solo del
-   color (daltonismo, o simplemente recordar "¿cuál era naranja?"). */
-.legendIcon {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
+.swatch {
+  width: 18px;
+  height: 10px;
   flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
+}
+
+.presenceSwatch {
+  background: var(--timeline-presence);
+}
+
+.panel {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.axisRow {
+  display: grid;
+  grid-template-columns: calc(var(--person-w) + var(--label-w) + var(--col-gap) * 2) 1fr;
+  padding: var(--space-3) var(--pad-x) var(--space-2);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .axis {
-  display: flex;
-  /* 212px = ancho de .sidebar (192) + su gap (20); +34px = columna de
-     .laneIcons (22) + el gap que la separa de .timelineArea (8) + el
-     padding propio de .track (4) — si alguno de esos cambia, este número
-     se desalinea con el eje de arriba. */
-  padding-left: 246px;
-  padding-bottom: var(--space-4);
-}
-
-.axisTrack {
   position: relative;
-  flex: 1;
-  height: 1px;
-  background: var(--color-border);
+  height: 18px;
 }
 
-.axisTick {
+.tick {
   position: absolute;
   top: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
   transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+  white-space: nowrap;
 }
 
-.axisTick:first-child {
-  transform: translateX(0);
-  align-items: flex-start;
-}
-
-.axisTick:last-child {
-  transform: translateX(-100%);
-  align-items: flex-end;
-}
-
-.axisTickMark {
+.tick::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
   width: 1px;
-  height: 5px;
+  height: 6px;
   background: var(--color-border);
 }
 
-.axisTickLabel {
-  margin-top: var(--space-1);
-  font-size: 11px;
-  color: var(--color-text-muted);
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
+.tickStart,
+.tickEnd {
+  color: var(--color-text);
+  font-weight: 600;
 }
 
-/* Sin overflow:hidden (recortaba el globo del tooltip apenas asomaba por
-   arriba del panel, sobre todo en la primera fila): las esquinas redondeadas
-   de arriba/abajo las ponen .entry:first-child/:last-child en su lugar. */
-.panel {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
+.tickStart {
+  transform: none;
+}
+
+.tickStart::after {
+  left: 0;
+}
+
+.tickEnd {
+  transform: translateX(-100%);
+}
+
+.tickEnd::after {
+  left: auto;
+  right: 0;
 }
 
 .list {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
 }
 
 .entry {
   position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--space-5);
-  min-height: 92px;
-  padding: var(--space-4) var(--space-5);
+  display: grid;
+  grid-template-columns: var(--person-w) 1fr;
+  gap: var(--col-gap);
+  padding: var(--space-4) var(--pad-x);
   border-bottom: 1px solid var(--color-border);
-  transition: background-color 0.15s;
-}
-
-.entry:first-child {
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 
 .entry:last-child {
   border-bottom: none;
-  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
 
-.entry:hover {
-  background: var(--color-chip-bg);
-}
-
-/* Sube toda la fila por encima de sus vecinas: sin esto, el globo del
-   tooltip (que asoma hacia arriba, fuera de la caja de su propia fila)
-   queda tapado por la fila de arriba, que es posterior en el flujo normal
-   y por lo tanto pinta después si ninguna de las dos tiene z-index propio. */
+/* El globo del tooltip asoma sobre la fila de arriba. */
 .entry:hover,
 .entry:focus-within {
   z-index: 5;
 }
 
-.sidebar {
-  flex-shrink: 0;
-  width: 192px;
+.person {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-3);
   min-width: 0;
 }
 
-.sidebarText {
+.personText {
   display: flex;
   flex-direction: column;
   gap: 3px;
   min-width: 0;
 }
 
-.sidebarText strong {
-  font-size: 15px;
+.personText strong {
+  font-size: 14px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.personTimes {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+
 .guestTag {
   align-self: flex-start;
-  font-size: 11px;
-  color: var(--color-text-muted);
-  background: var(--color-chip-bg);
   padding: 1px var(--space-2);
-  border-radius: var(--radius-sm);
-}
-
-.entryBody {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.entryTimes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  font-size: 12px;
-  color: var(--color-text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #fff;
-  padding: 3px 9px 3px 7px;
-  border-radius: var(--radius-sm);
-}
-
-.track {
-  display: flex;
-  align-items: stretch;
-  gap: var(--space-2);
-  height: 76px;
-  padding: var(--space-1);
-  background: var(--color-chip-bg);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  color: var(--color-text-muted);
 }
 
-/* Columna fija, fuera del área mapeada a porcentaje (.timelineArea): un
-   ícono por carril, alineado 1 a 1 con sus franjas porque usa el mismo
-   gap y la misma proporción flex que .lanes. */
-.laneIcons {
-  flex-shrink: 0;
-  width: 22px;
+.rows {
   display: flex;
   flex-direction: column;
   gap: 3px;
+  min-width: 0;
 }
 
-.laneIcon {
-  flex: 1;
-  min-height: 0;
-  display: flex;
+.row {
+  display: grid;
+  grid-template-columns: var(--label-w) 1fr;
+  gap: var(--col-gap);
   align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
+}
+
+.rowLabel {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .timelineArea {
   position: relative;
-  flex: 1;
+  height: 14px;
   min-width: 0;
 }
 
-.presenceBackdrop {
+/* Carril vacío visible: se nota que no hubo actividad, no que falta el dato. */
+.lane {
+  background: var(--color-raised);
+}
+
+.presence {
   position: absolute;
   top: 0;
   bottom: 0;
-  border-radius: var(--radius-md);
-  z-index: 0;
-}
-
-.lanes {
-  position: relative;
   z-index: 1;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+  background: var(--timeline-presence);
 }
 
-.lane {
-  position: relative;
-  flex: 1;
-  min-height: 0;
+.gridLines {
+  position: absolute;
+  inset: -2px 0;
+  pointer-events: none;
+}
+
+.gridLine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--color-text-muted) 25%, transparent);
 }
 
 .segmentWrap {
   position: absolute;
   top: 0;
   bottom: 0;
-  min-width: 6px;
+  z-index: 2;
+  min-width: 3px;
 }
 
-.segmentWrap:focus {
+.segmentWrap:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 1px;
 }
@@ -274,64 +251,96 @@
 .segment {
   width: 100%;
   height: 100%;
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-sm);
-  transition: filter 0.15s;
 }
 
 .segmentWrap:hover .segment {
-  filter: brightness(1.1);
+  outline: 1px solid var(--color-text);
 }
 
 .segmentTooltip {
   position: absolute;
-  bottom: calc(100% + 8px);
+  bottom: calc(100% + 6px);
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: max-content;
-  max-width: 260px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
   padding: var(--space-2) var(--space-3);
-  box-shadow: var(--shadow-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-overlay);
+  box-shadow: var(--shadow-overlay);
   font-size: 12px;
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transition: opacity 0.12s;
+  transition: opacity var(--dur-ui) var(--ease-out);
   z-index: 20;
 }
 
 .segmentWrap:hover .segmentTooltip,
-.segmentWrap:focus .segmentTooltip,
-.segmentWrap:focus-within .segmentTooltip {
+.segmentWrap:focus-visible .segmentTooltip {
   opacity: 1;
   visibility: visible;
 }
 
-.segmentTooltip strong {
-  font-size: 12px;
-  color: var(--color-text);
-}
-
 .segmentTooltip span {
+  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--color-text-muted);
   white-space: nowrap;
-  font-variant-numeric: tabular-nums;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding-left: calc(var(--label-w) + var(--col-gap));
+}
+
+.chip {
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.chip[data-source='microphone'] {
+  color: var(--color-accent-contrast);
+}
+
+.chip[data-source='screen_share'] {
+  color: var(--color-text);
+}
+
+.chip[data-source='rejoin'] {
+  color: #15171c;
 }
 
 .summary {
   margin: 0;
-  padding: var(--space-3) var(--space-5);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-text-muted);
+  padding: var(--space-3) var(--pad-x);
   border-top: 1px solid var(--color-border);
-  background: var(--color-chip-bg);
+  font-family: var(--font-mono);
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 720px) {
+  .wrapper {
+    --label-w: 72px;
+    --pad-x: var(--space-3);
+  }
+
+  .entry {
+    grid-template-columns: 1fr;
+  }
+
+  .axisRow {
+    grid-template-columns: calc(var(--label-w) + var(--col-gap)) 1fr;
+  }
 }
