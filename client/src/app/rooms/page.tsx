@@ -9,6 +9,8 @@ import { useTranslation } from '@/features/translation/useTranslation';
 import { AppShell } from '@/features/navigation/AppShell';
 import { MyRoomMenu } from '@/features/rooms/MyRoomMenu';
 import styles from './page.module.css';
+import { EmptyState } from '@/features/layout/EmptyState';
+import { SkeletonList } from '@/features/layout/SkeletonList';
 
 const DAY_LABELS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
@@ -161,17 +163,23 @@ function MyRoomsContent() {
         {visibilityNotice && <p role="status">{t(visibilityNotice)}</p>}
 
         {notice && <p role="status">{notice}</p>}
-        {loading && <p>{t('Cargando salas…')}</p>}
+        {loading && <SkeletonList label={t('Cargando salas…')} />}
         {error && (
           <p className={styles.error} role="alert">
             {error}
           </p>
         )}
         {!loading && !error && rooms.length === 0 && (
-          <p>{t('Todavía no tenés salas como administrador.')}</p>
+          <EmptyState
+            title={t('Todavía no tenés salas como administrador.')}
+            hint={t('Creá una sala permanente desde el inicio para tenerla siempre a mano.')}
+            action={<Link href="/">{t('Crear una sala')}</Link>}
+          />
         )}
         {!loading && !error && rooms.length > 0 && visibleRooms.length === 0 && (
-          <p>{t(showHidden ? 'No hay salas ocultas.' : 'No hay salas visibles en tu lista.')}</p>
+          <EmptyState
+            title={t(showHidden ? 'No hay salas ocultas.' : 'No hay salas visibles en tu lista.')}
+          />
         )}
 
         {visibleRooms.length > 0 && (

@@ -16,6 +16,8 @@ import { RequireAuth } from '@/features/auth/RequireAuth';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { AppShell } from '@/features/navigation/AppShell';
 import styles from './page.module.css';
+import { EmptyState } from '@/features/layout/EmptyState';
+import { SkeletonList } from '@/features/layout/SkeletonList';
 
 // useSearchParams needs a Suspense boundary or the static build of /history fails.
 export default function HistoryPage() {
@@ -139,7 +141,7 @@ function HistoryList({
       )}
       {!roomArchive && <OwnedRoomsSection roomFilter={roomId} />}
       {!archive && <p className={styles.filter}>{t('Llamadas de los últimos 90 días')}</p>}
-      {loading && <p>{t('Cargando historial…')}</p>}
+      {loading && <SkeletonList label={t('Cargando historial…')} />}
       {error && (
         <p className={styles.error} role="alert">
           {t(error)}
@@ -160,9 +162,12 @@ function HistoryList({
       )}
 
       {!roomId && !loading && !error && entries.length === 0 && (
-        <p>
-          {t(archive ? 'No hay llamadas conservadas.' : 'No hay llamadas en los últimos 90 días.')}
-        </p>
+        <EmptyState
+          title={t(
+            archive ? 'No hay llamadas conservadas.' : 'No hay llamadas en los últimos 90 días.',
+          )}
+          hint={t('Las llamadas en las que participes van a aparecer acá.')}
+        />
       )}
 
       {!loading && entries.length > 0 && (
@@ -317,14 +322,14 @@ function OwnedRoomsSection({ roomFilter }: { roomFilter: string | null }) {
   return (
     <section aria-label={t('Salas que administrás')} className={styles.roomsSection}>
       <h2>{t('Salas que administrás')}</h2>
-      {loading && <p>{t('Cargando salas…')}</p>}
+      {loading && <SkeletonList label={t('Cargando salas…')} rows={2} />}
       {error && (
         <p role="alert" className={styles.error}>
           {error}
         </p>
       )}
       {!loading && !error && visibleRooms.length === 0 && !roomFilter && (
-        <p>{t('Todavía no tenés salas como administrador.')}</p>
+        <EmptyState title={t('Todavía no tenés salas como administrador.')} />
       )}
       {visibleRooms.length > 0 && (
         <ul className={styles.list}>

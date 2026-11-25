@@ -739,6 +739,10 @@ const en: Record<string, string> = {
   Administrador: 'Administrator',
   Interacción: 'Interaction',
   'Micrófono y cámara': 'Microphone and camera',
+  'Crear una sala': 'Create a room',
+  'Creá una sala permanente desde el inicio para tenerla siempre a mano.':
+    'Create a permanent room from the home page to keep it at hand.',
+  'Las llamadas en las que participes van a aparecer acá.': 'Calls you join will show up here.',
 };
 
 export default en;
