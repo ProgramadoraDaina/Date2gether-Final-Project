@@ -830,6 +830,7 @@ const en: Record<string, string> = {
     'Messages and calls older than 90 days, for everyone.',
   'Mis llamadas': 'My calls',
   'Archivo compartido de llamadas': 'Shared call archive',
+  Idioma: 'Language',
 };
 
 export default en;

@@ -3,8 +3,6 @@
 import Link from 'next/link';
 import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from 'react';
 import { BrandMark } from '@/features/brand/BrandMark';
-import { ThemeToggle } from '@/features/theme/ThemeToggle';
-import { LanguageToggle } from '@/features/translation/LanguageToggle';
 import { useTranslation } from '@/features/translation/useTranslation';
 import styles from './RoomSidebar.module.css';
 
@@ -69,11 +67,7 @@ export function RoomSidebar({
           <span className={styles.code}>{code}</span>
         </div>
 
-        <div className={styles.toggles}>
-          <ThemeToggle />
-          <LanguageToggle />
-          {eventControl}
-        </div>
+        <div className={styles.toggles}>{eventControl}</div>
 
         <div className={styles.bottomActions}>
           {musicPlayer}

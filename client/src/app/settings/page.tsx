@@ -15,6 +15,7 @@ import { NAME_COLOR_HEX, NAME_COLOR_IDS, type NameColorId } from '@/lib/nameColo
 import { useTranslation } from '@/features/translation/useTranslation';
 import { AppShell } from '@/features/navigation/AppShell';
 import { useTheme } from '@/features/theme/useTheme';
+import { LanguagePicker } from '@/features/translation/LanguagePicker';
 import styles from './page.module.css';
 
 // Nombres legibles de cada color, solo para el aria-label/title de cada muestra.
@@ -166,6 +167,9 @@ export default function SettingsPage() {
                   aria-label={t('Modo oscuro')}
                   data-testid="theme-toggle"
                 />
+              </Row>
+              <Row label={t('Idioma')}>
+                <LanguagePicker />
               </Row>
             </Section>
 

@@ -8,6 +8,8 @@ import { CallLayoutEditor } from '../layout/CallLayoutEditor';
 import { useCallLayoutStore } from '../layout/store';
 import { useCallSettingsStore, type CallPreference, type CaptionSize } from './store';
 import { ToggleSwitch } from './ToggleSwitch';
+import { useTheme } from '@/features/theme/useTheme';
+import { LanguagePicker } from '@/features/translation/LanguagePicker';
 import styles from './CallSettings.module.css';
 
 const CAPTION_SIZES: { value: CaptionSize; label: string }[] = [
@@ -71,6 +73,7 @@ export function CallSettingsButton({
   const { t } = useTranslation();
   const { captionSize, setCaptionSize, setPreference } = useCallSettingsStore();
   const preferences = useCallSettingsStore();
+  const { theme, toggle: toggleTheme } = useTheme();
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<View>('menu');
   const [avatarOpen, setAvatarOpen] = useState(false);
@@ -160,6 +163,18 @@ export function CallSettingsButton({
                   </button>
                 </li>
               )}
+              <li className={styles.menuItem}>
+                <span>{t('Modo oscuro')}</span>
+                <ToggleSwitch
+                  checked={theme === 'dark'}
+                  onChange={toggleTheme}
+                  aria-label={t('Modo oscuro')}
+                />
+              </li>
+              <li className={styles.menuItem}>
+                <span>{t('Idioma')}</span>
+                <LanguagePicker />
+              </li>
               {PERSONAL_TOGGLES.map(({ key, label: toggleLabel }) => (
                 <li key={key} className={styles.menuItem}>
                   <span>{t(toggleLabel)}</span>
