@@ -57,7 +57,7 @@ import { CaptionsButton, CaptionsOverlay } from './transcription/Captions';
 import { TranscriptionProvider } from './transcription/TranscriptionProvider';
 import { MutedNudge } from './MutedNudge';
 import { CallShortcuts } from './CallShortcuts';
-import { PictureInPictureButton } from './PictureInPicture';
+import { usePictureInPicture } from './PictureInPicture';
 import { audioProcessing, CallPreferenceEffects } from './CallPreferenceEffects';
 import { HandsProvider } from './hands/HandsProvider';
 import { HandButton, HandQueue } from './hands/HandControls';
@@ -389,6 +389,7 @@ function MeetingContent({
   const { t } = useTranslation();
   const [deviceError, setDeviceError] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const pictureInPicture = usePictureInPicture();
   const showDeviceError = useCallback(() => setDeviceError(true), []);
   // Traslado real de medios (Fase 6.13, Flujo 1 de design.md): pide el token
   // de la mini sala y reemplaza la sesión con switchRoom -- nunca joinCall,
@@ -521,6 +522,7 @@ function MeetingContent({
             <ReactionOverlay />
             <HandQueue isAdmin={isCurrentUserAdmin} />
             <MutedNudge locked={enforceAudioLock} />
+            {pictureInPicture.portal}
             <CallShortcuts
               audioLocked={enforceAudioLock}
               videoLocked={enforceVideoLock}
@@ -588,10 +590,7 @@ function MeetingContent({
                   nameFocusEnabled={nameFocusEnabled}
                   onSetNameFocus={onSetNameFocus}
                   onShowShortcuts={() => setShortcutsOpen(true)}
-                />
-                <PictureInPictureButton
-                  buttonClassName={styles.iconButton}
-                  activeClassName={styles.iconButtonActive}
+                  pictureInPicture={pictureInPicture}
                 />
                 {/* Decisión 5 (design.md): único punto de montaje de toda la UI
                 de mini salas -- reemplaza el disparador del dock
@@ -607,6 +606,7 @@ function MeetingContent({
                   currentParticipantId={currentParticipantId}
                   buttonClassName={styles.iconButton}
                   activeButtonClassName={styles.iconButtonActive}
+                  showHostTrigger={false}
                 />
               </div>
               <ConnectedHangUpButton />

@@ -8,6 +8,7 @@ import { CallLayoutEditor } from '../layout/CallLayoutEditor';
 import { useCallLayoutStore } from '../layout/store';
 import { useCallSettingsStore, type CallPreference, type CaptionSize } from './store';
 import { ToggleSwitch } from './ToggleSwitch';
+import type { PictureInPictureControl } from '../PictureInPicture';
 import { useTheme } from '@/features/theme/useTheme';
 import { LanguagePicker } from '@/features/translation/LanguagePicker';
 import styles from './CallSettings.module.css';
@@ -57,6 +58,7 @@ interface CallSettingsButtonProps {
   nameFocusEnabled: boolean;
   onSetNameFocus: (enabled: boolean) => void;
   onShowShortcuts?: () => void;
+  pictureInPicture?: PictureInPictureControl;
 }
 
 export function CallSettingsButton({
@@ -69,6 +71,7 @@ export function CallSettingsButton({
   nameFocusEnabled,
   onSetNameFocus,
   onShowShortcuts,
+  pictureInPicture,
 }: CallSettingsButtonProps) {
   const { t } = useTranslation();
   const { captionSize, setCaptionSize, setPreference } = useCallSettingsStore();
@@ -148,6 +151,28 @@ export function CallSettingsButton({
                   <span className={styles.menuHint}>›</span>
                 </button>
               </li>
+              {pictureInPicture?.supported && (
+                <li>
+                  <button
+                    type="button"
+                    className={styles.menuItem}
+                    aria-pressed={pictureInPicture.open}
+                    onClick={() => {
+                      close();
+                      pictureInPicture.toggle();
+                    }}
+                  >
+                    <span>
+                      {t(
+                        pictureInPicture.open
+                          ? 'Cerrar ventana flotante'
+                          : 'Abrir ventana flotante',
+                      )}
+                    </span>
+                    <span className={styles.menuHint}>↗</span>
+                  </button>
+                </li>
+              )}
               {onShowShortcuts && (
                 <li className={styles.pointerOnly}>
                   <button

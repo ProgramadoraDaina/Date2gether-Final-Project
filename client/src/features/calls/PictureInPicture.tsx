@@ -9,7 +9,14 @@ import {
   type TrackReferenceOrPlaceholder,
 } from '@livekit/components-react';
 import { Track } from 'livekit-client';
-import { useEffect, useState, useSyncExternalStore, type CSSProperties } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from '../translation/useTranslation';
 import { useParticipantColor } from './participantColors';
@@ -126,33 +133,14 @@ function PipView() {
   );
 }
 
-function PipIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="20"
-      height="20"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="2" y="4" width="20" height="16" rx="1" />
-      <rect x="12" y="12" width="8" height="6" />
-    </svg>
-  );
+export interface PictureInPictureControl {
+  supported: boolean;
+  open: boolean;
+  toggle: () => void;
 }
 
-export function PictureInPictureButton({
-  buttonClassName,
-  activeClassName,
-}: {
-  buttonClassName: string;
-  activeClassName: string;
-}) {
-  const { t } = useTranslation();
+// El estado vive en la llamada; el menú de ajustes solo lo abre o cierra.
+export function usePictureInPicture(): PictureInPictureControl & { portal: ReactNode } {
   const supported = useSyncExternalStore(
     subscribe,
     () => !!pipApi(),
@@ -168,34 +156,24 @@ export function PictureInPictureButton({
       pipWindow.close();
     };
   }, [pipWindow]);
-  if (!supported) return null;
-  const label = t(pipWindow ? 'Cerrar ventana flotante' : 'Abrir ventana flotante');
-  return (
-    <>
-      <button
-        type="button"
-        className={`${buttonClassName} ${pipWindow ? activeClassName : ''}`}
-        aria-pressed={!!pipWindow}
-        title={label}
-        aria-label={label}
-        onClick={() => {
-          if (pipWindow) {
-            setPipWindow(null);
-            return;
-          }
-          void pipApi()
-            ?.requestWindow({ width: 360, height: 260 })
-            .then((opened) => {
-              copyStyles(opened.document);
-              opened.document.title = 'Date2gether';
-              setPipWindow(opened);
-            })
-            .catch(() => undefined);
-        }}
-      >
-        <PipIcon />
-      </button>
-      {pipWindow && createPortal(<PipView />, pipWindow.document.body)}
-    </>
-  );
+  const toggle = useCallback(() => {
+    if (pipWindow) {
+      setPipWindow(null);
+      return;
+    }
+    void pipApi()
+      ?.requestWindow({ width: 360, height: 260 })
+      .then((opened) => {
+        copyStyles(opened.document);
+        opened.document.title = 'Date2gether';
+        setPipWindow(opened);
+      })
+      .catch(() => undefined);
+  }, [pipWindow]);
+  return {
+    supported,
+    open: !!pipWindow,
+    toggle,
+    portal: pipWindow ? createPortal(<PipView />, pipWindow.document.body) : null,
+  };
 }

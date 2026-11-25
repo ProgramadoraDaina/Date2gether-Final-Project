@@ -64,6 +64,7 @@ import { useNameFocusSetting } from '@/features/calls/useNameFocusSetting';
 import { createRoomSocket } from '@/lib/socket';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { NAME_COLOR_HEX, isNameColorId } from '@/lib/nameColors';
+import { BreakoutHostDialog } from '@/features/calls/BreakoutView';
 import styles from './page.module.css';
 
 const MeetingRoom = dynamic(() => import('@/features/calls/MeetingRoom'), { ssr: false });
@@ -198,6 +199,7 @@ export default function RoomPage() {
     conflict: 'Otra persona actualizó las notas. Revisá ambas versiones antes de guardar.',
   }[sharedNotes.status];
   const [chatOpen, setChatOpen] = useState(true);
+  const [breakoutsOpen, setBreakoutsOpen] = useState(false);
   const [unread, setUnread] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   // On phones each panel covers the whole screen, so opening one closes the other.
@@ -1029,9 +1031,24 @@ export default function RoomPage() {
               participants={eventParticipants}
               onStartRoulette={roomEvents.startRoulette}
               onStartPoll={roomEvents.startPoll}
+              onOpenBreakouts={
+                isCurrentUserAdmin && callSession.status === 'in-call'
+                  ? () => setBreakoutsOpen(true)
+                  : undefined
+              }
             />
           }
         />
+        {isCurrentUserAdmin && (
+          <BreakoutHostDialog
+            open={breakoutsOpen && callSession.status === 'in-call'}
+            onClose={() => setBreakoutsOpen(false)}
+            roomCode={code}
+            roomToken={access.token}
+            participants={breakoutParticipants}
+            currentParticipantId={access.participant.sub}
+          />
+        )}
         <button
           type="button"
           className={styles.sidebarToggleButton}

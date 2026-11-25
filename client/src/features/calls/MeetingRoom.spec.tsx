@@ -1003,19 +1003,7 @@ describe('MeetingRoom', () => {
       expect(screen.queryByRole('button', { name: 'Mini salas' })).toBeNull();
     });
 
-    it('para el admin, clickear "Mini salas" abre el panel alimentado con los participantes recibidos', async () => {
-      const { moveToBreakoutRoom, listBreakoutRooms } = await import('@/lib/breakouts');
-      (listBreakoutRooms as jest.Mock<typeof listBreakoutRooms>).mockResolvedValue([
-        {
-          id: 'breakout-1',
-          livekitRoomName: 'abc-defg-hij::breakout-1',
-          label: 'Mini sala 1',
-          leavePolicy: 'locked',
-          joinPolicy: 'admin_only',
-          autoCloseAt: null,
-          occupants: [],
-        },
-      ]);
+    it('la barra de la llamada no muestra "Mini salas": el admin la abre desde "Hacer evento"', async () => {
       const MeetingRoom = (await import('./MeetingRoom')).default;
       render(
         <MeetingRoom
@@ -1033,8 +1021,33 @@ describe('MeetingRoom', () => {
           participants={[{ livekitIdentity: 'guest-sub', displayName: 'Invitado' }]}
         />,
       );
+      expect(screen.queryByRole('button', { name: 'Mini salas' })).not.toBeInTheDocument();
+    });
 
-      fireEvent.click(screen.getByRole('button', { name: 'Mini salas' }));
+    it('el panel de mini salas se alimenta con los participantes recibidos', async () => {
+      const { moveToBreakoutRoom, listBreakoutRooms } = await import('@/lib/breakouts');
+      (listBreakoutRooms as jest.Mock<typeof listBreakoutRooms>).mockResolvedValue([
+        {
+          id: 'breakout-1',
+          livekitRoomName: 'abc-defg-hij::breakout-1',
+          label: 'Mini sala 1',
+          leavePolicy: 'locked',
+          joinPolicy: 'admin_only',
+          autoCloseAt: null,
+          occupants: [],
+        },
+      ]);
+      const { BreakoutHostDialog } = await import('./BreakoutView');
+      render(
+        <BreakoutHostDialog
+          open
+          onClose={jest.fn()}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          participants={[{ livekitIdentity: 'guest-sub', displayName: 'Invitado' }]}
+          currentParticipantId=""
+        />,
+      );
 
       expect(listBreakoutRooms).toHaveBeenCalledWith('abc-defg-hij', 'test-room-token');
       await waitFor(() =>
