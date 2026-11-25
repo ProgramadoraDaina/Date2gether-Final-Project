@@ -36,6 +36,8 @@ Se optó por el **merge** (no rebase), resolviendo el conflicto manualmente.
 
 ## 2. Amazon Chime SDK para llamadas de voz y video
 
+> **Decisión histórica, sustituida por LiveKit:** Chime no está admitido en el plan FREE del nuevo AWS experience (sección 11) y se reemplazó por LiveKit autohospedado en EC2 (sección 12). Se conserva como registro de la evaluación inicial; no describe el stack actual.
+
 **Fecha:** 2026-10-24
 **Rama:** `feature/voice-video-call`
 
@@ -69,6 +71,8 @@ Se eligió **Amazon Chime SDK**.
 ---
 
 ## 3. Jest como test runner unitario del backend
+
+> **Nota de estado actual:** el script `test` del backend ejecuta hoy `vitest run` (`package.json` y `vitest.config.mts`, con `unplugin-swc` para los decoradores). El cliente sigue usando Jest. Esta sección registra la decisión original y su razonamiento; los ejemplos de Chime que menciona son históricos (ver sección 12).
 
 **Fecha:** 2026-10-24
 **Rama:** `feature/voice-video-call`
@@ -259,6 +263,8 @@ Se aplicó el mismo patrón que `features/theme/store.ts` ya usa para el mismo p
 
 ## 9. Cada click en "Llamar" creaba una reunión de Chime distinta — las salas no eran realmente grupales
 
+> **Decisión histórica, sustituida por LiveKit** (secciones 11 y 12): LiveKit identifica la sala de medios por el código de la sala, por lo que `rooms.chime_meeting_id` ya no se usa.
+
 **Fecha:** 2026-10-25
 **Rama:** `feature/voice-video-call`
 
@@ -293,6 +299,8 @@ Consecuencia real: si dos personas en la misma sala apretaban "Llamar" por separ
 
 **Fecha:** 2026-10-26.
 
+> La autorización de usar Amazon Chime SDK de esta sección quedó sin efecto: ver las secciones 11 y 12 (reemplazo por LiveKit).
+
 Se conservan juntos los roles de sala, ES/EN, tema claro/oscuro, la corrección de hidratación y las llamadas. La colisión entre dos migraciones `0002` se resuelve conservando roles en `0002_panoramic_nebula` y regenerando Chime como `0003_chime_meeting`, con su snapshot enlazado al de roles. Las bases anteriores de la rama que ya hayan aplicado el antiguo `0002_fast_nebula` requieren reconciliación o una base local nueva; no se borran ni se reinician datos automáticamente.
 
 El equipo autoriza AWS y Amazon Chime SDK para la etapa gratuita prevista de hasta seis meses. Se actualiza primero `docs/requirements.md` para reemplazar la restricción anterior de autohospedaje sin APIs comerciales. El plazo depende de los créditos y de los servicios disponibles en la cuenta; no garantiza consumo ilimitado. Las credenciales siguen solo en el backend y las pruebas automatizadas simulan Chime sin consumir AWS.
@@ -301,6 +309,8 @@ El equipo autoriza AWS y Amazon Chime SDK para la etapa gratuita prevista de has
 ## 11. Configuración de audio para el proyecto date2gether
 
 **Fecha:** 2026-10-26
+
+> **Sustituida por la sección 12:** las variables `AWS_CHIME_*` descritas aquí ya no existen; el audio y el video los resuelve LiveKit autohospedado. Se conserva el hallazgo de que Chime no está admitido en el plan FREE.
 
 La consulta `GetAccountPlanState` confirmó `FREE` y `ACTIVE`. El nuevo AWS experience excluye Chime SDK incluso en su plan pago simplificado. Instalar Agent Toolkit y autenticar AWS CLI no cambia esa restricción. No se cambia el plan, se activan funciones avanzadas ni se crean reuniones para probar el código.
 
@@ -641,3 +651,37 @@ Las salas se podían crear, listar (`/rooms/mine`) y renombrar, pero no borrar. 
 - El borrado es irreversible (sin papelera). La confirmación en la UI es la única barrera, de ahí el texto explícito del diálogo.
 - Los clientes conectados reciben `roomDeleted` pero la pantalla de sala todavía no reacciona a ese evento más allá de perder la conexión; queda como mejora.
 - Las sesiones de llamada de una sala borrada siguen apareciendo en la línea de tiempo de quienes participaron, con `roomName: null` (la consulta usa `leftJoin`). Las filas de `call_history` (listado "Historial") sí se borran junto con la sala.
+
+---
+
+## 24. Documentación del proyecto alineada al enunciado del Proyecto Integrador (Anexo A/C, sección 6)
+
+**Fecha:** 2026-11-24
+**Rama:** `docs/project-documentation`
+
+### Contexto
+
+El enunciado del Proyecto Integrador Final exige un README con secciones definidas (Anexo A), una justificación de las tecnologías, una descripción de la arquitectura y un documento de uso de IA (Anexo C). La documentación existente estaba repartida entre el README y este registro.
+
+### Alternativas consideradas
+
+- **Dejar todo en el README.** Lo vuelve inmanejable: ya mezclaba instalación, seguridad, API y despliegue.
+- **Documentos separados enlazados desde el README (elegida).**
+
+### Decisión
+
+- `README.md` se reorganiza con las secciones del Anexo A (Demo, Usuarios de prueba, Funcionalidades, Stack, Arquitectura, Cómo correrlo en local, Equipo, Uso de IA) y conserva el detalle operativo al final.
+- Se crean `docs/arquitectura.md` (diagramas Mermaid, flujo de una petición, ER y tabla de endpoints, que se movió desde el README), `docs/justificacion.md` y `docs/uso-de-ia.md`.
+- Los datos que no se pueden verificar en el repositorio (URLs, credenciales de prueba, video, nombres reales) quedan como marcadores `TODO` visibles.
+- Las secciones 2, 9, 10 y 11 reciben una nota de que Chime fue reemplazado por LiveKit (sección 12); la sección 3 anota que el backend usa hoy Vitest.
+
+### Justificación
+
+- Cada documento responde una pregunta distinta (cómo se usa, cómo está hecho, por qué, con qué ayuda) y puede evaluarse por separado.
+- Marcar lo desconocido evita documentar datos inventados.
+
+### Consecuencias
+
+- Los `TODO` deben completarse antes de la entrega.
+- Si cambia la API, hay que actualizar la tabla de `docs/arquitectura.md` y no el README.
+
