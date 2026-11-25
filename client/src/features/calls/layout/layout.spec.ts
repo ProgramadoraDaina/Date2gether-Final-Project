@@ -3,6 +3,7 @@ import {
   assignToZones,
   buildLayoutTree,
   fitTiles,
+  zonesInUse,
   type LayoutZone,
   type ZonePlacement,
 } from './layout';
@@ -120,5 +121,38 @@ describe('assignToZones', () => {
       ['p0'],
       [],
     ]);
+  });
+});
+
+describe('zonesInUse', () => {
+  const zone = (id: string, capacity: number) =>
+    ({
+      id,
+      capacity,
+      placement: 'bottom',
+      width: 100,
+      height: 30,
+      scale: 100,
+      aspect: '16:9',
+    }) as const;
+  const party = [zone('centro', 1), zone('abajo', 2), zone('derecha', 3)];
+  const ids = (count: number) => zonesInUse(party, count).map((z) => z.id);
+
+  it('solo: una zona que ocupa todo', () => {
+    expect(ids(1)).toEqual(['centro']);
+  });
+
+  it('de 2 a 3 personas: centro y abajo', () => {
+    expect(ids(2)).toEqual(['centro', 'abajo']);
+    expect(ids(3)).toEqual(['centro', 'abajo']);
+  });
+
+  it('desde 4 personas aparece la zona de la derecha', () => {
+    expect(ids(4)).toEqual(['centro', 'abajo', 'derecha']);
+    expect(ids(6)).toEqual(['centro', 'abajo', 'derecha']);
+  });
+
+  it('sin nadie todavía se muestra la primera zona', () => {
+    expect(ids(0)).toEqual(['centro']);
   });
 });

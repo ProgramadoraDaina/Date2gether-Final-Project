@@ -798,6 +798,8 @@ const en: Record<string, string> = {
     'Shown in the chat and around your video when you speak.',
   Presente: 'Present',
   'Para toda la sala': 'For the whole room',
+  'Una zona sin nadie no ocupa lugar: con poca gente, las primeras se agrandan.':
+    'An empty zone takes no space: with few people, the first zones grow.',
 };
 
 export default en;

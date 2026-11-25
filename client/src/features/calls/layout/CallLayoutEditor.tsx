@@ -354,6 +354,9 @@ export function CallLayoutEditor({
             'Las personas van llenando la Zona 1, después la 2, y así. Las que no entran van a la última.',
           )}
         </p>
+        <p className={styles.editorHint}>
+          {t('Una zona sin nadie no ocupa lugar: con poca gente, las primeras se agrandan.')}
+        </p>
       </div>
       <div className={styles.presets} role="group" aria-label={t('Distribuciones listas')}>
         {LAYOUT_PRESETS.map((preset) => (

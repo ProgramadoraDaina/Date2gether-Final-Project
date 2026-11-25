@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { TrackRefContext, type TrackReferenceOrPlaceholder } from '@livekit/components-react';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { ReactionTile } from '../reactions/ReactionTile';
-import { assignToZones, buildLayoutTree, type LayoutZone } from './layout';
+import { assignToZones, buildLayoutTree, zonesInUse, type LayoutZone } from './layout';
 import { LayoutView } from './LayoutView';
 import { ZoneTiles } from './ZoneTiles';
 import { useCallLayoutStore } from './store';
@@ -24,15 +24,20 @@ const trackKey = (track: TrackReferenceOrPlaceholder) =>
 export function CustomCallLayout({ tracks, zones, editing = false }: CustomCallLayoutProps) {
   const { t } = useTranslation();
   const focusedZoneId = useCallLayoutStore((state) => state.focusedZoneId);
-  const tree = useMemo(() => buildLayoutTree(zones), [zones]);
+  // Con el editor abierto se ven todas las zonas; en la llamada, solo las que tienen gente.
+  const shown = useMemo(
+    () => (editing ? zones : zonesInUse(zones, tracks.length)),
+    [editing, zones, tracks.length],
+  );
+  const tree = useMemo(() => buildLayoutTree(shown), [shown]);
   const groups = useMemo(() => {
     const ordered = [
       ...tracks.filter((track) => track.source === 'screen_share'),
       ...tracks.filter((track) => track.source !== 'screen_share'),
     ];
-    const assigned = assignToZones(zones, ordered);
-    return new Map(zones.map((zone, index) => [zone.id, assigned[index]]));
-  }, [tracks, zones]);
+    const assigned = assignToZones(shown, ordered);
+    return new Map(shown.map((zone, index) => [zone.id, assigned[index]]));
+  }, [tracks, shown]);
   const zoneNumber = useMemo(
     () => new Map(zones.map((zone, index) => [zone.id, index + 1])),
     [zones],
