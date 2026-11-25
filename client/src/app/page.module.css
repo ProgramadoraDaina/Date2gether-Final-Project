@@ -15,9 +15,6 @@
 .linkButton {
   composes: linkButton from '../styles/form.module.css';
 }
-.hintBelowButton {
-  composes: hintBelowButton from '../styles/form.module.css';
-}
 .divider {
   composes: divider from '../styles/form.module.css';
 }

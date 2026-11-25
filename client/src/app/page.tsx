@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { ApiError, createRoom, type CreateScheduleSlot } from '@/lib/api';
 import { getCurrentUser, isLoggedIn, logout, onAuthChange, type AuthUser } from '@/lib/auth';
 import { useTranslation } from '@/features/translation/useTranslation';
+import { loginUrlFor } from '@/features/auth/safeRedirect';
 import { AppShell } from '@/features/navigation/AppShell';
 import { ScheduleSlotEditor } from '@/features/rooms/ScheduleSlotEditor';
 import styles from './page.module.css';
@@ -59,13 +60,18 @@ export default function HomePage() {
     router.replace('/login');
   }
 
+  // push (not replace) so the back button returns to the home page.
+  function redirectToLogin() {
+    router.push(loginUrlFor('/'));
+  }
+
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
-    if (!name.trim()) return;
     if (!loggedIn) {
-      setError(t('Necesitás iniciar sesión para crear una reunión.'));
+      redirectToLogin();
       return;
     }
+    if (!name.trim()) return;
     localStorage.setItem(NAME_KEY, name.trim());
     setLoading(true);
     setError(null);
@@ -142,15 +148,17 @@ export default function HomePage() {
             maxLength={60}
             required
           />
-          <label className={styles.permanentToggle}>
-            <input
-              type="checkbox"
-              checked={isPermanent}
-              onChange={(event) => setIsPermanent(event.target.checked)}
-            />
-            {t('Sala permanente (enlace fijo, con sala de espera siempre activa)')}
-          </label>
-          {isPermanent && (
+          {loggedIn && (
+            <label className={styles.permanentToggle}>
+              <input
+                type="checkbox"
+                checked={isPermanent}
+                onChange={(event) => setIsPermanent(event.target.checked)}
+              />
+              {t('Sala permanente (enlace fijo, con sala de espera siempre activa)')}
+            </label>
+          )}
+          {loggedIn && isPermanent && (
             <>
               <label htmlFor="room-name">{t('Nombre de la sala')}</label>
               <input
@@ -162,15 +170,15 @@ export default function HomePage() {
               />
             </>
           )}
-          {isPermanent && <ScheduleSlotEditor slots={slots} onChange={setSlots} />}
-          <button type="submit" disabled={loading || !loggedIn}>
+          {loggedIn && isPermanent && <ScheduleSlotEditor slots={slots} onChange={setSlots} />}
+          {/* Logged out: plain button + onClick so the name input's `required` cannot block the redirect. */}
+          <button
+            type={loggedIn ? 'submit' : 'button'}
+            onClick={loggedIn ? undefined : redirectToLogin}
+            disabled={loading}
+          >
             {loading ? t('Creando…') : t('Crear reunión')}
           </button>
-          {!checkingSession && !loggedIn && (
-            <p className={styles.hintBelowButton}>
-              {t('Necesitás iniciar sesión (arriba) para crear una reunión.')}
-            </p>
-          )}
         </form>
 
         <div className={styles.divider}>{t('o unite a una existente')}</div>
