@@ -98,14 +98,14 @@ export function MutedNudge({ locked }: { locked: boolean }) {
           void room.localParticipant.setMicrophoneEnabled(true).catch(() => undefined);
         }}
       >
-        {t('Activar micrófono')}
+        {t('Activar')}
       </button>
       <button
         type="button"
         className={styles.mutedNudgeClose}
         onClick={dismiss}
-        aria-label={t('Cerrar')}
-        title={t('Cerrar')}
+        aria-label={t('Cerrar aviso')}
+        title={t('Cerrar aviso')}
       >
         ×
       </button>

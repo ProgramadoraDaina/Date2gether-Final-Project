@@ -671,7 +671,11 @@ export default function RoomPage() {
         >
           {t('Conversación')}
           {unread > 0 && (
-            <span className={styles.unreadBadge} aria-label={`${unread} ${t('sin leer')}`}>
+            <span
+              className={styles.unreadBadge}
+              aria-hidden="true"
+              title={`${unread} ${t('sin leer')}`}
+            >
               {unread > 99 ? '99+' : unread}
             </span>
           )}

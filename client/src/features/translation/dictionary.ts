@@ -833,6 +833,7 @@ const en: Record<string, string> = {
   'Volver al historial': 'Back to history',
   'Filtrar por sala': 'Filter by room',
   'Todas las salas': 'All rooms',
+  Activar: 'Turn on',
 };
 
 export default en;
