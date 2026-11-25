@@ -615,7 +615,7 @@ const en: Record<string, string> = {
   Personas: 'People',
   personas: 'people',
   'Tamaño (%)': 'Size (%)',
-  Forma: 'Shape',
+  'Forma del video': 'Video shape',
   'Alargada (16:9)': 'Wide (16:9)',
   'Clásica (4:3)': 'Classic (4:3)',
   'Cuadrada (1:1)': 'Square (1:1)',

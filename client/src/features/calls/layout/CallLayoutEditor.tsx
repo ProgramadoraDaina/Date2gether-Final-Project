@@ -276,7 +276,7 @@ function ZoneCard({ zone, index, open }: { zone: LayoutZone; index: number; open
             <Stepper value={zone.capacity} onChange={(capacity) => update({ capacity })} />
           </div>
           <ChoiceGroup
-            label={t('Forma')}
+            label={t('Forma del video')}
             options={ASPECTS}
             value={zone.aspect}
             onChange={(aspect) => update({ aspect })}
