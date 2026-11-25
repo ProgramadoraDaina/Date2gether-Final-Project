@@ -2,9 +2,15 @@ import type { CSSProperties, ReactNode } from 'react';
 import type { LayoutNode, LayoutZone } from './layout';
 import styles from './CallLayout.module.css';
 
+interface ZoneProps {
+  style?: CSSProperties;
+  focused?: boolean;
+}
+
 interface LayoutViewProps {
   tree: LayoutNode;
   renderZone: (zone: LayoutZone) => ReactNode;
+  zoneProps?: (zone: LayoutZone) => ZoneProps;
 }
 
 const FILL: CSSProperties = { flex: '1 1 0', alignSelf: 'stretch', minWidth: 0, minHeight: 0 };
@@ -27,14 +33,22 @@ function NodeView({
   node,
   style,
   renderZone,
+  zoneProps,
 }: {
   node: LayoutNode;
   style: CSSProperties;
   renderZone: LayoutViewProps['renderZone'];
+  zoneProps: LayoutViewProps['zoneProps'];
 }) {
   if (node.kind === 'zone') {
+    const extra = zoneProps?.(node.zone) ?? {};
     return (
-      <div className={styles.zone} style={style} data-testid="layout-zone">
+      <div
+        className={styles.zone}
+        style={{ ...style, ...extra.style }}
+        data-focused={extra.focused || undefined}
+        data-testid="layout-zone"
+      >
         {renderZone(node.zone)}
       </div>
     );
@@ -46,6 +60,7 @@ function NodeView({
           key={index}
           node={child}
           renderZone={renderZone}
+          zoneProps={zoneProps}
           style={index === node.sized ? sizedStyle(leadZone(child), node.direction) : FILL}
         />
       ))}
@@ -53,6 +68,13 @@ function NodeView({
   );
 }
 
-export function LayoutView({ tree, renderZone }: LayoutViewProps) {
-  return <NodeView node={tree} renderZone={renderZone} style={{ width: '100%', height: '100%' }} />;
+export function LayoutView({ tree, renderZone, zoneProps }: LayoutViewProps) {
+  return (
+    <NodeView
+      node={tree}
+      renderZone={renderZone}
+      zoneProps={zoneProps}
+      style={{ width: '100%', height: '100%' }}
+    />
+  );
 }

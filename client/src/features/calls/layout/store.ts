@@ -9,7 +9,10 @@ interface CallLayoutState {
   zones: LayoutZone[];
   // True while the tiles editor is open; never persisted.
   editing: boolean;
+  // Zone whose controls are open in the editor; never persisted.
+  focusedZoneId: string | null;
   setEditing: (editing: boolean) => void;
+  setFocusedZone: (id: string | null) => void;
   setEnabled: (enabled: boolean) => void;
   addZone: () => void;
   updateZone: (id: string, changes: ZoneChanges) => void;
@@ -70,9 +73,15 @@ export const useCallLayoutStore = create<CallLayoutState>()(
       enabled: false,
       zones: [],
       editing: false,
+      focusedZoneId: null,
       setEditing: (editing) => set({ editing }),
+      setFocusedZone: (focusedZoneId) => set({ focusedZoneId }),
       setEnabled: (enabled) => set({ enabled }),
-      addZone: () => set(({ zones }) => ({ zones: [...zones, defaultZone(zones.length === 0)] })),
+      addZone: () =>
+        set(({ zones }) => {
+          const zone = defaultZone(zones.length === 0);
+          return { zones: [...zones, zone], focusedZoneId: zone.id };
+        }),
       updateZone: (id, changes) =>
         set(({ zones }) => ({
           zones: zones.map((zone) =>
@@ -81,7 +90,11 @@ export const useCallLayoutStore = create<CallLayoutState>()(
               : zone,
           ),
         })),
-      removeZone: (id) => set(({ zones }) => ({ zones: zones.filter((zone) => zone.id !== id) })),
+      removeZone: (id) =>
+        set(({ zones, focusedZoneId }) => ({
+          zones: zones.filter((zone) => zone.id !== id),
+          focusedZoneId: focusedZoneId === id ? null : focusedZoneId,
+        })),
     }),
     {
       name: 'date2gether:call-layout',

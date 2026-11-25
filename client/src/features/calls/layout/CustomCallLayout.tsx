@@ -7,6 +7,8 @@ import { ReactionTile } from '../reactions/ReactionTile';
 import { assignToZones, buildLayoutTree, type LayoutZone } from './layout';
 import { LayoutView } from './LayoutView';
 import { ZoneTiles } from './ZoneTiles';
+import { useCallLayoutStore } from './store';
+import { zoneColorStyle } from './zoneColors';
 import styles from './CallLayout.module.css';
 
 interface CustomCallLayoutProps {
@@ -21,6 +23,7 @@ const trackKey = (track: TrackReferenceOrPlaceholder) =>
 
 export function CustomCallLayout({ tracks, zones, editing = false }: CustomCallLayoutProps) {
   const { t } = useTranslation();
+  const focusedZoneId = useCallLayoutStore((state) => state.focusedZoneId);
   const tree = useMemo(() => buildLayoutTree(zones), [zones]);
   const groups = useMemo(() => {
     const ordered = [
@@ -40,6 +43,10 @@ export function CustomCallLayout({ tracks, zones, editing = false }: CustomCallL
     <div className={styles.stage} data-editing={editing} data-testid="layout-stage">
       <LayoutView
         tree={tree}
+        zoneProps={(zone) => ({
+          style: zoneColorStyle((zoneNumber.get(zone.id) ?? 1) - 1),
+          focused: editing && zone.id === focusedZoneId,
+        })}
         renderZone={(zone) => {
           const members = groups.get(zone.id) ?? [];
           return (

@@ -165,6 +165,7 @@ describe('Ajustes de la llamada', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Agregar zona' }));
     fireEvent.click(screen.getByRole('button', { name: 'Agregar zona' }));
     const firstZone = screen.getByRole('group', { name: 'Zona 1' });
+    fireEvent.click(within(firstZone).getByRole('button', { name: /Zona 1/ }));
     fireEvent.change(within(firstZone).getByLabelText('Personas'), { target: { value: '2' } });
 
     expect(useCallLayoutStore.getState()).toMatchObject({
