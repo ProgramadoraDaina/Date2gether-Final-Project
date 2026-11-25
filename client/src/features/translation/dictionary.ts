@@ -762,6 +762,7 @@ const en: Record<string, string> = {
   'Sonido cuando alguien entra o sale': 'Sound when someone joins or leaves',
   'Abrir ventana flotante': 'Open floating window',
   'Cerrar ventana flotante': 'Close floating window',
+  'Desenfocar el fondo': 'Blur background',
 };
 
 export default en;

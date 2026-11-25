@@ -20,6 +20,7 @@ const CAPTION_SIZES: { value: CaptionSize; label: string }[] = [
 const PERSONAL_TOGGLES: { key: CallPreference; label: string }[] = [
   { key: 'mutedNudge', label: 'Avisarme si hablo silenciado' },
   { key: 'noiseSuppression', label: 'Supresión de ruido' },
+  { key: 'backgroundBlur', label: 'Desenfocar el fondo' },
   { key: 'joinLeaveSounds', label: 'Sonido cuando alguien entra o sale' },
 ];
 

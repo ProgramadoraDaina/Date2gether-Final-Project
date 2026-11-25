@@ -1,7 +1,7 @@
 'use client';
 
-import { useRoomContext } from '@livekit/components-react';
-import { RoomEvent, Track } from 'livekit-client';
+import { useLocalParticipant, useRoomContext } from '@livekit/components-react';
+import { RoomEvent, Track, type LocalVideoTrack } from 'livekit-client';
 import { useEffect, useRef } from 'react';
 import { useCallSettingsStore } from './settings/store';
 import { JOIN_TONE, LEAVE_TONE, playTones } from './tones';
@@ -30,6 +30,31 @@ function NoiseSuppressionSync() {
   return null;
 }
 
+// El modelo de segmentación se carga recién cuando alguien prende el desenfoque.
+function BackgroundBlurSync() {
+  const blur = useCallSettingsStore((state) => state.backgroundBlur);
+  const { cameraTrack } = useLocalParticipant();
+  const track = cameraTrack?.track as LocalVideoTrack | undefined;
+  useEffect(() => {
+    if (!track) return;
+    let cancelled = false;
+    if (!blur) {
+      if (track.getProcessor()) void track.stopProcessor().catch(() => undefined);
+      return;
+    }
+    void import('@livekit/track-processors')
+      .then(({ BackgroundBlur, supportsBackgroundProcessors }) => {
+        if (cancelled || !supportsBackgroundProcessors() || track.getProcessor()) return;
+        return track.setProcessor(BackgroundBlur(12));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [blur, track]);
+  return null;
+}
+
 function PresenceSounds() {
   const room = useRoomContext();
   useEffect(() => {
@@ -52,6 +77,7 @@ export function CallPreferenceEffects() {
   return (
     <>
       <NoiseSuppressionSync />
+      <BackgroundBlurSync />
       <PresenceSounds />
     </>
   );
