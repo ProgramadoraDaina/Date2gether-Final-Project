@@ -688,6 +688,19 @@ export const callParticipantIdentitiesRelations = relations(
   }),
 );
 
+// AI-generated summary of a call's transcript. One row per session (the PK is the
+// session id): that is the usage limit, each call is sent to the model at most once.
+export const callSummaries = pgTable('call_summaries', {
+  sessionId: uuid('session_id')
+    .primaryKey()
+    .references(() => callSessions.id, { onDelete: 'cascade' }),
+  summary: text('summary').notNull(),
+  model: varchar('model', { length: 80 }).notNull(),
+  language: varchar('language', { length: 2 }).notNull(),
+  createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
 export const callSessionsRelations = relations(callSessions, ({ one, many }) => ({
   room: one(rooms, { fields: [callSessions.roomId], references: [rooms.id] }),
   participants: many(callSessionParticipants),

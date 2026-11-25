@@ -701,3 +701,47 @@ El requisito R7 del curso exige que los errores del backend nunca expongan traza
 
 - Todo entorno que arranque la app debe definir `CORS_ORIGIN`: `.env` local (ver `.env.example`), Playwright (`playwright.config.ts`) y EC2 (`deploy/ec2/configure.py`) ya lo hacen. Cualquier script o test nuevo que llame a `createApp()` debe definirlo también.
 - Los errores 500 pierden el detalle en la respuesta; para diagnosticar hay que mirar los logs del servidor.
+
+---
+
+## 26. Resumen de llamadas con IA: Gemini API (nivel gratuito) llamada solo desde el backend
+
+**Fecha:** 2026-11-25
+**Rama:** `feature/ai-call-summary`
+
+### Contexto
+
+El curso pide una funcionalidad de producto que consuma un modelo de IA por API, siempre desde el backend, con la clave en variables de entorno, manejo de errores y límites de uso. La funcionalidad elegida es resumir la transcripción guardada de una llamada del historial.
+
+El proveedor se eligió después de probar Amazon Bedrock el 2026-11-25 en la cuenta AWS del proyecto (plan FREE):
+
+- Todos los modelos Claude respondieron `AccessDenied` ("not available for this account").
+- Amazon Nova Lite fue limitado ya en la primera llamada con "Too many tokens per day".
+- Los perfiles de inferencia entre Regiones no están permitidos por la cuenta.
+
+### Decisión
+
+- **Proveedor: Google Gemini API, nivel gratuito**, con el SDK oficial `@google/genai`. Modelo por defecto `gemini-3.5-flash-lite`, configurable con `GEMINI_MODEL`. Se verificó en la página de precios de la Gemini API que figura con costo cero en el nivel gratuito y que no está marcado como obsoleto (`gemini-2.5-flash` figura como obsoleto desde el 1 de diciembre de 2026).
+- **Clave solo en el backend** (`GEMINI_API_KEY`). Nunca se envía al cliente ni se registra en logs. Si falta, la aplicación arranca igual y el endpoint responde 503 "AI summaries are not configured".
+- **Un resumen por sesión.** Tabla `call_summaries` (migración `0031_call_summaries`) con la sesión como clave primaria y borrado en cascada con `call_sessions`. `POST` solo llama al modelo si no existe resumen; `GET` devuelve el guardado, aunque se haya pedido otro idioma después: la respuesta incluye `language` y el cliente avisa cuando difiere del idioma de la interfaz. Esto protege la cuota gratuita y evita pagar o gastar cuota dos veces por la misma llamada. Se eligió una tabla propia y no columnas en `call_sessions` para no ensanchar una tabla que escriben los webhooks de LiveKit y para poder guardar modelo, idioma y autor.
+- **Autorización reutilizada.** Los endpoints `GET/POST /calls/sessions/:sessionId/summary` validan `sessionId` como UUID (`ParseUUIDPipe`, 400 si no lo es), usan `JwtAuthGuard` y la misma regla que el acta (`TranscriptHistoryService.requireSession`): solo quien participó de la sesión, con 404 tanto si no existe como si no participó.
+- **Límite de tasa más estricto** en el `POST`: 5 por minuto (el global es 60), con `@Throttle` de `@nestjs/throttler`.
+- **Prompt seguro.** La instrucción de sistema indica que la transcripción son datos y no instrucciones; la transcripción va entre delimitadores `<transcript>` y se neutraliza cualquier cierre inyectado. Si supera 100 000 caracteres se responde 413 en lugar de truncar en silencio. Sin frases, 422.
+- **Errores controlados.** Cuota agotada del proveedor: 429 con `code: "AI_QUOTA"` (el límite propio de 5 por minuto también responde 429, pero sin ese código, y el cliente muestra un mensaje distinto). Red, error del proveedor o respuesta bloqueada o vacía: 503.
+- **Solo se guardan generaciones completas.** Se lee `finishReason` del primer candidato: solo `STOP` es válido. `MAX_TOKENS` (o cualquier otro fin distinto de `STOP`) se trata como no disponible (503) y los motivos de seguridad, lista de bloqueo, contenido prohibido, recitación o datos personales sensibles como bloqueo; en ambos casos no se persiste nada. El límite de salida es de 2048 tokens (`MAX_OUTPUT_TOKENS`).
+- **Línea única por entrada.** Al armar el prompt, los saltos de línea (CR, LF, NEL, U+2028, U+2029) del nombre y del texto se reemplazan por espacios, para que una frase no pueda falsificar líneas `[hh:mm:ss] Nombre:` de la transcripción.
+- **Sesiones en curso.** No se agrega una regla 409: `requireSession` exige filas en `call_session_participants`, que se insertan en la misma transacción que fija `ended_at` (`calls-webhook.service.ts`), por lo que una llamada en curso responde 404 y nunca llega a generar. El cliente solo recibe mensajes genéricos; el detalle del SDK queda en los logs del servidor, sin la clave.
+- **Proveedor detrás de una interfaz** (`AiTextGenerator`), de modo que cambiar de modelo o proveedor solo toca una clase.
+
+### Alternativas descartadas
+
+- **API de Anthropic (de pago):** buena calidad, pero exige tarjeta y costo recurrente para un proyecto de curso.
+- **Plan de pago de AWS (Bedrock):** habilitaría Claude, pero implica salir del plan gratuito y asumir costos.
+- **Amazon Nova Lite en Bedrock:** probado y limitado desde la primera llamada.
+
+### Consecuencias y tradeoffs
+
+- El nivel gratuito tiene límites de solicitudes y tokens por minuto y por día; por eso existen el resumen único por sesión y el límite de 5 por minuto. Una cuota agotada se muestra al usuario como un mensaje claro, sin romper la página.
+- Google puede usar el contenido enviado en el nivel gratuito para mejorar sus productos. Es aceptable para datos de demostración, pero debe informarse: no se deben resumir llamadas con datos sensibles reales.
+- Se suma un segundo proveedor y una segunda clave para administrar (`GEMINI_API_KEY`, y opcionalmente `GEMINI_MODEL`, en el entorno del backend y en EC2).
+- La numeración de la migración (0031) puede colisionar con otras ramas aún sin integrar que usan el mismo número; hay que renumerar la que se integre segunda.

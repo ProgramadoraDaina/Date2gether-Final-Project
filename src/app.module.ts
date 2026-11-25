@@ -6,6 +6,7 @@ import { AppController } from './app.controller';
 import { HttpOnlyThrottlerGuard } from './common/http-only-throttler.guard';
 import { DrizzleModule } from './db/drizzle.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { AiSummaryModule } from './modules/ai-summary/ai-summary.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CallsModule } from './modules/calls/calls.module';
 import { ChatModule } from './modules/chat/chat.module';
@@ -32,6 +33,7 @@ import { TranscriptsModule } from './modules/transcripts/transcripts.module';
     RoomEmojisModule,
     RoomLinksModule,
     TranscriptsModule,
+    AiSummaryModule,
   ],
   controllers: [AppController],
   providers: [{ provide: APP_GUARD, useClass: HttpOnlyThrottlerGuard }],

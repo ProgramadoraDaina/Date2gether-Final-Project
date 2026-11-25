@@ -218,6 +218,13 @@
       "when": 1795569146769,
       "tag": "0030_room_links",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1795642521878,
+      "tag": "0031_call_summaries",
+      "breakpoints": true
     }
   ]
 }

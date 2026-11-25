@@ -43,6 +43,10 @@ def main():
         'LIVEKIT_URL': 'wss://' + hosts['media'], 'LIVEKIT_API_URL': 'http://127.0.0.1:7880',
         'MAX_ROOM_PARTICIPANTS': str(args.participants),
     })
+    # Optional third-party key for AI call summaries. Taken from the operator's shell so it
+    # never lives in the repository; an existing value in runtime.env is kept when unset.
+    if os.environ.get('GEMINI_API_KEY'):
+        env['GEMINI_API_KEY'] = os.environ['GEMINI_API_KEY']
     env_path.write_text(''.join(key + '=' + value + '\n' for key, value in env.items()))
     # JSON is valid YAML and avoids templating credentials into shell code.
     livekit = {
