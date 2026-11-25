@@ -57,6 +57,7 @@ import { CaptionsButton, CaptionsOverlay } from './transcription/Captions';
 import { TranscriptionProvider } from './transcription/TranscriptionProvider';
 import { MutedNudge } from './MutedNudge';
 import { CallShortcuts } from './CallShortcuts';
+import { PictureInPictureButton } from './PictureInPicture';
 import { audioProcessing, CallPreferenceEffects } from './CallPreferenceEffects';
 import { HandsProvider } from './hands/HandsProvider';
 import { HandButton, HandQueue } from './hands/HandControls';
@@ -583,6 +584,11 @@ function MeetingContent({
                   onSetVideoLock={onSetVideoLock}
                   nameFocusEnabled={nameFocusEnabled}
                   onSetNameFocus={onSetNameFocus}
+                  onShowShortcuts={() => setShortcutsOpen(true)}
+                />
+                <PictureInPictureButton
+                  buttonClassName={styles.iconButton}
+                  activeClassName={styles.iconButtonActive}
                 />
                 {/* Decisión 5 (design.md): único punto de montaje de toda la UI
                 de mini salas -- reemplaza el disparador del dock

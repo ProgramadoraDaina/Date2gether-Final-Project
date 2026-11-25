@@ -760,6 +760,8 @@ const en: Record<string, string> = {
   'Sonando…': 'Playing…',
   'Supresión de ruido': 'Noise suppression',
   'Sonido cuando alguien entra o sale': 'Sound when someone joins or leaves',
+  'Abrir ventana flotante': 'Open floating window',
+  'Cerrar ventana flotante': 'Close floating window',
 };
 
 export default en;
