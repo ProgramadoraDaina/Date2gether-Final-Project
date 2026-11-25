@@ -57,7 +57,7 @@
   block-size: 5px;
   margin-block-start: var(--space-3);
   overflow: hidden;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--color-accent) 13%, var(--color-surface));
 }
 

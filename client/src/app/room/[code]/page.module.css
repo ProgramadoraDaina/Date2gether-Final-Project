@@ -82,7 +82,7 @@
 .callLoadingButton {
   width: auto;
   padding: 8px 20px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--color-border);
   background: transparent;
   color: var(--color-accent);
@@ -502,7 +502,7 @@
 .notesTabs button {
   padding: 6px 10px;
   border: 1px solid var(--color-border);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--color-surface);
   color: var(--color-text);
   cursor: pointer;
@@ -519,7 +519,7 @@
   resize: none;
   padding: 10px;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--color-surface);
   color: var(--color-text);
   font: inherit;
