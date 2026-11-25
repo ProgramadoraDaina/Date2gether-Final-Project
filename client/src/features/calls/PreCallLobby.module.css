@@ -162,3 +162,8 @@
     padding: var(--space-5);
   }
 }
+
+.speakerTest {
+  width: auto;
+  margin-bottom: var(--space-4);
+}

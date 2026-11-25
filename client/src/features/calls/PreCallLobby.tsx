@@ -1,12 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from '../translation/useTranslation';
 import type { CallDevices } from './callDevices';
 import { useCallSettingsStore } from './settings/store';
 import { useAvailableDevices, useDevicePreview } from './useDevicePreview';
 import { InitialsAvatar } from './InitialsAvatar';
+import { playTones, SPEAKER_TEST } from './tones';
 import styles from './PreCallLobby.module.css';
 
 const subscribeToMediaSupport = () => () => {};
@@ -114,6 +115,25 @@ function MicrophoneLevel({ stream }: { stream: MediaStream | null }) {
     };
   }, [stream]);
   return <meter ref={ref} min={0} max={100} value={0} aria-label={t('Nivel del micrófono')} />;
+}
+
+function SpeakerTest() {
+  const { t } = useTranslation();
+  const [playing, setPlaying] = useState(false);
+  return (
+    <button
+      type="button"
+      className={`secondary ${styles.speakerTest}`}
+      aria-busy={playing}
+      disabled={playing}
+      onClick={() => {
+        setPlaying(true);
+        void playTones(SPEAKER_TEST).finally(() => setPlaying(false));
+      }}
+    >
+      {t(playing ? 'Sonando…' : 'Probar parlante')}
+    </button>
+  );
 }
 
 async function permissionGranted(name: 'camera' | 'microphone'): Promise<boolean> {
@@ -317,6 +337,7 @@ export function PreCallLobby({ code, name, onNameChange, joining, error, onJoin 
                 : 'Micrófono apagado',
             )}
           </p>
+          <SpeakerTest />
           {unsupported && (
             <p role="status">
               {t(

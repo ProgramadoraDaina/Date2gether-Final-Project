@@ -756,6 +756,8 @@ const en: Record<string, string> = {
   'Levantar o bajar la mano': 'Raise or lower hand',
   'Ver los atajos de teclado': 'Show keyboard shortcuts',
   'sin leer': 'unread',
+  'Probar parlante': 'Test speaker',
+  'Sonando…': 'Playing…',
 };
 
 export default en;
