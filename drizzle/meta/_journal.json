@@ -190,6 +190,27 @@
       "when": 1795554405647,
       "tag": "0026_user_role",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1795554406647,
+      "tag": "0027_widen_room_code",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1795554407647,
+      "tag": "0028_breakout_rooms",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1795554408647,
+      "tag": "0029_breakout_join_policy",
+      "breakpoints": true
     }
   ]
 }

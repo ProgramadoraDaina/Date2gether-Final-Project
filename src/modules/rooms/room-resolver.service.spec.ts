@@ -130,6 +130,31 @@ describe('RoomResolverService', () => {
     });
   });
 
+  describe('assertResolvableCode (breakout-rooms/design.md D11: rechazo de nombres de mini sala)', () => {
+    it('[4.7.1] resolveJoinable con un código que contiene "::" -> 404 NotFoundException, sin consultar rooms', async () => {
+      await expect(resolver.resolveJoinable('abc-defg-hij::breakout-1')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(db.select).not.toHaveBeenCalled();
+    });
+
+    it('[4.7.1] lockJoinable con un código que contiene "::" -> 404 NotFoundException, sin consultar rooms', async () => {
+      const tx = { select: db.select } as unknown as Parameters<typeof resolver.lockJoinable>[0];
+
+      await expect(resolver.lockJoinable(tx, 'abc-defg-hij::breakout-1')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(db.select).not.toHaveBeenCalled();
+    });
+
+    it('[4.7.1] findPoolOccupant con un código que contiene "::" -> 404 NotFoundException, sin consultar rooms', async () => {
+      await expect(resolver.findPoolOccupant('abc-defg-hij::breakout-1')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(db.select).not.toHaveBeenCalled();
+    });
+  });
+
   describe('getById', () => {
     it('devuelve la sala por id sin aplicar el predicado de joinability', async () => {
       const room = makeRoom({ retiredAt: new Date() });

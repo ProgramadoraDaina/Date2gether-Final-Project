@@ -641,3 +641,35 @@ Las salas se podían crear, listar (`/rooms/mine`) y renombrar, pero no borrar. 
 - El borrado es irreversible (sin papelera). La confirmación en la UI es la única barrera, de ahí el texto explícito del diálogo.
 - Los clientes conectados reciben `roomDeleted` pero la pantalla de sala todavía no reacciona a ese evento más allá de perder la conexión; queda como mejora.
 - Las sesiones de llamada de una sala borrada siguen apareciendo en la línea de tiempo de quienes participaron, con `roomName: null` (la consulta usa `leftJoin`). Las filas de `call_history` (listado "Historial") sí se borran junto con la sala.
+
+---
+
+## 24. Mini salas: separación `joinPolicy`/`leavePolicy`, señal explícita de motivo de remoción y mitigación de R1 (admin sola trasladándose)
+
+**Fecha:** 2026-11-23
+**Rama:** `feature/breakout-rooms`
+
+### Contexto
+
+Después de desplegar las mini salas, aparecieron tres problemas de UX/robustez distintos pero relacionados, todos resueltos en el mismo cambio porque el diseño de uno condicionaba al de los otros (ver `openspec/changes/breakout-rooms-ux-fix/`):
+
+1. **R1 — riesgo de carrera cuando la única administradora conectada se traslada sola a una mini sala.** `moveIn` inserta la asignación nueva y recién después ejecuta `removeParticipant` sobre la identity vieja, lo que dispara `onAdminLeft` → `hasConnectedAdmin` evaluando presencia con la mini sala todavía vacía (la persona no llegó a reconectarse) → se agenda el cierre del grupo a T+15s. Si la reconexión (pedir token nuevo + `switchRoom`) tarda más de 15s — red lenta, cold start del endpoint de token — `claimAndClose` borra la principal y las mini salas sin que nadie haya hecho nada mal.
+2. **Expulsión indistinguible.** El cliente recibía `PARTICIPANT_REMOVED` de LiveKit en tres situaciones muy distintas (traslado en curso, vuelta forzada por el admin, expulsión por política `locked`) y las trataba todas igual (`call.failed(...)`), mostrando un error genérico donde no correspondía.
+3. **Auto-ingreso a mini salas.** No existía ninguna forma de que alguien se moviera a una mini sala por su cuenta: todo traslado requería que un admin lo ejecutara desde el panel.
+
+### Decisión
+
+- **R1**: en vez de ensanchar la ventana de gracia (retrasa *todo* cierre forzado legítimo) o introducir una supresión en memoria (no sobrevive un restart y crea un ciclo de dependencias entre servicios), `hasConnectedAdmin` ahora consulta `hasAdminAssignmentInFlight(roomId)` **solo** cuando la evaluación de presencia iba a devolver `false` y hay más de una sala en el grupo: un admin con una fila de `call_breakout_occupants` abierta y con `assigned_at` de menos de 30s cuenta como "en tránsito", sin necesitar ninguna columna ni tabla nueva (la fila ya existe, se escribe antes de `removeParticipant`). Cero costo en el camino feliz (llamadas sin mini salas) y cero costo cuando la presencia ya resuelve `true`.
+- **Señal de motivo de remoción**: un evento de socket nuevo, `breakout:removal`, viaja **antes** de `removeParticipant` (mismo orden que `breakout:assigned`) con un código cerrado (`BREAKOUT_MOVE_IN` / `BREAKOUT_FORCED_RETURN` / `BREAKOUT_RETURN_LOCKED`) y nada de texto — la traducción vive del lado del cliente. `useRoomSocket.consumeRemovalNotice()` lo guarda en un `useRef` (no en estado) con lectura destructiva y ventana de frescura de 10s, porque `onDisconnected` dispara a milisegundos del evento y un `setState` puede no haber flusheado todavía — leer estado stale ahí clasificaría una expulsión legítima como fallo genérico.
+- **`joinPolicy` separado de `leavePolicy`**: columna aditiva nueva (`admin_only` por default) en `call_breakout_rooms`, exclusivamente para gobernar quién puede **entrar** por iniciativa propia; `leavePolicy` sigue gobernando exclusivamente la vuelta a la principal. Son preguntas de producto independientes (una mini sala puede ser fácil de entrar y difícil de dejar, o viceversa) y mezclarlas en una sola columna haría imposible expresar esa combinación.
+- **Frontend**: los dos *gates* que antes vivían por separado (`BreakoutPanel` solo-admin, `BreakoutBanner` solo-ocupante) se colapsan en un selector puro de 4 estados (`resolveBreakoutViewState`: `guest-idle` / `guest-occupant` / `host` / `host-occupant`) y un único punto de montaje (`BreakoutView`), estructuralmente incapaz de renderizar dos vistas de mini sala a la vez — el bug que motivó este cambio.
+
+### Consecuencias
+
+- La mitigación de R1 cubre ~30s desde `assigned_at`; una reconexión más lenta todavía no está protegida por este marcador (aunque sigue protegida por la convergencia de `room_finished` de LiveKit, no por un cierre forzado).
+- `room_finished` de la sala principal **no** ejecuta la cascada de cierre de mini salas (divergencia respecto del diseño original de breakout-rooms) — eso es lo que protege hoy a la admin sola; fijado como contrato por un test de caracterización (R1-C5) para que un cambio futuro no lo rompa sin darse cuenta.
+- `BREAKOUT_FORCED_RETURN` termina la sesión del cliente (no hay reingreso automático a la principal todavía); la persona vuelve a entrar con un clic desde la página de la sala.
+
+### Verificación
+
+Backend: `pnpm vitest run` — 549 tests, 535 pasan (las 14 fallas restantes son integración contra Postgres sin conexión local disponible, preexistentes a este cambio, mismo set antes/después confirmado con `git stash`). Frontend: `pnpm jest` en `client/` — 68 suites / 478 tests, todo verde. `tsc --noEmit` sin errores nuevos en ninguno de los dos paquetes (los únicos preexistentes son los ya documentados en `calls-webhook.service.spec.ts`, dos specs de integración de `rooms`, y el uso de `exact` en `page.spec.tsx` de `room/[code]`, ninguno tocado por este cambio).

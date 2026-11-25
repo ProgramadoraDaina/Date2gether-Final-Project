@@ -53,6 +53,11 @@ export default defineConfig({
         JWT_REFRESH_SECRET: TEST_JWT_REFRESH_SECRET,
         JWT_ACCESS_EXPIRES_IN: '15m',
         JWT_REFRESH_EXPIRES_IN: '7d',
+        // Abre TestSupportController (introspección de LiveKit vía
+        // listParticipants, breakout-rooms.spec.ts) solo para esta suite;
+        // en cualquier otro entorno (dev, producción) ese endpoint responde
+        // 404 (ver test-support.controller.ts).
+        NODE_ENV: 'test',
       },
     },
     {

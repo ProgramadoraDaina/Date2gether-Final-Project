@@ -162,6 +162,35 @@ export class ChatGateway implements OnGatewayDisconnect {
     this.roomEvents.onRoomEmojisChanged(({ roomCode }) => {
       this.server.to(roomCode).emit('roomEmojisChanged');
     });
+    // Mini salas (D12, design.md): señal únicamente, nunca el token de
+    // LiveKit (ese se pide por HTTP autenticado, issueBreakoutToken). El
+    // traslado es personal -- solo el participante trasladado tiene que
+    // enterarse -- a diferencia del cierre, que es un broadcast a toda la
+    // sala (cualquier occupant de esa mini sala puede estar escuchando).
+    this.roomEvents.onBreakoutAssigned((event) => {
+      this.emitToParticipant(event.roomCode, event.targetIdentity, 'breakout:assigned', {
+        breakoutId: event.breakoutId,
+        label: event.label,
+        leavePolicy: event.leavePolicy,
+        closesAt: event.closesAt,
+      });
+    });
+    this.roomEvents.onBreakoutBroadcast((event) => {
+      this.server.to(event.roomCode).emit(event.event, event.payload);
+    });
+    this.roomEvents.onBreakoutClosed((event) => {
+      this.server.to(event.roomCode).emit('breakout:closed', { breakoutId: event.breakoutId });
+    });
+    // Decisión 2 (design.md "Señal de motivo de remoción"): mismo criterio
+    // que breakout:assigned -- personal, nunca broadcast. targetIdentity ya
+    // llega resuelto por el llamador (BreakoutRoomsService/
+    // CallsWebhookService) como la sourceIdentity estable que corresponde
+    // al socket real.
+    this.roomEvents.onBreakoutRemoval((event) => {
+      this.emitToParticipant(event.roomCode, event.targetIdentity, 'breakout:removal', {
+        reason: event.reason,
+      });
+    });
     // La sala se borró: se avisa y se corta el chat. handleDisconnect limpia el estado en memoria.
     this.roomEvents.onRoomDeleted(({ roomCode }) => {
       this.server.to(roomCode).emit('roomDeleted');
@@ -763,6 +792,24 @@ export class ChatGateway implements OnGatewayDisconnect {
       played: [Math.min(stored.currentIndex, stored.tracks.length - 1)],
       updatedAt: Date.now(),
     });
+  }
+
+  // Mini salas (D12): a diferencia de memberRoleChanged/roomEmojisChanged
+  // (broadcast a toda la sala), breakout:assigned es personal. Todo socket
+  // de Socket.io se autosuscribe a una room con su propio id, así que
+  // emitir a ese id llega solo al cliente buscado sin tener que guardar un
+  // mapa nuevo de participantId -> clientId.
+  private emitToParticipant(
+    roomCode: string,
+    participantId: string,
+    event: string,
+    payload: unknown,
+  ): void {
+    for (const [clientId, user] of this.connectedUsers) {
+      if (user.roomCode === roomCode && user.participantId === participantId) {
+        this.server.to(clientId).emit(event, payload);
+      }
+    }
   }
 
   private getUsersInRoom(roomCode: string): RoomUser[] {

@@ -166,6 +166,10 @@
   filter: brightness(0.9);
 }
 
+/* Decisión 5 (design.md): el botón + popover de Mini salas se movió a
+   BreakoutView.module.css -- BreakoutView ahora es dueña de su propio
+   disparador y popover (único punto de montaje). */
+
 @media (max-width: 640px) {
   .controlsDock {
     --dock-pad-y: 8px;

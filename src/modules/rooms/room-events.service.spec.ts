@@ -34,4 +34,60 @@ describe('RoomEventsService', () => {
     expect(first).toHaveBeenCalledWith({ roomCode: 'xyz-abcd-efg' });
     expect(second).toHaveBeenCalledWith({ roomCode: 'xyz-abcd-efg' });
   });
+
+  // Mini salas (D12, design.md breakout-rooms): mismo puente, canal propio.
+  it('entrega a cada listener registrado el payload exacto de un traslado a mini sala', () => {
+    const events = new RoomEventsService();
+    const listener = vi.fn();
+    events.onBreakoutAssigned(listener);
+
+    events.emitBreakoutAssigned({
+      roomCode: 'abc-defg-hij',
+      targetIdentity: 'participant-sub-1',
+      breakoutId: 'breakout-1',
+      label: 'Mini sala 1',
+      leavePolicy: 'locked',
+      closesAt: null,
+    });
+
+    expect(listener).toHaveBeenCalledWith({
+      roomCode: 'abc-defg-hij',
+      targetIdentity: 'participant-sub-1',
+      breakoutId: 'breakout-1',
+      label: 'Mini sala 1',
+      leavePolicy: 'locked',
+      closesAt: null,
+    });
+  });
+
+  it('entrega a cada listener registrado el payload exacto del cierre de una mini sala', () => {
+    const events = new RoomEventsService();
+    const listener = vi.fn();
+    events.onBreakoutClosed(listener);
+
+    events.emitBreakoutClosed({ roomCode: 'abc-defg-hij', breakoutId: 'breakout-1' });
+
+    expect(listener).toHaveBeenCalledWith({ roomCode: 'abc-defg-hij', breakoutId: 'breakout-1' });
+  });
+
+  // Decisión 2 (design.md "Señal de motivo de remoción", tasks.md 2.3):
+  // mismo puente, canal propio para la señal de motivo de remoción forzada
+  // (moveIn/selfReturn admin), distinta de la señal de asignación.
+  it('[2.3] entrega a cada listener registrado el payload exacto de una señal de motivo de remoción', () => {
+    const events = new RoomEventsService();
+    const listener = vi.fn();
+    events.onBreakoutRemoval(listener);
+
+    events.emitBreakoutRemoval({
+      roomCode: 'abc-defg-hij',
+      targetIdentity: 'participant-sub-1',
+      reason: 'BREAKOUT_MOVE_IN',
+    });
+
+    expect(listener).toHaveBeenCalledWith({
+      roomCode: 'abc-defg-hij',
+      targetIdentity: 'participant-sub-1',
+      reason: 'BREAKOUT_MOVE_IN',
+    });
+  });
 });

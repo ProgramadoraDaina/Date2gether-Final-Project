@@ -6,12 +6,14 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { and, asc, eq, gte, inArray, lt, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, sql } from 'drizzle-orm';
 import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
 import { randomUUID } from 'node:crypto';
 import type { RoomParticipant } from '../auth/room-access.service';
 import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
 import {
+  callBreakoutOccupants,
+  callBreakoutRooms,
   callEvents,
   callHistory,
   callParticipantIdentities,
@@ -25,6 +27,8 @@ import {
 import { RoomResolverService } from '../rooms/room-resolver.service';
 import { isRoomSessionVisible } from '../rooms/room-history-policy';
 import { RoomsService } from '../rooms/rooms.service';
+import { BREAKOUT_RETURN_LOCKED_CODE } from './breakout-rooms.service';
+import { CallGroupResolverService } from './call-group-resolver.service';
 import { CALL_HISTORY_PAGE_SIZE, callHistoryCutoff } from './call-history-retention';
 import type { ListCallHistoryDto } from './dto/list-call-history.dto';
 import type { ReportTrackStateDto } from './dto/report-track-state.dto';
@@ -33,6 +37,11 @@ import type { ReportTrackStateDto } from './dto/report-track-state.dto';
 // cliente se acopla a este código, no al texto del mensaje.
 const NO_HOST_CONNECTED_CODE = 'NO_HOST_CONNECTED';
 const NO_HOST_CONNECTED_MESSAGE = 'Esperá a que se conecte un anfitrión para unirte a la llamada.';
+
+// D8, design.md: mismo código que BreakoutRoomsService.selfReturn usa para
+// el rechazo del lado servidor -- este es el enforcement del OTRO punto (el
+// gate de join() sobre la sala principal), así que comparten el código.
+const BREAKOUT_RETURN_LOCKED_MESSAGE = 'El host te va a devolver a la sala principal.';
 
 export interface CallHistoryEntry {
   id: string;
@@ -60,6 +69,7 @@ export class CallsService {
     private readonly config: ConfigService,
     @Inject(DRIZZLE) private readonly db: DrizzleDb,
     private readonly resolver: RoomResolverService,
+    private readonly groupResolver: CallGroupResolverService,
   ) {}
 
   async join(roomCode: string, participant: RoomParticipant) {
@@ -115,9 +125,22 @@ export class CallsService {
     }
 
     // El admin nunca pasa por esta consulta (D2): solo los no-admin dependen
-    // de que haya al menos un administrador ya conectado a la videollamada.
+    // de que haya al menos un administrador ya conectado a la videollamada,
+    // en CUALQUIER sala del grupo (principal + mini salas activas, D1/D9).
+    // Sin mini salas abiertas, resolveCallGroupRoomNames degenera a
+    // [roomCode] y assertHostConnected recorre el fast path de D2 -- cero
+    // cambio de comportamiento para una llamada sin mini salas.
     if (role !== 'administrador') {
-      await this.assertHostConnected(client, roomCode, room.id);
+      const groupRoomNames = await this.groupResolver.resolveCallGroupRoomNames(room.id, roomCode);
+      // D8/D9: solo cuando el grupo tiene mini salas abiertas (length > 1,
+      // la misma condición que ya distingue el fast path de D2 un poco más
+      // abajo) se consulta si el solicitante tiene una asignación abierta
+      // `locked` -- reusa la lista ya resuelta arriba, sin costo nuevo para
+      // una llamada sin mini salas.
+      if (groupRoomNames.length > 1) {
+        await this.assertBreakoutReturnAllowed(room.id, participant.sub);
+      }
+      await this.assertHostConnected(client, groupRoomNames, room.id);
     }
 
     // Correlación identity↔usuario/invitado para esta sala, escrita antes de
@@ -198,20 +221,46 @@ export class CallsService {
     return member?.role;
   }
 
-  // Gate de anfitrión para un solicitante no-admin (D1/D2, design.md):
-  // consulta el estado EN VIVO de LiveKit (no el log de eventos, que es una
-  // proyección rezagada) y lo cruza contra el snapshot de rol guardado en
-  // call_participant_identities. Si LiveKit no responde, se rechaza con 503
-  // (fail-closed honesto), nunca con 403 (eso le mentiría al solicitante).
+  // Gate de anfitrión a nivel GRUPO (design.md D1-D3, D9): consulta el
+  // estado EN VIVO de LiveKit (no el log de eventos, que es una proyección
+  // rezagada) sobre todas las salas del grupo y lo cruza contra el snapshot
+  // de rol guardado en call_participant_identities. Si LiveKit no responde,
+  // se rechaza con 503 (fail-closed honesto), nunca con 403 (eso le
+  // mentiría al solicitante).
+  //
+  // D2: con groupRoomNames.length === 1 (sin mini salas abiertas) se
+  // recorre el código de HOY, intacto -- es el fast path que hace del
+  // control de acceso de una sola sala un camino de ejecución literal, no
+  // un caso "equivalente" que haya que demostrar.
   private async assertHostConnected(
     client: RoomServiceClient,
-    roomCode: string,
+    groupRoomNames: string[],
     roomId: string,
   ): Promise<void> {
-    let connectedIdentities: string[];
+    const connectedIdentities =
+      groupRoomNames.length === 1
+        ? await this.listRoomParticipantIdentities(client, groupRoomNames[0])
+        : await this.listGroupParticipantIdentities(client, groupRoomNames);
+
+    const hostConnected = await this.hasAdminAmongIdentities(connectedIdentities, roomId);
+    if (!hostConnected) {
+      throw new ForbiddenException({
+        message: NO_HOST_CONNECTED_MESSAGE,
+        code: NO_HOST_CONNECTED_CODE,
+      });
+    }
+  }
+
+  // Camino de hoy (D2), sin cambios de comportamiento: una sola llamada a
+  // listParticipants, con la misma propagación de excepción que antes del
+  // cambio.
+  private async listRoomParticipantIdentities(
+    client: RoomServiceClient,
+    roomCode: string,
+  ): Promise<string[]> {
     try {
       const participants = await client.listParticipants(roomCode);
-      connectedIdentities = participants
+      return participants
         .map((p) => p.identity)
         .filter((identity): identity is string => !!identity);
     } catch {
@@ -220,35 +269,88 @@ export class CallsService {
         'No se pudo verificar si hay un anfitrión conectado. Intentá nuevamente.',
       );
     }
+  }
 
-    // Lista vacía: nadie conectado, se rechaza sin consultar la base.
-    let hostConnected = false;
-    if (connectedIdentities.length > 0) {
-      const [admin] = await this.db
-        .select({ id: callParticipantIdentities.id })
-        .from(callParticipantIdentities)
-        .innerJoin(
-          roomMembers,
-          and(
-            eq(roomMembers.roomId, callParticipantIdentities.roomId),
-            eq(roomMembers.userId, callParticipantIdentities.userId),
-          ),
-        )
-        .where(
-          and(
-            eq(callParticipantIdentities.roomId, roomId),
-            inArray(callParticipantIdentities.livekitIdentity, connectedIdentities),
-            eq(roomMembers.role, 'administrador'),
-          ),
-        )
-        .limit(1);
-      hostConnected = !!admin;
+  // Camino multi-sala (D3): existencia por listRooms, presencia por
+  // listParticipants solo sobre las salas que SÍ existen. Una mini sala
+  // ausente de listRooms se trata como vacía (no se le llama
+  // listParticipants); cualquier error de listRooms/listParticipants sobre
+  // una sala existente se propaga igual que en el camino de una sola sala
+  // (mismo fail-safe, sin cambios).
+  private async listGroupParticipantIdentities(
+    client: RoomServiceClient,
+    groupRoomNames: string[],
+  ): Promise<string[]> {
+    try {
+      const existingRooms = await client.listRooms(groupRoomNames);
+      const existingNames = new Set(existingRooms.map((r) => r.name));
+      const participantLists = await Promise.all(
+        groupRoomNames
+          .filter((name) => existingNames.has(name))
+          .map((name) => client.listParticipants(name)),
+      );
+      return participantLists
+        .flat()
+        .map((p) => p.identity)
+        .filter((identity): identity is string => !!identity);
+    } catch {
+      this.logger.warn('No se pudo verificar la presencia de un anfitrión en la videollamada');
+      throw new ServiceUnavailableException(
+        'No se pudo verificar si hay un anfitrión conectado. Intentá nuevamente.',
+      );
     }
+  }
 
-    if (!hostConnected) {
+  // Cruce de identities conectadas contra roleAtIssue='administrador'
+  // (C2/D7): el filtro por roomId sigue intacto en los dos caminos -- todas
+  // las identities del grupo, incluidas las de mini sala, comparten el
+  // mismo roomId del padre (D7, Fase 5).
+  private async hasAdminAmongIdentities(identities: string[], roomId: string): Promise<boolean> {
+    if (identities.length === 0) return false;
+    const [admin] = await this.db
+      .select({ id: callParticipantIdentities.id })
+      .from(callParticipantIdentities)
+      .innerJoin(
+        roomMembers,
+        and(
+          eq(roomMembers.roomId, callParticipantIdentities.roomId),
+          eq(roomMembers.userId, callParticipantIdentities.userId),
+        ),
+      )
+      .where(
+        and(
+          eq(callParticipantIdentities.roomId, roomId),
+          inArray(callParticipantIdentities.livekitIdentity, identities),
+          eq(roomMembers.role, 'administrador'),
+        ),
+      )
+      .limit(1);
+    return !!admin;
+  }
+
+  // D8 punto 1 (design.md): un no-admin con una asignación abierta a una
+  // mini sala `locked` no puede volver a la principal por su cuenta --
+  // rechazo del lado servidor ANTES de emitir el token, sin importar que su
+  // JWT de 24h siga siendo técnicamente válido. `administrador` nunca pasa
+  // por acá (D8: `locked` no aplica a admin, y el llamador en join() solo
+  // invoca esto en el camino no-admin).
+  private async assertBreakoutReturnAllowed(roomId: string, sourceIdentity: string): Promise<void> {
+    const [openAssignment] = await this.db
+      .select({ leavePolicy: callBreakoutRooms.leavePolicy })
+      .from(callBreakoutOccupants)
+      .innerJoin(callBreakoutRooms, eq(callBreakoutOccupants.breakoutRoomId, callBreakoutRooms.id))
+      .where(
+        and(
+          eq(callBreakoutOccupants.sourceIdentity, sourceIdentity),
+          isNull(callBreakoutOccupants.returnedAt),
+          eq(callBreakoutRooms.roomId, roomId),
+        ),
+      )
+      .limit(1);
+    if (openAssignment?.leavePolicy === 'locked') {
       throw new ForbiddenException({
-        message: NO_HOST_CONNECTED_MESSAGE,
-        code: NO_HOST_CONNECTED_CODE,
+        message: BREAKOUT_RETURN_LOCKED_MESSAGE,
+        code: BREAKOUT_RETURN_LOCKED_CODE,
       });
     }
   }
