@@ -180,6 +180,7 @@ export default function RoomPage() {
     return () => clearTimeout(timer);
   }, [notice]);
   const [chatTab, setChatTab] = useState<'chat' | 'presentes' | 'notas' | 'links'>('chat');
+  const [chatFiltersOpen, setChatFiltersOpen] = useState(false);
   const [notesTab, setNotesTab] = useState<'personal' | 'sala'>('personal');
   const [personalNotes, setPersonalNotes] = useState('');
   const [notesStatus, setNotesStatus] = useState('');
@@ -257,6 +258,7 @@ export default function RoomPage() {
   const callSession = useCallSession();
   const { joinCall } = callSession;
   const [initialDevices, setInitialDevices] = useState(DEFAULT_CALL_DEVICES);
+  const callDevicesRef = useRef(DEFAULT_CALL_DEVICES);
   const [emojisOpen, setEmojisOpen] = useState(false);
   const [transcriptCallSid, setTranscriptCallSid] = useState<string | null>(null);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
@@ -354,6 +356,7 @@ export default function RoomPage() {
     try {
       const roomAccess = await requestRoomAccess(code, name.trim());
       setInitialDevices(devices);
+      callDevicesRef.current = devices;
       if ('token' in roomAccess) acceptAccess(roomAccess);
       else admission.start(roomAccess);
     } catch (error) {
@@ -712,32 +715,55 @@ export default function RoomPage() {
             {t('Links')}
           </button>
         )}
+        {chatTab === 'chat' && (
+          <button
+            type="button"
+            className={styles.chatFilterToggle}
+            aria-expanded={chatFiltersOpen}
+            aria-controls="chat-filters"
+            onClick={() => setChatFiltersOpen((open) => !open)}
+            aria-label={t('Filtros')}
+            title={t('Filtros')}
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                d="M1.5 2.5h13l-5 6v5l-3-1.5V8.5z"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        )}
       </div>
       {chatTab === 'chat' ? (
         <>
-          <div className={styles.chatDateFilter}>
-            <label htmlFor="chat-message-day">{t('Filtrar por día')}</label>
-            <input
-              id="chat-message-day"
-              type="date"
-              value={chatHistory.day}
-              onChange={(event) => chatHistory.changeDay(event.target.value)}
-            />
-            {chatHistory.day && (
-              <button type="button" onClick={() => chatHistory.changeDay('')}>
-                {t('Limpiar filtro')}
-              </button>
-            )}
-            {isPermanentRoom && (
-              <button
-                type="button"
-                aria-pressed={chatHistory.archive}
-                onClick={chatHistory.toggleArchive}
-              >
-                {t(chatHistory.archive ? 'Volver al chat reciente' : 'Ver archivo del chat')}
-              </button>
-            )}
-          </div>
+          {chatFiltersOpen && (
+            <div id="chat-filters" className={styles.chatDateFilter}>
+              <label htmlFor="chat-message-day">{t('Filtrar por día')}</label>
+              <input
+                id="chat-message-day"
+                type="date"
+                value={chatHistory.day}
+                onChange={(event) => chatHistory.changeDay(event.target.value)}
+              />
+              {chatHistory.day && (
+                <button type="button" onClick={() => chatHistory.changeDay('')}>
+                  {t('Limpiar filtro')}
+                </button>
+              )}
+              {isPermanentRoom && (
+                <button
+                  type="button"
+                  aria-pressed={chatHistory.archive}
+                  onClick={chatHistory.toggleArchive}
+                >
+                  {t(chatHistory.archive ? 'Volver al chat reciente' : 'Ver archivo del chat')}
+                </button>
+              )}
+            </div>
+          )}
           {(chatPage.nextCursor || chatHistory.before) && (
             <div className={styles.chatDateFilter}>
               {chatHistory.before && (
@@ -1130,6 +1156,7 @@ export default function RoomPage() {
                       roomToken={access.token}
                       roomEmojis={emojis}
                       initialDevices={initialDevices}
+                      devicesRef={callDevicesRef}
                       onTranscriptAvailable={setTranscriptCallSid}
                       onHangUp={
                         transcriptCallSid

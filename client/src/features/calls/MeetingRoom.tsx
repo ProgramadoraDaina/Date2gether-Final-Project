@@ -13,6 +13,7 @@ import {
   TrackRefContext,
   useCreateLayoutContext,
   useDisconnectButton,
+  useLocalParticipant,
   usePinnedTracks,
   useRoomContext,
   useTracks,
@@ -28,7 +29,7 @@ import {
   type RoomOptions,
 } from 'livekit-client';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import type { Socket } from 'socket.io-client';
 import { DEFAULT_CALL_DEVICES, type CallDevices } from './callDevices';
 import { HangUpButton } from './HangUpButton';
@@ -289,6 +290,8 @@ interface MeetingRoomProps {
   roomToken: string;
   roomEmojis: RoomEmoji[];
   initialDevices?: CallDevices;
+  // Owned by the page: MeetingRoom remounts on a mini sala move, and mic/camera must survive it.
+  devicesRef?: MutableRefObject<CallDevices>;
   onTranscriptAvailable?: (callSid: string) => void;
   // Reemplaza la vuelta al inicio al colgar (por ejemplo, para mostrar el acta).
   onHangUp?: () => void;
@@ -327,18 +330,22 @@ interface MeetingRoomProps {
 // Un permiso revocado después del lobby no debe hacer fallar la llamada.
 // Solo se aplica al conectar por primera vez; reconectar conserva los estados.
 function InitialCallDevices({
-  devices,
+  readDevices,
+  rememberDevices,
   onDeviceError,
 }: {
-  devices: CallDevices;
+  readDevices(): CallDevices;
+  rememberDevices(devices: Pick<CallDevices, 'microphoneEnabled' | 'cameraEnabled'>): void;
   onDeviceError(): void;
 }) {
   const room = useRoomContext();
+  const { isMicrophoneEnabled, isCameraEnabled } = useLocalParticipant();
   const appliedTo = useRef<typeof room | null>(null);
   useEffect(() => {
     const publish = () => {
       if (appliedTo.current === room) return;
       appliedTo.current = room;
+      const devices = readDevices();
       if (devices.microphoneEnabled)
         void room.localParticipant.setMicrophoneEnabled(true).catch(onDeviceError);
       if (devices.cameraEnabled)
@@ -349,7 +356,12 @@ function InitialCallDevices({
     return () => {
       room.off(RoomEvent.Connected, publish);
     };
-  }, [room, devices, onDeviceError]);
+  }, [room, readDevices, onDeviceError]);
+  // Remembered for the next room (mini sala); skipped while disconnecting, which unpublishes everything.
+  useEffect(() => {
+    if (appliedTo.current !== room || room.state !== ConnectionState.Connected) return;
+    rememberDevices({ microphoneEnabled: isMicrophoneEnabled, cameraEnabled: isCameraEnabled });
+  }, [room, rememberDevices, isMicrophoneEnabled, isCameraEnabled]);
   return null;
 }
 
@@ -357,7 +369,8 @@ function MeetingContent({
   roomCode,
   roomToken,
   roomEmojis,
-  initialDevices = DEFAULT_CALL_DEVICES,
+  readDevices,
+  rememberDevices,
   onTranscriptAvailable,
   isCurrentUserAdmin,
   audioLocked,
@@ -378,6 +391,8 @@ function MeetingContent({
   // componente necesita para ejecutar el Flujo 1 de design.md -- pedir el
   // token y reemplazar la sesión de forma atómica, nunca vía joinCall.
   switchRoom: CallSessionState['switchRoom'];
+  readDevices(): CallDevices;
+  rememberDevices(devices: Pick<CallDevices, 'microphoneEnabled' | 'cameraEnabled'>): void;
   // Decisión 2 (design.md): useRoomSocket ahora se llama UNA sola vez, en
   // el componente exterior (MeetingRoom), porque consumeRemovalNotice se
   // necesita en el ámbito de onDisconnected, no acá. breakoutAssignment
@@ -488,7 +503,11 @@ function MeetingContent({
           onFinalPhrase={handleFinalPhrase}
         >
           <LayoutContextProvider value={layoutContext}>
-            <InitialCallDevices devices={initialDevices} onDeviceError={showDeviceError} />
+            <InitialCallDevices
+              readDevices={readDevices}
+              rememberDevices={rememberDevices}
+              onDeviceError={showDeviceError}
+            />
             <CallPreferenceEffects />
             <RoomAudioRenderer />
             <StartAudio label={t('Activar sonido de la reunión')} />
@@ -640,6 +659,7 @@ export default function MeetingRoom({
   currentParticipantId = '',
   nameFocusEnabled,
   onSetNameFocus,
+  devicesRef,
 }: MeetingRoomProps) {
   const router = useRouter();
   // Decisión 2 (design.md "Señal de motivo de remoción"): useRoomSocket se
@@ -658,6 +678,15 @@ export default function MeetingRoom({
   const [transition, setTransition] = useState<BreakoutTransitionState | null>(null);
   // Evita dos reconexiones a la principal cuando llegan juntos el aviso del socket y la desconexión.
   const returningRef = useRef(false);
+  const ownDevices = useRef(initialDevices);
+  const readDevices = useCallback(() => (devicesRef ?? ownDevices).current, [devicesRef]);
+  const rememberDevices = useCallback(
+    (changes: Pick<CallDevices, 'microphoneEnabled' | 'cameraEnabled'>) => {
+      const target = devicesRef ?? ownDevices;
+      target.current = { ...target.current, ...changes };
+    },
+    [devicesRef],
+  );
   const returnToMainRef = useRef<() => void>(() => {});
   returnToMainRef.current = () => {
     if (returningRef.current) return;
@@ -824,7 +853,8 @@ export default function MeetingRoom({
             roomCode={roomCode}
             roomToken={roomToken}
             roomEmojis={roomEmojis}
-            initialDevices={initialDevices}
+            readDevices={readDevices}
+            rememberDevices={rememberDevices}
             onTranscriptAvailable={onTranscriptAvailable}
             isCurrentUserAdmin={isCurrentUserAdmin}
             audioLocked={audioLocked}

@@ -561,6 +561,70 @@ describe('MeetingRoom', () => {
     });
     expect(mockRoom.localParticipant.setCameraEnabled).toHaveBeenCalledTimes(1);
   });
+  it('al pasar a una mini sala conserva el micrófono y la cámara como estaban, aunque MeetingRoom se remonte', async () => {
+    const { useLocalParticipant } = await import('@livekit/components-react');
+    const MeetingRoom = (await import('./MeetingRoom')).default;
+    const lobbyDevices = {
+      cameraEnabled: false,
+      microphoneEnabled: true,
+      cameraId: '',
+      microphoneId: '',
+    };
+    const devicesRef = { current: lobbyDevices };
+    const setMedia = (mic: boolean, cam: boolean) =>
+      jest.mocked(useLocalParticipant).mockReturnValue({
+        localParticipant: { identity: 'local', name: 'Ana' },
+        isMicrophoneEnabled: mic,
+        isCameraEnabled: cam,
+      } as never);
+    const props = (call: CallSessionState) => ({
+      call,
+      roomCode: 'abc-defg-hij',
+      roomToken: 'test-room-token',
+      roomEmojis: [],
+      isCurrentUserAdmin: false,
+      audioLocked: false,
+      videoLocked: false,
+      onSetAudioLock: jest.fn(),
+      onSetVideoLock: jest.fn(),
+      nameFocusEnabled: false,
+      onSetNameFocus: jest.fn(),
+      initialDevices: lobbyDevices,
+      devicesRef,
+    });
+    setMedia(false, false);
+    const mainCall = { ...state(), session: mainSession };
+    const { rerender, unmount } = render(<MeetingRoom {...props(mainCall)} />);
+    mockRoom.state = 'connected';
+    await act(async () => {
+      mockEvents.connected();
+    });
+    expect(mockRoom.localParticipant.setMicrophoneEnabled).toHaveBeenCalledWith(true);
+    setMedia(true, false);
+    rerender(<MeetingRoom {...props({ ...mainCall })} />);
+    // The user mutes and turns the camera on during the main call.
+    setMedia(false, true);
+    rerender(<MeetingRoom {...props({ ...mainCall })} />);
+
+    jest.mocked(mockRoom.localParticipant.setMicrophoneEnabled).mockClear();
+    jest.mocked(mockRoom.localParticipant.setCameraEnabled).mockClear();
+    mockRoom.state = 'disconnected';
+    setMedia(false, false);
+    const breakoutCall = {
+      ...mainCall,
+      status: 'switching' as const,
+      session: { ...mainSession, roomName: 'abc-defg-hij::breakout-1', token: 'breakout-token' },
+    };
+    // The real page remounts MeetingRoom on a move: only the page-owned ref survives.
+    unmount();
+    render(<MeetingRoom {...props(breakoutCall)} />);
+    mockRoom.state = 'connected';
+    await act(async () => {
+      mockEvents.connected();
+    });
+    expect(mockRoom.localParticipant.setMicrophoneEnabled).not.toHaveBeenCalledWith(true);
+    expect(mockRoom.localParticipant.setCameraEnabled).toHaveBeenCalledWith(true);
+  });
   it('si se revoca el permiso de cámara después del lobby, conserva la llamada y publica el micrófono', async () => {
     mockRoom.state = 'connected';
     mockRoom.localParticipant.setCameraEnabled.mockRejectedValueOnce(

@@ -395,6 +395,25 @@
   }
 }
 
+.chatFilterToggle {
+  display: inline-flex;
+  align-items: center;
+  width: auto;
+  margin: 0 0 10px auto;
+  padding: 2px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.chatFilterToggle:hover,
+.chatFilterToggle[aria-expanded='true'] {
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
 .chatDateFilter {
   display: flex;
   align-items: center;
