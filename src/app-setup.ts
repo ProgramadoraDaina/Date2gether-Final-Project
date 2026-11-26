@@ -32,6 +32,13 @@ export async function createApp(module: Type<unknown>): Promise<NestExpressAppli
   const corsOrigin = getCorsOrigin();
   const app = await NestFactory.create<NestExpressApplication>(module, { rawBody: true });
 
+  // In production Caddy proxies every request from 127.0.0.1 and sets
+  // X-Forwarded-For to the client address it receives through PROXY protocol
+  // (deploy/ec2/configure.py). Trusting only the loopback hop makes req.ip the
+  // real client IP, so the throttler limits each client separately instead of
+  // sharing one bucket. Trusting every hop (`true`) would let clients spoof it.
+  app.set('trust proxy', 'loopback');
+
   // rawBody: true es aditivo: Nest sigue parseando JSON como siempre y solo
   // además retiene el buffer crudo. Esta línea extiende qué Content-Type
   // dispara ese parseo para que también cubra el de LiveKit.
