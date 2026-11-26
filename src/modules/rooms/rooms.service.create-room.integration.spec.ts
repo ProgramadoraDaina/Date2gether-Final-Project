@@ -81,7 +81,6 @@ describe('RoomsService.createRoom — transaction integration (real Postgres)', 
         code: fixedCode,
         name: 'R1 (a retirar)',
         isPermanent: false,
-        isActive: true,
         lastEnteredAt: new Date(Date.now() - 48 * 60 * 60 * 1000),
       })
       .returning();

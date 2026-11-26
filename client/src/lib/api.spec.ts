@@ -87,6 +87,43 @@ describe('renameRoom', () => {
   });
 });
 
+describe('promoteRoomToPermanent', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    localStorage.setItem(ACCESS_TOKEN_KEY, 'fake-access-token');
+    global.fetch = jest.fn() as unknown as typeof fetch;
+  });
+
+  it('envía PATCH autenticado a /rooms/:code/permanent', async () => {
+    const fetchMock = global.fetch as jest.Mock<typeof fetch>;
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
+
+    const { promoteRoomToPermanent } = await import('./api');
+    await promoteRoomToPermanent('abc-defg-hij');
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('http://localhost:3001/rooms/abc-defg-hij/permanent');
+    expect(init).toMatchObject({
+      method: 'PATCH',
+      headers: expect.objectContaining({ Authorization: 'Bearer fake-access-token' }),
+    });
+  });
+
+  it('lanza ApiError con status y mensaje del backend si lo rechaza', async () => {
+    const fetchMock = global.fetch as jest.Mock<typeof fetch>;
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ message: 'Solo el administrador' }), { status: 403 }),
+    );
+
+    const { promoteRoomToPermanent } = await import('./api');
+
+    await expect(promoteRoomToPermanent('abc-defg-hij')).rejects.toMatchObject({
+      message: 'Solo el administrador',
+      status: 403,
+    });
+  });
+});
+
 describe('notas compartidas', () => {
   beforeEach(() => {
     global.fetch = jest.fn() as unknown as typeof fetch;

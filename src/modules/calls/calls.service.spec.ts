@@ -29,7 +29,7 @@ const participant: RoomParticipant = {
   roomCode: 'abc-defg-hij',
   name: 'Ana',
 };
-const room = { id: participant.roomId, code: participant.roomCode, isActive: true } as Room;
+const room = { id: participant.roomId, code: participant.roomCode } as Room;
 const secret = 'test-secret-at-least-32-characters-long';
 const config = {
   LIVEKIT_URL: 'wss://media.example.com',
@@ -263,11 +263,6 @@ describe('CallsService: LiveKit', () => {
     expect(createRoom).not.toHaveBeenCalled();
   });
 
-  it('rechaza una sala cerrada antes de contactar LiveKit (el 403 ahora lo lanza RoomsService/el resolver, no join())', async () => {
-    rooms.getByCodeOrThrow.mockRejectedValue(new ForbiddenException('La sala está cerrada'));
-    await expect(service.join(room.code, participant)).rejects.toThrow('La sala está cerrada');
-    expect(createRoom).not.toHaveBeenCalled();
-  });
 
   it('informa si falta configuración sin contactar al servicio', async () => {
     service = new CallsService(

@@ -60,6 +60,13 @@ export interface RoomDeletedEvent {
   roomCode: string;
 }
 
+// roomId viaja junto al código para que el gateway marque la sala como permanente
+// (persistencia de playlist) sin otra consulta.
+export interface RoomPromotedEvent {
+  roomCode: string;
+  roomId: string;
+}
+
 export interface RoomLinksChangedEvent {
   roomCode: string;
 }
@@ -126,6 +133,14 @@ export class RoomEventsService {
 
   emitRoomDeleted(event: RoomDeletedEvent): void {
     this.emitter.emit('roomDeleted', event);
+  }
+
+  onRoomPromoted(listener: (event: RoomPromotedEvent) => void): void {
+    this.emitter.on('roomPromoted', listener);
+  }
+
+  emitRoomPromoted(event: RoomPromotedEvent): void {
+    this.emitter.emit('roomPromoted', event);
   }
 
   onRoomLinksChanged(listener: (event: RoomLinksChangedEvent) => void): void {

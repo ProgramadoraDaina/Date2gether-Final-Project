@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import type { DrizzleDb } from '../../db/drizzle.module';
 import type { Room } from '../../db/schema';
 import { chain, createFakeDb, type FakeDb } from '../../test-support/fake-drizzle';
@@ -11,7 +11,6 @@ function makeRoom(overrides: Partial<Room> = {}): Room {
     id: 'room-1',
     code: 'abc-defg-hij',
     name: 'Reunión de Daina',
-    isActive: true,
     isPermanent: false,
     historyDeletedBefore: null,
     historyCleanupPending: false,
@@ -81,7 +80,7 @@ describe('RoomAdmissionService', () => {
 
       const result = await service.request(room.code, 'Ana');
 
-      expect(resolver.lockJoinable).toHaveBeenCalledWith(tx, room.code, { requireActive: true });
+      expect(resolver.lockJoinable).toHaveBeenCalledWith(tx, room.code);
       expect(result).toEqual({ token: 'tok', participant: {} });
     });
 
@@ -103,11 +102,6 @@ describe('RoomAdmissionService', () => {
       await expect(service.request('codigo-reciclado', 'Ana')).rejects.toThrow(NotFoundException);
     });
 
-    it('propaga el 403 del resolver cuando la sala está cerrada', async () => {
-      resolver.lockJoinable.mockRejectedValueOnce(new ForbiddenException('La sala está cerrada'));
-
-      await expect(service.request('abc-defg-hij', 'Ana')).rejects.toThrow(ForbiddenException);
-    });
   });
 
   describe('list (Category B: raw query -> resolver.resolveJoinable)', () => {
@@ -268,7 +262,7 @@ describe('RoomAdmissionService', () => {
     });
   });
 
-  describe('configure: isPermanent es inmutable (3.1)', () => {
+  describe('configure: nunca escribe isPermanent (solo el endpoint de promoción lo cambia) (3.1)', () => {
     it('ignora un isPermanent colado en el DTO -- la sala sigue siendo permanente, nunca se escribe en rooms', async () => {
       const room = makeRoom({ isPermanent: true, waitingRoomEnabled: true });
       resolver.lockJoinable.mockResolvedValueOnce(room);

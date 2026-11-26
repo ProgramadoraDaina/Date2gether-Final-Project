@@ -113,6 +113,20 @@ export class RoomsController {
     return { message: 'Nombre actualizado' };
   }
 
+  // Temporal -> permanente, irreversible e idempotente (200 con la sala si ya lo era).
+  // El rol "administrador" se valida en el service (en la misma transacción que bloquea la
+  // fila), no con RoomRolesGuard: 404 sala inexistente/vencida, 403 si no es administrador.
+  @UseGuards(JwtAuthGuard)
+  @Patch(':code/permanent')
+  async promoteToPermanent(@Param('code') code: string, @CurrentUser() user: AccessTokenPayload) {
+    const {
+      historyDeletedBefore: _deleted,
+      historyCleanupPending: _pending,
+      ...room
+    } = await this.roomsService.promoteToPermanent(code, user.sub);
+    return room;
+  }
+
   // El rol "administrador" de la sala se valida en el service (ver deleteRoomAsAdmin).
   @UseGuards(JwtAuthGuard)
   @Delete(':code')

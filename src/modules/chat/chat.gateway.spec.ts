@@ -35,7 +35,6 @@ describe('ChatGateway', () => {
     const room = {
       id: 'room-1',
       code: 'abc-defg-hij',
-      isActive: true,
       isPermanent: roomOptions.isPermanent ?? false,
     };
     const playlists = {
@@ -74,6 +73,7 @@ describe('ChatGateway', () => {
       onBreakoutRemoval: vi.fn(),
       onBreakoutBroadcast: vi.fn(),
       onRoomDeleted: vi.fn(),
+      onRoomPromoted: vi.fn(),
       onRoomLinksChanged: vi.fn(),
     } as unknown as RoomEventsService;
 
@@ -137,6 +137,21 @@ describe('ChatGateway', () => {
     });
   });
 
+  describe('roomPromoted (evento del bridge RoomEventsService)', () => {
+    it('avisa a la sala sin desconectar a nadie', () => {
+      const { roomEvents, serverTo, serverEmit, disconnectSockets } = createGateway();
+      const onRoomPromoted = vi.mocked(roomEvents.onRoomPromoted);
+      expect(onRoomPromoted).toHaveBeenCalledTimes(1);
+      const listener = onRoomPromoted.mock.calls[0][0];
+
+      listener({ roomCode: 'abc-defg-hij', roomId: 'room-1' });
+
+      expect(serverTo).toHaveBeenCalledWith('abc-defg-hij');
+      expect(serverEmit).toHaveBeenCalledWith('roomPromoted');
+      expect(disconnectSockets).not.toHaveBeenCalled();
+    });
+  });
+
   describe('handleJoinRoom (Categoría E, D4: resolver.resolveJoinable + assertBound)', () => {
     it('código retirado/vencido/inexistente: emite el evento error existente, no lanza', async () => {
       const { gateway, resolveJoinable } = createGateway();
@@ -167,7 +182,6 @@ describe('ChatGateway', () => {
       resolveJoinable.mockResolvedValueOnce({
         id: 'room-2-recycled',
         code: 'abc-defg-hij',
-        isActive: true,
       } as never);
       const participant: RoomParticipant = {
         kind: 'room-participant',

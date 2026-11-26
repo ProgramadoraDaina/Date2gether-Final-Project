@@ -198,6 +198,12 @@ export class ChatGateway implements OnGatewayDisconnect {
       this.server.to(roomCode).emit('roomDeleted');
       this.server.in(roomCode).disconnectSockets(true);
     });
+    // Promoción temporal -> permanente: los clientes refrescan la info de la sala y, desde acá,
+    // los cambios de playlist se persisten sin esperar a que alguien reingrese.
+    this.roomEvents.onRoomPromoted(({ roomCode, roomId }) => {
+      this.permanentRoomIds.add(roomId);
+      this.server.to(roomCode).emit('roomPromoted');
+    });
     this.roomEvents.onRoomLinksChanged(({ roomCode }) => {
       this.server.to(roomCode).emit('roomLinksChanged');
     });

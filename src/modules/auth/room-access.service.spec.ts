@@ -17,8 +17,8 @@ const httpContext = (request: object) =>
 // real (403 si el roomId del participante no coincide con el de la sala).
 const resolver = {
   resolveJoinable: vi.fn((code: string) => {
-    if (code === 'abc-defg-hij') return { id: 'room-1', code, isActive: true };
-    if (code === 'xyz-abcd-efg') return { id: 'room-2', code, isActive: true };
+    if (code === 'abc-defg-hij') return { id: 'room-1', code };
+    if (code === 'xyz-abcd-efg') return { id: 'room-2', code };
     throw new NotFoundException(`No existe una sala con el código "${code}"`);
   }),
   assertBound: vi.fn((participant: { roomId: string }, room: { id: string }) => {

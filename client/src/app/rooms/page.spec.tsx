@@ -16,6 +16,7 @@ jest.mock('@/features/auth/useGlobalRole', () => ({ useGlobalRole: () => 'user' 
 jest.mock('@/lib/api', () => ({
   getOwnedRooms: jest.fn(),
   renameRoom: jest.fn(),
+  promoteRoomToPermanent: jest.fn(),
   deleteRoom: jest.fn(),
   ApiError: class extends Error {
     constructor(
@@ -96,19 +97,168 @@ describe('MyRoomsPage', () => {
     expect(await screen.findByText('Link copiado')).toBeInTheDocument();
   });
 
-  it('solo muestra el botón de renombrar en salas permanentes', async () => {
+  it('muestra el botón de renombrar en todas las salas vigentes, temporales o permanentes', async () => {
     const { isLoggedIn } = await import('@/lib/auth');
     const { getOwnedRooms } = await import('@/lib/api');
     (isLoggedIn as jest.Mock<typeof isLoggedIn>).mockReturnValue(true);
     (getOwnedRooms as jest.Mock<typeof getOwnedRooms>).mockResolvedValue([
       ownedRoom(),
-      ownedRoom({ id: 'room-2', code: 'xyz-abcd-efg', name: 'Sala vieja', isPermanent: false }),
+      ownedRoom({ id: 'room-2', code: 'xyz-abcd-efg', name: 'Sala temporal', isPermanent: false }),
+      ownedRoom({
+        id: 'room-3',
+        code: 'old-abcd-efg',
+        name: 'Sala vieja',
+        isPermanent: false,
+        isJoinable: false,
+      }),
     ]);
     const MyRoomsPage = (await import('./page')).default;
     render(<MyRoomsPage />);
 
     await screen.findByText('Cita de los lunes', { selector: '.roomName' });
-    expect(screen.getAllByRole('button', { name: 'Renombrar sala' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'Renombrar sala' })).toHaveLength(2);
+  });
+
+  it('renombra una sala temporal', async () => {
+    const { isLoggedIn } = await import('@/lib/auth');
+    const { getOwnedRooms, renameRoom } = await import('@/lib/api');
+    (isLoggedIn as jest.Mock<typeof isLoggedIn>).mockReturnValue(true);
+    (getOwnedRooms as jest.Mock<typeof getOwnedRooms>).mockResolvedValue([
+      ownedRoom({ isPermanent: false, slots: [], nextOccurrenceAt: null }),
+    ]);
+    (renameRoom as jest.Mock<typeof renameRoom>).mockResolvedValue(undefined);
+    const MyRoomsPage = (await import('./page')).default;
+    render(<MyRoomsPage />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Renombrar sala' }));
+    fireEvent.change(screen.getByLabelText('Nuevo nombre de la sala'), {
+      target: { value: 'Nombre nuevo' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    await screen.findByText('Nombre nuevo', { selector: '.roomName' });
+    expect(renameRoom).toHaveBeenCalledWith('abc-defg-hij', 'Nombre nuevo');
+  });
+
+  describe('hacer permanente', () => {
+    async function renderTemporary() {
+      const { isLoggedIn } = await import('@/lib/auth');
+      const { getOwnedRooms } = await import('@/lib/api');
+      (isLoggedIn as jest.Mock<typeof isLoggedIn>).mockReturnValue(true);
+      (getOwnedRooms as jest.Mock<typeof getOwnedRooms>).mockResolvedValue([
+        ownedRoom({ isPermanent: false, slots: [], nextOccurrenceAt: null }),
+      ]);
+      const MyRoomsPage = (await import('./page')).default;
+      render(<MyRoomsPage />);
+      await screen.findByText('Cita de los lunes', { selector: '.roomName' });
+    }
+
+    it('no ofrece la acción en una sala que ya es permanente ni en una vencida', async () => {
+      const { isLoggedIn } = await import('@/lib/auth');
+      const { getOwnedRooms } = await import('@/lib/api');
+      (isLoggedIn as jest.Mock<typeof isLoggedIn>).mockReturnValue(true);
+      (getOwnedRooms as jest.Mock<typeof getOwnedRooms>).mockResolvedValue([
+        ownedRoom(),
+        ownedRoom({ id: 'room-2', code: 'old-abcd-efg', isPermanent: false, isJoinable: false }),
+      ]);
+      const MyRoomsPage = (await import('./page')).default;
+      render(<MyRoomsPage />);
+      await screen.findAllByText('Cita de los lunes');
+
+      expect(screen.queryByRole('button', { name: /Hacer permanente/ })).not.toBeInTheDocument();
+    });
+
+    it('pide confirmación explicando que es irreversible y cancelar no llama a la API', async () => {
+      await renderTemporary();
+      const { promoteRoomToPermanent } = await import('@/lib/api');
+
+      fireEvent.click(screen.getByRole('button', { name: /Hacer permanente/ }));
+      const dialog = screen.getByRole('dialog');
+      expect(dialog).toHaveTextContent('Cita de los lunes');
+      expect(dialog).toHaveTextContent('no se puede deshacer');
+
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
+
+      expect(promoteRoomToPermanent).not.toHaveBeenCalled();
+      expect(screen.queryByText('Permanente')).not.toBeInTheDocument();
+    });
+
+    it('al confirmar muestra carga, llama a la API y la sala pasa a mostrar la insignia Permanente', async () => {
+      await renderTemporary();
+      const { promoteRoomToPermanent } = await import('@/lib/api');
+      let finish: () => void = () => {};
+      (promoteRoomToPermanent as jest.Mock<typeof promoteRoomToPermanent>).mockReturnValue(
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: /Hacer permanente/ }));
+      fireEvent.click(screen.getByRole('button', { name: 'Sí, hacer permanente' }));
+
+      expect(promoteRoomToPermanent).toHaveBeenCalledWith('abc-defg-hij');
+      expect(await screen.findByRole('button', { name: 'Haciendo permanente…' })).toBeDisabled();
+
+      finish();
+
+      expect(await screen.findByText('Permanente')).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(screen.queryByRole('button', { name: /Hacer permanente/ })).not.toBeInTheDocument();
+    });
+
+    it('si el backend falla muestra el error en el diálogo y la sala sigue siendo temporal', async () => {
+      await renderTemporary();
+      const { promoteRoomToPermanent, ApiError } = await import('@/lib/api');
+      (promoteRoomToPermanent as jest.Mock<typeof promoteRoomToPermanent>).mockRejectedValue(
+        new ApiError('Solo el administrador de la sala puede hacerla permanente', 403),
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: /Hacer permanente/ }));
+      fireEvent.click(screen.getByRole('button', { name: 'Sí, hacer permanente' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Solo el administrador de la sala puede hacerla permanente',
+      );
+      expect(screen.queryByText('Permanente')).not.toBeInTheDocument();
+    });
+
+    it.each([403, 404])(
+      'si el backend responde %i vuelve a pedir las salas y conserva el error visible',
+      async (status) => {
+        await renderTemporary();
+        const { promoteRoomToPermanent, getOwnedRooms, ApiError } = await import('@/lib/api');
+        (promoteRoomToPermanent as jest.Mock<typeof promoteRoomToPermanent>).mockRejectedValue(
+          new ApiError('No se pudo', status),
+        );
+        const callsBefore = (getOwnedRooms as jest.Mock).mock.calls.length;
+        (getOwnedRooms as jest.Mock<typeof getOwnedRooms>).mockResolvedValue([
+          ownedRoom({ name: 'Cita de los lunes', isPermanent: true }),
+        ]);
+
+        fireEvent.click(screen.getByRole('button', { name: /Hacer permanente/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Sí, hacer permanente' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo');
+        await waitFor(() =>
+          expect((getOwnedRooms as jest.Mock).mock.calls.length).toBe(callsBefore + 1),
+        );
+      },
+    );
+
+    it('un error de otro tipo (500) no vuelve a pedir las salas', async () => {
+      await renderTemporary();
+      const { promoteRoomToPermanent, getOwnedRooms, ApiError } = await import('@/lib/api');
+      (promoteRoomToPermanent as jest.Mock<typeof promoteRoomToPermanent>).mockRejectedValue(
+        new ApiError('Falló', 500),
+      );
+      const callsBefore = (getOwnedRooms as jest.Mock).mock.calls.length;
+
+      fireEvent.click(screen.getByRole('button', { name: /Hacer permanente/ }));
+      fireEvent.click(screen.getByRole('button', { name: 'Sí, hacer permanente' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Falló');
+      expect((getOwnedRooms as jest.Mock).mock.calls.length).toBe(callsBefore);
+    });
   });
 
   it('renombra una sala permanente y actualiza el nombre mostrado', async () => {

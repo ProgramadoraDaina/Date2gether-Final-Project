@@ -14,7 +14,6 @@ export interface Room {
   id: string;
   code: string;
   name: string;
-  isActive: boolean;
   isPermanent: boolean;
   createdAt: string;
 }
@@ -264,6 +263,20 @@ export async function renameRoom(code: string, name: string): Promise<void> {
     body: JSON.stringify({ name }),
   });
   if (!res.ok) throw new ApiError(await extractErrorMessage(res, 'No se pudo renombrar la sala'));
+}
+
+// Promueve una sala temporal a permanente (irreversible, idempotente). Solo su administrador;
+// 403 si no lo es, 404 si la sala no existe o ya venció.
+export async function promoteRoomToPermanent(code: string): Promise<void> {
+  const res = await authFetch(`/rooms/${encodeURIComponent(code)}/permanent`, {
+    method: 'PATCH',
+  });
+  if (!res.ok) {
+    throw new ApiError(
+      await extractErrorMessage(res, 'No se pudo hacer permanente la sala'),
+      res.status,
+    );
+  }
 }
 
 // Borra la sala (204). Solo su administrador; el backend responde 403/404 si no corresponde.

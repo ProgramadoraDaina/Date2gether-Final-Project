@@ -24,8 +24,8 @@ export class RoomAdmissionService {
     private readonly resolver: RoomResolverService,
   ) {}
 
-  private lockRoom(tx: Transaction, code: string, requireActive = true) {
-    return this.resolver.lockJoinable(tx, code, { requireActive });
+  private lockRoom(tx: Transaction, code: string) {
+    return this.resolver.lockJoinable(tx, code);
   }
 
   private async grant(
@@ -88,7 +88,7 @@ export class RoomAdmissionService {
   }
 
   private async ownRequest(tx: Transaction, code: string, id: string) {
-    const room = await this.lockRoom(tx, code, false);
+    const room = await this.lockRoom(tx, code);
     const [request] = await tx
       .select()
       .from(roomAdmissionRequests)
@@ -103,7 +103,6 @@ export class RoomAdmissionService {
       // resuelve la sala, y SOLO DESPUÉS se verifica el ticket contra su id.
       const { room, request } = await this.ownRequest(tx, code, id);
       await this.access.verifyAdmissionTicket(ticket, room.id, id);
-      if (!room.isActive) return { status: 'cancelled' as const };
       if (request.expiresAt && request.expiresAt <= new Date())
         return { status: 'expired' as const };
       if (request.status === 'pending' && !room.waitingRoomEnabled && !room.entryLocked) {
@@ -180,8 +179,9 @@ export class RoomAdmissionService {
   async configure(code: string, settings: UpdateAdmissionSettingsDto) {
     return this.db.transaction(async (tx) => {
       const room = await this.lockRoom(tx, code);
-      // D5/D7: isPermanent es inmutable y ausente de este DTO -- no hay
-      // endpoint que lo acepte. Una sala permanente exige admisión siempre:
+      // D5/D7 (revisado): isPermanent se declara al crear y solo puede pasar de false a
+      // true por la promoción del administrador (PATCH /rooms/:code/permanent), nunca
+      // de true a false; está ausente de este DTO. Una sala permanente exige admisión siempre:
       // no se puede desactivar la sala de espera, y queda forzada a true
       // aunque no se la pida explícitamente.
       if (room.isPermanent && settings.waitingRoomEnabled === false) {
@@ -222,7 +222,6 @@ export class RoomAdmissionService {
   async decide(code: string, id: string, decision: 'admitted' | 'rejected') {
     return this.db.transaction(async (tx) => {
       const { room, request } = await this.ownRequest(tx, code, id);
-      if (!room.isActive) throw new ForbiddenException('La sala está cerrada');
       if (request.expiresAt && request.expiresAt <= new Date())
         throw new ConflictException('La solicitud venció');
       if (request.status === decision) return { status: decision };
