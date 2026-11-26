@@ -36,6 +36,8 @@ Se optó por el **merge** (no rebase), resolviendo el conflicto manualmente.
 
 ## 2. Amazon Chime SDK para llamadas de voz y video
 
+> **Decisión histórica, sustituida por LiveKit:** Chime no está admitido en el plan FREE del nuevo AWS experience (sección 11) y se reemplazó por LiveKit autohospedado en EC2 (sección 12). Se conserva como registro de la evaluación inicial; no describe el stack actual.
+
 **Fecha:** 2026-10-24
 **Rama:** `feature/voice-video-call`
 
@@ -259,6 +261,8 @@ Se aplicó el mismo patrón que `features/theme/store.ts` ya usa para el mismo p
 
 ## 9. Cada click en "Llamar" creaba una reunión de Chime distinta — las salas no eran realmente grupales
 
+> **Decisión histórica, sustituida por LiveKit** (secciones 11 y 12): LiveKit identifica la sala de medios por el código de la sala, por lo que `rooms.chime_meeting_id` ya no se usa.
+
 **Fecha:** 2026-10-25
 **Rama:** `feature/voice-video-call`
 
@@ -293,6 +297,8 @@ Consecuencia real: si dos personas en la misma sala apretaban "Llamar" por separ
 
 **Fecha:** 2026-10-26.
 
+> La autorización de usar Amazon Chime SDK de esta sección quedó sin efecto: ver las secciones 11 y 12 (reemplazo por LiveKit).
+
 Se conservan juntos los roles de sala, ES/EN, tema claro/oscuro, la corrección de hidratación y las llamadas. La colisión entre dos migraciones `0002` se resuelve conservando roles en `0002_panoramic_nebula` y regenerando Chime como `0003_chime_meeting`, con su snapshot enlazado al de roles. Las bases anteriores de la rama que ya hayan aplicado el antiguo `0002_fast_nebula` requieren reconciliación o una base local nueva; no se borran ni se reinician datos automáticamente.
 
 El equipo autoriza AWS y Amazon Chime SDK para la etapa gratuita prevista de hasta seis meses. Se actualiza primero `docs/requirements.md` para reemplazar la restricción anterior de autohospedaje sin APIs comerciales. El plazo depende de los créditos y de los servicios disponibles en la cuenta; no garantiza consumo ilimitado. Las credenciales siguen solo en el backend y las pruebas automatizadas simulan Chime sin consumir AWS.
@@ -301,6 +307,8 @@ El equipo autoriza AWS y Amazon Chime SDK para la etapa gratuita prevista de has
 ## 11. Configuración de audio para el proyecto date2gether
 
 **Fecha:** 2026-10-26
+
+> **Sustituida por la sección 12:** las variables `AWS_CHIME_*` descritas aquí ya no existen; el audio y el video los resuelve LiveKit autohospedado. Se conserva el hallazgo de que Chime no está admitido en el plan FREE.
 
 La consulta `GetAccountPlanState` confirmó `FREE` y `ACTIVE`. El nuevo AWS experience excluye Chime SDK incluso en su plan pago simplificado. Instalar Agent Toolkit y autenticar AWS CLI no cambia esa restricción. No se cambia el plan, se activan funciones avanzadas ni se crean reuniones para probar el código.
 
@@ -552,14 +560,14 @@ Se implementaron ambas puntas:
 
 - El nombre de sala es **opcional** en el form de creación (`app/page.tsx`), y solo se muestra cuando `isPermanent` está activo. Si se deja vacío, se mantiene el comportamiento actual (`Reunión de {nombre del usuario}`).
 - Nuevo endpoint `PATCH /rooms/:code/name` (`UpdateRoomNameDto`, mismo guard stack que `PATCH /rooms/:code/members/:userId`: `JwtAuthGuard` + `RoomRolesGuard` + `@RoomRoles('administrador')`), y `RoomsService.renameRoom`.
-- ~~**El renombre queda restringido a salas permanentes, validado en el servidor**~~ **(superado por la decisión 27: el renombre vale para todas las salas, temporales o permanentes; el servidor ya no lanza `ForbiddenException` por `!room.isPermanent`).** La autorización por rol de administrador no cambió.
-- UI de renombre en "Mis salas" (`app/rooms/page.tsx`): un botón ✏️ que abre un input inline con Guardar/Cancelar (originalmente solo en filas `isPermanent`; desde la decisión 27, en todas las salas vigentes).
+- ~~**El renombre queda restringido a salas permanentes, validado en el servidor**~~ **(superado por la decisión 30: el renombre vale para todas las salas, temporales o permanentes; el servidor ya no lanza `ForbiddenException` por `!room.isPermanent`).** La autorización por rol de administrador no cambió.
+- UI de renombre en "Mis salas" (`app/rooms/page.tsx`): un botón ✏️ que abre un input inline con Guardar/Cancelar (originalmente solo en filas `isPermanent`; desde la decisión 30, en todas las salas vigentes).
 
 ### Resolución aplicada
 
 - Backend: `dto/update-room-name.dto.ts` (nuevo), `rooms.controller.ts` (+`renameRoom`), `rooms.service.ts` (+`renameRoom`).
 - Frontend: `lib/api.ts` (+`renameRoom`), `app/page.tsx` (input opcional de nombre de sala), `app/rooms/page.tsx` + `page.module.css` (UI de edición inline), `features/translation/dictionary.ts` (claves nuevas en inglés).
-- No se tocó el schema (la columna ya existía) ni la inmutabilidad de `isPermanent` (esta última superada por la decisión 27: ahora solo puede pasar de temporal a permanente).
+- No se tocó el schema (la columna ya existía) ni la inmutabilidad de `isPermanent` (esta última superada por la decisión 30: ahora solo puede pasar de temporal a permanente).
 
 ### Verificación
 
@@ -746,7 +754,119 @@ El proveedor se eligió después de probar Amazon Bedrock el 2026-11-25 en la cu
 - Se suma un segundo proveedor y una segunda clave para administrar (`GEMINI_API_KEY`, y opcionalmente `GEMINI_MODEL`, en el entorno del backend y en EC2).
 - La numeración de la migración (0031) puede colisionar con otras ramas aún sin integrar que usan el mismo número; hay que renumerar la que se integre segunda.
 
-## 27. Editar salas: renombrar cualquier sala y promover temporal a permanente (supera D5/D7 "isPermanent inmutable")
+---
+
+## 27. LiveKit autohospedado como proveedor vigente de audio y video (sustituye a Amazon Chime SDK)
+
+**Fecha:** 2026-11-25
+**Rama:** `chore/repo-hygiene`
+**Estado:** vigente. Sustituye a las secciones 2, 5, 9 y 11, que se conservan solo como historia; la sección 12 describe la implementación inicial.
+
+### Contexto
+
+La sección 2 eligió Chime SDK por ser nativo de AWS. La sección 11 documentó después que el nuevo AWS experience excluye Chime SDK, incluso en el plan pago simplificado, y que el proyecto está en el plan FREE. Sin Chime no había llamadas de voz y video. Esta sección consolida el razonamiento de la decisión vigente para que no haya que reconstruirlo desde varias secciones.
+
+### Alternativas consideradas
+
+- **Amazon Chime SDK (decisión original).** Descartada: no está disponible para este tipo de cuenta, por lo que no se puede ni probar ni desplegar.
+- **LiveKit Cloud.** Descartada para esta entrega: añade un servicio comercial externo y un plan que el proyecto no necesita. El servidor de código abierto cubre el caso (ver `deploy/ec2/README.md`, sección "Costos y créditos").
+- **LiveKit autohospedado en la EC2 del proyecto (elegida).**
+- No se evaluaron otras plataformas de video ni una malla WebRTC directa entre navegadores; no hay un análisis documentado de ellas y no se afirma nada al respecto.
+
+### Decisión
+
+LiveKit de código abierto (`livekit/livekit-server`, versión fijada en `deploy/ec2/compose.yaml`) corre junto con la API, el frontend y Caddy en la misma EC2 de `us-east-2`. El backend emite pases JWT de corta duración con `livekit-server-sdk`; el cliente usa `livekit-client` y los componentes oficiales de React. Cupo predeterminado: 6 participantes por llamada, aplicado por LiveKit al conectar.
+
+### Justificación
+
+- Funciona dentro del plan FREE: solo requiere EC2, un servicio admitido, sin activar funciones avanzadas.
+- La licencia del servidor no tiene costo; el único gasto es la infraestructura de AWS, que se descuenta de los créditos elegibles.
+- Un único stack de Docker Compose incluye todo, lo que simplifica el despliegue y las pruebas locales (LiveKit también se puede levantar con Docker).
+- El SDK abierto permite mantener la identidad y los permisos en el backend: el pase no concede administración y las claves privadas no llegan al navegador.
+
+### Consecuencias y tradeoffs
+
+- Pasamos a operar el servidor de medios: actualizaciones, certificados (Caddy) y TURN son responsabilidad del equipo, no de un servicio administrado.
+- Despliegue de un solo host, sin alta disponibilidad. El límite de seis participantes no es una certificación de rendimiento; requiere una prueba real desde varias redes.
+- Hay que abrir puertos públicos de medios (TCP 7881; UDP 3478 y 7882) además de 80 y 443.
+- Las llamadas activas se interrumpen cuando la EC2 se apaga automáticamente (dos horas después de cada arranque).
+- La columna `rooms.chime_meeting_id` y la migración `0003_chime_meeting` se conservan para no reescribir historial de migraciones; LiveKit no las usa.
+
+---
+
+## 28. PostgreSQL como contenedor en la misma EC2, no como servicio administrado (RDS)
+
+**Fecha:** 2026-11-25
+**Rama:** `chore/repo-hygiene`
+
+### Contexto
+
+El proyecto necesita una base PostgreSQL alojada en la nube, no en la computadora de un integrante. La cuenta de AWS del proyecto usa el plan FREE del nuevo AWS experience, con una única región (`us-east-2`) y créditos limitados. Los servicios disponibles dependen de ese plan, y los administrados se cobran por separado de la EC2.
+
+### Alternativas consideradas
+
+- **Amazon RDS (u otro PostgreSQL administrado).** Ofrece copias automáticas, recuperación a un punto en el tiempo y parches gestionados. Agrega una instancia de base facturable además de la EC2 y no se verificó contra la lista oficial de servicios admitidos del plan FREE; la plantilla del proyecto declara explícitamente que no crea RDS (`deploy/ec2/README.md`, "Costos y créditos").
+- **PostgreSQL en la computadora de un integrante.** Descartada: incumple el requisito de que la base esté en un servicio en la nube.
+- **PostgreSQL 16 en un contenedor Docker en la misma EC2 (elegida).**
+
+### Decisión
+
+El servicio `postgres` (`postgres:16-alpine`) está definido en `deploy/ec2/compose.yaml` junto al resto del stack. Escucha solo en `127.0.0.1` (`listen_addresses=127.0.0.1`) y el puerto 5432 no se abre en el Security Group. Los datos viven en el volumen Docker `postgres_data`, dentro del disco raíz de la instancia: gp3 de 30 GiB con cifrado activado y `DeleteOnTermination: false` (`deploy/ec2/cloudformation.json`). Las migraciones se aplican en `deploy/ec2/start.sh` antes de iniciar la API.
+
+Esto cumple el requisito de que la base esté alojada en un servicio en la nube y no en la computadora de un integrante: corre en una instancia EC2 de AWS.
+
+### Justificación
+
+- Costo: no se agrega ningún recurso facturable aparte de la EC2, el disco y la IPv4 que ya existen.
+- Simplicidad: un solo `docker compose` levanta aplicación, medios, proxy y base, y una sola plantilla de CloudFormation describe todo.
+- Encaja con el alcance de una demostración académica con una llamada a la vez.
+
+### Consecuencias y tradeoffs
+
+- **Sin copias automáticas ni recuperación a un punto en el tiempo.** La única copia prevista es manual con `pg_dump` (`deploy/ec2/README.md`, "Copias, actualización y retiro"), y queda en el mismo disco; hay que copiarla fuera de la instancia si se quiere protección ante la pérdida del host.
+- **La base comparte CPU y RAM con la aplicación y LiveKit.** La plantilla admite `t3.small` (2 GiB) y `t3.medium` (4 GiB, valor por defecto); en `t3.small` la construcción de imágenes puede agotar la memoria, por eso el arranque crea 2 GiB de swap.
+- **La base se apaga con la instancia.** Un temporizador de systemd apaga la EC2 dos horas después de cada arranque; hasta volver a iniciarla desde la consola, la aplicación y la base no responden. Los datos persisten porque el disco y el volumen se conservan.
+- **Parches manuales.** La versión de imagen está fijada; actualizar PostgreSQL o el sistema operativo es una tarea del equipo.
+- **Un solo host, sin réplica ni alta disponibilidad.** Aceptable para la demostración; no para producción real.
+- Si el proyecto continuara más allá de la entrega, migrar a RDS (o equivalente) sería el primer cambio recomendado: bastaría cambiar `DATABASE_URL` y restaurar un volcado.
+
+---
+
+## 29. IP real del cliente detrás de Caddy (PROXY protocol y `trust proxy`)
+
+**Fecha:** 2026-11-24
+**Rama:** `fix/trust-proxy`
+
+### Contexto
+
+El límite global de 60 peticiones por minuto (`ThrottlerModule`) cuenta por `req.ip`. En el despliegue, la capa 4 de Caddy recibe la conexión en `:443` y la reenvía por TCP a su servidor HTTP en `127.0.0.1:8080`, que a su vez la pasa al backend. Ese reenvío no conservaba la dirección del cliente: el servidor HTTP de Caddy veía a todos como `127.0.0.1`, completaba `X-Forwarded-For` con ese valor, y el backend tampoco confiaba en ese encabezado. Resultado: todas las personas compartían un único cupo de 60 peticiones.
+
+Un primer intento solo activó `trust proxy` en el backend. La revisión del cambio detectó que no alcanzaba, porque el encabezado ya llegaba con la IP equivocada; las pruebas unitarias pasaban porque no reproducían la cadena de Caddy.
+
+### Alternativas consideradas
+
+- **Solo `trust proxy` en el backend.** Insuficiente por lo explicado arriba.
+- **`trust proxy: true`.** Permitiría que cualquier cliente falsee su IP con `X-Forwarded-For`.
+- **Subir o quitar el límite.** Esconde el problema y deja la API sin límite por cliente.
+- **PROXY protocol entre la capa 4 y la capa HTTP de Caddy, más `trust proxy: 'loopback'` (elegida).**
+
+### Decisión
+
+- `deploy/ec2/configure.py`: la ruta de la aplicación en la capa 4 envía un encabezado PROXY v2 (`proxy_protocol: 'v2'`), y el servidor HTTP lo lee con el listener `proxy_protocol`, aceptado solo desde `127.0.0.1/32`. Las rutas de TURN y de LiveKit no cambian.
+- `src/app-setup.ts`: `app.set('trust proxy', 'loopback')`, de modo que el backend toma la IP del `X-Forwarded-For` que agrega Caddy.
+
+### Justificación
+
+- Se verificó con la imagen fijada en `compose.yaml` (Caddy v2.11.3): `caddy validate` acepta el `caddy.json` generado, y una réplica de la cadena mostró que sin PROXY protocol el backend recibe `127.0.0.1` y con PROXY protocol recibe la IP del cliente, ignorando un `X-Forwarded-For` falso enviado por el cliente.
+
+### Consecuencias
+
+- Para aplicarlo en el EC2 hay que volver a ejecutar `configure.py` (conserva las claves existentes) y reiniciar Caddy. Si la configuración fallara, el sitio entero deja de responder: se debe aplicar con la posibilidad de volver al `caddy.json` anterior.
+- Pendiente de comprobar en producción: que dos dispositivos distintos tengan cupos separados.
+
+---
+
+## 30. Editar salas: renombrar cualquier sala y promover temporal a permanente (supera D5/D7 "isPermanent inmutable")
 
 **Fecha:** 2026-11-26
 **Rama:** `feat/room-edit-and-promote`
@@ -779,7 +899,7 @@ La rúbrica pide un CRUD completo y la operación Update de las salas era débil
 
 ---
 
-## 28. Eliminar la columna `rooms.is_active` (código muerto)
+## 31. Eliminar la columna `rooms.is_active` (código muerto)
 
 ### Contexto
 

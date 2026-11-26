@@ -449,6 +449,31 @@ describe('AmbientMusicPlayer', () => {
     expect(position).toBeLessThan(5.5);
   });
 
+  it('cuando YouTube arranca tarde por la carga, salta a donde ya va la sala', async () => {
+    const { AmbientMusicPlayer } = await import('./AmbientMusicPlayer');
+    const socket = fakeSocket();
+    render(<AmbientMusicPlayer socket={socket as never} isAdmin={false} />);
+    const startedAt = Date.now() - 2500;
+    act(() =>
+      socket.handlers.musicState(
+        musicState({ isPlaying: true, positionSeconds: 10, updatedAt: startedAt }),
+      ),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Unirme a la música' }));
+    await waitFor(() => expect(playerCtor).toHaveBeenCalledTimes(1));
+    act(() => capturedOptions.events?.onReady?.());
+    // YouTube recién empieza a sonar en el segundo 10, aunque la sala ya va 2,5 s adelante.
+    playerInstance.getCurrentTime.mockReturnValue(10);
+    playerInstance.seekTo.mockClear();
+
+    act(() => capturedOptions.events?.onStateChange?.({ data: 1 }));
+
+    expect(playerInstance.seekTo).toHaveBeenCalledTimes(1);
+    const [target] = playerInstance.seekTo.mock.calls[0] as [number];
+    expect(target).toBeGreaterThanOrEqual(12.5);
+    expect(target).toBeLessThan(13.5);
+  });
+
   it('quien se unió puede salir de la música y volver a unirse', async () => {
     const { AmbientMusicPlayer } = await import('./AmbientMusicPlayer');
     const socket = fakeSocket();

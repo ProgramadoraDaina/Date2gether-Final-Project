@@ -17,7 +17,7 @@ export class CreateRoomDto {
   name: string;
 
   // Set at creation. Afterwards it can only go false -> true, through the admin
-  // promote endpoint (D5/D7 revised, see decision 27). Defaults to false when omitted.
+  // promote endpoint (D5/D7 revised, see decision 30). Defaults to false when omitted.
   @IsOptional()
   @IsBoolean()
   isPermanent?: boolean;
