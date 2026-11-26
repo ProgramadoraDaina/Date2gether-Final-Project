@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AvatarDialog } from '@/features/avatar/AvatarDialog';
 import { useDismiss } from '@/lib/useDismiss';
 import { useTranslation } from '@/features/translation/useTranslation';
@@ -81,6 +81,19 @@ export function CallSettingsButton({
   const [view, setView] = useState<View>('menu');
   const [avatarOpen, setAvatarOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [panelMaxHeight, setPanelMaxHeight] = useState<number>();
+  useLayoutEffect(() => {
+    if (!open || view === 'layout') return;
+    // The panel opens upward from its anchor (the gear, or the whole dock on phones).
+    const fit = () => {
+      const anchor = panelRef.current?.offsetParent;
+      if (anchor) setPanelMaxHeight(Math.max(160, anchor.getBoundingClientRect().top - 20));
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, [open, view]);
   const close = useCallback(() => {
     setOpen(false);
     setView('menu');
@@ -112,7 +125,9 @@ export function CallSettingsButton({
       </button>
       {open && (
         <div
+          ref={panelRef}
           className={`${styles.panel} ${view === 'layout' ? styles.panelWide : ''}`}
+          style={view === 'layout' ? undefined : { maxHeight: panelMaxHeight }}
           role="dialog"
           aria-label={label}
         >
