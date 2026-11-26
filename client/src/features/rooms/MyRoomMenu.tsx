@@ -13,7 +13,7 @@ export function MyRoomMenu({
 }: {
   room: OwnedRoom;
   onVisibilityChange: (roomId: string, hidden: boolean) => void;
-  onPromote?: (room: OwnedRoom) => void;
+  onPromote: (room: OwnedRoom) => void;
 }) {
   const { t } = useTranslation();
   const menu = useRef<HTMLDetailsElement>(null);
@@ -26,7 +26,7 @@ export function MyRoomMenu({
   const [changingVisibility, setChangingVisibility] = useState(false);
   const [visibilityError, setVisibilityError] = useState('');
   const canManageArchive = room.isPermanent && !room.hiddenFromMyRooms;
-  const canPromote = Boolean(onPromote) && !room.isPermanent && room.isJoinable;
+  const canPromote = !room.isPermanent && room.isJoinable;
 
   async function confirm() {
     setDeleting(true);
@@ -102,7 +102,7 @@ export function MyRoomMenu({
               disabled={changingVisibility}
               onClick={() => {
                 if (menu.current) menu.current.open = false;
-                onPromote?.(room);
+                onPromote(room);
               }}
             >
               <span className={styles.optionLabel}>{t('Hacer permanente')}</span>

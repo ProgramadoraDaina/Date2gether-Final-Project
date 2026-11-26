@@ -792,10 +792,7 @@ export async function generateCallSummary(
     body: JSON.stringify({ language }),
   });
   if (!res.ok) {
-    const body = (await res
-      .clone()
-      .json()
-      .catch(() => null)) as { code?: unknown } | null;
+    const body = (await res.clone().json().catch(() => null)) as { code?: unknown } | null;
     const code = typeof body?.code === 'string' ? body.code : undefined;
     throw new ApiError(
       await extractErrorMessage(res, 'No se pudo generar el resumen'),

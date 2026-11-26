@@ -262,7 +262,7 @@ describe('RoomAdmissionService', () => {
     });
   });
 
-  describe('configure: isPermanent es inmutable (3.1)', () => {
+  describe('configure: nunca escribe isPermanent (solo el endpoint de promoción lo cambia) (3.1)', () => {
     it('ignora un isPermanent colado en el DTO -- la sala sigue siendo permanente, nunca se escribe en rooms', async () => {
       const room = makeRoom({ isPermanent: true, waitingRoomEnabled: true });
       resolver.lockJoinable.mockResolvedValueOnce(room);

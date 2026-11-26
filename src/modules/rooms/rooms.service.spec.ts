@@ -27,6 +27,7 @@ describe('RoomsService', () => {
   let roomEvents: {
     emitMemberRoleChanged: ReturnType<typeof vi.fn>;
     emitRoomDeleted: ReturnType<typeof vi.fn>;
+    emitRoomPromoted: ReturnType<typeof vi.fn>;
   };
   let resolver: {
     resolveJoinable: ReturnType<typeof vi.fn>;
@@ -39,7 +40,11 @@ describe('RoomsService', () => {
 
   beforeEach(() => {
     db = createFakeDb();
-    roomEvents = { emitMemberRoleChanged: vi.fn(), emitRoomDeleted: vi.fn() };
+    roomEvents = {
+      emitMemberRoleChanged: vi.fn(),
+      emitRoomDeleted: vi.fn(),
+      emitRoomPromoted: vi.fn(),
+    };
     resolver = {
       resolveJoinable: vi.fn().mockResolvedValue(room),
       lockJoinable: vi.fn<RoomResolverService['lockJoinable']>().mockResolvedValue(room),
@@ -324,7 +329,7 @@ describe('RoomsService', () => {
     it('actualiza el nombre de una sala permanente', async () => {
       const permanentRoom = { ...room, isPermanent: true };
       resolver.resolveJoinable.mockResolvedValueOnce(permanentRoom);
-      const updateChain = chain([]);
+      const updateChain = chain([{ id: room.id }]);
       db.update.mockReturnValueOnce(updateChain);
 
       await service.renameRoom(room.code, 'Grupo de los jueves');
@@ -334,12 +339,20 @@ describe('RoomsService', () => {
 
     it('actualiza el nombre de una sala temporal (el rename vale para todas las salas)', async () => {
       resolver.resolveJoinable.mockResolvedValueOnce({ ...room, isPermanent: false });
-      const updateChain = chain([]);
+      const updateChain = chain([{ id: room.id }]);
       db.update.mockReturnValueOnce(updateChain);
 
       await service.renameRoom(room.code, 'Nuevo nombre');
 
       expect(updateChain.set).toHaveBeenCalledWith({ name: 'Nuevo nombre' });
+    });
+
+    it('responde 404 si la sala desapareció entre la resolución y el UPDATE', async () => {
+      db.update.mockReturnValueOnce(chain([]));
+
+      await expect(service.renameRoom(room.code, 'Nuevo nombre')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -368,6 +381,12 @@ describe('RoomsService', () => {
         isPermanent: true,
         waitingRoomEnabled: true,
       });
+      // Las solicitudes pendientes dejan de vencer en la misma transacción.
+      expect(updateChain.set).toHaveBeenCalledWith({ expiresAt: null });
+      expect(roomEvents.emitRoomPromoted).toHaveBeenCalledWith({
+        roomCode: room.code,
+        roomId: room.id,
+      });
     });
 
     it('es idempotente: si la sala ya es permanente devuelve la sala sin escribir', async () => {
@@ -379,6 +398,7 @@ describe('RoomsService', () => {
 
       expect(result).toBe(permanent);
       expect(tx.update).not.toHaveBeenCalled();
+      expect(roomEvents.emitRoomPromoted).not.toHaveBeenCalled();
     });
 
     it.each(['colaborador', 'participante'] as const)(
@@ -390,6 +410,7 @@ describe('RoomsService', () => {
           ForbiddenException,
         );
         expect(tx.update).not.toHaveBeenCalled();
+        expect(roomEvents.emitRoomPromoted).not.toHaveBeenCalled();
       },
     );
 

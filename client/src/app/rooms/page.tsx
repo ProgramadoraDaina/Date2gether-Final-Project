@@ -147,6 +147,13 @@ function MyRoomsContent() {
       setPromoteError(
         err instanceof ApiError ? err.message : t('No se pudo hacer permanente la sala'),
       );
+      // 403/404: la lista quedó desactualizada (cambió el rol, la sala venció o se borró).
+      // Se refresca para que "Hacer permanente" no siga ofreciéndose; el error se conserva.
+      if (err instanceof ApiError && (err.status === 403 || err.status === 404)) {
+        getOwnedRooms()
+          .then(setRooms)
+          .catch(() => {});
+      }
     } finally {
       setPromoting(false);
     }

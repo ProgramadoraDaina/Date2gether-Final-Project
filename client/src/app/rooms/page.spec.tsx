@@ -221,6 +221,44 @@ describe('MyRoomsPage', () => {
       );
       expect(screen.queryByText('Permanente')).not.toBeInTheDocument();
     });
+
+    it.each([403, 404])(
+      'si el backend responde %i vuelve a pedir las salas y conserva el error visible',
+      async (status) => {
+        await renderTemporary();
+        const { promoteRoomToPermanent, getOwnedRooms, ApiError } = await import('@/lib/api');
+        (promoteRoomToPermanent as jest.Mock<typeof promoteRoomToPermanent>).mockRejectedValue(
+          new ApiError('No se pudo', status),
+        );
+        const callsBefore = (getOwnedRooms as jest.Mock).mock.calls.length;
+        (getOwnedRooms as jest.Mock<typeof getOwnedRooms>).mockResolvedValue([
+          ownedRoom({ name: 'Cita de los lunes', isPermanent: true }),
+        ]);
+
+        fireEvent.click(screen.getByRole('button', { name: /Hacer permanente/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Sí, hacer permanente' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo');
+        await waitFor(() =>
+          expect((getOwnedRooms as jest.Mock).mock.calls.length).toBe(callsBefore + 1),
+        );
+      },
+    );
+
+    it('un error de otro tipo (500) no vuelve a pedir las salas', async () => {
+      await renderTemporary();
+      const { promoteRoomToPermanent, getOwnedRooms, ApiError } = await import('@/lib/api');
+      (promoteRoomToPermanent as jest.Mock<typeof promoteRoomToPermanent>).mockRejectedValue(
+        new ApiError('Falló', 500),
+      );
+      const callsBefore = (getOwnedRooms as jest.Mock).mock.calls.length;
+
+      fireEvent.click(screen.getByRole('button', { name: /Hacer permanente/ }));
+      fireEvent.click(screen.getByRole('button', { name: 'Sí, hacer permanente' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Falló');
+      expect((getOwnedRooms as jest.Mock).mock.calls.length).toBe(callsBefore);
+    });
   });
 
   it('renombra una sala permanente y actualiza el nombre mostrado', async () => {

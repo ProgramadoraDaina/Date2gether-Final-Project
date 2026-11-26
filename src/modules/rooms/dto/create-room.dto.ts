@@ -16,8 +16,8 @@ export class CreateRoomDto {
   @MaxLength(100)
   name: string;
 
-  // Immutable in v1 (D5): absent from every update DTO, no endpoint accepts
-  // it afterwards. Defaults to false when omitted.
+  // Set at creation. Afterwards it can only go false -> true, through the admin
+  // promote endpoint (D5/D7 revised, see decision 27). Defaults to false when omitted.
   @IsOptional()
   @IsBoolean()
   isPermanent?: boolean;

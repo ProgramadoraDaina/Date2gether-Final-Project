@@ -276,6 +276,41 @@ describe('RoomPage: enlace de invitado', () => {
     expect(screen.queryByPlaceholderText('Escribí un mensaje...')).not.toBeInTheDocument();
   });
 
+  it('si el backend avisa que la sala pasó a permanente, aparece la pestaña Links sin recargar', async () => {
+    const { requestRoomAccess, getRoomInfo } = await import('@/lib/api');
+    const { createRoomSocket } = await import('@/lib/socket');
+    jest.mocked(getRoomInfo).mockResolvedValue({ isPermanent: false } as never);
+    (requestRoomAccess as jest.Mock<typeof requestRoomAccess>).mockResolvedValue({
+      token: 'guest-token',
+      participant: { sub: 'guest-1', roomId: 'room-1', name: 'Alex', roomCode: 'abc-defg-hij' },
+    });
+    const callbacks: Record<string, (...args: unknown[]) => void> = {};
+    const fake = {
+      on: jest.fn((event: string, cb: (...args: unknown[]) => void) => {
+        callbacks[event] = cb;
+      }),
+      connect: jest.fn(() => callbacks.connect?.()),
+      emit: jest.fn(),
+      disconnect: jest.fn(),
+      off: jest.fn(),
+      removeAllListeners: jest.fn(),
+    };
+    (createRoomSocket as jest.Mock<typeof createRoomSocket>).mockReturnValue(fake as never);
+    const Page = (await import('./page')).default;
+    render(<Page />);
+    fireEvent.change(screen.getByLabelText('Tu nombre en la reunión'), {
+      target: { value: 'Alex' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar a la reunión' }));
+    await waitFor(() => expect(callbacks.roomPromoted).toBeDefined());
+    await waitFor(() => expect(getRoomInfo).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: 'Links' })).not.toBeInTheDocument();
+
+    act(() => callbacks.roomPromoted());
+
+    expect(await screen.findByRole('button', { name: 'Links' })).toBeInTheDocument();
+  });
+
   it('el botón de toggle colapsa y vuelve a expandir el panel lateral', async () => {
     const { requestRoomAccess } = await import('@/lib/api');
     const { createRoomSocket } = await import('@/lib/socket');

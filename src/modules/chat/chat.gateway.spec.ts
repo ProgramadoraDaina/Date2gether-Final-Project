@@ -73,6 +73,7 @@ describe('ChatGateway', () => {
       onBreakoutRemoval: vi.fn(),
       onBreakoutBroadcast: vi.fn(),
       onRoomDeleted: vi.fn(),
+      onRoomPromoted: vi.fn(),
       onRoomLinksChanged: vi.fn(),
     } as unknown as RoomEventsService;
 
@@ -133,6 +134,21 @@ describe('ChatGateway', () => {
       expect(serverEmit).toHaveBeenCalledWith('roomDeleted');
       expect(serverIn).toHaveBeenCalledWith('abc-defg-hij');
       expect(disconnectSockets).toHaveBeenCalledWith(true);
+    });
+  });
+
+  describe('roomPromoted (evento del bridge RoomEventsService)', () => {
+    it('avisa a la sala sin desconectar a nadie', () => {
+      const { roomEvents, serverTo, serverEmit, disconnectSockets } = createGateway();
+      const onRoomPromoted = vi.mocked(roomEvents.onRoomPromoted);
+      expect(onRoomPromoted).toHaveBeenCalledTimes(1);
+      const listener = onRoomPromoted.mock.calls[0][0];
+
+      listener({ roomCode: 'abc-defg-hij', roomId: 'room-1' });
+
+      expect(serverTo).toHaveBeenCalledWith('abc-defg-hij');
+      expect(serverEmit).toHaveBeenCalledWith('roomPromoted');
+      expect(disconnectSockets).not.toHaveBeenCalled();
     });
   });
 

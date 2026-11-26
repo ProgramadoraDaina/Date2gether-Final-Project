@@ -463,6 +463,9 @@ export default function RoomPage() {
     // La sala se borró (su administrador): el backend corta chat y llamada, y desde
     // acá se reemplaza toda la vista por un aviso en vez de dejar una sala muerta.
     socket.on('roomDeleted', () => setRoomDeleted(true));
+    // El administrador hizo permanente la sala: la promoción no tiene vuelta atrás, así que
+    // se habilita la UI solo para permanentes sin recargar la página.
+    socket.on('roomPromoted', () => setIsPermanentRoom(true));
 
     socket.connect();
 

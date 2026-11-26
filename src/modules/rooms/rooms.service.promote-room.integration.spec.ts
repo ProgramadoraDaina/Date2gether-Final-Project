@@ -1,8 +1,14 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
-import { roomMembers, rooms, users, type NewUser } from '../../db/schema';
+import {
+  roomAdmissionRequests,
+  roomMembers,
+  rooms,
+  users,
+  type NewUser,
+} from '../../db/schema';
 import { connectTestDb } from '../../test-support/test-database';
 import { RoomEventsService } from './room-events.service';
 import { RoomResolverService } from './room-resolver.service';
@@ -29,7 +35,7 @@ describe('RoomsService.promoteToPermanent (real Postgres)', () => {
   const service = () =>
     new RoomsService(ctx.db, new RoomEventsService(), new RoomResolverService(ctx.db));
 
-  async function seed(role: 'administrador' | 'participante', opts: { stale?: boolean } = {}) {
+  async function seed(role: 'administrador' | 'colaborador' | 'participante', opts: { stale?: boolean } = {}) {
     const [user] = await ctx.db
       .insert(users)
       .values({
@@ -44,7 +50,8 @@ describe('RoomsService.promoteToPermanent (real Postgres)', () => {
       .values({
         code: `pr-${randomUUID().slice(0, 8)}`,
         name: 'Temporal',
-        ...(opts.stale ? { lastEnteredAt: sql`now() - interval '25 hours'` as never } : {}),
+        waitingRoomEnabled: false,
+        ...(opts.stale ? { lastEnteredAt: new Date(Date.now() - 25 * 3600e3) } : {}),
       })
       .returning();
     roomIds.push(room.id);
@@ -70,10 +77,56 @@ describe('RoomsService.promoteToPermanent (real Postgres)', () => {
   it('es idempotente', async () => {
     const { user, room } = await seed('administrador');
     await service().promoteToPermanent(room.code, user.id);
+    const [before] = await ctx.db.select().from(rooms).where(eq(rooms.id, room.id));
 
     await expect(service().promoteToPermanent(room.code, user.id)).resolves.toMatchObject({
       isPermanent: true,
     });
+    const [after] = await ctx.db.select().from(rooms).where(eq(rooms.id, room.id));
+    expect(after).toEqual(before);
+  });
+
+  it('dos promociones concurrentes terminan bien y la sala queda permanente', async () => {
+    const { user, room } = await seed('administrador');
+
+    const results = await Promise.all([
+      service().promoteToPermanent(room.code, user.id),
+      service().promoteToPermanent(room.code, user.id),
+    ]);
+
+    expect(results.map((r) => r.isPermanent)).toEqual([true, true]);
+    const [row] = await ctx.db.select().from(rooms).where(eq(rooms.id, room.id));
+    expect(row).toMatchObject({ isPermanent: true, waitingRoomEnabled: true });
+  });
+
+  it('las solicitudes de admisión pendientes dejan de vencer; las ya resueltas no se tocan', async () => {
+    const { user, room } = await seed('administrador');
+    const expiresAt = new Date(Date.now() + 3600e3);
+    const pendingId = randomUUID();
+    const rejectedId = randomUUID();
+    await ctx.db.insert(roomAdmissionRequests).values([
+      { id: pendingId, roomId: room.id, name: 'Pendiente', status: 'pending', expiresAt },
+      { id: rejectedId, roomId: room.id, name: 'Rechazada', status: 'rejected', expiresAt },
+    ]);
+
+    await service().promoteToPermanent(room.code, user.id);
+
+    const rows = await ctx.db
+      .select()
+      .from(roomAdmissionRequests)
+      .where(eq(roomAdmissionRequests.roomId, room.id));
+    expect(rows.find((r) => r.id === pendingId)?.expiresAt).toBeNull();
+    expect(rows.find((r) => r.id === rejectedId)?.expiresAt).toEqual(expiresAt);
+  });
+
+  it('responde 403 a un colaborador y no modifica la sala', async () => {
+    const { user, room } = await seed('colaborador');
+
+    await expect(service().promoteToPermanent(room.code, user.id)).rejects.toThrow(
+      ForbiddenException,
+    );
+    const [row] = await ctx.db.select().from(rooms).where(eq(rooms.id, room.id));
+    expect(row.isPermanent).toBe(false);
   });
 
   it('responde 403 a un no administrador y no modifica la sala', async () => {
