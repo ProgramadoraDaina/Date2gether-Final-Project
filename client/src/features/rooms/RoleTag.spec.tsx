@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 import { render, screen } from '@testing-library/react';
+import { useLanguageStore } from '@/features/translation/store';
 import { RoleTag } from './RoleTag';
 
 describe('RoleTag', () => {
@@ -8,6 +9,17 @@ describe('RoleTag', () => {
     ['colaborador', 'colab', 'Colaborador'],
     ['participante', 'part', 'Participante'],
   ] as const)('muestra "%s" como "%s", con "%s" como título completo', (role, short, full) => {
+    useLanguageStore.setState({ language: 'es' });
+    render(<RoleTag role={role} />);
+    expect(screen.getByText(short)).toHaveAttribute('title', full);
+  });
+
+  it.each([
+    ['administrador', 'admin', 'Administrator'],
+    ['colaborador', 'collab', 'Collaborator'],
+    ['participante', 'part', 'Participant'],
+  ] as const)('en inglés muestra "%s" como "%s", con "%s" como título', (role, short, full) => {
+    useLanguageStore.setState({ language: 'en' });
     render(<RoleTag role={role} />);
     expect(screen.getByText(short)).toHaveAttribute('title', full);
   });
