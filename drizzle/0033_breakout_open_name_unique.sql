@@ -1,0 +1,2 @@
+ALTER TABLE "call_breakout_rooms" DROP CONSTRAINT "call_breakout_rooms_livekit_room_name_unique";--> statement-breakpoint
+CREATE UNIQUE INDEX "call_breakout_rooms_open_livekit_room_name_unique" ON "call_breakout_rooms" USING btree ("livekit_room_name") WHERE "call_breakout_rooms"."closed_at" is null;
