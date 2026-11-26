@@ -451,6 +451,7 @@ export function AmbientMusicPlayer({
 
   function applyState(player: YT.Player, state: MusicState) {
     const newTrack = currentTrack(state)?.videoId !== loadedVideoId.current;
+    if (newTrack) setError(null);
     reconcilePlayerState(player, loadedVideoId.current, state);
     loadedVideoId.current = currentTrack(state)?.videoId ?? null;
     setDuration(player.getDuration() || 0);
@@ -521,8 +522,22 @@ export function AmbientMusicPlayer({
                 socketRef.current.emit('musicTrackEnded', { updatedAt: state.updatedAt });
               }
             },
-            onError: () =>
-              setError(tRef.current('No se pudo reproducir ese video. Probá con otro link.')),
+            onError: (event: { data: number }) => {
+              const t = tRef.current;
+              const failed = pendingState.current?.tracks.find(
+                (track) => track.videoId === loadedVideoId.current,
+              );
+              if (!failed) {
+                setError(t('No se pudo reproducir ese video. Probá con otro link.'));
+                return;
+              }
+              // 101/150: the owner disabled embedding; any other link to the same video fails too.
+              const reason =
+                event.data === 101 || event.data === 150
+                  ? t('Su dueño no permite reproducirlo fuera de YouTube.')
+                  : t('Probá con otro link.');
+              setError(`${t('No se pudo reproducir')} "${failed.title}". ${reason}`);
+            },
           },
         });
       });
@@ -1053,9 +1068,18 @@ export function AmbientMusicPlayer({
         )}
       </div>
       {error && (
-        <p role="alert" className={styles.error}>
-          {error}
-        </p>
+        <div role="alert" className={styles.error}>
+          <span>{error}</span>
+          <button
+            type="button"
+            className={styles.errorClose}
+            aria-label={t('Cerrar aviso')}
+            title={t('Cerrar aviso')}
+            onClick={() => setError(null)}
+          >
+            ×
+          </button>
+        </div>
       )}
       <dialog
         ref={removeDialogRef}
