@@ -39,7 +39,7 @@ Puntos clave, verificables en `deploy/ec2/compose.yaml` y `deploy/ec2/configure.
 - Caddy enruta `/api/*` al backend (quitando el prefijo `/api`) y el resto al frontend, de modo que el navegador usa **un solo origen HTTPS** y se evitan problemas de contenido mixto y CORS.
 - PostgreSQL escucha solo en `127.0.0.1`; ni la API, ni LiveKit interno ni la base están abiertos en el Security Group.
 - El audio y el video **no pasan por el backend**: el navegador se conecta directamente a LiveKit con un token de corta duración que emite el backend.
-- Los subtítulos se reconocen en el navegador de cada persona (Web Speech API); el backend solo guarda las frases finales en `transcript_lines`. No hay llamadas a modelos de IA desde el servidor.
+- Los subtítulos se reconocen en el navegador de cada persona (Web Speech API); el backend solo guarda las frases finales en `transcript_lines`. La única llamada a un modelo de IA desde el servidor es el resumen de una llamada, que envía la transcripción guardada a la API de Gemini (`src/modules/ai-summary/`); la clave `GEMINI_API_KEY` solo existe en el entorno del backend.
 
 ## 2. Recorrido de una petición (navegador a base de datos y vuelta)
 
@@ -231,6 +231,14 @@ erDiagram
     int total_seconds
     jsonb track_intervals
   }
+  call_summaries {
+    uuid session_id PK, FK "un resumen por sesion"
+    text summary
+    varchar model
+    varchar language "es o en"
+    uuid created_by FK "SET NULL al borrar la cuenta"
+    timestamp created_at
+  }
   call_events {
     varchar id PK "id propio de LiveKit"
     varchar livekit_room_sid
@@ -259,6 +267,8 @@ erDiagram
   rooms |o--o{ call_sessions : "origina"
   call_sessions ||--o{ call_session_participants : "resume"
   users |o--o{ call_session_participants : "se asocia"
+  call_sessions ||--o| call_summaries : "tiene"
+  users |o--o{ call_summaries : "genera"
 ```
 
 Observaciones sobre el modelo:
@@ -267,6 +277,7 @@ Observaciones sobre el modelo:
 - `room_members.is_owner` marca al creador de la sala. Un índice único parcial permite un solo propietario por sala y una restricción `CHECK` exige que el propietario tenga rol `administrador`. `hidden_from_my_rooms` es una preferencia por cuenta y sala: oculta la sala en la lista "Mis salas" sin quitar el rol ni la sala.
 - La retención del historial es de 90 días (`call-history-retention.ts`). Las filas de `call_history` y los mensajes de salas permanentes más antiguos pasan a una vista de **archivo**. Cada cuenta puede vaciar su archivo de llamadas (`users.call_history_deleted_before`), y el administrador de una sala permanente puede vaciar el archivo de la sala (`rooms.history_deleted_before` y `history_cleanup_pending`): un proceso en segundo plano del backend purga por lotes cada 2 segundos y marca `call_sessions.history_purged_at`.
 - `call_sessions.room_id` es `ON DELETE SET NULL` y `call_events` **no tiene claves foráneas** a propósito: son un registro histórico que sobrevive al borrado de salas y cuentas. `call_events` se relaciona con `call_sessions` solo de forma lógica, por `livekit_room_sid`.
+- `call_summaries.session_id` es la clave primaria y `ON DELETE CASCADE`: hay a lo sumo un resumen por sesión y desaparece con ella. `created_by` es `ON DELETE SET NULL`. La transcripción no se copia: el resumen se genera a partir de `transcript_lines` en el momento de pedirlo.
 - `rooms.chime_meeting_id` es una columna histórica de la etapa Amazon Chime; se conserva para no reescribir migraciones y LiveKit no la usa.
 - Los archivos de emojis y sonidos se guardan como `bytea` en PostgreSQL porque el despliegue solo respalda la base (`pg_dump`) y el backend no tiene volumen propio.
 
@@ -353,6 +364,8 @@ Con ingreso directo, `POST /rooms/:code/access` devuelve `{ token, participant }
 | GET | `/calls/sessions` | Cuenta | - | Sesiones en las que participó la cuenta |
 | GET | `/calls/sessions/:sessionId/timeline` | Cuenta | - | Línea de tiempo de participación |
 | GET | `/calls/sessions/:sessionId/transcript` | Cuenta | Haber participado (404 si no) | Acta de esa sesión |
+| GET | `/calls/sessions/:sessionId/summary` | Cuenta | Haber participado (404 si no) | Resumen guardado: `{ summary }` (`null` si aún no existe) |
+| POST | `/calls/sessions/:sessionId/summary` | Cuenta | Haber participado (404 si no); 5 por minuto | Cuerpo opcional `{ language }` con `es` o `en` (por defecto `es`). Devuelve el resumen guardado o lo genera con Gemini. Errores: 422 (sin transcripción), 413 (más de 100 000 caracteres), 429 con `code: AI_QUOTA` (cuota del proveedor), 503 (sin clave o servicio caído) |
 | GET | `/calls/sessions/by-sid/:livekitRoomSid` | Cuenta | Haber participado (404 si no) | Devuelve `{ id }` de la sesión |
 | POST | `/transcripts/:roomCode` | Pase | - | `{ callSid, content }`; el nombre sale del pase |
 | GET | `/transcripts/:roomCode?callSid=` | Pase | - | Acta de esa llamada en orden |

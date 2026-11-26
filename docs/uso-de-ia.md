@@ -68,10 +68,39 @@ Autoría: los artefactos de `openspec/changes/call-participation-timeline/` los 
 
 ## Funcionalidad de IA en el producto
 
-**Actualmente el producto no llama a ningún modelo de IA desde el backend.**
+El producto tiene una función de IA: el **resumen de una llamada**. El resto de las funciones de texto y voz no usan modelos propios.
 
-- **Subtítulos y transcripción:** usan la **Web Speech API del navegador** (`client/src/features/calls/transcription/useSpeechRecognition.ts`). Funciona solo en Chrome y Edge; en Chrome el audio pasa por los servidores de Google. Cada persona transcribe únicamente su propio micrófono, el texto viaja por el data channel de LiveKit y las frases finales se guardan en la tabla `transcript_lines`. Es una función del navegador, no un componente de IA propio del sistema.
+**Modelo y servicio.** API de Gemini de Google, con el modelo `gemini-3.5-flash-lite` por defecto (se puede cambiar con `GEMINI_MODEL`) y el nivel gratuito con clave de API. Código en `src/modules/ai-summary/`; la interfaz `AiTextGenerator` aísla al proveedor, de modo que cambiarlo solo afecta a `gemini-text-generator.ts`.
+
+**Qué hace.** Quien participó en una sesión puede pulsar **Resumir con IA** en su transcripción. El backend lee las frases guardadas en `transcript_lines`, arma un prompt (resumen breve, puntos clave, decisiones y tareas; texto plano, en español o inglés) y guarda el resultado en `call_summaries`. Hay **un solo resumen por sesión**: las siguientes peticiones devuelven el guardado, lo que protege la cuota. Endpoints: `GET` y `POST /calls/sessions/:sessionId/summary` (ver [arquitectura.md](arquitectura.md)).
+
+**Quién puede usarla.** Solo cuentas que participaron en esa sesión; si no, la respuesta es 404, igual que con la transcripción.
+
+**Cómo se protege la clave.** `GEMINI_API_KEY` existe solo en el entorno del backend: en EC2 se agrega una vez a `deploy/ec2/runtime/runtime.env` (ignorado por git; procedimiento en `deploy/ec2/README.md`) y `configure.py` no la imprime. El navegador nunca la ve; los errores del SDK no se devuelven al cliente y en los registros solo queda un motivo.
+
+**Entrada no confiable.** La transcripción es texto de usuarios. Va entre etiquetas `<transcript>`, las instrucciones indican que es dato y no órdenes, las etiquetas de cierre inyectadas se neutralizan y los saltos de línea de nombres y frases se aplanan para que nadie pueda fabricar líneas de otra persona.
+
+**Errores, costos y límites.**
+
+| Situación | Respuesta |
+| --- | --- |
+| Sin `GEMINI_API_KEY` o servicio de Gemini caído | 503 (la aplicación sigue funcionando) |
+| Llamada sin transcripción | 422 |
+| Transcripción de más de 100 000 caracteres | 413 (se rechaza en vez de truncar, para no resumir solo una parte) |
+| Cuota del proveedor agotada | 429 con `code: AI_QUOTA` |
+| Más de 5 generaciones por minuto | 429 del limitador propio (sin ese código) |
+| Respuesta bloqueada por políticas del modelo o cortada por longitud | 503; nunca se guarda un resumen incompleto |
+
+Cada petición al modelo tiene un tiempo máximo de 30 s y las generaciones simultáneas de la misma sesión se unifican en una sola llamada. El costo es cero mientras se use el nivel gratuito. Para este modelo, ese nivel permite 15 peticiones por minuto, 250 000 tokens por minuto y 500 peticiones por día (según el panel de uso de Google AI Studio). El backend limita a 5 generaciones por minuto, por debajo de ese tope, y como cada sesión se resume una sola vez, cada resumen consume una única petición diaria.
+
+**Limitaciones.** El texto de la transcripción sale de AWS hacia Google. La calidad del resumen depende de la transcripción de la Web Speech API del navegador. Hay dependencia de un proveedor externo y de su nivel gratuito.
+
+**Alternativa descartada: Amazon Bedrock.** Se probó antes de elegir Gemini. En la cuenta del plan FREE todos los modelos Claude devolvieron `AccessDeniedException` aunque figuraban como ACTIVE; Haiku 4.5 y Nova 2 Lite solo aceptan perfiles de inferencia entre regiones, que la restricción de una sola región del proyecto prohíbe; y `amazon.nova-lite-v1:0` se limitó en la primera llamada ("Too many tokens per day"). Es otro caso de una suposición sobre un servicio externo (que un modelo listado como activo es utilizable) que solo se desmintió llamándolo de verdad.
+
+**Lo que no usa un modelo propio.**
+
+- **Subtítulos y transcripción:** usan la **Web Speech API del navegador** (`client/src/features/calls/transcription/useSpeechRecognition.ts`). Funciona solo en Chrome y Edge; en Chrome el audio pasa por los servidores de Google. Cada persona transcribe únicamente su propio micrófono, el texto viaja por el data channel de LiveKit y las frases finales se guardan en la tabla `transcript_lines`. Es una función del navegador, no un modelo del backend.
 - **Traducción ES/EN:** la interfaz usa un diccionario estático (`client/src/features/translation/`); no hay traducción automática de mensajes ni de subtítulos con IA.
 - **Integraciones externas** (Giphy, Freesound, YouTube): son servicios de búsqueda de contenido, no de IA.
 
-Posibles evoluciones, no implementadas: resumen automático del acta de una llamada y transcripción en el servidor con un modelo propio, para no depender del navegador.
+Posible evolución, no implementada: transcripción en el servidor con un modelo propio, para no depender del navegador.
