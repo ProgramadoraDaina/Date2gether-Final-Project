@@ -20,6 +20,8 @@ import {
   PLAYBACK_MODE_LABELS,
   PLAYBACK_MODE_ORDER,
   reconcilePlayerState,
+  resyncTarget,
+  roomPosition,
   type MusicState,
   type PlaybackMode,
 } from './ambientMusic';
@@ -420,26 +422,26 @@ export function AmbientMusicPlayer({
     };
   }, []);
 
-  // Posición mostrada en la barra de avance: misma fórmula que usa
-  // reconcilePlayerState para el player, no lee player.getCurrentTime(). Así
-  // la barra muestra lo mismo que ve el resto de la sala, no lo que arrastra
-  // el buffer local del admin.
+  // La barra sigue al audio que suena de verdad: mientras YouTube carga no avanza. Como el player
+  // se realinea con la sala al arrancar, lo que muestra coincide con lo que oye el resto.
   useEffect(() => {
     if (!musicState) {
       setPosition(0);
       return;
     }
     function tick() {
-      const elapsedSinceUpdate = musicState!.isPlaying
-        ? Math.max(0, (Date.now() - musicState!.updatedAt) / 1000)
-        : 0;
-      setPosition(musicState!.positionSeconds + elapsedSinceUpdate);
+      const player = playerRef.current;
+      if (joined && player && playerIsReady.current && musicState!.isPlaying) {
+        setPosition(player.getCurrentTime());
+        return;
+      }
+      setPosition(roomPosition(musicState!));
     }
     tick();
     if (!musicState.isPlaying) return;
     const interval = setInterval(tick, 500);
     return () => clearInterval(interval);
-  }, [musicState]);
+  }, [musicState, joined]);
 
   // new YT.Player(...) devuelve el objeto al toque, pero sus métodos
   // (unMute, playVideo, etc.) recién quedan disponibles cuando el iframe
@@ -477,6 +479,16 @@ export function AmbientMusicPlayer({
               const player = playerRef.current;
               if (player) setDuration(player.getDuration() || 0);
               const state = pendingState.current;
+              // 1 = reproduciendo: recién ahora suena, así que se recupera lo que tardó en cargar.
+              if (
+                event.data === 1 &&
+                player &&
+                state &&
+                currentTrack(state)?.videoId === loadedVideoId.current
+              ) {
+                const target = resyncTarget(state, player.getCurrentTime());
+                if (target !== null) player.seekTo(target, true);
+              }
               if (event.data === 0 && state?.isPlaying) {
                 socketRef.current.emit('musicTrackEnded', { updatedAt: state.updatedAt });
               }
