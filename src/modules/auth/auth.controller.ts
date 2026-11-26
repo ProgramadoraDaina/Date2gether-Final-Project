@@ -1,4 +1,6 @@
 import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
+import { AUTH_THROTTLE } from './auth-throttle';
 import { AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { LoginDto } from './dto/login.dto';
@@ -14,11 +16,13 @@ import type { AccessTokenPayload } from './auth.types';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @Throttle(AUTH_THROTTLE)
   @Post('register')
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
 
+  @Throttle(AUTH_THROTTLE)
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);

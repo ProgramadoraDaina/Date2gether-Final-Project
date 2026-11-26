@@ -58,6 +58,8 @@ export default defineConfig({
         // en cualquier otro entorno (dev, producción) ese endpoint responde
         // 404 (ver test-support.controller.ts).
         NODE_ENV: 'test',
+        // The suite logs in and registers many accounts from one IP; keep it at the global limit.
+        AUTH_THROTTLE_LIMIT: '60',
       },
     },
     {
