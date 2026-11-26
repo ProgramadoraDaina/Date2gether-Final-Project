@@ -88,20 +88,6 @@
   text-decoration: underline;
 }
 
-.linkButton {
-  width: auto;
-  padding: 0;
-  background: none;
-  color: var(--color-accent);
-  font-size: 13px;
-  font-weight: 400;
-}
-
-.linkButton:hover {
-  background: none;
-  text-decoration: underline;
-}
-
 .switchLink {
   margin: var(--space-4) 0 0;
   font-size: 13px;

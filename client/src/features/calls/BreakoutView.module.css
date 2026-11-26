@@ -60,3 +60,72 @@
   color: var(--color-text-muted);
   font-size: 13px;
 }
+
+.openCount {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.openPanel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 20;
+  width: min(280px, 80vw);
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-overlay);
+  box-shadow: var(--shadow-overlay);
+}
+
+.openTitle {
+  margin: 0 0 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.openList {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.openRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 40px;
+  font-size: 14px;
+}
+
+.openMeta {
+  display: block;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.openJoin {
+  width: auto;
+  height: 30px;
+  padding: 0 12px;
+  font-size: 13px;
+}

@@ -2,6 +2,8 @@ export const HANDS_TOPIC = 'hands';
 
 export interface RaisedHand {
   identity: string;
+  // Identity en la sala principal (en una mini sala la de LiveKit es otra): la usa el servidor.
+  source: string;
   name: string;
   at: number;
 }

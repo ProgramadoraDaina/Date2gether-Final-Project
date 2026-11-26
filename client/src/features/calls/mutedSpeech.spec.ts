@@ -7,12 +7,23 @@ describe('mutedSpeech', () => {
     expect(rmsOf(new Uint8Array([0, 0]))).toBe(1);
   });
 
-  it('solo avisa con habla sostenida, no con un pico suelto', () => {
-    const speaking = createSpeechGate(0.05, 3);
-    expect(speaking(0.2)).toBe(false);
-    expect(speaking(0.01)).toBe(false);
-    expect(speaking(0.2)).toBe(false);
-    expect(speaking(0.2)).toBe(false);
-    expect(speaking(0.2)).toBe(true);
+  it('un golpe suelto no avisa', () => {
+    const speaking = createSpeechGate();
+    expect([0.4, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01].map(speaking).some(Boolean)).toBe(false);
+  });
+
+  it('avisa con habla sostenida aunque tenga pausas entre sílabas', () => {
+    const speaking = createSpeechGate();
+    const results = [0.029, 0.034, 0.01, 0.018, 0.053, 0.015, 0.009, 0.045].map(speaking);
+    expect(results.at(-1)).toBe(true);
+  });
+});
+
+describe('createSpeechGate (umbral por defecto)', () => {
+  it('el ruido de fondo filtrado no avisa', () => {
+    const noise = createSpeechGate();
+    expect(
+      [0.008, 0.009, 0.007, 0.01, 0.009, 0.008, 0.009, 0.007, 0.01].map(noise).some(Boolean),
+    ).toBe(false);
   });
 });

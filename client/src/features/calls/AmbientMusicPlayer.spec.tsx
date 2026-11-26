@@ -449,6 +449,40 @@ describe('AmbientMusicPlayer', () => {
     expect(position).toBeLessThan(5.5);
   });
 
+  it('quien se unió puede salir de la música y volver a unirse', async () => {
+    const { AmbientMusicPlayer } = await import('./AmbientMusicPlayer');
+    const socket = fakeSocket();
+    render(<AmbientMusicPlayer socket={socket as never} isAdmin={false} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unirme a la música' }));
+    await waitFor(() => expect(playerCtor).toHaveBeenCalledTimes(1));
+    act(() => capturedOptions.events?.onReady?.());
+    fireEvent.click(await screen.findByRole('button', { name: 'Salir' }));
+
+    expect(playerInstance.mute).toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Unirme a la música' })).toBeInTheDocument();
+  });
+
+  it('el admin fija el volumen para todos con un solo mensaje por gesto', async () => {
+    jest.useFakeTimers();
+    try {
+      const { AmbientMusicPlayer } = await import('./AmbientMusicPlayer');
+      const socket = fakeSocket();
+      render(<AmbientMusicPlayer socket={socket as never} isAdmin />);
+      act(() => socket.handlers.musicState(musicState({})));
+      const slider = screen.getByRole('slider', { name: 'Volumen para todos' });
+
+      fireEvent.change(slider, { target: { value: '60' } });
+      fireEvent.change(slider, { target: { value: '40' } });
+      act(() => jest.advanceTimersByTime(300));
+
+      const volumeEmits = socket.emit.mock.calls.filter(([event]) => event === 'musicSetVolume');
+      expect(volumeEmits).toEqual([['musicSetVolume', { volume: 40 }]]);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('reconcilia el player ya creado cuando llega un musicState nuevo', async () => {
     const { AmbientMusicPlayer } = await import('./AmbientMusicPlayer');
     const socket = fakeSocket();

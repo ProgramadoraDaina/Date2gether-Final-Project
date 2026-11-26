@@ -640,3 +640,28 @@
 .modeActive:hover {
   color: var(--color-accent);
 }
+
+.leaveButton {
+  width: auto;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.leaveButton:hover {
+  background: transparent;
+  color: var(--color-text);
+}
+
+.roomVolumeRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 12px;
+  color: var(--color-text-muted);
+}

@@ -14,6 +14,7 @@ import { searchMusic, youTubeSearchUrl, type MusicSearchResult } from '@/lib/mus
 import { useTranslation } from '../translation/useTranslation';
 import {
   currentTrack,
+  effectiveVolume,
   fetchYouTubeTitle,
   formatTime,
   PLAYBACK_MODE_LABELS,
@@ -508,6 +509,33 @@ export function AmbientMusicPlayer({
     if (silenced && playerIsReady.current) playerRef.current?.mute();
   }, [silenced]);
 
+  const roomVolume = musicState?.roomVolume ?? 100;
+  useEffect(() => {
+    if (joined && playerIsReady.current)
+      playerRef.current?.setVolume(effectiveVolume(volume, roomVolume));
+  }, [joined, volume, roomVolume]);
+
+  // Salir deja el reproductor sincronizado pero en silencio, así volver a unirse es instantáneo.
+  function handleLeaveMusic() {
+    playerRef.current?.mute();
+    setMuted(false);
+    setJoined(false);
+  }
+
+  const volumeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [roomVolumeDraft, setRoomVolumeDraft] = useState<number | null>(null);
+  function handleRoomVolumeChange(e: ChangeEvent<HTMLInputElement>) {
+    const value = Number(e.target.value);
+    setRoomVolumeDraft(value);
+    clearTimeout(volumeTimer.current);
+    // Un mensaje por gesto, no uno por cada paso del deslizador.
+    volumeTimer.current = setTimeout(() => {
+      socket.emit('musicSetVolume', { volume: value });
+      setRoomVolumeDraft(null);
+    }, 250);
+  }
+  useEffect(() => () => clearTimeout(volumeTimer.current), []);
+
   function handleToggleMute() {
     const next = !muted;
     setMuted(next);
@@ -522,7 +550,7 @@ export function AmbientMusicPlayer({
   function handleVolumeChange(e: ChangeEvent<HTMLInputElement>) {
     const value = Number(e.target.value);
     setVolume(value);
-    playerRef.current?.setVolume(value);
+    playerRef.current?.setVolume(effectiveVolume(value, roomVolume));
     if (muted) {
       setMuted(false);
       playerRef.current?.unMute();
@@ -672,7 +700,29 @@ export function AmbientMusicPlayer({
             <span className={styles.volumeValue} aria-hidden="true">
               {muted ? 0 : volume}%
             </span>
+            {!isAdmin && (
+              <button type="button" className={styles.leaveButton} onClick={handleLeaveMusic}>
+                {t('Salir')}
+              </button>
+            )}
           </div>
+        )}
+        {isAdmin && musicState && musicState.tracks.length > 0 && (
+          <label className={styles.roomVolumeRow}>
+            <span>{t('Volumen para todos')}</span>
+            <input
+              type="range"
+              className={styles.volumeBar}
+              style={{ '--volume-fill': `${roomVolumeDraft ?? roomVolume}%` } as CSSProperties}
+              min={0}
+              max={100}
+              value={roomVolumeDraft ?? roomVolume}
+              onChange={handleRoomVolumeChange}
+            />
+            <span className={styles.volumeValue} aria-hidden="true">
+              {roomVolumeDraft ?? roomVolume}%
+            </span>
+          </label>
         )}
         {isAdmin && current && musicState && (
           <div className={styles.nowPlayingBlock}>

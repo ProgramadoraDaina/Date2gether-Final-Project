@@ -9,6 +9,7 @@ import type { BreakoutAssignment } from '../chat/useRoomSocket';
 import { resolveBreakoutViewState } from './breakoutViewState';
 import { BreakoutHostConsole, type BreakoutHostConsoleParticipant } from './BreakoutHostConsole';
 import { BreakoutSelfStatus } from './BreakoutSelfStatus';
+import { OpenBreakouts } from './OpenBreakouts';
 import styles from './BreakoutView.module.css';
 
 function BreakoutRoomsIcon() {
@@ -153,12 +154,15 @@ export function BreakoutView({
   });
 
   if (state === 'guest-idle') {
-    // Decisión 5 (design.md): "Nada, salvo que exista alguna sala abierta
-    // con joinPolicy='open'" -- el selector mínimo de auto-ingreso vive
-    // fuera de este lote (requiere su propio fetch de list() como
-    // no-admin); por ahora el estado inactivo no renderiza nada, igual
-    // que el comportamiento de hoy cuando no hay asignación.
-    return null;
+    return (
+      <OpenBreakouts
+        roomCode={roomCode}
+        roomToken={roomToken}
+        currentParticipantId={currentParticipantId}
+        buttonClassName={buttonClassName}
+        activeButtonClassName={activeButtonClassName}
+      />
+    );
   }
 
   if (state === 'guest-occupant') {
