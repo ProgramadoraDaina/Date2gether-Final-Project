@@ -18,9 +18,9 @@ describe('hands', () => {
 
   it('ordena la fila por quién levantó primero', () => {
     const queue = handQueue({
-      beto: { identity: 'beto', name: 'Beto', at: 20 },
-      ana: { identity: 'ana', name: 'Ana', at: 10 },
-      caro: { identity: 'caro', name: 'Caro', at: 20 },
+      beto: { identity: 'beto', source: 'beto', name: 'Beto', at: 20 },
+      ana: { identity: 'ana', source: 'ana', name: 'Ana', at: 10 },
+      caro: { identity: 'caro', source: 'caro', name: 'Caro', at: 20 },
     });
     expect(queue.map((hand) => hand.identity)).toEqual(['ana', 'beto', 'caro']);
   });

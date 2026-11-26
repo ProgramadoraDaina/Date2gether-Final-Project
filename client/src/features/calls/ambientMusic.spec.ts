@@ -1,5 +1,11 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { currentTrack, formatTime, reconcilePlayerState, type MusicState } from './ambientMusic';
+import {
+  currentTrack,
+  effectiveVolume,
+  formatTime,
+  reconcilePlayerState,
+  type MusicState,
+} from './ambientMusic';
 
 function fakePlayer(currentTime = 0) {
   return {
@@ -154,5 +160,16 @@ describe('reconcilePlayerState', () => {
     expect(player.seekTo).toHaveBeenCalledWith(10, true);
     expect(player.pauseVideo).toHaveBeenCalled();
     expect(player.playVideo).not.toHaveBeenCalled();
+  });
+});
+
+describe('effectiveVolume', () => {
+  it('aplica tu volumen encima del de la sala', () => {
+    expect(effectiveVolume(100, 50)).toBe(50);
+    expect(effectiveVolume(80, 50)).toBe(40);
+  });
+
+  it('sin volumen de sala definido suena tu volumen tal cual', () => {
+    expect(effectiveVolume(70)).toBe(70);
   });
 });

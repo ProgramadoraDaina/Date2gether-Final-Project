@@ -19,6 +19,7 @@ import { AppShell } from '@/features/navigation/AppShell';
 import styles from './page.module.css';
 import { EmptyState } from '@/features/layout/EmptyState';
 import { SkeletonList } from '@/features/layout/SkeletonList';
+import { collapseAttempts } from '@/features/history/collapseAttempts';
 
 // useSearchParams needs a Suspense boundary or the static build of /history fails.
 export default function HistoryPage() {
@@ -158,7 +159,7 @@ function HistoryList({
     }
   }
 
-  const entries = page?.entries ?? [];
+  const entries = collapseAttempts(page?.entries ?? []);
   const timeFormat = new Intl.DateTimeFormat(locale, {
     hour: '2-digit',
     minute: '2-digit',

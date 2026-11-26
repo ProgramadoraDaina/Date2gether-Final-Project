@@ -30,6 +30,12 @@ function NoiseSuppressionSync() {
   return null;
 }
 
+// Servidos desde la app (ver scripts/copy-mediapipe.mjs): nada sale a un CDN de terceros.
+const BLUR_ASSETS = {
+  tasksVisionFileSet: '/mediapipe/wasm',
+  modelAssetPath: '/mediapipe/selfie_segmenter.tflite',
+};
+
 // El modelo de segmentación se carga recién cuando alguien prende el desenfoque.
 function BackgroundBlurSync() {
   const blur = useCallSettingsStore((state) => state.backgroundBlur);
@@ -43,9 +49,11 @@ function BackgroundBlurSync() {
       return;
     }
     void import('@livekit/track-processors')
-      .then(({ BackgroundBlur, supportsBackgroundProcessors }) => {
+      .then(({ BackgroundProcessor, supportsBackgroundProcessors }) => {
         if (cancelled || !supportsBackgroundProcessors() || track.getProcessor()) return;
-        return track.setProcessor(BackgroundBlur(12));
+        return track.setProcessor(
+          BackgroundProcessor({ mode: 'background-blur', blurRadius: 12, assetPaths: BLUR_ASSETS }),
+        );
       })
       .catch(() => undefined);
     return () => {

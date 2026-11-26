@@ -2,6 +2,7 @@
 
 import { useDataChannel, useLocalParticipant, useRoomContext } from '@livekit/components-react';
 import { RoomEvent, type RemoteParticipant } from 'livekit-client';
+import type { Socket } from 'socket.io-client';
 import {
   createContext,
   useCallback,
@@ -20,6 +21,7 @@ import {
   type HandMessage,
   type RaisedHand,
 } from './hands';
+import { avatarIdentityOf } from '@/features/avatar/TileAvatar';
 
 interface HandsContextValue {
   own: string;
@@ -39,7 +41,14 @@ const HandsContext = createContext<HandsContextValue>({
 
 export const useHands = () => useContext(HandsContext);
 
-export function HandsProvider({ children }: { children: ReactNode }) {
+export function HandsProvider({
+  children,
+  socket = null,
+}: {
+  children: ReactNode;
+  // Socket de la sala: el servidor valida que quien baja la mano de otro sea admin.
+  socket?: Socket | null;
+}) {
   const room = useRoomContext();
   const { localParticipant } = useLocalParticipant();
   const [hands, setHands] = useState<Record<string, RaisedHand>>({});
@@ -65,14 +74,11 @@ export function HandsProvider({ children }: { children: ReactNode }) {
     if (message.raised) {
       setHand(from.identity, {
         identity: from.identity,
+        source: avatarIdentityOf(from),
         name: from.name || from.identity,
         at: message.at,
       });
-    } else if (message.target) {
-      setHand(message.target, null);
-      if (message.target === own)
-        void send(encodeHand({ raised: false }), { reliable: true, topic: HANDS_TOPIC });
-    } else {
+    } else if (!message.target) {
       setHand(from.identity, null);
     }
   });
@@ -109,7 +115,12 @@ export function HandsProvider({ children }: { children: ReactNode }) {
       return;
     }
     const at = Date.now();
-    setHand(own, { identity: own, name: localParticipant.name || own, at });
+    setHand(own, {
+      identity: own,
+      source: avatarIdentityOf(localParticipant),
+      name: localParticipant.name || own,
+      at,
+    });
     broadcast({ raised: true, at });
   }, [own, localParticipant.name, broadcast, setHand]);
 
@@ -119,11 +130,25 @@ export function HandsProvider({ children }: { children: ReactNode }) {
         if (ownHandRef.current) toggle();
         return;
       }
+      const hand = hands[identity];
+      if (!hand) return;
       setHand(identity, null);
-      broadcast({ raised: false, target: identity });
+      socket?.emit('lowerHand', { participantId: hand.source });
     },
-    [own, toggle, broadcast, setHand],
+    [own, toggle, hands, socket, setHand],
   );
+
+  // El servidor solo manda este aviso si lo pidió un admin.
+  useEffect(() => {
+    if (!socket) return;
+    const lowered = () => {
+      if (ownHandRef.current) toggle();
+    };
+    socket.on('lowerHand', lowered);
+    return () => {
+      socket.off('lowerHand', lowered);
+    };
+  }, [socket, toggle]);
 
   const value = useMemo(
     () => ({ own, queue: handQueue(hands), raised: !!ownHand, toggle, lower }),

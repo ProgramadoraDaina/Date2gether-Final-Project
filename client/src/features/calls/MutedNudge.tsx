@@ -10,6 +10,7 @@ import styles from './MeetingRoom.module.css';
 const SAMPLE_MS = 100;
 const VISIBLE_MS = 5000;
 const COOLDOWN_MS = 20_000;
+const START_DELAY_MS = 1500;
 
 async function permissionGranted(name: string): Promise<boolean> {
   try {
@@ -31,7 +32,9 @@ function useSpeakingWhileMuted(active: boolean, deviceId: string | undefined) {
     let timer: ReturnType<typeof setInterval> | undefined;
     let mutedUntil = 0;
     void (async () => {
-      if (!(await permissionGranted('microphone')) || stopped) return;
+      // Al entrar o al apagarlo recién, el mic tarda un instante en quedar en silencio de verdad.
+      await new Promise((resolve) => setTimeout(resolve, START_DELAY_MS));
+      if (stopped || !(await permissionGranted('microphone')) || stopped) return;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           audio: deviceId ? { deviceId: { exact: deviceId } } : true,
@@ -44,6 +47,8 @@ function useSpeakingWhileMuted(active: boolean, deviceId: string | undefined) {
         return;
       }
       context = new AudioContext();
+      // Nace suspendido: sin resume() el analizador lee silencio y el aviso nunca aparece.
+      await context.resume().catch(() => undefined);
       const analyser = context.createAnalyser();
       analyser.fftSize = 512;
       context.createMediaStreamSource(stream).connect(analyser);

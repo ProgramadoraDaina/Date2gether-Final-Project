@@ -663,6 +663,12 @@ export default function RoomPage() {
   // chatPanelInCallWrap). Evita duplicar este bloque dos veces en el JSX.
   const chatContent = (
     <>
+      {/* El número va aparte: dentro de la pestaña cambiaría su nombre accesible. */}
+      {unread > 0 && (
+        <p className={styles.srOnly} role="status" aria-live="polite">
+          {`${unread} ${t(unread === 1 ? 'mensaje sin leer' : 'mensajes sin leer')}`}
+        </p>
+      )}
       <div className={styles.chatTabs}>
         <button
           type="button"

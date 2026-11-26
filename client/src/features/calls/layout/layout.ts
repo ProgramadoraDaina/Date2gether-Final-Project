@@ -91,6 +91,18 @@ export function buildLayoutTree(zones: readonly LayoutZone[]): LayoutNode | null
   return root;
 }
 
+interface OrderableTrack {
+  source: string;
+  participant: { isLocal?: boolean };
+}
+
+// Pantallas compartidas primero, después tu cámara: así quedás siempre en la Zona 1.
+export function orderForZones<T extends OrderableTrack>(tracks: readonly T[]): T[] {
+  const rank = (track: T) =>
+    track.source === 'screen_share' ? 0 : track.participant.isLocal ? 1 : 2;
+  return [...tracks].sort((a, b) => rank(a) - rank(b));
+}
+
 // Zonas que reciben al menos una persona: las vacías no ocupan lugar y su espacio se reparte.
 export function zonesInUse(zones: readonly LayoutZone[], count: number): LayoutZone[] {
   let seated = 0;

@@ -4,6 +4,7 @@ import {
   buildLayoutTree,
   fitTiles,
   zonesInUse,
+  orderForZones,
   type LayoutZone,
   type ZonePlacement,
 } from './layout';
@@ -211,5 +212,23 @@ describe('zonesInUse con todas las combinaciones', () => {
       }
     }
     expect(checked).toBeGreaterThan(100_000);
+  });
+});
+
+describe('orderForZones', () => {
+  const t = (id: string, source = 'camera', isLocal = false) => ({
+    id,
+    source,
+    participant: { isLocal },
+  });
+
+  it('pantalla compartida primero, después tu cámara y luego el resto en su orden', () => {
+    const ordered = orderForZones([
+      t('ana'),
+      t('yo', 'camera', true),
+      t('beto'),
+      t('pantalla', 'screen_share'),
+    ]);
+    expect(ordered.map((track) => track.id)).toEqual(['pantalla', 'yo', 'ana', 'beto']);
   });
 });

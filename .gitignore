@@ -35,3 +35,6 @@ CLAUDE.md
 /deploy/ec2/backups/
 **/__pycache__/
 .claude/
+
+# Copiado desde node_modules por client/scripts/copy-mediapipe.mjs
+client/public/mediapipe/wasm/

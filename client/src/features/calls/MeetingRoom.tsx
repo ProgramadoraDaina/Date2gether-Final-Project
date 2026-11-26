@@ -370,6 +370,7 @@ function MeetingContent({
   switchRoom,
   nameFocusEnabled,
   onSetNameFocus,
+  handsSocket = null,
 }: Omit<MeetingRoomProps, 'call' | 'onHangUp' | 'roomSocket'> & {
   // Mini salas (breakout-rooms, Fase 6.13): traslado REAL de medios al
   // recibir breakout:assigned. Se pasa solo esta función de `call` (no el
@@ -385,6 +386,8 @@ function MeetingContent({
   // (Socket.io admite múltiples listeners), pero duplica trabajo sin
   // necesidad.
   breakoutAssignment: ReturnType<typeof useRoomSocket>['breakoutAssignment'];
+  // Para pedirle al servidor que le baje la mano a otra persona.
+  handsSocket?: Socket | null;
 }) {
   const { t } = useTranslation();
   const [deviceError, setDeviceError] = useState(false);
@@ -477,7 +480,7 @@ function MeetingContent({
     : tracks;
   return (
     <ReactionsProvider roomCode={roomCode} roomEmojis={roomEmojis}>
-      <HandsProvider>
+      <HandsProvider socket={handsSocket}>
         <TranscriptionProvider
           roomCode={roomCode}
           roomToken={roomToken}
@@ -834,6 +837,7 @@ export default function MeetingRoom({
             switchRoom={call.switchRoom}
             nameFocusEnabled={nameFocusEnabled}
             onSetNameFocus={onSetNameFocus}
+            handsSocket={roomSocket}
           />
         </ParticipantColorsContext.Provider>
       </LiveKitRoom>

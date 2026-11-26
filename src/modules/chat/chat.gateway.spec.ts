@@ -503,6 +503,57 @@ describe('ChatGateway', () => {
       );
     });
 
+    it('el admin le baja la mano a otra persona: el aviso va solo al socket de esa persona', async () => {
+      const { gateway, client, serverTo, serverEmit } = await joinedAdmin('administrador');
+      const guest = createSocket(
+        {
+          kind: 'room-participant',
+          roomId: 'room-1',
+          sub: 'guest-sub',
+          roomCode: 'abc-defg-hij',
+          name: 'Beto',
+        },
+        'socket-2',
+      );
+      await gateway.handleJoinRoom(guest as never, { code: 'abc-defg-hij' });
+      serverTo.mockClear();
+      serverEmit.mockClear();
+
+      await gateway.handleLowerHand(client as never, { participantId: 'guest-sub' });
+
+      expect(serverTo).toHaveBeenCalledWith('socket-2');
+      expect(serverEmit).toHaveBeenCalledWith('lowerHand');
+    });
+
+    it('rechaza lowerHand de alguien que no es administrador', async () => {
+      const { gateway, client, serverEmit } = await joinedAdmin('participante');
+      serverEmit.mockClear();
+
+      await gateway.handleLowerHand(client as never, { participantId: 'guest-sub' });
+
+      expect(serverEmit).not.toHaveBeenCalledWith('lowerHand');
+    });
+
+    it('el admin fija el volumen de la música para toda la sala', async () => {
+      const { gateway, client, serverEmit } = await joinedAdmin('administrador');
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'aaaaaaaaaaa', title: 'Uno' });
+
+      await gateway.handleMusicSetVolume(client as never, { volume: 40 });
+
+      expect(serverEmit).toHaveBeenLastCalledWith(
+        'musicState',
+        expect.objectContaining({ roomVolume: 40 }),
+      );
+    });
+
+    it('rechaza musicSetVolume de alguien que no es administrador', async () => {
+      const { gateway, client, serverEmit } = await joinedAdmin('participante');
+
+      await gateway.handleMusicSetVolume(client as never, { volume: 10 });
+
+      expect(serverEmit).not.toHaveBeenCalled();
+    });
+
     it('rechaza musicSetMode de alguien que no es administrador', async () => {
       const { gateway, client, serverEmit } = await joinedAdmin('participante');
 
