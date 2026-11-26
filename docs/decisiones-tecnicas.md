@@ -552,14 +552,14 @@ Se implementaron ambas puntas:
 
 - El nombre de sala es **opcional** en el form de creación (`app/page.tsx`), y solo se muestra cuando `isPermanent` está activo. Si se deja vacío, se mantiene el comportamiento actual (`Reunión de {nombre del usuario}`).
 - Nuevo endpoint `PATCH /rooms/:code/name` (`UpdateRoomNameDto`, mismo guard stack que `PATCH /rooms/:code/members/:userId`: `JwtAuthGuard` + `RoomRolesGuard` + `@RoomRoles('administrador')`), y `RoomsService.renameRoom`.
-- **El renombre queda restringido a salas permanentes, validado en el servidor** (`renameRoom` lanza `ForbiddenException` si `!room.isPermanent`), no solo ocultando el botón en el cliente — así no se puede saltear llamando al endpoint directo. Las salas temporales se recuperan en 24h (D5); darles un nombre persistente no aporta nada y complica el modelo mental.
-- UI de renombre en "Mis salas" (`app/rooms/page.tsx`): un botón ✏️ visible solo en filas `isPermanent`, que abre un input inline con Guardar/Cancelar.
+- ~~**El renombre queda restringido a salas permanentes, validado en el servidor**~~ **(superado por la decisión 27: el renombre vale para todas las salas, temporales o permanentes; el servidor ya no lanza `ForbiddenException` por `!room.isPermanent`).** La autorización por rol de administrador no cambió.
+- UI de renombre en "Mis salas" (`app/rooms/page.tsx`): un botón ✏️ que abre un input inline con Guardar/Cancelar (originalmente solo en filas `isPermanent`; desde la decisión 27, en todas las salas vigentes).
 
 ### Resolución aplicada
 
 - Backend: `dto/update-room-name.dto.ts` (nuevo), `rooms.controller.ts` (+`renameRoom`), `rooms.service.ts` (+`renameRoom`).
 - Frontend: `lib/api.ts` (+`renameRoom`), `app/page.tsx` (input opcional de nombre de sala), `app/rooms/page.tsx` + `page.module.css` (UI de edición inline), `features/translation/dictionary.ts` (claves nuevas en inglés).
-- No se tocó el schema (la columna ya existía) ni la inmutabilidad de `isPermanent`.
+- No se tocó el schema (la columna ya existía) ni la inmutabilidad de `isPermanent` (esta última superada por la decisión 27: ahora solo puede pasar de temporal a permanente).
 
 ### Verificación
 
@@ -745,3 +745,34 @@ El proveedor se eligió después de probar Amazon Bedrock el 2026-11-25 en la cu
 - Google puede usar el contenido enviado en el nivel gratuito para mejorar sus productos. Es aceptable para datos de demostración, pero debe informarse: no se deben resumir llamadas con datos sensibles reales.
 - Se suma un segundo proveedor y una segunda clave para administrar (`GEMINI_API_KEY`, y opcionalmente `GEMINI_MODEL`, en el entorno del backend y en EC2).
 - La numeración de la migración (0031) puede colisionar con otras ramas aún sin integrar que usan el mismo número; hay que renumerar la que se integre segunda.
+
+## 27. Editar salas: renombrar cualquier sala y promover temporal a permanente (supera D5/D7 "isPermanent inmutable")
+
+**Fecha:** 2026-11-26
+**Rama:** `feat/room-edit-and-promote`
+
+### Contexto
+
+La rúbrica pide un CRUD completo y la operación Update de las salas era débil: solo se podía renombrar una sala permanente. Además, `isPermanent` se declaraba como inmutable (D5/D7 de salas temporales y permanentes): quien creaba una sala temporal y después quería conservarla no tenía forma de hacerlo.
+
+### Decisión
+
+- **Renombrar vale para todas las salas.** `RoomsService.renameRoom` ya no rechaza las temporales (se quitó el `ForbiddenException` de la decisión 21). El rol de administrador se sigue exigiendo con `RoomRolesGuard`. En "Mis salas" el botón ✏️ aparece en toda sala vigente.
+- **Promoción temporal a permanente, solo hacia adelante.** Nuevo `PATCH /rooms/:code/permanent` (`JwtAuthGuard`; el rol se valida en el service, igual que `deleteRoomAsAdmin`):
+  - Sin token: 401. Sala inexistente, retirada o vencida: 404. Quien llama no es miembro o no es administrador: 403.
+  - **Idempotente:** si la sala ya es permanente responde 200 con la sala, sin escribir (se prefirió a un 409 porque el resultado deseado por el cliente ya se cumplió, y un reintento por red lenta no debe mostrar un error).
+  - **Vencida responde 404, no 409:** coincide con el resto de los endpoints, que tratan una sala vencida como inexistente (`joinableByCode`). El retiro es perezoso (`retireExpired` solo corre al crear una sala), por lo que una sala de más de 24 h sin ingresos puede tener todavía `retired_at` nulo; por eso no alcanza con mirar `retired_at`: se reutiliza el mismo predicado de vida (`RoomResolverService.lockJoinable`).
+  - **Transacción con bloqueo de fila** (`SELECT ... FOR UPDATE` vía `lockJoinable`), para serializar contra otra promoción y contra el barrido de retiro.
+  - Se fija `is_permanent = true` **y** `waiting_room_enabled = true` en la misma sentencia, porque una sala permanente exige sala de espera siempre (decisión de admisión). El código sigue reservado: `retired_at` queda nulo y el índice parcial único `rooms_code_code_pool_unique` lo conserva.
+- **Nueva regla de dominio:** `isPermanent` se declara al crear la sala y solo puede pasar de `false` a `true` por acción de un administrador de la sala. Nunca se revierte. Se actualizaron los comentarios de `schema.ts` y `room-admission.service.ts` que decían "inmutable". No hace falta migración: la columna ya existía.
+- **Cliente:** acción "Hacer permanente" en el menú de cada sala temporal vigente de "Mis salas", con diálogo de confirmación (irreversible, la sala deja de vencer, la sala de espera pasa a ser obligatoria), estado de carga y mensaje de error visible. Al confirmar, la fila muestra la insignia "Permanente".
+
+### Alternativa descartada
+
+- **Interruptor bidireccional (permanente a temporal).** Degradar una sala exigiría decidir qué pasa con sus horarios, la playlist guardada, la biblioteca de links, el archivo compartido y los miembros; además el código volvería al pool de reciclaje y podría terminar asignado a otra persona mientras hay links circulando. Es un conjunto de casos borde grande y con riesgo de pérdida de datos, sin una necesidad de producto que lo justifique.
+
+### Casos borde y consecuencias
+
+- **Pases ya emitidos:** los tokens de admisión de una sala temporal se emitieron con `expiresAt` de 24 h. Después de promover, esos pases conservan su vencimiento original; los nuevos se emiten sin vencimiento. Es aceptable: quien tenga un pase vencido vuelve a entrar por la sala de espera.
+- **Quien ya está dentro de la sala** no ve las funciones solo-permanentes (playlist guardada, eventos, modos persistentes) hasta recargar, porque la página de la sala consulta `isPermanent` al montarse. No se agregó la acción dentro de la sala para mantener el cambio acotado.
+- Los demás consumidores de `isPermanent` (historial de chat, restauración de playlist, links de sala, archivo compartido, línea de tiempo) leen el valor desde la base en cada petición o conexión, por lo que ven la promoción sin invalidar cachés.
