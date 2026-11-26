@@ -9,9 +9,11 @@ import styles from './MyRoomMenu.module.css';
 export function MyRoomMenu({
   room,
   onVisibilityChange,
+  onPromote,
 }: {
   room: OwnedRoom;
   onVisibilityChange: (roomId: string, hidden: boolean) => void;
+  onPromote?: (room: OwnedRoom) => void;
 }) {
   const { t } = useTranslation();
   const menu = useRef<HTMLDetailsElement>(null);
@@ -24,6 +26,7 @@ export function MyRoomMenu({
   const [changingVisibility, setChangingVisibility] = useState(false);
   const [visibilityError, setVisibilityError] = useState('');
   const canManageArchive = room.isPermanent && !room.hiddenFromMyRooms;
+  const canPromote = Boolean(onPromote) && !room.isPermanent && room.isJoinable;
 
   async function confirm() {
     setDeleting(true);
@@ -92,6 +95,21 @@ export function MyRoomMenu({
             <p className={styles.menuError} role="alert">
               {t(visibilityError)}
             </p>
+          )}
+          {canPromote && (
+            <button
+              type="button"
+              disabled={changingVisibility}
+              onClick={() => {
+                if (menu.current) menu.current.open = false;
+                onPromote?.(room);
+              }}
+            >
+              <span className={styles.optionLabel}>{t('Hacer permanente')}</span>
+              <span className={styles.optionHint}>
+                {t('La sala deja de vencer. No se puede deshacer.')}
+              </span>
+            </button>
           )}
           {canManageArchive && (
             <>

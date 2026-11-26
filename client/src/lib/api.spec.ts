@@ -87,6 +87,43 @@ describe('renameRoom', () => {
   });
 });
 
+describe('promoteRoomToPermanent', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    localStorage.setItem(ACCESS_TOKEN_KEY, 'fake-access-token');
+    global.fetch = jest.fn() as unknown as typeof fetch;
+  });
+
+  it('envía PATCH autenticado a /rooms/:code/permanent', async () => {
+    const fetchMock = global.fetch as jest.Mock<typeof fetch>;
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
+
+    const { promoteRoomToPermanent } = await import('./api');
+    await promoteRoomToPermanent('abc-defg-hij');
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('http://localhost:3001/rooms/abc-defg-hij/permanent');
+    expect(init).toMatchObject({
+      method: 'PATCH',
+      headers: expect.objectContaining({ Authorization: 'Bearer fake-access-token' }),
+    });
+  });
+
+  it('lanza ApiError con status y mensaje del backend si lo rechaza', async () => {
+    const fetchMock = global.fetch as jest.Mock<typeof fetch>;
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ message: 'Solo el administrador' }), { status: 403 }),
+    );
+
+    const { promoteRoomToPermanent } = await import('./api');
+
+    await expect(promoteRoomToPermanent('abc-defg-hij')).rejects.toMatchObject({
+      message: 'Solo el administrador',
+      status: 403,
+    });
+  });
+});
+
 describe('notas compartidas', () => {
   beforeEach(() => {
     global.fetch = jest.fn() as unknown as typeof fetch;
@@ -225,12 +262,16 @@ describe('resumen de IA de una llamada', () => {
   it('getCallSummary devuelve el resumen guardado o null si todavía no hay', async () => {
     const fetchMock = jest.mocked(global.fetch);
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ summary }), { status: 200 }));
-    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ summary: null }), { status: 200 }));
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ summary: null }), { status: 200 }),
+    );
 
     const { getCallSummary } = await import('./api');
     await expect(getCallSummary('session-1')).resolves.toEqual(summary);
     await expect(getCallSummary('session-1')).resolves.toBeNull();
-    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:3001/calls/sessions/session-1/summary');
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'http://localhost:3001/calls/sessions/session-1/summary',
+    );
   });
 
   it('generateCallSummary hace POST con el idioma y devuelve el resumen', async () => {
@@ -258,11 +299,18 @@ describe('resumen de IA de una llamada', () => {
     jest
       .mocked(global.fetch)
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ statusCode: 429, message: 'x', code: 'AI_QUOTA' }), { status: 429 }),
+        new Response(JSON.stringify({ statusCode: 429, message: 'x', code: 'AI_QUOTA' }), {
+          status: 429,
+        }),
       )
-      .mockResolvedValueOnce(new Response(JSON.stringify({ message: 'ThrottlerException' }), { status: 429 }));
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ message: 'ThrottlerException' }), { status: 429 }),
+      );
     const { generateCallSummary } = await import('./api');
-    await expect(generateCallSummary('session-1', 'es')).rejects.toMatchObject({ status: 429, code: 'AI_QUOTA' });
+    await expect(generateCallSummary('session-1', 'es')).rejects.toMatchObject({
+      status: 429,
+      code: 'AI_QUOTA',
+    });
     await expect(generateCallSummary('session-1', 'es')).rejects.toMatchObject({
       status: 429,
       code: undefined,

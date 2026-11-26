@@ -737,6 +737,19 @@ const en: Record<string, string> = {
   'Se borran sus mensajes, notas, horarios y miembros. Esta acción no se puede deshacer.':
     'Its messages, notes, schedules and members are deleted. This cannot be undone.',
   'No se pudo eliminar la sala': 'Could not delete the room',
+  // Promoción a sala permanente
+  'Hacer permanente': 'Make permanent',
+  'La sala deja de vencer. No se puede deshacer.':
+    'The room stops expiring. This cannot be undone.',
+  'Vas a hacer permanente': 'You are about to make permanent',
+  'Esta acción no se puede deshacer.': 'This cannot be undone.',
+  'La sala deja de vencer y conserva su código.': 'The room stops expiring and keeps its code.',
+  'La sala de espera pasa a ser obligatoria y no se puede desactivar.':
+    'The waiting room becomes mandatory and cannot be turned off.',
+  'Sí, hacer permanente': 'Yes, make permanent',
+  'Haciendo permanente…': 'Making permanent…',
+  'La sala ahora es permanente.': 'The room is now permanent.',
+  'No se pudo hacer permanente la sala': 'Could not make the room permanent',
   // Administración (roles globales)
   Admin: 'Admin',
   Administración: 'Administration',

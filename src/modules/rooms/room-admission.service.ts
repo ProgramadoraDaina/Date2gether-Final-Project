@@ -180,8 +180,9 @@ export class RoomAdmissionService {
   async configure(code: string, settings: UpdateAdmissionSettingsDto) {
     return this.db.transaction(async (tx) => {
       const room = await this.lockRoom(tx, code);
-      // D5/D7: isPermanent es inmutable y ausente de este DTO -- no hay
-      // endpoint que lo acepte. Una sala permanente exige admisión siempre:
+      // D5/D7 (revisado): isPermanent se declara al crear y solo puede pasar de false a
+      // true por la promoción del administrador (PATCH /rooms/:code/permanent), nunca
+      // de true a false; está ausente de este DTO. Una sala permanente exige admisión siempre:
       // no se puede desactivar la sala de espera, y queda forzada a true
       // aunque no se la pida explícitamente.
       if (room.isPermanent && settings.waitingRoomEnabled === false) {

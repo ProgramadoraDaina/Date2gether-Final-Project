@@ -2,11 +2,19 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { ApiError, deleteRoom, getOwnedRooms, renameRoom, type OwnedRoom } from '@/lib/api';
+import {
+  ApiError,
+  deleteRoom,
+  getOwnedRooms,
+  promoteRoomToPermanent,
+  renameRoom,
+  type OwnedRoom,
+} from '@/lib/api';
 import { RequireAuth } from '@/features/auth/RequireAuth';
 import { DeleteRoomDialog } from '@/features/rooms/DeleteRoomDialog';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { AppShell } from '@/features/navigation/AppShell';
+import { PromoteRoomDialog } from '@/features/rooms/PromoteRoomDialog';
 import { MyRoomMenu } from '@/features/rooms/MyRoomMenu';
 import styles from './page.module.css';
 import { EmptyState } from '@/features/layout/EmptyState';
@@ -34,6 +42,9 @@ function MyRoomsContent() {
   const [roomToDelete, setRoomToDelete] = useState<OwnedRoom | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [roomToPromote, setRoomToPromote] = useState<OwnedRoom | null>(null);
+  const [promoting, setPromoting] = useState(false);
+  const [promoteError, setPromoteError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [showHidden, setShowHidden] = useState(false);
   const [visibilityNotice, setVisibilityNotice] = useState('');
@@ -110,6 +121,37 @@ function MyRoomsContent() {
     setDeleteError(null);
   }
 
+  function askToPromote(room: OwnedRoom) {
+    setRoomToPromote(room);
+    setPromoteError(null);
+    setNotice(null);
+  }
+
+  function cancelPromote() {
+    if (promoting) return;
+    setRoomToPromote(null);
+    setPromoteError(null);
+  }
+
+  async function confirmPromote() {
+    if (!roomToPromote || promoting) return;
+    const room = roomToPromote;
+    setPromoting(true);
+    setPromoteError(null);
+    try {
+      await promoteRoomToPermanent(room.code);
+      setRooms((prev) => prev.map((r) => (r.id === room.id ? { ...r, isPermanent: true } : r)));
+      setRoomToPromote(null);
+      setNotice(t('La sala ahora es permanente.'));
+    } catch (err) {
+      setPromoteError(
+        err instanceof ApiError ? err.message : t('No se pudo hacer permanente la sala'),
+      );
+    } finally {
+      setPromoting(false);
+    }
+  }
+
   async function confirmDelete() {
     if (!roomToDelete || deleting) return;
     const room = roomToDelete;
@@ -143,6 +185,14 @@ function MyRoomsContent() {
         error={deleteError}
         onConfirm={() => void confirmDelete()}
         onCancel={cancelDelete}
+      />
+      <PromoteRoomDialog
+        open={roomToPromote !== null}
+        roomName={roomToPromote?.name ?? ''}
+        promoting={promoting}
+        error={promoteError}
+        onConfirm={() => void confirmPromote()}
+        onCancel={cancelPromote}
       />
       <div className={styles.card}>
         <h1 ref={headingRef} tabIndex={-1}>
@@ -212,7 +262,7 @@ function MyRoomsContent() {
                   ) : (
                     <>
                       <strong className={styles.roomName}>{room.name}</strong>
-                      {room.isPermanent && (
+                      {room.isJoinable && (
                         <button
                           type="button"
                           className={styles.renameButton}
@@ -229,7 +279,11 @@ function MyRoomsContent() {
                   {!room.isJoinable && (
                     <span className={`${styles.badge} ${styles.badgeMuted}`}>{t('Vencida')}</span>
                   )}
-                  <MyRoomMenu room={room} onVisibilityChange={updateRoomVisibility} />
+                  <MyRoomMenu
+                    room={room}
+                    onVisibilityChange={updateRoomVisibility}
+                    onPromote={askToPromote}
+                  />
                 </div>
                 {editingId === room.id && renameError && (
                   <p className={styles.error} role="alert">

@@ -275,16 +275,45 @@ export class RoomsService {
     if (changed) this.roomEvents.emitMemberRoleChanged({ roomCode: code });
   }
 
-  // Solo permanentes: las temporales se recuperan en 24h (ver D5), un nombre
-  // persistente sobre algo que se descarta solo no tiene valor y complica el
-  // mental model. La restricción se valida acá, no solo en el cliente, para
-  // que no se pueda saltear llamando al endpoint directo.
+  // Vale para cualquier sala (temporal o permanente). La autorización por rol de
+  // administrador la resuelve RoomRolesGuard en el controller.
   async renameRoom(code: string, name: string): Promise<void> {
     const room = await this.getByCodeOrThrow(code);
-    if (!room.isPermanent) {
-      throw new ForbiddenException('Solo las salas permanentes se pueden renombrar');
-    }
     await this.db.update(rooms).set({ name }).where(eq(rooms.id, room.id));
+  }
+
+  // Promoción temporal -> permanente, solo hacia adelante (D5/D7 revisado): la sala deja de
+  // vencer y su código queda reservado para siempre. No hay camino inverso.
+  // - Liveness: lockJoinable reusa el mismo predicado que el resto del tráfico (no retirada Y
+  //   permanente o con ingreso en las últimas 24h). El retiro es perezoso (retireExpired solo
+  //   corre al crear salas), así que una sala vencida puede tener retiredAt nulo todavía: acá
+  //   se la trata como inexistente (404) igual que en el resto de endpoints.
+  // - El bloqueo de fila (FOR UPDATE) serializa contra el barrido de retiro y contra otra
+  //   promoción concurrente.
+  // - Una sala permanente exige sala de espera siempre, por eso se fuerza en la misma sentencia.
+  // - Idempotente: si ya es permanente devuelve la sala sin escribir.
+  async promoteToPermanent(code: string, userId: string): Promise<Room> {
+    return this.db.transaction(async (tx) => {
+      const room = await this.resolver.lockJoinable(tx, code, { requireActive: false });
+      const [member] = await tx
+        .select({ role: roomMembers.role })
+        .from(roomMembers)
+        .where(and(eq(roomMembers.roomId, room.id), eq(roomMembers.userId, userId)))
+        .limit(1);
+      if (!member) {
+        throw new ForbiddenException('No sos parte de esta sala');
+      }
+      if (member.role !== 'administrador') {
+        throw new ForbiddenException('Solo el administrador de la sala puede hacerla permanente');
+      }
+      if (room.isPermanent) return room;
+      const [promoted] = await tx
+        .update(rooms)
+        .set({ isPermanent: true, waitingRoomEnabled: true })
+        .where(eq(rooms.id, room.id))
+        .returning();
+      return promoted;
+    });
   }
 
   // Borra la sala y, por ON DELETE CASCADE, todo lo que cuelga de ella (miembros, mensajes,
