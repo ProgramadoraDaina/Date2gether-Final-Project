@@ -187,12 +187,13 @@ describe('resyncTarget', () => {
   } as MusicState;
 
   it('si YouTube arrancó atrasado por la carga, salta a donde ya va la sala', () => {
-    // La sala arrancó hace 1,2 s, pero el reproductor recién empieza en el segundo 10.
-    expect(resyncTarget(playing, 10, 1_001_200)).toBeCloseTo(11.2);
+    // La sala arrancó hace 2 s, pero el reproductor recién empieza en el segundo 10.
+    expect(resyncTarget(playing, 10, 1_002_000)).toBeCloseTo(12);
   });
 
   it('no toca nada si ya está alineado o si la música está pausada', () => {
-    expect(resyncTarget(playing, 11.1, 1_001_200)).toBeNull();
+    // Medio segundo atrasado: saltar costaría más silencio del que recupera.
+    expect(resyncTarget(playing, 10.7, 1_001_200)).toBeNull();
     expect(resyncTarget({ ...playing, isPlaying: false }, 3, 1_001_200)).toBeNull();
   });
 });

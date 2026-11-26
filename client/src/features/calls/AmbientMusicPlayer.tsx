@@ -360,12 +360,20 @@ export function AmbientMusicPlayer({
   const [scrubPosition, setScrubPosition] = useState<number | null>(null);
   const [volume, setVolume] = useState(100);
   const [muted, setMuted] = useState(false);
+  useEffect(() => {
+    mutedRef.current = muted;
+  }, [muted]);
   const playerRef = useRef<YT.Player | null>(null);
   const loadedVideoId = useRef<string | null>(null);
   const pendingState = useRef<MusicState | null>(null);
   const modeRestored = useRef(false);
   // YT.Player exists right after construction but its methods only after onReady.
   const playerIsReady = useRef(false);
+  // Precarga: con la sala en pausa, el video suena un instante en silencio para que ▶ no arranque en frío.
+  const priming = useRef(false);
+  // Último estado de YouTube (1 = sonando): la barra solo lo lee cuando ya suena la canción correcta.
+  const playerState = useRef(-1);
+  const mutedRef = useRef(false);
   const socketRef = useRef(socket);
   // A ref so a language switch does not recreate the player and re-run the admin auto-join.
   const tRef = useRef(t);
@@ -381,11 +389,7 @@ export function AmbientMusicPlayer({
       if (isAdmin && persistModes && roomCode) syncStoredMode(state, roomCode);
       pendingState.current = state;
       setMusicState(state);
-      if (playerRef.current && playerIsReady.current) {
-        reconcilePlayerState(playerRef.current, loadedVideoId.current, state);
-        loadedVideoId.current = currentTrack(state)?.videoId ?? null;
-        setDuration(playerRef.current.getDuration() || 0);
-      }
+      if (playerRef.current && playerIsReady.current) applyState(playerRef.current, state);
     }
     function onError({ message }: { message: string }) {
       setError(message);
@@ -431,7 +435,9 @@ export function AmbientMusicPlayer({
     }
     function tick() {
       const player = playerRef.current;
-      if (joined && player && playerIsReady.current && musicState!.isPlaying) {
+      const sounding =
+        playerState.current === 1 && loadedVideoId.current === currentTrack(musicState!)?.videoId;
+      if (joined && player && playerIsReady.current && musicState!.isPlaying && sounding) {
         setPosition(player.getCurrentTime());
         return;
       }
@@ -442,6 +448,22 @@ export function AmbientMusicPlayer({
     const interval = setInterval(tick, 500);
     return () => clearInterval(interval);
   }, [musicState, joined]);
+
+  function applyState(player: YT.Player, state: MusicState) {
+    const newTrack = currentTrack(state)?.videoId !== loadedVideoId.current;
+    reconcilePlayerState(player, loadedVideoId.current, state);
+    loadedVideoId.current = currentTrack(state)?.videoId ?? null;
+    setDuration(player.getDuration() || 0);
+    if (state.isPlaying) {
+      priming.current = false;
+    } else if (newTrack && loadedVideoId.current) {
+      priming.current = true;
+      player.mute();
+      player.playVideo();
+    }
+  }
+  const applyStateRef = useRef(applyState);
+  applyStateRef.current = applyState;
 
   // new YT.Player(...) devuelve el objeto al toque, pero sus métodos
   // (unMute, playVideo, etc.) recién quedan disponibles cuando el iframe
@@ -464,11 +486,7 @@ export function AmbientMusicPlayer({
               playerIsReady.current = true;
               const player = playerRef.current;
               const state = pendingState.current;
-              if (player && state) {
-                reconcilePlayerState(player, loadedVideoId.current, state);
-                loadedVideoId.current = currentTrack(state)?.videoId ?? null;
-                setDuration(player.getDuration() || 0);
-              }
+              if (player && state) applyStateRef.current(player, state);
               resolve();
             },
             // getDuration() en onReady suele devolver 0: el iframe recién
@@ -477,8 +495,18 @@ export function AmbientMusicPlayer({
             // a leer ahí.
             onStateChange: (event: { data: number }) => {
               const player = playerRef.current;
+              playerState.current = event.data;
               if (player) setDuration(player.getDuration() || 0);
               const state = pendingState.current;
+              if (event.data === 1 && player && priming.current) {
+                priming.current = false;
+                if (!state?.isPlaying) {
+                  player.pauseVideo();
+                  if (state) player.seekTo(roomPosition(state), true);
+                }
+                if (!mutedRef.current) player.unMute();
+                if (!state?.isPlaying) return;
+              }
               // 1 = reproduciendo: recién ahora suena, así que se recupera lo que tardó en cargar.
               if (
                 event.data === 1 &&
@@ -620,9 +648,19 @@ export function AmbientMusicPlayer({
     return player?.getCurrentTime() ?? musicState?.positionSeconds ?? 0;
   }
 
+  // Quien toca ▶ arranca su reproductor ya, sin esperar la vuelta del servidor.
   function handleTogglePlay() {
-    if (musicState?.isPlaying) socket.emit('musicPause', { positionSeconds: currentPosition() });
-    else socket.emit('musicPlay', { positionSeconds: currentPosition() });
+    const player = playerIsReady.current ? playerRef.current : null;
+    const position = currentPosition();
+    if (musicState?.isPlaying) {
+      player?.pauseVideo();
+      socket.emit('musicPause', { positionSeconds: position });
+    } else {
+      priming.current = false;
+      if (player && !mutedRef.current) player.unMute();
+      player?.playVideo();
+      socket.emit('musicPlay', { positionSeconds: position });
+    }
   }
 
   function handlePrevious() {
@@ -651,7 +689,24 @@ export function AmbientMusicPlayer({
     socket.emit('musicRemoveTrack', { index });
   }
 
+  // Quien elige la canción la empieza a cargar ya; la vuelta del servidor la encuentra cargada.
   function handleJumpToTrack(index: number) {
+    const player = playerIsReady.current ? playerRef.current : null;
+    const track = musicState?.tracks[index];
+    if (player && track) {
+      playerState.current = -1;
+      loadedVideoId.current = track.videoId;
+      if (musicState?.isPlaying) {
+        priming.current = false;
+        player.loadVideoById(track.videoId, 0);
+        if (!mutedRef.current) player.unMute();
+      } else {
+        // En pausa elegir otra canción no la hace sonar: solo queda precargada.
+        priming.current = true;
+        player.mute();
+        player.loadVideoById(track.videoId, 0);
+      }
+    }
     socket.emit('musicJumpToTrack', { index });
   }
 

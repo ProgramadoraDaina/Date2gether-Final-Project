@@ -74,7 +74,8 @@ export function roomPosition(state: MusicState, now = Date.now()): number {
   return state.positionSeconds + elapsed;
 }
 
-const RESYNC_TOLERANCE_SECONDS = 0.25;
+// Saltar obliga a YouTube a volver a cargar (~0.5-1 s de silencio): solo conviene si el desfase es mayor.
+const RESYNC_TOLERANCE_SECONDS = 1.5;
 
 // YouTube tarda en cargar: cuando arranca de verdad, se salta a donde ya va la sala.
 export function resyncTarget(
