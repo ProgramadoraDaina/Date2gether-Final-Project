@@ -497,6 +497,10 @@ const en: Record<string, string> = {
   'Sacar de la lista': 'Remove from queue',
   'Avance de la canción': 'Track progress',
   'El link o ID de YouTube no es válido': 'That YouTube link or ID is not valid',
+  'No se pudo reproducir': 'Could not play',
+  'Su dueño no permite reproducirlo fuera de YouTube.':
+    'Its owner does not allow playing it outside YouTube.',
+  'Probá con otro link.': 'Try another link.',
   'No se pudo reproducir ese video. Probá con otro link.':
     'That video could not be played. Try another link.',
   'No se pudo obtener la información de ese video. Probá con otro link.':

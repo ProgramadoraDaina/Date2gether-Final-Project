@@ -534,18 +534,43 @@ describe('AmbientMusicPlayer', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('El link o ID de YouTube no es válido');
   });
 
-  it('un error de reproducción de YouTube (video no disponible) se muestra con un mensaje claro', async () => {
+  it('un video que no se puede incrustar avisa cuál es y por qué', async () => {
     const { AmbientMusicPlayer } = await import('./AmbientMusicPlayer');
     const socket = fakeSocket();
     render(<AmbientMusicPlayer socket={socket as never} isAdmin={false} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Unirme a la música' }));
     await waitFor(() => expect(playerCtor).toHaveBeenCalledTimes(1));
-    act(() => capturedOptions.events?.onError?.({ data: 101 }));
+    act(() => capturedOptions.events?.onReady?.());
+    act(() => socket.handlers.musicState(musicState()));
+    act(() => capturedOptions.events?.onError?.({ data: 150 }));
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('No se pudo reproducir "Love Song Baby"');
+    expect(alert).toHaveTextContent('Su dueño no permite reproducirlo fuera de YouTube.');
+  });
+
+  it('otro error de YouTube nombra el tema, y el aviso se va cuando cambia el tema', async () => {
+    const { AmbientMusicPlayer } = await import('./AmbientMusicPlayer');
+    const socket = fakeSocket();
+    render(<AmbientMusicPlayer socket={socket as never} isAdmin={false} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unirme a la música' }));
+    await waitFor(() => expect(playerCtor).toHaveBeenCalledTimes(1));
+    act(() => capturedOptions.events?.onReady?.());
+    const tracks = [
+      { videoId: 'dQw4w9WgXcQ', title: 'Love Song Baby' },
+      { videoId: 'kJQP7kiw5Fk', title: 'Otro tema' },
+    ];
+    act(() => socket.handlers.musicState(musicState({ tracks })));
+    act(() => capturedOptions.events?.onError?.({ data: 100 }));
 
     expect(screen.getByRole('alert')).toHaveTextContent(
-      'No se pudo reproducir ese video. Probá con otro link.',
+      'No se pudo reproducir "Love Song Baby". Probá con otro link.',
     );
+
+    act(() => socket.handlers.musicState(musicState({ tracks, currentIndex: 1 })));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('solo el admin ve la barra de avance (no admin, ni con canción sonando)', async () => {
