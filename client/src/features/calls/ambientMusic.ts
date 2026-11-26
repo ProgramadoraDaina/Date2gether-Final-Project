@@ -22,6 +22,13 @@ export interface MusicState {
   updatedAt: number;
   mode: PlaybackMode;
   shuffle: boolean;
+  // Tope que fija el admin para toda la sala; sin definir equivale a 100.
+  roomVolume?: number;
+}
+
+// Tu volumen se aplica encima del de la sala: si el admin la baja a la mitad, tu 100 suena a 50.
+export function effectiveVolume(personal: number, roomVolume?: number): number {
+  return Math.round((personal * (roomVolume ?? 100)) / 100);
 }
 
 export function currentTrack(state: MusicState): MusicTrack | null {
@@ -61,6 +68,26 @@ const DRIFT_TOLERANCE_SECONDS = 1;
 // (ver AmbientMusicPlayer): siempre reacciona a `musicState`, igual para el
 // admin que para el resto, así nadie puede desincronizarse de lo que ve el
 // resto de la sala.
+// Posición en la que debería estar la sala ahora mismo.
+export function roomPosition(state: MusicState, now = Date.now()): number {
+  const elapsed = state.isPlaying ? Math.max(0, (now - state.updatedAt) / 1000) : 0;
+  return state.positionSeconds + elapsed;
+}
+
+// Saltar obliga a YouTube a volver a cargar (~0.5-1 s de silencio): solo conviene si el desfase es mayor.
+const RESYNC_TOLERANCE_SECONDS = 1.5;
+
+// YouTube tarda en cargar: cuando arranca de verdad, se salta a donde ya va la sala.
+export function resyncTarget(
+  state: MusicState,
+  currentTime: number,
+  now = Date.now(),
+): number | null {
+  if (!state.isPlaying) return null;
+  const target = roomPosition(state, now);
+  return Math.abs(currentTime - target) > RESYNC_TOLERANCE_SECONDS ? target : null;
+}
+
 export function reconcilePlayerState(
   player: YT.Player,
   loadedVideoId: string | null,
@@ -71,8 +98,7 @@ export function reconcilePlayerState(
   // hay nada que cargar ni reproducir.
   if (!track) return;
 
-  const elapsed = state.isPlaying ? Math.max(0, (Date.now() - state.updatedAt) / 1000) : 0;
-  const target = state.positionSeconds + elapsed;
+  const target = roomPosition(state);
 
   if (track.videoId !== loadedVideoId) {
     if (state.isPlaying) player.loadVideoById(track.videoId, target);

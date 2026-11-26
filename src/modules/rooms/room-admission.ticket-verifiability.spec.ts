@@ -13,7 +13,6 @@ function makeRoom(overrides: Partial<Room> = {}): Room {
     id: 'room-1',
     code: 'abc-defg-hij',
     name: 'Sala permanente',
-    isActive: true,
     isPermanent: true,
     historyDeletedBefore: null,
     historyCleanupPending: false,

@@ -23,6 +23,8 @@ import { ChatService } from './chat.service';
 import { RoomPlaylistsService } from './room-playlists.service';
 import { afterTrackEnded, skipToNext, type PlaybackState } from './music-playback';
 import { MusicModeDto } from './dto/music-mode.dto';
+import { MusicVolumeDto } from './dto/music-volume.dto';
+import { LowerHandDto } from './dto/lower-hand.dto';
 import { MusicTrackEndedDto } from './dto/music-track-ended.dto';
 import { JoinRoomDto } from './dto/join-room.dto';
 import { MusicAddTrackDto } from './dto/music-add-track.dto';
@@ -98,6 +100,8 @@ type RoomUser = Pick<
 
 interface MusicState extends PlaybackState {
   updatedAt: number;
+  // Volumen que fija el admin para toda la sala (0-100); cada persona ajusta el suyo encima.
+  roomVolume?: number;
 }
 
 interface RouletteEventState {
@@ -130,10 +134,8 @@ function livePosition(state: MusicState, now: number): number {
   return state.positionSeconds + Math.max(0, now - state.updatedAt) / 1000;
 }
 
-@WebSocketGateway({
-  namespace: '/rooms',
-  cors: { origin: process.env.CORS_ORIGIN ?? '*' },
-})
+// CORS origin is applied at runtime by CorsIoAdapter (see app-setup.ts).
+@WebSocketGateway({ namespace: '/rooms' })
 @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
 export class ChatGateway implements OnGatewayDisconnect {
   @WebSocketServer()
@@ -162,10 +164,48 @@ export class ChatGateway implements OnGatewayDisconnect {
     this.roomEvents.onRoomEmojisChanged(({ roomCode }) => {
       this.server.to(roomCode).emit('roomEmojisChanged');
     });
+    // Mini salas (D12, design.md): señal únicamente, nunca el token de
+    // LiveKit (ese se pide por HTTP autenticado, issueBreakoutToken). El
+    // traslado es personal -- solo el participante trasladado tiene que
+    // enterarse -- a diferencia del cierre, que es un broadcast a toda la
+    // sala (cualquier occupant de esa mini sala puede estar escuchando).
+    this.roomEvents.onBreakoutAssigned((event) => {
+      this.emitToParticipant(event.roomCode, event.targetIdentity, 'breakout:assigned', {
+        breakoutId: event.breakoutId,
+        label: event.label,
+        leavePolicy: event.leavePolicy,
+        closesAt: event.closesAt,
+      });
+    });
+    this.roomEvents.onBreakoutBroadcast((event) => {
+      this.server.to(event.roomCode).emit(event.event, event.payload);
+    });
+    this.roomEvents.onBreakoutClosed((event) => {
+      this.server.to(event.roomCode).emit('breakout:closed', { breakoutId: event.breakoutId });
+    });
+    // Decisión 2 (design.md "Señal de motivo de remoción"): mismo criterio
+    // que breakout:assigned -- personal, nunca broadcast. targetIdentity ya
+    // llega resuelto por el llamador (BreakoutRoomsService/
+    // CallsWebhookService) como la sourceIdentity estable que corresponde
+    // al socket real.
+    this.roomEvents.onBreakoutRemoval((event) => {
+      this.emitToParticipant(event.roomCode, event.targetIdentity, 'breakout:removal', {
+        reason: event.reason,
+      });
+    });
     // La sala se borró: se avisa y se corta el chat. handleDisconnect limpia el estado en memoria.
     this.roomEvents.onRoomDeleted(({ roomCode }) => {
       this.server.to(roomCode).emit('roomDeleted');
       this.server.in(roomCode).disconnectSockets(true);
+    });
+    // Promoción temporal -> permanente: los clientes refrescan la info de la sala y, desde acá,
+    // los cambios de playlist se persisten sin esperar a que alguien reingrese.
+    this.roomEvents.onRoomPromoted(({ roomCode, roomId }) => {
+      this.permanentRoomIds.add(roomId);
+      this.server.to(roomCode).emit('roomPromoted');
+    });
+    this.roomEvents.onRoomLinksChanged(({ roomCode }) => {
+      this.server.to(roomCode).emit('roomLinksChanged');
     });
   }
 
@@ -462,6 +502,28 @@ export class ChatGateway implements OnGatewayDisconnect {
     }));
   }
 
+  @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage('musicSetVolume')
+  async handleMusicSetVolume(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() dto: MusicVolumeDto,
+  ) {
+    await this.updateMusicState(client, (state) => ({ ...state, roomVolume: dto.volume }));
+  }
+
+  // Bajar la mano de otro pasa por acá: el servidor sabe quién es admin, un invitado no.
+  @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage('lowerHand')
+  async handleLowerHand(@ConnectedSocket() client: Socket, @MessageBody() dto: LowerHandDto) {
+    const user = await this.requireHandAdmin(client);
+    if (!user) return;
+    for (const [socketId, other] of this.connectedUsers) {
+      if (other.roomCode === user.roomCode && other.participantId === dto.participantId) {
+        this.server.to(socketId).emit('lowerHand');
+      }
+    }
+  }
+
   // Any listener may report the end: the admin is not necessarily listening.
   @UseGuards(WsJwtAuthGuard)
   @SubscribeMessage('musicTrackEnded')
@@ -631,6 +693,13 @@ export class ChatGateway implements OnGatewayDisconnect {
 
   // Devuelve al usuario conectado si es administrador de la sala; si no,
   // emite el error correspondiente y devuelve undefined.
+  private async requireHandAdmin(client: Socket): Promise<ConnectedUser | undefined> {
+    const user = this.connectedUsers.get(client.id);
+    if (!user?.userId) return undefined;
+    const role = await this.roomsService.getMemberRole(user.roomCode, user.userId);
+    return role === 'administrador' ? user : undefined;
+  }
+
   private async requireMusicAdmin(client: Socket): Promise<ConnectedUser | undefined> {
     const user = this.connectedUsers.get(client.id);
     if (!user) {
@@ -763,6 +832,24 @@ export class ChatGateway implements OnGatewayDisconnect {
       played: [Math.min(stored.currentIndex, stored.tracks.length - 1)],
       updatedAt: Date.now(),
     });
+  }
+
+  // Mini salas (D12): a diferencia de memberRoleChanged/roomEmojisChanged
+  // (broadcast a toda la sala), breakout:assigned es personal. Todo socket
+  // de Socket.io se autosuscribe a una room con su propio id, así que
+  // emitir a ese id llega solo al cliente buscado sin tener que guardar un
+  // mapa nuevo de participantId -> clientId.
+  private emitToParticipant(
+    roomCode: string,
+    participantId: string,
+    event: string,
+    payload: unknown,
+  ): void {
+    for (const [clientId, user] of this.connectedUsers) {
+      if (user.roomCode === roomCode && user.participantId === participantId) {
+        this.server.to(clientId).emit(event, payload);
+      }
+    }
   }
 
   private getUsersInRoom(roomCode: string): RoomUser[] {

@@ -10,5 +10,6 @@ import { TranscriptsService } from './transcripts.service';
   imports: [JwtAuthModule, RoomResolverModule],
   controllers: [TranscriptsController, TranscriptHistoryController],
   providers: [TranscriptsService, TranscriptHistoryService],
+  exports: [TranscriptsService, TranscriptHistoryService],
 })
 export class TranscriptsModule {}

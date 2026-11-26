@@ -562,14 +562,14 @@ Se implementaron ambas puntas:
 
 - El nombre de sala es **opcional** en el form de creación (`app/page.tsx`), y solo se muestra cuando `isPermanent` está activo. Si se deja vacío, se mantiene el comportamiento actual (`Reunión de {nombre del usuario}`).
 - Nuevo endpoint `PATCH /rooms/:code/name` (`UpdateRoomNameDto`, mismo guard stack que `PATCH /rooms/:code/members/:userId`: `JwtAuthGuard` + `RoomRolesGuard` + `@RoomRoles('administrador')`), y `RoomsService.renameRoom`.
-- **El renombre queda restringido a salas permanentes, validado en el servidor** (`renameRoom` lanza `ForbiddenException` si `!room.isPermanent`), no solo ocultando el botón en el cliente — así no se puede saltear llamando al endpoint directo. Las salas temporales se recuperan en 24h (D5); darles un nombre persistente no aporta nada y complica el modelo mental.
-- UI de renombre en "Mis salas" (`app/rooms/page.tsx`): un botón ✏️ visible solo en filas `isPermanent`, que abre un input inline con Guardar/Cancelar.
+- ~~**El renombre queda restringido a salas permanentes, validado en el servidor**~~ **(superado por la decisión 30: el renombre vale para todas las salas, temporales o permanentes; el servidor ya no lanza `ForbiddenException` por `!room.isPermanent`).** La autorización por rol de administrador no cambió.
+- UI de renombre en "Mis salas" (`app/rooms/page.tsx`): un botón ✏️ que abre un input inline con Guardar/Cancelar (originalmente solo en filas `isPermanent`; desde la decisión 30, en todas las salas vigentes).
 
 ### Resolución aplicada
 
 - Backend: `dto/update-room-name.dto.ts` (nuevo), `rooms.controller.ts` (+`renameRoom`), `rooms.service.ts` (+`renameRoom`).
 - Frontend: `lib/api.ts` (+`renameRoom`), `app/page.tsx` (input opcional de nombre de sala), `app/rooms/page.tsx` + `page.module.css` (UI de edición inline), `features/translation/dictionary.ts` (claves nuevas en inglés).
-- No se tocó el schema (la columna ya existía) ni la inmutabilidad de `isPermanent`.
+- No se tocó el schema (la columna ya existía) ni la inmutabilidad de `isPermanent` (esta última superada por la decisión 30: ahora solo puede pasar de temporal a permanente).
 
 ### Verificación
 
@@ -654,7 +654,273 @@ Las salas se podían crear, listar (`/rooms/mine`) y renombrar, pero no borrar. 
 
 ---
 
-## 24. Documentación del proyecto alineada al enunciado del Proyecto Integrador (Anexo A/C, sección 6)
+## 24. Mini salas: separación `joinPolicy`/`leavePolicy`, señal explícita de motivo de remoción y mitigación de R1 (admin sola trasladándose)
+
+**Fecha:** 2026-11-23
+**Rama:** `feature/breakout-rooms`
+
+### Contexto
+
+Después de desplegar las mini salas, aparecieron tres problemas de UX/robustez distintos pero relacionados, todos resueltos en el mismo cambio porque el diseño de uno condicionaba al de los otros (ver `openspec/changes/breakout-rooms-ux-fix/`):
+
+1. **R1 — riesgo de carrera cuando la única administradora conectada se traslada sola a una mini sala.** `moveIn` inserta la asignación nueva y recién después ejecuta `removeParticipant` sobre la identity vieja, lo que dispara `onAdminLeft` → `hasConnectedAdmin` evaluando presencia con la mini sala todavía vacía (la persona no llegó a reconectarse) → se agenda el cierre del grupo a T+15s. Si la reconexión (pedir token nuevo + `switchRoom`) tarda más de 15s — red lenta, cold start del endpoint de token — `claimAndClose` borra la principal y las mini salas sin que nadie haya hecho nada mal.
+2. **Expulsión indistinguible.** El cliente recibía `PARTICIPANT_REMOVED` de LiveKit en tres situaciones muy distintas (traslado en curso, vuelta forzada por el admin, expulsión por política `locked`) y las trataba todas igual (`call.failed(...)`), mostrando un error genérico donde no correspondía.
+3. **Auto-ingreso a mini salas.** No existía ninguna forma de que alguien se moviera a una mini sala por su cuenta: todo traslado requería que un admin lo ejecutara desde el panel.
+
+### Decisión
+
+- **R1**: en vez de ensanchar la ventana de gracia (retrasa *todo* cierre forzado legítimo) o introducir una supresión en memoria (no sobrevive un restart y crea un ciclo de dependencias entre servicios), `hasConnectedAdmin` ahora consulta `hasAdminAssignmentInFlight(roomId)` **solo** cuando la evaluación de presencia iba a devolver `false` y hay más de una sala en el grupo: un admin con una fila de `call_breakout_occupants` abierta y con `assigned_at` de menos de 30s cuenta como "en tránsito", sin necesitar ninguna columna ni tabla nueva (la fila ya existe, se escribe antes de `removeParticipant`). Cero costo en el camino feliz (llamadas sin mini salas) y cero costo cuando la presencia ya resuelve `true`.
+- **Señal de motivo de remoción**: un evento de socket nuevo, `breakout:removal`, viaja **antes** de `removeParticipant` (mismo orden que `breakout:assigned`) con un código cerrado (`BREAKOUT_MOVE_IN` / `BREAKOUT_FORCED_RETURN` / `BREAKOUT_RETURN_LOCKED`) y nada de texto — la traducción vive del lado del cliente. `useRoomSocket.consumeRemovalNotice()` lo guarda en un `useRef` (no en estado) con lectura destructiva y ventana de frescura de 10s, porque `onDisconnected` dispara a milisegundos del evento y un `setState` puede no haber flusheado todavía — leer estado stale ahí clasificaría una expulsión legítima como fallo genérico.
+- **`joinPolicy` separado de `leavePolicy`**: columna aditiva nueva (`admin_only` por default) en `call_breakout_rooms`, exclusivamente para gobernar quién puede **entrar** por iniciativa propia; `leavePolicy` sigue gobernando exclusivamente la vuelta a la principal. Son preguntas de producto independientes (una mini sala puede ser fácil de entrar y difícil de dejar, o viceversa) y mezclarlas en una sola columna haría imposible expresar esa combinación.
+- **Frontend**: los dos *gates* que antes vivían por separado (`BreakoutPanel` solo-admin, `BreakoutBanner` solo-ocupante) se colapsan en un selector puro de 4 estados (`resolveBreakoutViewState`: `guest-idle` / `guest-occupant` / `host` / `host-occupant`) y un único punto de montaje (`BreakoutView`), estructuralmente incapaz de renderizar dos vistas de mini sala a la vez — el bug que motivó este cambio.
+
+### Consecuencias
+
+- La mitigación de R1 cubre ~30s desde `assigned_at`; una reconexión más lenta todavía no está protegida por este marcador (aunque sigue protegida por la convergencia de `room_finished` de LiveKit, no por un cierre forzado).
+- `room_finished` de la sala principal **no** ejecuta la cascada de cierre de mini salas (divergencia respecto del diseño original de breakout-rooms) — eso es lo que protege hoy a la admin sola; fijado como contrato por un test de caracterización (R1-C5) para que un cambio futuro no lo rompa sin darse cuenta.
+- `BREAKOUT_FORCED_RETURN` termina la sesión del cliente (no hay reingreso automático a la principal todavía); la persona vuelve a entrar con un clic desde la página de la sala.
+
+### Verificación
+
+Backend: `pnpm vitest run` — 549 tests, 535 pasan (las 14 fallas restantes son integración contra Postgres sin conexión local disponible, preexistentes a este cambio, mismo set antes/después confirmado con `git stash`). Frontend: `pnpm jest` en `client/` — 68 suites / 478 tests, todo verde. `tsc --noEmit` sin errores nuevos en ninguno de los dos paquetes (los únicos preexistentes son los ya documentados en `calls-webhook.service.spec.ts`, dos specs de integración de `rooms`, y el uso de `exact` en `page.spec.tsx` de `room/[code]`, ninguno tocado por este cambio).
+
+---
+
+## 25. Endurecimiento R7: filtro global de excepciones explícito y CORS sin fallback `*`
+
+**Fecha:** 2026-11-25
+**Rama:** `fix/r7-exception-filter-and-cors`
+
+### Contexto
+
+El requisito R7 del curso exige que los errores del backend nunca expongan trazas, consultas ni datos internos al cliente, y que CORS apunte al dominio propio del frontend, no a `*`. Antes de este cambio, el primer punto dependía solo del comportamiento por defecto de Nest y el segundo tenía un fallback silencioso: `process.env.CORS_ORIGIN ?? '*'` tanto en `app-setup.ts` como en el decorador de `ChatGateway`.
+
+### Decisión
+
+- **Filtro global explícito (`src/common/all-exceptions.filter.ts`).** Las `HttpException` (validación, 401, 403, 404, throttling) se devuelven con su status y body originales, así que el formato que ya consumen cliente y tests no cambia. Cualquier otro error se registra completo (mensaje, stack, método y URL) con el `Logger` de Nest y el cliente recibe siempre `{ statusCode: 500, message: 'Internal server error' }`. Se registra en `createApp()` para que lo ejerciten también los tests. Solo responde en contexto `http`; los filtros globales de `useGlobalFilters` no alcanzan a los gateways, así que el chat por Socket.IO y el webhook de LiveKit no cambian.
+- **Errores 4xx de body-parser y `headersSent`.** Los errores que no son `HttpException` pero traen `status`/`statusCode` 4xx y `expose === true` (p. ej. 413 por body demasiado grande, 415) conservan su status; el body solo lleva la frase estándar (`http.STATUS_CODES`), nunca `err.message`, y se registran como `warn` sin stack. Un 5xx o un `expose` distinto de `true` sigue siendo el 500 genérico. Si `response.headersSent` ya es `true` (handlers con `@Res()`), el filtro no escribe nada: registra el error con método y URL y cierra la respuesta.
+- **CORS con falla temprana (`src/common/cors-origin.ts`).** `getCorsOrigin()` lanza un error claro si `CORS_ORIGIN` falta, está vacío, es `*` o no es un origen simple (`new URL(v).origin === v`: sin barra final, path ni esquema faltante; formato esperado `https://app.example.com`). `createApp()` lo llama antes de crear la app, por lo que el servidor no arranca (falla en el boot, no en la primera request). Solo se admite un origen único, que es lo que usan hoy desarrollo, e2e y EC2.
+- **CORS del gateway en runtime (`CorsIoAdapter`).** El decorador `@WebSocketGateway` se evalúa al importar el módulo, antes de que `ConfigModule` cargue el `.env`, de modo que leer `process.env` ahí era frágil. El origen se inyecta ahora desde un `IoAdapter` propio registrado en `createApp()`.
+
+### Justificación
+
+- Los errores de Drizzle/pg incluyen el SQL y los parámetros en `error.message`. Confiar en el default de Nest hoy los oculta, pero un filtro explícito con tests que lo prueban es evidencia defendible de R7 y no depende de un detalle de implementación del framework.
+- Un fallback a `*` convierte un olvido de configuración en una apertura silenciosa de la API. Es preferible que el despliegue falle de forma visible.
+
+### Consecuencias
+
+- Todo entorno que arranque la app debe definir `CORS_ORIGIN`: `.env` local (ver `.env.example`), Playwright (`playwright.config.ts`) y EC2 (`deploy/ec2/configure.py`) ya lo hacen. Cualquier script o test nuevo que llame a `createApp()` debe definirlo también.
+- Los errores 500 pierden el detalle en la respuesta; para diagnosticar hay que mirar los logs del servidor.
+
+---
+
+## 26. Resumen de llamadas con IA: Gemini API (nivel gratuito) llamada solo desde el backend
+
+**Fecha:** 2026-11-25
+**Rama:** `feature/ai-call-summary`
+
+### Contexto
+
+El curso pide una funcionalidad de producto que consuma un modelo de IA por API, siempre desde el backend, con la clave en variables de entorno, manejo de errores y límites de uso. La funcionalidad elegida es resumir la transcripción guardada de una llamada del historial.
+
+El proveedor se eligió después de probar Amazon Bedrock el 2026-11-25 en la cuenta AWS del proyecto (plan FREE):
+
+- Todos los modelos Claude respondieron `AccessDenied` ("not available for this account").
+- Amazon Nova Lite fue limitado ya en la primera llamada con "Too many tokens per day".
+- Los perfiles de inferencia entre Regiones no están permitidos por la cuenta.
+
+### Decisión
+
+- **Proveedor: Google Gemini API, nivel gratuito**, con el SDK oficial `@google/genai`. Modelo por defecto `gemini-3.5-flash-lite`, configurable con `GEMINI_MODEL`. Se verificó en la página de precios de la Gemini API que figura con costo cero en el nivel gratuito y que no está marcado como obsoleto (`gemini-2.5-flash` figura como obsoleto desde el 1 de diciembre de 2026).
+- **Clave solo en el backend** (`GEMINI_API_KEY`). Nunca se envía al cliente ni se registra en logs. Si falta, la aplicación arranca igual y el endpoint responde 503 "AI summaries are not configured".
+- **Un resumen por sesión.** Tabla `call_summaries` (migración `0031_call_summaries`) con la sesión como clave primaria y borrado en cascada con `call_sessions`. `POST` solo llama al modelo si no existe resumen; `GET` devuelve el guardado, aunque se haya pedido otro idioma después: la respuesta incluye `language` y el cliente avisa cuando difiere del idioma de la interfaz. Esto protege la cuota gratuita y evita pagar o gastar cuota dos veces por la misma llamada. Se eligió una tabla propia y no columnas en `call_sessions` para no ensanchar una tabla que escriben los webhooks de LiveKit y para poder guardar modelo, idioma y autor.
+- **Autorización reutilizada.** Los endpoints `GET/POST /calls/sessions/:sessionId/summary` validan `sessionId` como UUID (`ParseUUIDPipe`, 400 si no lo es), usan `JwtAuthGuard` y la misma regla que el acta (`TranscriptHistoryService.requireSession`): solo quien participó de la sesión, con 404 tanto si no existe como si no participó.
+- **Límite de tasa más estricto** en el `POST`: 5 por minuto (el global es 60), con `@Throttle` de `@nestjs/throttler`.
+- **Prompt seguro.** La instrucción de sistema indica que la transcripción son datos y no instrucciones; la transcripción va entre delimitadores `<transcript>` y se neutraliza cualquier cierre inyectado. Si supera 100 000 caracteres se responde 413 en lugar de truncar en silencio. Sin frases, 422.
+- **Errores controlados.** Cuota agotada del proveedor: 429 con `code: "AI_QUOTA"` (el límite propio de 5 por minuto también responde 429, pero sin ese código, y el cliente muestra un mensaje distinto). Red, error del proveedor o respuesta bloqueada o vacía: 503.
+- **Solo se guardan generaciones completas.** Se lee `finishReason` del primer candidato: solo `STOP` es válido. `MAX_TOKENS` (o cualquier otro fin distinto de `STOP`) se trata como no disponible (503) y los motivos de seguridad, lista de bloqueo, contenido prohibido, recitación o datos personales sensibles como bloqueo; en ambos casos no se persiste nada. El límite de salida es de 2048 tokens (`MAX_OUTPUT_TOKENS`).
+- **Línea única por entrada.** Al armar el prompt, los saltos de línea (CR, LF, NEL, U+2028, U+2029) del nombre y del texto se reemplazan por espacios, para que una frase no pueda falsificar líneas `[hh:mm:ss] Nombre:` de la transcripción.
+- **Sesiones en curso.** No se agrega una regla 409: `requireSession` exige filas en `call_session_participants`, que se insertan en la misma transacción que fija `ended_at` (`calls-webhook.service.ts`), por lo que una llamada en curso responde 404 y nunca llega a generar. El cliente solo recibe mensajes genéricos; el detalle del SDK queda en los logs del servidor, sin la clave.
+- **Proveedor detrás de una interfaz** (`AiTextGenerator`), de modo que cambiar de modelo o proveedor solo toca una clase.
+
+### Alternativas descartadas
+
+- **API de Anthropic (de pago):** buena calidad, pero exige tarjeta y costo recurrente para un proyecto de curso.
+- **Plan de pago de AWS (Bedrock):** habilitaría Claude, pero implica salir del plan gratuito y asumir costos.
+- **Amazon Nova Lite en Bedrock:** probado y limitado desde la primera llamada.
+
+### Consecuencias y tradeoffs
+
+- El nivel gratuito tiene límites de solicitudes y tokens por minuto y por día; por eso existen el resumen único por sesión y el límite de 5 por minuto. Una cuota agotada se muestra al usuario como un mensaje claro, sin romper la página.
+- Google puede usar el contenido enviado en el nivel gratuito para mejorar sus productos. Es aceptable para datos de demostración, pero debe informarse: no se deben resumir llamadas con datos sensibles reales.
+- Se suma un segundo proveedor y una segunda clave para administrar (`GEMINI_API_KEY`, y opcionalmente `GEMINI_MODEL`, en el entorno del backend y en EC2).
+- La numeración de la migración (0031) puede colisionar con otras ramas aún sin integrar que usan el mismo número; hay que renumerar la que se integre segunda.
+
+---
+
+## 27. LiveKit autohospedado como proveedor vigente de audio y video (sustituye a Amazon Chime SDK)
+
+**Fecha:** 2026-11-25
+**Rama:** `chore/repo-hygiene`
+**Estado:** vigente. Sustituye a las secciones 2, 5, 9 y 11, que se conservan solo como historia; la sección 12 describe la implementación inicial.
+
+### Contexto
+
+La sección 2 eligió Chime SDK por ser nativo de AWS. La sección 11 documentó después que el nuevo AWS experience excluye Chime SDK, incluso en el plan pago simplificado, y que el proyecto está en el plan FREE. Sin Chime no había llamadas de voz y video. Esta sección consolida el razonamiento de la decisión vigente para que no haya que reconstruirlo desde varias secciones.
+
+### Alternativas consideradas
+
+- **Amazon Chime SDK (decisión original).** Descartada: no está disponible para este tipo de cuenta, por lo que no se puede ni probar ni desplegar.
+- **LiveKit Cloud.** Descartada para esta entrega: añade un servicio comercial externo y un plan que el proyecto no necesita. El servidor de código abierto cubre el caso (ver `deploy/ec2/README.md`, sección "Costos y créditos").
+- **LiveKit autohospedado en la EC2 del proyecto (elegida).**
+- No se evaluaron otras plataformas de video ni una malla WebRTC directa entre navegadores; no hay un análisis documentado de ellas y no se afirma nada al respecto.
+
+### Decisión
+
+LiveKit de código abierto (`livekit/livekit-server`, versión fijada en `deploy/ec2/compose.yaml`) corre junto con la API, el frontend y Caddy en la misma EC2 de `us-east-2`. El backend emite pases JWT de corta duración con `livekit-server-sdk`; el cliente usa `livekit-client` y los componentes oficiales de React. Cupo predeterminado: 6 participantes por llamada, aplicado por LiveKit al conectar.
+
+### Justificación
+
+- Funciona dentro del plan FREE: solo requiere EC2, un servicio admitido, sin activar funciones avanzadas.
+- La licencia del servidor no tiene costo; el único gasto es la infraestructura de AWS, que se descuenta de los créditos elegibles.
+- Un único stack de Docker Compose incluye todo, lo que simplifica el despliegue y las pruebas locales (LiveKit también se puede levantar con Docker).
+- El SDK abierto permite mantener la identidad y los permisos en el backend: el pase no concede administración y las claves privadas no llegan al navegador.
+
+### Consecuencias y tradeoffs
+
+- Pasamos a operar el servidor de medios: actualizaciones, certificados (Caddy) y TURN son responsabilidad del equipo, no de un servicio administrado.
+- Despliegue de un solo host, sin alta disponibilidad. El límite de seis participantes no es una certificación de rendimiento; requiere una prueba real desde varias redes.
+- Hay que abrir puertos públicos de medios (TCP 7881; UDP 3478 y 7882) además de 80 y 443.
+- Las llamadas activas se interrumpen cuando la EC2 se apaga automáticamente (dos horas después de cada arranque).
+- La columna `rooms.chime_meeting_id` y la migración `0003_chime_meeting` se conservan para no reescribir historial de migraciones; LiveKit no las usa.
+
+---
+
+## 28. PostgreSQL como contenedor en la misma EC2, no como servicio administrado (RDS)
+
+**Fecha:** 2026-11-25
+**Rama:** `chore/repo-hygiene`
+
+### Contexto
+
+El proyecto necesita una base PostgreSQL alojada en la nube, no en la computadora de un integrante. La cuenta de AWS del proyecto usa el plan FREE del nuevo AWS experience, con una única región (`us-east-2`) y créditos limitados. Los servicios disponibles dependen de ese plan, y los administrados se cobran por separado de la EC2.
+
+### Alternativas consideradas
+
+- **Amazon RDS (u otro PostgreSQL administrado).** Ofrece copias automáticas, recuperación a un punto en el tiempo y parches gestionados. Agrega una instancia de base facturable además de la EC2 y no se verificó contra la lista oficial de servicios admitidos del plan FREE; la plantilla del proyecto declara explícitamente que no crea RDS (`deploy/ec2/README.md`, "Costos y créditos").
+- **PostgreSQL en la computadora de un integrante.** Descartada: incumple el requisito de que la base esté en un servicio en la nube.
+- **PostgreSQL 16 en un contenedor Docker en la misma EC2 (elegida).**
+
+### Decisión
+
+El servicio `postgres` (`postgres:16-alpine`) está definido en `deploy/ec2/compose.yaml` junto al resto del stack. Escucha solo en `127.0.0.1` (`listen_addresses=127.0.0.1`) y el puerto 5432 no se abre en el Security Group. Los datos viven en el volumen Docker `postgres_data`, dentro del disco raíz de la instancia: gp3 de 30 GiB con cifrado activado y `DeleteOnTermination: false` (`deploy/ec2/cloudformation.json`). Las migraciones se aplican en `deploy/ec2/start.sh` antes de iniciar la API.
+
+Esto cumple el requisito de que la base esté alojada en un servicio en la nube y no en la computadora de un integrante: corre en una instancia EC2 de AWS.
+
+### Justificación
+
+- Costo: no se agrega ningún recurso facturable aparte de la EC2, el disco y la IPv4 que ya existen.
+- Simplicidad: un solo `docker compose` levanta aplicación, medios, proxy y base, y una sola plantilla de CloudFormation describe todo.
+- Encaja con el alcance de una demostración académica con una llamada a la vez.
+
+### Consecuencias y tradeoffs
+
+- **Sin copias automáticas ni recuperación a un punto en el tiempo.** La única copia prevista es manual con `pg_dump` (`deploy/ec2/README.md`, "Copias, actualización y retiro"), y queda en el mismo disco; hay que copiarla fuera de la instancia si se quiere protección ante la pérdida del host.
+- **La base comparte CPU y RAM con la aplicación y LiveKit.** La plantilla admite `t3.small` (2 GiB) y `t3.medium` (4 GiB, valor por defecto); en `t3.small` la construcción de imágenes puede agotar la memoria, por eso el arranque crea 2 GiB de swap.
+- **La base se apaga con la instancia.** Un temporizador de systemd apaga la EC2 dos horas después de cada arranque; hasta volver a iniciarla desde la consola, la aplicación y la base no responden. Los datos persisten porque el disco y el volumen se conservan.
+- **Parches manuales.** La versión de imagen está fijada; actualizar PostgreSQL o el sistema operativo es una tarea del equipo.
+- **Un solo host, sin réplica ni alta disponibilidad.** Aceptable para la demostración; no para producción real.
+- Si el proyecto continuara más allá de la entrega, migrar a RDS (o equivalente) sería el primer cambio recomendado: bastaría cambiar `DATABASE_URL` y restaurar un volcado.
+
+---
+
+## 29. IP real del cliente detrás de Caddy (PROXY protocol y `trust proxy`)
+
+**Fecha:** 2026-11-24
+**Rama:** `fix/trust-proxy`
+
+### Contexto
+
+El límite global de 60 peticiones por minuto (`ThrottlerModule`) cuenta por `req.ip`. En el despliegue, la capa 4 de Caddy recibe la conexión en `:443` y la reenvía por TCP a su servidor HTTP en `127.0.0.1:8080`, que a su vez la pasa al backend. Ese reenvío no conservaba la dirección del cliente: el servidor HTTP de Caddy veía a todos como `127.0.0.1`, completaba `X-Forwarded-For` con ese valor, y el backend tampoco confiaba en ese encabezado. Resultado: todas las personas compartían un único cupo de 60 peticiones.
+
+Un primer intento solo activó `trust proxy` en el backend. La revisión del cambio detectó que no alcanzaba, porque el encabezado ya llegaba con la IP equivocada; las pruebas unitarias pasaban porque no reproducían la cadena de Caddy.
+
+### Alternativas consideradas
+
+- **Solo `trust proxy` en el backend.** Insuficiente por lo explicado arriba.
+- **`trust proxy: true`.** Permitiría que cualquier cliente falsee su IP con `X-Forwarded-For`.
+- **Subir o quitar el límite.** Esconde el problema y deja la API sin límite por cliente.
+- **PROXY protocol entre la capa 4 y la capa HTTP de Caddy, más `trust proxy: 'loopback'` (elegida).**
+
+### Decisión
+
+- `deploy/ec2/configure.py`: la ruta de la aplicación en la capa 4 envía un encabezado PROXY v2 (`proxy_protocol: 'v2'`), y el servidor HTTP lo lee con el listener `proxy_protocol`, aceptado solo desde `127.0.0.1/32`. Las rutas de TURN y de LiveKit no cambian.
+- `src/app-setup.ts`: `app.set('trust proxy', 'loopback')`, de modo que el backend toma la IP del `X-Forwarded-For` que agrega Caddy.
+
+### Justificación
+
+- Se verificó con la imagen fijada en `compose.yaml` (Caddy v2.11.3): `caddy validate` acepta el `caddy.json` generado, y una réplica de la cadena mostró que sin PROXY protocol el backend recibe `127.0.0.1` y con PROXY protocol recibe la IP del cliente, ignorando un `X-Forwarded-For` falso enviado por el cliente.
+
+### Consecuencias
+
+- Para aplicarlo en el EC2 hay que volver a ejecutar `configure.py` (conserva las claves existentes) y reiniciar Caddy. Si la configuración fallara, el sitio entero deja de responder: se debe aplicar con la posibilidad de volver al `caddy.json` anterior.
+- Pendiente de comprobar en producción: que dos dispositivos distintos tengan cupos separados.
+
+---
+
+## 30. Editar salas: renombrar cualquier sala y promover temporal a permanente (supera D5/D7 "isPermanent inmutable")
+
+**Fecha:** 2026-11-26
+**Rama:** `feat/room-edit-and-promote`
+
+### Contexto
+
+La rúbrica pide un CRUD completo y la operación Update de las salas era débil: solo se podía renombrar una sala permanente. Además, `isPermanent` se declaraba como inmutable (D5/D7 de salas temporales y permanentes): quien creaba una sala temporal y después quería conservarla no tenía forma de hacerlo.
+
+### Decisión
+
+- **Renombrar vale para todas las salas.** `RoomsService.renameRoom` ya no rechaza las temporales (se quitó el `ForbiddenException` de la decisión 21). El rol de administrador se sigue exigiendo con `RoomRolesGuard`. En "Mis salas" el botón ✏️ aparece en toda sala vigente.
+- **Promoción temporal a permanente, solo hacia adelante.** Nuevo `PATCH /rooms/:code/permanent` (`JwtAuthGuard`; el rol se valida en el service, igual que `deleteRoomAsAdmin`):
+  - Sin token: 401. Sala inexistente, retirada o vencida: 404. Quien llama no es miembro o no es administrador: 403.
+  - **Idempotente:** si la sala ya es permanente responde 200 con la sala, sin escribir (se prefirió a un 409 porque el resultado deseado por el cliente ya se cumplió, y un reintento por red lenta no debe mostrar un error).
+  - **Vencida responde 404, no 409:** coincide con el resto de los endpoints, que tratan una sala vencida como inexistente (`joinableByCode`). El retiro es perezoso (`retireExpired` solo corre al crear una sala), por lo que una sala de más de 24 h sin ingresos puede tener todavía `retired_at` nulo; por eso no alcanza con mirar `retired_at`: se reutiliza el mismo predicado de vida (`RoomResolverService.lockJoinable`).
+  - **Transacción con bloqueo de fila** (`SELECT ... FOR UPDATE` vía `lockJoinable`), para serializar contra otra promoción y contra el barrido de retiro.
+  - Se fija `is_permanent = true` **y** `waiting_room_enabled = true` en la misma sentencia, porque una sala permanente exige sala de espera siempre (decisión de admisión). El código sigue reservado: `retired_at` queda nulo y el índice parcial único `rooms_code_code_pool_unique` lo conserva.
+- **Nueva regla de dominio:** `isPermanent` se declara al crear la sala y solo puede pasar de `false` a `true` por acción de un administrador de la sala. Nunca se revierte. Se actualizaron los comentarios de `schema.ts` y `room-admission.service.ts` que decían "inmutable". No hace falta migración: la columna ya existía.
+- **Cliente:** acción "Hacer permanente" en el menú de cada sala temporal vigente de "Mis salas", con diálogo de confirmación (irreversible, la sala deja de vencer, la sala de espera pasa a ser obligatoria), estado de carga y mensaje de error visible. Al confirmar, la fila muestra la insignia "Permanente".
+
+### Alternativa descartada
+
+- **Interruptor bidireccional (permanente a temporal).** Degradar una sala exigiría decidir qué pasa con sus horarios, la playlist guardada, la biblioteca de links, el archivo compartido y los miembros; además el código volvería al pool de reciclaje y podría terminar asignado a otra persona mientras hay links circulando. Es un conjunto de casos borde grande y con riesgo de pérdida de datos, sin una necesidad de producto que lo justifique.
+
+### Casos borde y consecuencias
+
+- **Pases ya emitidos:** los tokens de admisión de una sala temporal se emitieron con `expiresAt` de 24 h. Después de promover, esos pases conservan su vencimiento original; los nuevos se emiten sin vencimiento. Es aceptable: quien tenga un pase vencido vuelve a entrar por la sala de espera.
+- **Quien ya está dentro de la sala** no ve las funciones solo-permanentes (playlist guardada, eventos, modos persistentes) hasta recargar, porque la página de la sala consulta `isPermanent` al montarse. No se agregó la acción dentro de la sala para mantener el cambio acotado.
+- Los demás consumidores de `isPermanent` (historial de chat, restauración de playlist, links de sala, archivo compartido, línea de tiempo) leen el valor desde la base en cada petición o conexión, por lo que ven la promoción sin invalidar cachés.
+
+---
+
+## 31. Eliminar la columna `rooms.is_active` (código muerto)
+
+### Contexto
+
+`rooms.is_active` nació en la migración 0000 con valor por defecto `true`, pero ninguna ruta del código la puso nunca en `false`: todas las filas valían `true`. Sin embargo condicionaba lógica real (`La sala está cerrada` en el resolver y en la admisión, el barrido `retireExpired`, y la opción `requireActive` de `lockJoinable`), lo que sugería una funcionalidad de "cerrar sala" que no existe.
+
+### Decisión
+
+- Se elimina la columna (migración `0032_drop_rooms_is_active`) y toda la lógica asociada: la opción `requireActive`, las ramas `La sala está cerrada` y el filtro `is_active` del barrido de retiro. El comportamiento observable no cambia.
+- **La regla "no hay administrador conectado" no se guarda como bandera derivada en la base.** Se evalúa en vivo contra LiveKit (`calls.service` `assertHostConnected` y `call-session-close` `onAdminLeft`). Persistirla duplicaría un estado que cambia en cada conexión y desconexión, con riesgo de desincronización.
+- **Fin de vida de una sala:** retiro tras 24 h sin ingresos (`retired_at`, salvo salas permanentes) o eliminación por un administrador.
+
+### Consecuencias
+
+- Si en el futuro se implementa "cerrar sala", debe diseñarse con su propia semántica en vez de reutilizar esta columna.
+- Migración irreversible sin pérdida de información útil: el valor era constante.
+
+---
+
+## 32. Documentación del proyecto alineada al enunciado del Proyecto Integrador (Anexo A/C, sección 6)
 
 **Fecha:** 2026-11-24
 **Rama:** `docs/project-documentation`

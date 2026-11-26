@@ -1,5 +1,12 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { currentTrack, formatTime, reconcilePlayerState, type MusicState } from './ambientMusic';
+import {
+  currentTrack,
+  effectiveVolume,
+  formatTime,
+  reconcilePlayerState,
+  resyncTarget,
+  type MusicState,
+} from './ambientMusic';
 
 function fakePlayer(currentTime = 0) {
   return {
@@ -154,5 +161,39 @@ describe('reconcilePlayerState', () => {
     expect(player.seekTo).toHaveBeenCalledWith(10, true);
     expect(player.pauseVideo).toHaveBeenCalled();
     expect(player.playVideo).not.toHaveBeenCalled();
+  });
+});
+
+describe('effectiveVolume', () => {
+  it('aplica tu volumen encima del de la sala', () => {
+    expect(effectiveVolume(100, 50)).toBe(50);
+    expect(effectiveVolume(80, 50)).toBe(40);
+  });
+
+  it('sin volumen de sala definido suena tu volumen tal cual', () => {
+    expect(effectiveVolume(70)).toBe(70);
+  });
+});
+
+describe('resyncTarget', () => {
+  const playing = {
+    tracks: [{ videoId: 'abc', title: 'Uno' }],
+    currentIndex: 0,
+    isPlaying: true,
+    positionSeconds: 10,
+    updatedAt: 1_000_000,
+    mode: 'repeat-all',
+    shuffle: false,
+  } as MusicState;
+
+  it('si YouTube arrancó atrasado por la carga, salta a donde ya va la sala', () => {
+    // La sala arrancó hace 2 s, pero el reproductor recién empieza en el segundo 10.
+    expect(resyncTarget(playing, 10, 1_002_000)).toBeCloseTo(12);
+  });
+
+  it('no toca nada si ya está alineado o si la música está pausada', () => {
+    // Medio segundo atrasado: saltar costaría más silencio del que recupera.
+    expect(resyncTarget(playing, 10.7, 1_001_200)).toBeNull();
+    expect(resyncTarget({ ...playing, isPlaying: false }, 3, 1_001_200)).toBeNull();
   });
 });

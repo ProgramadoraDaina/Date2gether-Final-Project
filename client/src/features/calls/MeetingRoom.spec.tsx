@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
+import type { Socket } from 'socket.io-client';
 import type { CallSessionState } from './useCallSession';
 import { useLanguageStore } from '../translation/store';
 
@@ -46,9 +47,15 @@ jest.mock('livekit-client', () => ({
   DefaultReconnectPolicy: jest.fn(),
   ConnectionState: { Connected: 'connected' },
   RoomEvent: { Connected: 'connected' },
-  // Valores reales verificados en @livekit/protocol (design.md D5):
+  // Valores reales verificados en @livekit/protocol (design.md D5/Decisión 2):
+  // PARTICIPANT_REMOVED = 4 ("RoomService.RemoveParticipant was called"),
   // ROOM_DELETED = 5 ("RoomService.DeleteRoom was called"), ROOM_CLOSED = 10.
-  DisconnectReason: { CLIENT_INITIATED: 1, ROOM_DELETED: 5, ROOM_CLOSED: 10 },
+  DisconnectReason: {
+    CLIENT_INITIATED: 1,
+    PARTICIPANT_REMOVED: 4,
+    ROOM_DELETED: 5,
+    ROOM_CLOSED: 10,
+  },
   Track: {
     Source: { Camera: 'camera', Microphone: 'microphone', ScreenShare: 'screen_share' },
   },
@@ -57,7 +64,29 @@ jest.mock('livekit-client', () => ({
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
 }));
-jest.mock('@/lib/calls', () => ({ reportTrackState: jest.fn() }));
+const mainSession = {
+  url: 'wss://media.example.com',
+  token: 'main-token',
+  roomName: 'abc-defg-hij',
+  participantLimit: 6,
+};
+jest.mock('@/lib/calls', () => ({
+  reportTrackState: jest.fn(),
+  startCall: jest.fn(() => Promise.resolve(mainSession)),
+}));
+jest.mock('@/lib/breakouts', () => ({
+  createBreakoutRoom: jest.fn(),
+  listBreakoutRooms: jest.fn(),
+  updateBreakoutRoomPolicy: jest.fn(),
+  moveToBreakoutRoom: jest.fn(),
+  issueBreakoutToken: jest.fn(),
+  closeBreakoutRoom: jest.fn(),
+  closeAllBreakoutRooms: jest.fn(),
+  returnFromBreakoutRoom: jest.fn(),
+  // Puro -- se reusa la implementación real (Decisión 4, design.md): solo
+  // la vista de admin trae `occupants`.
+  isAdminBreakoutView: (room: { occupants?: unknown }) => 'occupants' in room,
+}));
 function state(): CallSessionState {
   return {
     status: 'connecting',
@@ -74,6 +103,9 @@ function state(): CallSessionState {
     connected: jest.fn(),
     failed: jest.fn(),
     endedByHost: jest.fn(),
+    endedForBreakout: jest.fn(),
+    removedByPolicy: jest.fn(),
+    switchRoom: jest.fn(),
   };
 }
 function defaultUseTrackToggle({ onDeviceError }: { onDeviceError?: (error: Error) => void } = {}) {
@@ -85,6 +117,19 @@ function defaultUseTrackToggle({ onDeviceError }: { onDeviceError?: (error: Erro
     buttonProps: {
       onClick: () => onDeviceError?.(new Error('denied')),
     },
+  };
+}
+// Mismo helper que useRoomSocket.spec.ts: un fake de socket.io-client que
+// guarda los callbacks registrados por evento para poder dispararlos a mano.
+function createFakeSocket() {
+  const callbacks: Record<string, (...args: unknown[]) => void> = {};
+  return {
+    on: jest.fn((event: string, cb: (...args: unknown[]) => void) => {
+      callbacks[event] = cb;
+    }),
+    off: jest.fn(),
+    emit: jest.fn(),
+    callbacks,
   };
 }
 describe('MeetingRoom', () => {
@@ -106,6 +151,50 @@ describe('MeetingRoom', () => {
     const { useTrackToggle } = await import('@livekit/components-react');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     jest.mocked(useTrackToggle).mockImplementation(defaultUseTrackToggle as any);
+    const { listBreakoutRooms, issueBreakoutToken } = await import('@/lib/breakouts');
+    (listBreakoutRooms as jest.Mock<typeof listBreakoutRooms>).mockResolvedValue([]);
+    // Default para los tests que no son sobre el traslado real de medios
+    // (Fase 6.13): cualquier breakout:assigned que emitan ahora también
+    // dispara el pedido de token (ver MeetingRoom.tsx), así que necesita una
+    // resolución válida para no tirar un TypeError sobre una promesa undefined.
+    (issueBreakoutToken as jest.Mock<typeof issueBreakoutToken>).mockResolvedValue({
+      url: 'wss://media.example.com',
+      token: 'breakout-token',
+      roomName: 'abc-defg-hij::breakout-1',
+      participantLimit: 6,
+    });
+  });
+  it('con una distribución propia activada, la usa en vez de la grilla', async () => {
+    const { useCallLayoutStore } = await import('./layout/store');
+    const { useTracks } = await import('@livekit/components-react');
+    jest
+      .mocked(useTracks)
+      .mockReturnValue([{ participant: { identity: 'santi' }, source: 'camera' }] as never);
+    const MeetingRoom = (await import('./MeetingRoom')).default;
+    const props = {
+      call: state(),
+      roomCode: 'abc',
+      roomToken: 'test-room-token',
+      roomEmojis: [],
+      isCurrentUserAdmin: false,
+      audioLocked: false,
+      videoLocked: false,
+      onSetAudioLock: jest.fn(),
+      onSetVideoLock: jest.fn(),
+      nameFocusEnabled: false,
+      onSetNameFocus: jest.fn(),
+    };
+    act(() => useCallLayoutStore.setState({ enabled: false, zones: [] }));
+    act(() => useCallLayoutStore.getState().addZone());
+    const { rerender } = render(<MeetingRoom {...props} />);
+    expect(screen.queryByTestId('layout-zone')).not.toBeInTheDocument();
+
+    act(() => useCallLayoutStore.getState().setEnabled(true));
+    rerender(<MeetingRoom {...props} />);
+    expect(screen.getByTestId('layout-zone')).toBeInTheDocument();
+    expect(screen.getAllByTestId('layout-tile')).toHaveLength(1);
+    act(() => useCallLayoutStore.setState({ enabled: false, zones: [] }));
+    jest.mocked(useTracks).mockReturnValue([]);
   });
   it('al tocar micrófono o cámara en la llamada recuerda la elección para la próxima vez', async () => {
     const { useCallSettingsStore } = await import('./settings/store');
@@ -472,6 +561,70 @@ describe('MeetingRoom', () => {
     });
     expect(mockRoom.localParticipant.setCameraEnabled).toHaveBeenCalledTimes(1);
   });
+  it('al pasar a una mini sala conserva el micrófono y la cámara como estaban, aunque MeetingRoom se remonte', async () => {
+    const { useLocalParticipant } = await import('@livekit/components-react');
+    const MeetingRoom = (await import('./MeetingRoom')).default;
+    const lobbyDevices = {
+      cameraEnabled: false,
+      microphoneEnabled: true,
+      cameraId: '',
+      microphoneId: '',
+    };
+    const devicesRef = { current: lobbyDevices };
+    const setMedia = (mic: boolean, cam: boolean) =>
+      jest.mocked(useLocalParticipant).mockReturnValue({
+        localParticipant: { identity: 'local', name: 'Ana' },
+        isMicrophoneEnabled: mic,
+        isCameraEnabled: cam,
+      } as never);
+    const props = (call: CallSessionState) => ({
+      call,
+      roomCode: 'abc-defg-hij',
+      roomToken: 'test-room-token',
+      roomEmojis: [],
+      isCurrentUserAdmin: false,
+      audioLocked: false,
+      videoLocked: false,
+      onSetAudioLock: jest.fn(),
+      onSetVideoLock: jest.fn(),
+      nameFocusEnabled: false,
+      onSetNameFocus: jest.fn(),
+      initialDevices: lobbyDevices,
+      devicesRef,
+    });
+    setMedia(false, false);
+    const mainCall = { ...state(), session: mainSession };
+    const { rerender, unmount } = render(<MeetingRoom {...props(mainCall)} />);
+    mockRoom.state = 'connected';
+    await act(async () => {
+      mockEvents.connected();
+    });
+    expect(mockRoom.localParticipant.setMicrophoneEnabled).toHaveBeenCalledWith(true);
+    setMedia(true, false);
+    rerender(<MeetingRoom {...props({ ...mainCall })} />);
+    // The user mutes and turns the camera on during the main call.
+    setMedia(false, true);
+    rerender(<MeetingRoom {...props({ ...mainCall })} />);
+
+    jest.mocked(mockRoom.localParticipant.setMicrophoneEnabled).mockClear();
+    jest.mocked(mockRoom.localParticipant.setCameraEnabled).mockClear();
+    mockRoom.state = 'disconnected';
+    setMedia(false, false);
+    const breakoutCall = {
+      ...mainCall,
+      status: 'switching' as const,
+      session: { ...mainSession, roomName: 'abc-defg-hij::breakout-1', token: 'breakout-token' },
+    };
+    // The real page remounts MeetingRoom on a move: only the page-owned ref survives.
+    unmount();
+    render(<MeetingRoom {...props(breakoutCall)} />);
+    mockRoom.state = 'connected';
+    await act(async () => {
+      mockEvents.connected();
+    });
+    expect(mockRoom.localParticipant.setMicrophoneEnabled).not.toHaveBeenCalledWith(true);
+    expect(mockRoom.localParticipant.setCameraEnabled).toHaveBeenCalledWith(true);
+  });
   it('si se revoca el permiso de cámara después del lobby, conserva la llamada y publica el micrófono', async () => {
     mockRoom.state = 'connected';
     mockRoom.localParticipant.setCameraEnabled.mockRejectedValueOnce(
@@ -556,15 +709,734 @@ describe('MeetingRoom', () => {
     expect(call.endedByHost).toHaveBeenCalledTimes(1);
     expect(call.failed).not.toHaveBeenCalled();
   });
-  it('con el enfoque automático activado, una frase final de otro participante que nombra a alguien pinea su track', async () => {
-    const { useCreateLayoutContext, useDataChannel, useTracks } = await import(
-      '@livekit/components-react'
+
+  it('ignora onDisconnected mientras la llamada está en medio de un traslado de sala (status "switching", breakout-rooms)', async () => {
+    const { LiveKitRoom } = await import('@livekit/components-react');
+    const MeetingRoom = (await import('./MeetingRoom')).default;
+    const call = { ...state(), status: 'switching' as const };
+    render(
+      <MeetingRoom
+        call={call}
+        roomCode="abc-defg-hij"
+        roomToken="test-room-token"
+        roomEmojis={[]}
+        isCurrentUserAdmin={false}
+        audioLocked={false}
+        videoLocked={false}
+        onSetAudioLock={jest.fn()}
+        onSetVideoLock={jest.fn()}
+        nameFocusEnabled={false}
+        onSetNameFocus={jest.fn()}
+      />,
     );
+    const props = jest.mocked(LiveKitRoom).mock.calls[0][0];
+    act(() => props.onDisconnected?.(1));
+    act(() => props.onDisconnected?.(undefined));
+    expect(call.leaveCall).not.toHaveBeenCalled();
+    expect(call.failed).not.toHaveBeenCalled();
+    expect(call.endedByHost).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  // Decisión 2 (design.md "Señal de motivo de remoción", tasks.md 2.9):
+  // onDisconnected distingue, dentro de PARTICIPANT_REMOVED, los tres
+  // motivos posibles vía consumeRemovalNotice() -- insertado después del
+  // chequeo de 'switching' (:643) y antes del else final.
+  describe('PARTICIPANT_REMOVED: distingue el motivo (Decisión 2, design.md)', () => {
+    it('BREAKOUT_MOVE_IN: no-op -- no llama a failed/endedByHost/endedForBreakout/removedByPolicy/leaveCall', async () => {
+      const { LiveKitRoom } = await import('@livekit/components-react');
+      const { DisconnectReason } = await import('livekit-client');
+      const MeetingRoom = (await import('./MeetingRoom')).default;
+      const call = state();
+      const socket = createFakeSocket();
+      render(
+        <MeetingRoom
+          call={call}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin={false}
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+          nameFocusEnabled={false}
+          onSetNameFocus={jest.fn()}
+          roomSocket={socket as unknown as Socket}
+        />,
+      );
+      act(() => socket.callbacks['breakout:removal']({ reason: 'BREAKOUT_MOVE_IN' }));
+      const props = jest.mocked(LiveKitRoom).mock.calls[0][0];
+
+      act(() => props.onDisconnected?.(DisconnectReason.PARTICIPANT_REMOVED));
+
+      expect(call.failed).not.toHaveBeenCalled();
+      expect(call.endedByHost).not.toHaveBeenCalled();
+      expect(call.endedForBreakout).not.toHaveBeenCalled();
+      expect(call.removedByPolicy).not.toHaveBeenCalled();
+      expect(call.leaveCall).not.toHaveBeenCalled();
+    });
+
+    it('BREAKOUT_FORCED_RETURN: vuelve solo a la sala principal, sin terminar la llamada', async () => {
+      const { LiveKitRoom } = await import('@livekit/components-react');
+      const { DisconnectReason } = await import('livekit-client');
+      const MeetingRoom = (await import('./MeetingRoom')).default;
+      const call = state();
+      const socket = createFakeSocket();
+      render(
+        <MeetingRoom
+          call={call}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin={false}
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+          nameFocusEnabled={false}
+          onSetNameFocus={jest.fn()}
+          roomSocket={socket as unknown as Socket}
+        />,
+      );
+      act(() => socket.callbacks['breakout:removal']({ reason: 'BREAKOUT_FORCED_RETURN' }));
+      const props = jest.mocked(LiveKitRoom).mock.calls[0][0];
+
+      await act(async () => props.onDisconnected?.(DisconnectReason.PARTICIPANT_REMOVED));
+
+      expect(call.switchRoom).toHaveBeenCalledTimes(1);
+      expect(call.switchRoom).toHaveBeenCalledWith(mainSession);
+      expect(call.endedForBreakout).not.toHaveBeenCalled();
+      expect(call.failed).not.toHaveBeenCalled();
+      expect(screen.getByText('Volviendo a la sala principal')).toBeInTheDocument();
+    });
+
+    it('dentro de una mini sala sin asignación en memoria, la recupera del servidor y muestra el tiempo arriba', async () => {
+      const { listBreakoutRooms, issueBreakoutToken } = await import('@/lib/breakouts');
+      const closesAt = new Date(Date.now() + 45_000).toISOString();
+      jest.mocked(listBreakoutRooms).mockResolvedValue([
+        {
+          id: 'breakout-1',
+          livekitRoomName: 'abc-defg-hij::breakout-1',
+          label: 'Mini sala 1',
+          leavePolicy: 'locked',
+          joinPolicy: 'admin_only',
+          autoCloseAt: closesAt,
+          occupants: [
+            {
+              livekitIdentity: 'minted',
+              sourceIdentity: 'admin-sub',
+              displayName: 'Santi',
+              userId: 'u1',
+            },
+          ],
+        },
+      ]);
+      const MeetingRoom = (await import('./MeetingRoom')).default;
+      const call = state();
+      call.status = 'in-call';
+      call.session = { ...call.session!, roomName: 'abc-defg-hij::breakout-1' };
+      render(
+        <MeetingRoom
+          call={call}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+          nameFocusEnabled={false}
+          onSetNameFocus={jest.fn()}
+          currentParticipantId="admin-sub"
+          roomSocket={createFakeSocket() as unknown as Socket}
+        />,
+      );
+
+      expect(await screen.findByRole('timer')).toHaveTextContent(/00:4[45]/);
+      expect(screen.getByText('Volvés a la sala principal en')).toBeInTheDocument();
+      expect(issueBreakoutToken).not.toHaveBeenCalled();
+      expect(call.switchRoom).not.toHaveBeenCalled();
+    });
+
+    it('cerrar la mini sala (ROOM_DELETED estando en ella) vuelve a la principal en vez de decir que el anfitrión se fue', async () => {
+      const { LiveKitRoom } = await import('@livekit/components-react');
+      const { DisconnectReason } = await import('livekit-client');
+      const MeetingRoom = (await import('./MeetingRoom')).default;
+      const call = state();
+      call.session = { ...call.session!, roomName: 'abc-defg-hij::breakout-1' };
+      render(
+        <MeetingRoom
+          call={call}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin={false}
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+          nameFocusEnabled={false}
+          onSetNameFocus={jest.fn()}
+        />,
+      );
+      const props = jest.mocked(LiveKitRoom).mock.calls[0][0];
+
+      await act(async () => props.onDisconnected?.(DisconnectReason.ROOM_DELETED));
+
+      expect(call.switchRoom).toHaveBeenCalledWith(mainSession);
+      expect(call.endedByHost).not.toHaveBeenCalled();
+    });
+
+    it('BREAKOUT_RETURN_LOCKED: llama a removedByPolicy con el código, no a failed', async () => {
+      const { LiveKitRoom } = await import('@livekit/components-react');
+      const { DisconnectReason } = await import('livekit-client');
+      const MeetingRoom = (await import('./MeetingRoom')).default;
+      const call = state();
+      const socket = createFakeSocket();
+      render(
+        <MeetingRoom
+          call={call}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin={false}
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+          nameFocusEnabled={false}
+          onSetNameFocus={jest.fn()}
+          roomSocket={socket as unknown as Socket}
+        />,
+      );
+      act(() => socket.callbacks['breakout:removal']({ reason: 'BREAKOUT_RETURN_LOCKED' }));
+      const props = jest.mocked(LiveKitRoom).mock.calls[0][0];
+
+      act(() => props.onDisconnected?.(DisconnectReason.PARTICIPANT_REMOVED));
+
+      expect(call.removedByPolicy).toHaveBeenCalledWith('BREAKOUT_RETURN_LOCKED');
+      expect(call.failed).not.toHaveBeenCalled();
+    });
+
+    it('sin ningún aviso previo: PARTICIPANT_REMOVED sigue cayendo en failed (comportamiento de hoy intacto)', async () => {
+      const { LiveKitRoom } = await import('@livekit/components-react');
+      const { DisconnectReason } = await import('livekit-client');
+      const MeetingRoom = (await import('./MeetingRoom')).default;
+      const call = state();
+      render(
+        <MeetingRoom
+          call={call}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin={false}
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+          nameFocusEnabled={false}
+          onSetNameFocus={jest.fn()}
+        />,
+      );
+      const props = jest.mocked(LiveKitRoom).mock.calls[0][0];
+
+      act(() => props.onDisconnected?.(DisconnectReason.PARTICIPANT_REMOVED));
+
+      expect(call.failed).toHaveBeenCalledTimes(1);
+      expect(call.endedForBreakout).not.toHaveBeenCalled();
+      expect(call.removedByPolicy).not.toHaveBeenCalled();
+    });
+  });
+
+  it('cambia la key de LiveKitRoom con roomName para forzar un remount completo en un traslado a mini sala', async () => {
+    const { LiveKitRoom } = await import('@livekit/components-react');
+    const original = jest.mocked(LiveKitRoom).getMockImplementation();
+    jest.mocked(LiveKitRoom).mockImplementation(({ children }: { children?: ReactNode }) => {
+      const idRef = useRef(Math.random());
+      return (
+        <div data-testid="mount-id" data-mount-id={idRef.current}>
+          {children}
+        </div>
+      );
+    });
+    try {
+      const MeetingRoom = (await import('./MeetingRoom')).default;
+      const mainCall = {
+        ...state(),
+        session: {
+          url: 'wss://media.example.com',
+          token: 'main-token',
+          roomName: 'abc-defg-hij',
+          participantLimit: 6,
+        },
+      };
+      const { rerender } = render(
+        <MeetingRoom
+          call={mainCall}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin={false}
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+          nameFocusEnabled={false}
+          onSetNameFocus={jest.fn()}
+        />,
+      );
+      const firstMountId = screen.getByTestId('mount-id').getAttribute('data-mount-id');
+
+      const breakoutCall = {
+        ...mainCall,
+        status: 'switching' as const,
+        session: {
+          url: 'wss://media.example.com',
+          token: 'breakout-token',
+          roomName: 'abc-defg-hij::breakout-1',
+          participantLimit: 6,
+        },
+      };
+      rerender(
+        <MeetingRoom
+          call={breakoutCall}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin={false}
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+          nameFocusEnabled={false}
+          onSetNameFocus={jest.fn()}
+        />,
+      );
+      const secondMountId = screen.getByTestId('mount-id').getAttribute('data-mount-id');
+
+      expect(secondMountId).not.toBe(firstMountId);
+
+      // Un segundo render con el MISMO roomName no debe forzar otro remount.
+      rerender(
+        <MeetingRoom
+          call={{ ...breakoutCall }}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin={false}
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+          nameFocusEnabled={false}
+          onSetNameFocus={jest.fn()}
+        />,
+      );
+      const thirdMountId = screen.getByTestId('mount-id').getAttribute('data-mount-id');
+      expect(thirdMountId).toBe(secondMountId);
+    } finally {
+      jest
+        .mocked(LiveKitRoom)
+        .mockImplementation(
+          original ?? (({ children }: { children?: ReactNode }) => <div>{children}</div>),
+        );
+    }
+  });
+
+  describe('mini salas (breakout-rooms, Fase 6.12 — montaje en la UI real)', () => {
+    it('el botón de "Mini salas" solo aparece para el admin, mismo gate que mute-all/cámara-off', async () => {
+      const MeetingRoom = (await import('./MeetingRoom')).default;
+      render(
+        <MeetingRoom
+          call={state()}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin={false}
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+          nameFocusEnabled={false}
+          onSetNameFocus={jest.fn()}
+          participants={[]}
+        />,
+      );
+      expect(screen.queryByRole('button', { name: 'Mini salas' })).toBeNull();
+    });
+
+    it('la barra de la llamada no muestra "Mini salas": el admin la abre desde "Hacer evento"', async () => {
+      const MeetingRoom = (await import('./MeetingRoom')).default;
+      render(
+        <MeetingRoom
+          call={state()}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+          nameFocusEnabled={false}
+          onSetNameFocus={jest.fn()}
+          participants={[{ livekitIdentity: 'guest-sub', displayName: 'Invitado' }]}
+        />,
+      );
+      expect(screen.queryByRole('button', { name: 'Mini salas' })).not.toBeInTheDocument();
+    });
+
+    it('el panel de mini salas se alimenta con los participantes recibidos', async () => {
+      const { moveToBreakoutRoom, listBreakoutRooms } = await import('@/lib/breakouts');
+      (listBreakoutRooms as jest.Mock<typeof listBreakoutRooms>).mockResolvedValue([
+        {
+          id: 'breakout-1',
+          livekitRoomName: 'abc-defg-hij::breakout-1',
+          label: 'Mini sala 1',
+          leavePolicy: 'locked',
+          joinPolicy: 'admin_only',
+          autoCloseAt: null,
+          occupants: [],
+        },
+      ]);
+      const { BreakoutHostDialog } = await import('./BreakoutView');
+      render(
+        <BreakoutHostDialog
+          open
+          onClose={jest.fn()}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          participants={[{ livekitIdentity: 'guest-sub', displayName: 'Invitado' }]}
+          currentParticipantId=""
+        />,
+      );
+
+      expect(listBreakoutRooms).toHaveBeenCalledWith('abc-defg-hij', 'test-room-token');
+      await waitFor(() =>
+        expect(screen.getByRole('option', { name: 'Invitado' })).toBeInTheDocument(),
+      );
+      expect(moveToBreakoutRoom).not.toHaveBeenCalled();
+    });
+
+    it('breakout:assigned muestra el banner; breakout:closed de esa mini sala lo oculta', async () => {
+      const MeetingRoom = (await import('./MeetingRoom')).default;
+      const socket = createFakeSocket();
+      render(
+        <MeetingRoom
+          call={state()}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin={false}
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+          nameFocusEnabled={false}
+          onSetNameFocus={jest.fn()}
+          participants={[]}
+          roomSocket={socket as unknown as Socket}
+        />,
+      );
+      expect(screen.queryByText('Mini sala 1')).toBeNull();
+
+      act(() =>
+        socket.callbacks['breakout:assigned']({
+          breakoutId: 'breakout-1',
+          label: 'Mini sala 1',
+          leavePolicy: 'locked',
+        }),
+      );
+      expect(screen.getByText('Mini sala 1')).toBeInTheDocument();
+
+      act(() => socket.callbacks['breakout:closed']({ breakoutId: 'breakout-1' }));
+      expect(screen.queryByText('Mini sala 1')).toBeNull();
+    });
+
+    it('clickear "Volver" en el banner (free_return) llama returnFromBreakoutRoom y oculta el banner sin esperar otra señal', async () => {
+      const { returnFromBreakoutRoom } = await import('@/lib/breakouts');
+      (returnFromBreakoutRoom as jest.Mock<typeof returnFromBreakoutRoom>).mockResolvedValue(
+        undefined,
+      );
+      const MeetingRoom = (await import('./MeetingRoom')).default;
+      const socket = createFakeSocket();
+      render(
+        <MeetingRoom
+          call={state()}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin={false}
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+          nameFocusEnabled={false}
+          onSetNameFocus={jest.fn()}
+          participants={[]}
+          roomSocket={socket as unknown as Socket}
+        />,
+      );
+      act(() =>
+        socket.callbacks['breakout:assigned']({
+          breakoutId: 'breakout-1',
+          label: 'Mini sala 1',
+          leavePolicy: 'free_return',
+        }),
+      );
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Volver' }));
+      });
+
+      expect(returnFromBreakoutRoom).toHaveBeenCalledWith(
+        'abc-defg-hij',
+        'test-room-token',
+        'breakout-1',
+      );
+      expect(screen.queryByText('Mini sala 1')).toBeNull();
+    });
+
+    it('si returnFromBreakoutRoom falla, muestra el error y conserva el banner visible', async () => {
+      const { returnFromBreakoutRoom } = await import('@/lib/breakouts');
+      (returnFromBreakoutRoom as jest.Mock<typeof returnFromBreakoutRoom>).mockRejectedValue(
+        new Error('No se pudo volver a la sala principal'),
+      );
+      const MeetingRoom = (await import('./MeetingRoom')).default;
+      const socket = createFakeSocket();
+      render(
+        <MeetingRoom
+          call={state()}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin={false}
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+          nameFocusEnabled={false}
+          onSetNameFocus={jest.fn()}
+          participants={[]}
+          roomSocket={socket as unknown as Socket}
+        />,
+      );
+      act(() =>
+        socket.callbacks['breakout:assigned']({
+          breakoutId: 'breakout-1',
+          label: 'Mini sala 1',
+          leavePolicy: 'free_return',
+        }),
+      );
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Volver' }));
+      });
+
+      expect(screen.getByRole('alert')).toHaveTextContent('No se pudo volver a la sala principal');
+      expect(screen.getByText('Mini sala 1')).toBeInTheDocument();
+    });
+  });
+
+  describe('traslado real de medios al recibir breakout:assigned (Fase 6.13)', () => {
+    it('[6.13.1] pide el token de la mini sala vía issueBreakoutToken y traslada los medios reales con switchRoom, sin pasar por joinCall', async () => {
+      const { issueBreakoutToken } = await import('@/lib/breakouts');
+      (issueBreakoutToken as jest.Mock<typeof issueBreakoutToken>).mockResolvedValue({
+        url: 'wss://media.example.com',
+        token: 'breakout-token-1',
+        roomName: 'abc-defg-hij::breakout-1',
+        participantLimit: 6,
+      });
+      const MeetingRoom = (await import('./MeetingRoom')).default;
+      const socket = createFakeSocket();
+      const call = state();
+      render(
+        <MeetingRoom
+          call={call}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin={false}
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+          nameFocusEnabled={false}
+          onSetNameFocus={jest.fn()}
+          participants={[]}
+          roomSocket={socket as unknown as Socket}
+        />,
+      );
+
+      await act(async () => {
+        socket.callbacks['breakout:assigned']({
+          breakoutId: 'breakout-1',
+          label: 'Mini sala 1',
+          leavePolicy: 'locked',
+        });
+      });
+
+      expect(issueBreakoutToken).toHaveBeenCalledWith(
+        'abc-defg-hij',
+        'test-room-token',
+        'breakout-1',
+      );
+      await waitFor(() =>
+        expect(call.switchRoom).toHaveBeenCalledWith({
+          url: 'wss://media.example.com',
+          token: 'breakout-token-1',
+          roomName: 'abc-defg-hij::breakout-1',
+          participantLimit: 6,
+        }),
+      );
+      expect(call.joinCall).not.toHaveBeenCalled();
+    });
+
+    it('[6.13.2] si issueBreakoutToken falla (403 sin asignación, red caída), no llama switchRoom y muestra un error visible sin traslado parcial', async () => {
+      const { issueBreakoutToken } = await import('@/lib/breakouts');
+      (issueBreakoutToken as jest.Mock<typeof issueBreakoutToken>).mockRejectedValue(
+        new Error('No se pudo obtener el acceso a la mini sala'),
+      );
+      const MeetingRoom = (await import('./MeetingRoom')).default;
+      const socket = createFakeSocket();
+      const call = state();
+      render(
+        <MeetingRoom
+          call={call}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin={false}
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+          nameFocusEnabled={false}
+          onSetNameFocus={jest.fn()}
+          participants={[]}
+          roomSocket={socket as unknown as Socket}
+        />,
+      );
+
+      await act(async () => {
+        socket.callbacks['breakout:assigned']({
+          breakoutId: 'breakout-1',
+          label: 'Mini sala 1',
+          leavePolicy: 'locked',
+        });
+      });
+
+      await waitFor(() =>
+        expect(screen.getByRole('alert')).toHaveTextContent(
+          'No se pudo obtener el acceso a la mini sala',
+        ),
+      );
+      expect(call.switchRoom).not.toHaveBeenCalled();
+    });
+
+    it('[6.13.3] dos breakout:assigned consecutivos (reasignación) para el mismo usuario: el segundo traslado reemplaza limpiamente al primero, sin un switchRoom intermedio hacia la mini sala vieja', async () => {
+      const { issueBreakoutToken } = await import('@/lib/breakouts');
+      const deferred: Array<(value: Awaited<ReturnType<typeof issueBreakoutToken>>) => void> = [];
+      (issueBreakoutToken as jest.Mock<typeof issueBreakoutToken>).mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            deferred.push(resolve);
+          }),
+      );
+      const MeetingRoom = (await import('./MeetingRoom')).default;
+      const socket = createFakeSocket();
+      const call = state();
+      render(
+        <MeetingRoom
+          call={call}
+          roomCode="abc-defg-hij"
+          roomToken="test-room-token"
+          roomEmojis={[]}
+          isCurrentUserAdmin={false}
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+          nameFocusEnabled={false}
+          onSetNameFocus={jest.fn()}
+          participants={[]}
+          roomSocket={socket as unknown as Socket}
+        />,
+      );
+
+      act(() =>
+        socket.callbacks['breakout:assigned']({
+          breakoutId: 'breakout-1',
+          label: 'Mini sala 1',
+          leavePolicy: 'locked',
+        }),
+      );
+      act(() =>
+        socket.callbacks['breakout:assigned']({
+          breakoutId: 'breakout-2',
+          label: 'Mini sala 2',
+          leavePolicy: 'locked',
+        }),
+      );
+
+      expect(issueBreakoutToken).toHaveBeenCalledTimes(2);
+      expect(issueBreakoutToken).toHaveBeenNthCalledWith(
+        1,
+        'abc-defg-hij',
+        'test-room-token',
+        'breakout-1',
+      );
+      expect(issueBreakoutToken).toHaveBeenNthCalledWith(
+        2,
+        'abc-defg-hij',
+        'test-room-token',
+        'breakout-2',
+      );
+
+      // La primera resuelve tarde, después de que ya se pidió la segunda: no
+      // debe aplicar un switchRoom intermedio hacia la mini sala vieja.
+      await act(async () => {
+        deferred[0]({
+          url: 'wss://media.example.com',
+          token: 'breakout-token-1',
+          roomName: 'abc-defg-hij::breakout-1',
+          participantLimit: 6,
+        });
+      });
+      expect(call.switchRoom).not.toHaveBeenCalled();
+
+      await act(async () => {
+        deferred[1]({
+          url: 'wss://media.example.com',
+          token: 'breakout-token-2',
+          roomName: 'abc-defg-hij::breakout-2',
+          participantLimit: 6,
+        });
+      });
+      expect(call.switchRoom).toHaveBeenCalledTimes(1);
+      expect(call.switchRoom).toHaveBeenCalledWith({
+        url: 'wss://media.example.com',
+        token: 'breakout-token-2',
+        roomName: 'abc-defg-hij::breakout-2',
+        participantLimit: 6,
+      });
+    });
+  });
+  it('con el enfoque automático activado, una frase final de otro participante que nombra a alguien pinea su track', async () => {
+    const { useCreateLayoutContext, useDataChannel, useTracks } =
+      await import('@livekit/components-react');
     const { encodeCaption } = await import('./transcription/transcript');
     const { Track } = await import('livekit-client');
     const dispatch = jest.fn();
-    jest.mocked(useCreateLayoutContext).mockReturnValueOnce({ pin: { dispatch }, widget: {} } as never);
-    const juanTrack = { source: Track.Source.Camera, participant: { identity: 'id-juan', name: 'Juan' } };
+    jest
+      .mocked(useCreateLayoutContext)
+      .mockReturnValueOnce({ pin: { dispatch }, widget: {} } as never);
+    const juanTrack = {
+      source: Track.Source.Camera,
+      participant: { identity: 'id-juan', name: 'Juan' },
+    };
     jest.mocked(useTracks).mockReturnValueOnce([juanTrack] as never);
 
     const MeetingRoom = (await import('./MeetingRoom')).default;
@@ -601,14 +1473,18 @@ describe('MeetingRoom', () => {
     expect(dispatch).toHaveBeenCalledWith({ msg: 'set_pin', trackReference: juanTrack });
   });
   it('con el enfoque automático desactivado, nombrar a alguien no pinea nada', async () => {
-    const { useCreateLayoutContext, useDataChannel, useTracks } = await import(
-      '@livekit/components-react'
-    );
+    const { useCreateLayoutContext, useDataChannel, useTracks } =
+      await import('@livekit/components-react');
     const { encodeCaption } = await import('./transcription/transcript');
     const { Track } = await import('livekit-client');
     const dispatch = jest.fn();
-    jest.mocked(useCreateLayoutContext).mockReturnValueOnce({ pin: { dispatch }, widget: {} } as never);
-    const juanTrack = { source: Track.Source.Camera, participant: { identity: 'id-juan', name: 'Juan' } };
+    jest
+      .mocked(useCreateLayoutContext)
+      .mockReturnValueOnce({ pin: { dispatch }, widget: {} } as never);
+    const juanTrack = {
+      source: Track.Source.Camera,
+      participant: { identity: 'id-juan', name: 'Juan' },
+    };
     jest.mocked(useTracks).mockReturnValueOnce([juanTrack] as never);
 
     const MeetingRoom = (await import('./MeetingRoom')).default;

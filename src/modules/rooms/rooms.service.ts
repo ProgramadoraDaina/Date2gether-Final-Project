@@ -9,6 +9,7 @@ import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { generateRoomCode } from '../../common/generate-room-code';
 import { DRIZZLE, DrizzleDb } from '../../db/drizzle.module';
 import {
+  roomAdmissionRequests,
   roomMembers,
   roomNotes,
   roomScheduleSlots,
@@ -275,16 +276,83 @@ export class RoomsService {
     if (changed) this.roomEvents.emitMemberRoleChanged({ roomCode: code });
   }
 
-  // Solo permanentes: las temporales se recuperan en 24h (ver D5), un nombre
-  // persistente sobre algo que se descarta solo no tiene valor y complica el
-  // mental model. La restricción se valida acá, no solo en el cliente, para
-  // que no se pueda saltear llamando al endpoint directo.
+  // Vale para cualquier sala (temporal o permanente). La autorización por rol de
+  // administrador la resuelve RoomRolesGuard en el controller.
   async renameRoom(code: string, name: string): Promise<void> {
     const room = await this.getByCodeOrThrow(code);
-    if (!room.isPermanent) {
-      throw new ForbiddenException('Solo las salas permanentes se pueden renombrar');
+    // Si la sala se borró entre la resolución y el UPDATE, no se responde 204 en falso.
+    const updated = await this.db
+      .update(rooms)
+      .set({ name })
+      .where(eq(rooms.id, room.id))
+      .returning({ id: rooms.id });
+    if (updated.length === 0) {
+      throw new NotFoundException(`No existe una sala con el código "${code}"`);
     }
-    await this.db.update(rooms).set({ name }).where(eq(rooms.id, room.id));
+  }
+
+  // Promoción temporal -> permanente, solo hacia adelante (D5/D7 revisado): la sala deja de
+  // vencer y su código queda reservado para siempre. No hay camino inverso.
+  // - Liveness: lockJoinable reusa el mismo predicado que el resto del tráfico (no retirada Y
+  //   permanente o con ingreso en las últimas 24h). El retiro es perezoso (retireExpired solo
+  //   corre al crear salas), así que una sala vencida puede tener retiredAt nulo todavía: acá
+  //   se la trata como inexistente (404) igual que en el resto de endpoints.
+  // - El bloqueo de fila (FOR UPDATE) serializa contra el barrido de retiro y contra otra
+  //   promoción concurrente.
+  // - Una sala permanente exige sala de espera siempre, por eso se fuerza en la misma sentencia.
+  // - Las solicitudes de admisión pendientes dejan de vencer (expiresAt = NULL, igual que las
+  //   que nacen en una sala permanente). El ticket JWT ya emitido conserva su propio exp: la
+  //   verificación del ticket no mira la columna.
+  // - Idempotente: si ya es permanente devuelve la sala sin escribir ni emitir el evento.
+  async promoteToPermanent(code: string, userId: string): Promise<Room> {
+    const { room, changed } = await this.db.transaction(async (tx) => {
+      const locked = await this.resolver.lockJoinable(tx, code);
+      await this.assertRoomAdmin(
+        tx,
+        locked.id,
+        userId,
+        'Solo el administrador de la sala puede hacerla permanente',
+      );
+      if (locked.isPermanent) return { room: locked, changed: false };
+      const [promoted] = await tx
+        .update(rooms)
+        .set({ isPermanent: true, waitingRoomEnabled: true })
+        .where(eq(rooms.id, locked.id))
+        .returning();
+      await tx
+        .update(roomAdmissionRequests)
+        .set({ expiresAt: null })
+        .where(
+          and(
+            eq(roomAdmissionRequests.roomId, locked.id),
+            eq(roomAdmissionRequests.status, 'pending'),
+          ),
+        );
+      return { room: promoted, changed: true };
+    });
+    // Después del commit: los sockets conectados refrescan la info de la sala.
+    if (changed) this.roomEvents.emitRoomPromoted({ roomCode: room.code, roomId: room.id });
+    return room;
+  }
+
+  // Autorización compartida por las operaciones que solo puede hacer el administrador de la sala.
+  private async assertRoomAdmin(
+    executor: Pick<DrizzleDb, 'select'>,
+    roomId: string,
+    userId: string,
+    notAdminMessage: string,
+  ): Promise<void> {
+    const [member] = await executor
+      .select({ role: roomMembers.role })
+      .from(roomMembers)
+      .where(and(eq(roomMembers.roomId, roomId), eq(roomMembers.userId, userId)))
+      .limit(1);
+    if (!member) {
+      throw new ForbiddenException('No sos parte de esta sala');
+    }
+    if (member.role !== 'administrador') {
+      throw new ForbiddenException(notAdminMessage);
+    }
   }
 
   // Borra la sala y, por ON DELETE CASCADE, todo lo que cuelga de ella (miembros, mensajes,
@@ -309,17 +377,12 @@ export class RoomsService {
     if (!room) {
       throw new NotFoundException(`No existe una sala con el código "${code}"`);
     }
-    const [member] = await this.db
-      .select({ role: roomMembers.role })
-      .from(roomMembers)
-      .where(and(eq(roomMembers.roomId, room.id), eq(roomMembers.userId, userId)))
-      .limit(1);
-    if (!member) {
-      throw new ForbiddenException('No sos parte de esta sala');
-    }
-    if (member.role !== 'administrador') {
-      throw new ForbiddenException('Solo el administrador de la sala puede borrarla');
-    }
+    await this.assertRoomAdmin(
+      this.db,
+      room.id,
+      userId,
+      'Solo el administrador de la sala puede borrarla',
+    );
     await this.removeRoom(room);
   }
 

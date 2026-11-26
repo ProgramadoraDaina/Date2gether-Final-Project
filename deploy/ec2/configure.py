@@ -43,6 +43,10 @@ def main():
         'LIVEKIT_URL': 'wss://' + hosts['media'], 'LIVEKIT_API_URL': 'http://127.0.0.1:7880',
         'MAX_ROOM_PARTICIPANTS': str(args.participants),
     })
+    # Optional third-party key for AI call summaries. Taken from the operator's shell so it
+    # never lives in the repository; an existing value in runtime.env is kept when unset.
+    if os.environ.get('GEMINI_API_KEY'):
+        env['GEMINI_API_KEY'] = os.environ['GEMINI_API_KEY']
     env_path.write_text(''.join(key + '=' + value + '\n' for key, value in env.items()))
     # JSON is valid YAML and avoids templating credentials into shell code.
     livekit = {
@@ -66,6 +70,10 @@ def main():
     routes = [tls_route(hosts['turn'], private_ip + ':5349'), tls_route(hosts['media'], '127.0.0.1:7880'), tls_route(hosts['app'], '127.0.0.1:8080')]
     # TURN does not use HTTP ALPN negotiation.
     routes[0]['handle'][0].pop('connection_policies')
+    # The layer4 proxy hands the app connection to the HTTP server over loopback,
+    # which hides the client address. A PROXY protocol v2 header carries it, so
+    # X-Forwarded-For (and the backend's req.ip and rate limit) see the real client.
+    routes[2]['handle'][1]['proxy_protocol'] = 'v2'
     caddy = {
         'admin': {'listen': '127.0.0.1:2019'},
         'storage': {'module': 'file_system', 'root': '/data'},
@@ -75,6 +83,8 @@ def main():
             'layer4': {'servers': {'main': {'listen': [':443'], 'routes': routes}}},
             'http': {'servers': {'application': {
                 'listen': ['127.0.0.1:8080'],
+                # Accept the PROXY header only from the local layer4 proxy.
+                'listener_wrappers': [{'wrapper': 'proxy_protocol', 'allow': ['127.0.0.1/32']}],
                 'routes': [
                     {'match': [{'path': ['/api/*']}], 'handle': [
                         {'handler': 'rewrite', 'strip_path_prefix': '/api'},

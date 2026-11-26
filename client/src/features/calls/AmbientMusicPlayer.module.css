@@ -275,7 +275,7 @@
   flex-shrink: 0;
   min-width: 4ch;
   text-align: right;
-  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
@@ -473,7 +473,7 @@
   width: 2.5ch;
   display: flex;
   justify-content: center;
-  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
@@ -539,8 +539,31 @@
 }
 
 .error {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
   color: var(--color-error, #c0392b);
   font-size: 0.85rem;
+}
+
+.errorClose {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: none;
+  color: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.errorClose:hover {
+  border-color: currentColor;
 }
 
 .searchBlock {
@@ -639,4 +662,29 @@
 .modeActive,
 .modeActive:hover {
   color: var(--color-accent);
+}
+
+.leaveButton {
+  width: auto;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.leaveButton:hover {
+  background: transparent;
+  color: var(--color-text);
+}
+
+.roomVolumeRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 12px;
+  color: var(--color-text-muted);
 }

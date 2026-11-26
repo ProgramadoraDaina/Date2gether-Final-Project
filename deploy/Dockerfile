@@ -19,6 +19,11 @@ FROM dependencies AS client-build
 ARG NEXT_PUBLIC_API_URL=/api
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_TELEMETRY_DISABLED=1
+# Docker's default bridge network has no IPv6 route, but fonts.gstatic.com
+# resolves dual-stack; without this, Node picks the AAAA record first and
+# next/font's fetch fails with an unhelpful null-dereference instead of a
+# clear connection error.
+ENV NODE_OPTIONS=--dns-result-order=ipv4first
 RUN pnpm build:client
 RUN chown -R node:node /app/client/.next
 

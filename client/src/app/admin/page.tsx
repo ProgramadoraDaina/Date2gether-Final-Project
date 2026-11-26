@@ -8,6 +8,7 @@ import { useGlobalAccount } from '@/features/auth/useGlobalRole';
 import { AppShell } from '@/features/navigation/AppShell';
 import { useTranslation } from '@/features/translation/useTranslation';
 import styles from './page.module.css';
+import { SkeletonList } from '@/features/layout/SkeletonList';
 
 export default function AdminPage() {
   return (
@@ -47,7 +48,9 @@ function AdminGate() {
       <AppShell>
         <div className={styles.card}>
           <h1>{t('Sin acceso')}</h1>
-          <p role="alert">{t('Necesitás ser administrador de la plataforma para ver esta página.')}</p>
+          <p role="alert">
+            {t('Necesitás ser administrador de la plataforma para ver esta página.')}
+          </p>
         </div>
       </AppShell>
     );
@@ -97,7 +100,7 @@ function AdminUsers({ currentUserId }: { currentUserId: string | null }) {
         <h1>{t('Administración')}</h1>
         <p className={styles.subtitle}>{t('Usuarios de la plataforma y su rol global.')}</p>
 
-        {loading && <p>{t('Cargando usuarios…')}</p>}
+        {loading && <SkeletonList label={t('Cargando usuarios…')} rows={4} />}
         {error && (
           <p className={styles.error} role="alert">
             {error}

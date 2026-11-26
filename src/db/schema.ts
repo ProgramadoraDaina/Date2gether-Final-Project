@@ -84,8 +84,8 @@ export const rooms = pgTable(
     id: uuid('id').defaultRandom().primaryKey(),
     code: varchar('code', { length: 20 }).notNull(), // .unique() removed — see rooms_code_code_pool_unique
     name: varchar('name', { length: 100 }).notNull(),
-    isActive: boolean('is_active').notNull().default(true),
-    // Declared at creation and immutable. Permanent rooms never expire and never recycle their code.
+    // Declared at creation; a room admin can later promote false -> true (never demote). Permanent
+    // rooms never expire and never recycle their code.
     isPermanent: boolean('is_permanent').notNull().default(false),
     historyDeletedBefore: timestamp('history_deleted_before'),
     historyCleanupPending: boolean('history_cleanup_pending').notNull().default(false),
@@ -143,6 +143,21 @@ export const roomNotes = pgTable('room_notes', {
   revision: integer('revision').notNull().default(1),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
+
+export const roomLinks = pgTable(
+  'room_links',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    roomId: uuid('room_id')
+      .notNull()
+      .references(() => rooms.id, { onDelete: 'cascade' }),
+    url: varchar('url', { length: 2048 }).notNull(),
+    title: varchar('title', { length: 120 }),
+    addedByName: varchar('added_by_name', { length: 100 }).notNull(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [unique('room_links_room_url_unique').on(table.roomId, table.url)],
+);
 
 // El rol es por sala: la misma persona puede ser admin en una y participante en otra.
 export const roomRoleEnum = pgEnum('room_role', ['administrador', 'colaborador', 'participante']);
@@ -400,6 +415,7 @@ export type NewRoom = typeof rooms.$inferInsert;
 export type Message = typeof messages.$inferSelect;
 export type NewMessage = typeof messages.$inferInsert;
 export type RoomNote = typeof roomNotes.$inferSelect;
+export type RoomLink = typeof roomLinks.$inferSelect;
 export type RoomMember = typeof roomMembers.$inferSelect;
 export type NewRoomMember = typeof roomMembers.$inferInsert;
 export type RoomRole = (typeof roomRoleEnum.enumValues)[number];
@@ -458,7 +474,7 @@ export const callEvents = pgTable(
     id: varchar('id', { length: 40 }).primaryKey(),
     livekitRoomSid: varchar('livekit_room_sid', { length: 64 }).notNull(),
     // room.name; sin FK a propósito (ver D7).
-    roomCode: varchar('room_code', { length: 20 }).notNull(),
+    roomCode: varchar('room_code', { length: 40 }).notNull(),
     eventType: varchar('event_type', { length: 40 }).notNull(),
     // null en room_started / room_finished.
     livekitIdentity: varchar('livekit_identity', { length: 64 }),
@@ -487,7 +503,7 @@ export const callSessions = pgTable(
     id: uuid('id').defaultRandom().primaryKey(),
     livekitRoomSid: varchar('livekit_room_sid', { length: 64 }).notNull(),
     roomId: uuid('room_id').references(() => rooms.id, { onDelete: 'set null' }),
-    roomCode: varchar('room_code', { length: 20 }).notNull(),
+    roomCode: varchar('room_code', { length: 40 }).notNull(),
     startedAt: timestamp('started_at').notNull(),
     // De room_finished.
     endedAt: timestamp('ended_at'),
@@ -497,6 +513,10 @@ export const callSessions = pgTable(
     forcedCloseAt: timestamp('forced_close_at'),
     // Guard de idempotencia de la materialización ante reentregas de room_finished.
     materializedAt: timestamp('materialized_at'),
+    // livekitRoomSid de la sesión PADRE del grupo (breakout-rooms/design.md D5.3).
+    // null = sesión sin mini salas. Sin backfill: solo lo stampea el handler de
+    // room_finished de una mini sala al resolver call_breakout_rooms.
+    callGroupId: varchar('call_group_id', { length: 64 }),
     historyPurgedAt: timestamp('history_purged_at'),
   },
   (table) => [
@@ -568,6 +588,101 @@ export const callSessionParticipants = pgTable(
   ],
 );
 
+// ---------------------------------------------------------------------------
+// Mini salas dentro de una llamada (ver openspec/changes/breakout-rooms/
+// design.md D4/D5). Tablas operativas aditivas: ninguna tabla existente
+// cambia de semántica (call_sessions solo gana la columna call_group_id).
+// ---------------------------------------------------------------------------
+
+// Mini sala de LiveKit acotada a una sala padre. Vida corta (minutos), sin
+// identidad de producto propia — a diferencia de `rooms` (D4).
+export const callBreakoutRooms = pgTable(
+  'call_breakout_rooms',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    roomId: uuid('room_id')
+      .notNull()
+      .references(() => rooms.id, { onDelete: 'cascade' }),
+    // `${roomCode}::breakout-N` — reusado entre ciclos abrir/cerrar del mismo slot.
+    livekitRoomName: varchar('livekit_room_name', { length: 40 }).notNull(),
+    // sid de la sala PADRE (D5.2), capturado al crear vía listRooms([parentCode]).
+    parentLivekitRoomSid: varchar('parent_livekit_room_sid', { length: 64 }),
+    label: varchar('label', { length: 60 }).notNull(),
+    // 'locked' | 'free_return'. varchar y no pgEnum: mismo precedente que
+    // call_sessions.close_reason — es operativo, no una taxonomía de dominio.
+    leavePolicy: varchar('leave_policy', { length: 16 }).notNull().default('locked'),
+    // Decisión 3 (breakout-rooms-ux-fix/design.md "joinPolicy: esquema,
+    // migración y autorización"): 'admin_only' | 'open'. Gobierna el
+    // movimiento HACIA DENTRO por iniciativa propia -- separado de
+    // leavePolicy, que gobierna la VUELTA a la principal. Mismo precedente
+    // varchar que leavePolicy, documentado arriba.
+    joinPolicy: varchar('join_policy', { length: 16 }).notNull().default('admin_only'),
+    // null = sin timer de cierre automático.
+    autoCloseAt: timestamp('auto_close_at'),
+    // null = abierta. Objetivo del compare-and-set de cierre.
+    closedAt: timestamp('closed_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    // Only open rows: a closed mini sala must free its slot name for the next one.
+    uniqueIndex('call_breakout_rooms_open_livekit_room_name_unique')
+      .on(table.livekitRoomName)
+      .where(sql`${table.closedAt} is null`),
+    index('call_breakout_rooms_room_id_closed_at_idx').on(table.roomId, table.closedAt),
+  ],
+);
+
+// Correlación identity ↔ ocupante trasladado a una mini sala (D5.1, D7). Se
+// escribe antes de emitir el token de la mini sala, igual que
+// call_participant_identities en join().
+export const callBreakoutOccupants = pgTable(
+  'call_breakout_occupants',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    breakoutRoomId: uuid('breakout_room_id')
+      .notNull()
+      .references(() => callBreakoutRooms.id, { onDelete: 'cascade' }),
+    // participant.sub del pase de la sala principal (estable 24h): la clave
+    // con la que join() reconoce al solicitante que quiere volver.
+    sourceIdentity: varchar('source_identity', { length: 64 }).notNull(),
+    // Identity NUEVA emitida para la mini sala (D7) — nunca el mismo sub.
+    livekitIdentity: varchar('livekit_identity', { length: 64 }).notNull(),
+    // null para invitados.
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    displayName: varchar('display_name', { length: 60 }).notNull(),
+    assignedAt: timestamp('assigned_at').notNull().defaultNow(),
+    // null = asignación abierta.
+    returnedAt: timestamp('returned_at'),
+  },
+  (table) => [
+    unique('call_breakout_occupants_livekit_identity_unique').on(table.livekitIdentity),
+    index('call_breakout_occupants_breakout_room_id_open_idx')
+      .on(table.breakoutRoomId)
+      .where(sql`${table.returnedAt} is null`),
+    index('call_breakout_occupants_source_identity_open_idx')
+      .on(table.sourceIdentity)
+      .where(sql`${table.returnedAt} is null`),
+  ],
+);
+
+export const callBreakoutRoomsRelations = relations(callBreakoutRooms, ({ one, many }) => ({
+  room: one(rooms, { fields: [callBreakoutRooms.roomId], references: [rooms.id] }),
+  occupants: many(callBreakoutOccupants),
+}));
+
+export const callBreakoutOccupantsRelations = relations(callBreakoutOccupants, ({ one }) => ({
+  breakoutRoom: one(callBreakoutRooms, {
+    fields: [callBreakoutOccupants.breakoutRoomId],
+    references: [callBreakoutRooms.id],
+  }),
+  user: one(users, { fields: [callBreakoutOccupants.userId], references: [users.id] }),
+}));
+
+export type CallBreakoutRoom = typeof callBreakoutRooms.$inferSelect;
+export type NewCallBreakoutRoom = typeof callBreakoutRooms.$inferInsert;
+export type CallBreakoutOccupant = typeof callBreakoutOccupants.$inferSelect;
+export type NewCallBreakoutOccupant = typeof callBreakoutOccupants.$inferInsert;
+
 export const callParticipantIdentitiesRelations = relations(
   callParticipantIdentities,
   ({ one }) => ({
@@ -575,6 +690,19 @@ export const callParticipantIdentitiesRelations = relations(
     user: one(users, { fields: [callParticipantIdentities.userId], references: [users.id] }),
   }),
 );
+
+// AI-generated summary of a call's transcript. One row per session (the PK is the
+// session id): that is the usage limit, each call is sent to the model at most once.
+export const callSummaries = pgTable('call_summaries', {
+  sessionId: uuid('session_id')
+    .primaryKey()
+    .references(() => callSessions.id, { onDelete: 'cascade' }),
+  summary: text('summary').notNull(),
+  model: varchar('model', { length: 80 }).notNull(),
+  language: varchar('language', { length: 2 }).notNull(),
+  createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
 
 export const callSessionsRelations = relations(callSessions, ({ one, many }) => ({
   room: one(rooms, { fields: [callSessions.roomId], references: [rooms.id] }),

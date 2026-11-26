@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { getSessionTranscript } from '@/lib/api';
 import type { TranscriptEntry } from '@/lib/transcripts';
 import { useTranslation } from '../../translation/useTranslation';
+import { CallSummary } from './CallSummary';
 import { TranscriptExport } from './TranscriptExport';
 import { TranscriptLines } from './TranscriptLines';
 import styles from './TranscriptDialog.module.css';
@@ -47,6 +48,7 @@ export function SessionTranscript({
       {state.status === 'ready' && state.lines.length > 0 && (
         <>
           <TranscriptExport roomCode={roomCode} lines={state.lines} />
+          <CallSummary key={sessionId} sessionId={sessionId} hasTranscript />
           <TranscriptLines lines={state.lines} />
         </>
       )}

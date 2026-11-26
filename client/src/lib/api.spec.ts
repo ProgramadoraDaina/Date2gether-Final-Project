@@ -87,6 +87,43 @@ describe('renameRoom', () => {
   });
 });
 
+describe('promoteRoomToPermanent', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    localStorage.setItem(ACCESS_TOKEN_KEY, 'fake-access-token');
+    global.fetch = jest.fn() as unknown as typeof fetch;
+  });
+
+  it('envía PATCH autenticado a /rooms/:code/permanent', async () => {
+    const fetchMock = global.fetch as jest.Mock<typeof fetch>;
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
+
+    const { promoteRoomToPermanent } = await import('./api');
+    await promoteRoomToPermanent('abc-defg-hij');
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('http://localhost:3001/rooms/abc-defg-hij/permanent');
+    expect(init).toMatchObject({
+      method: 'PATCH',
+      headers: expect.objectContaining({ Authorization: 'Bearer fake-access-token' }),
+    });
+  });
+
+  it('lanza ApiError con status y mensaje del backend si lo rechaza', async () => {
+    const fetchMock = global.fetch as jest.Mock<typeof fetch>;
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ message: 'Solo el administrador' }), { status: 403 }),
+    );
+
+    const { promoteRoomToPermanent } = await import('./api');
+
+    await expect(promoteRoomToPermanent('abc-defg-hij')).rejects.toMatchObject({
+      message: 'Solo el administrador',
+      status: 403,
+    });
+  });
+});
+
 describe('notas compartidas', () => {
   beforeEach(() => {
     global.fetch = jest.fn() as unknown as typeof fetch;
@@ -209,6 +246,63 @@ describe('getCallSessionTimeline', () => {
     await expect(getCallSessionTimeline('session-1')).rejects.toMatchObject({
       message: 'Sesión no encontrada',
       status: 404,
+    });
+  });
+});
+
+describe('resumen de IA de una llamada', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    localStorage.setItem(ACCESS_TOKEN_KEY, 'fake-access-token');
+    global.fetch = jest.fn() as unknown as typeof fetch;
+  });
+
+  const summary = { text: 'Resumen', model: 'm', createdAt: '2026-11-19T10:00:00.000Z' };
+
+  it('getCallSummary devuelve el resumen guardado o null si todavía no hay', async () => {
+    const fetchMock = jest.mocked(global.fetch);
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ summary }), { status: 200 }));
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ summary: null }), { status: 200 }));
+
+    const { getCallSummary } = await import('./api');
+    await expect(getCallSummary('session-1')).resolves.toEqual(summary);
+    await expect(getCallSummary('session-1')).resolves.toBeNull();
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:3001/calls/sessions/session-1/summary');
+  });
+
+  it('generateCallSummary hace POST con el idioma y devuelve el resumen', async () => {
+    const fetchMock = jest.mocked(global.fetch);
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ summary }), { status: 200 }));
+
+    const { generateCallSummary } = await import('./api');
+    await expect(generateCallSummary('session-1', 'en')).resolves.toEqual(summary);
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init).toMatchObject({ method: 'POST', body: JSON.stringify({ language: 'en' }) });
+  });
+
+  it('generateCallSummary falla con ApiError que conserva el status', async () => {
+    jest
+      .mocked(global.fetch)
+      .mockResolvedValueOnce(new Response(JSON.stringify({ message: 'x' }), { status: 429 }));
+    const { generateCallSummary, ApiError } = await import('./api');
+    await expect(generateCallSummary('session-1', 'es')).rejects.toMatchObject({
+      status: 429,
+    });
+    expect(ApiError).toBeDefined();
+  });
+
+  it('generateCallSummary conserva el code del backend (cuota del proveedor vs. límite propio)', async () => {
+    jest
+      .mocked(global.fetch)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ statusCode: 429, message: 'x', code: 'AI_QUOTA' }), { status: 429 }),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ message: 'ThrottlerException' }), { status: 429 }));
+    const { generateCallSummary } = await import('./api');
+    await expect(generateCallSummary('session-1', 'es')).rejects.toMatchObject({ status: 429, code: 'AI_QUOTA' });
+    await expect(generateCallSummary('session-1', 'es')).rejects.toMatchObject({
+      status: 429,
+      code: undefined,
     });
   });
 });

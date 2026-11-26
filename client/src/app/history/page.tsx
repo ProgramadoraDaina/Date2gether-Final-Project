@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { Suspense, useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ApiError,
   clearCallHistoryArchive,
   getCallHistory,
   getOwnedRooms,
   getRoomCallArchive,
+  type CallHistoryEntry,
   type CallHistoryPage,
   type OwnedRoom,
 } from '@/lib/api';
@@ -16,6 +17,9 @@ import { RequireAuth } from '@/features/auth/RequireAuth';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { AppShell } from '@/features/navigation/AppShell';
 import styles from './page.module.css';
+import { EmptyState } from '@/features/layout/EmptyState';
+import { SkeletonList } from '@/features/layout/SkeletonList';
+import { collapseAttempts } from '@/features/history/collapseAttempts';
 
 // useSearchParams needs a Suspense boundary or the static build of /history fails.
 export default function HistoryPage() {
@@ -44,6 +48,44 @@ function HistoryContent() {
   );
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function dayKey(date: Date): string {
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+// Agrupa por día local manteniendo el orden en que llegan las llamadas.
+function groupByDay(entries: CallHistoryEntry[]): [string, CallHistoryEntry[]][] {
+  const groups = new Map<string, CallHistoryEntry[]>();
+  for (const entry of entries) {
+    const key = dayKey(new Date(entry.startedAt));
+    groups.set(key, [...(groups.get(key) ?? []), entry]);
+  }
+  return [...groups.entries()];
+}
+
+function Tabs({
+  recentActive,
+  onRecent,
+  onOlder,
+}: {
+  recentActive: boolean;
+  onRecent: () => void;
+  onOlder: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className={styles.tabs} role="group" aria-label={t('Período')}>
+      <button type="button" className={styles.tab} aria-pressed={recentActive} onClick={onRecent}>
+        {t('Últimos 90 días')}
+      </button>
+      <button type="button" className={styles.tab} aria-pressed={!recentActive} onClick={onOlder}>
+        {t('Más antiguas')}
+      </button>
+    </div>
+  );
+}
+
 function HistoryList({
   roomId,
   roomArchive,
@@ -52,6 +94,9 @@ function HistoryList({
   roomArchive: string | null;
 }) {
   const { t, language } = useTranslation();
+  const router = useRouter();
+  const owned = useOwnedRooms();
+  const locale = language === 'en' ? 'en-US' : 'es-AR';
   const [view, setView] = useState<'recent' | 'archive'>('recent');
   const [cursors, setCursors] = useState<(string | null)[]>([null]);
   const [response, setResponse] = useState<{
@@ -114,160 +159,230 @@ function HistoryList({
     }
   }
 
-  const entries = page?.entries ?? [];
-  const filteredRoomName = entries[0]?.roomName;
-  const dateFormat = new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'es-AR', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
+  const entries = collapseAttempts(page?.entries ?? []);
+  const timeFormat = new Intl.DateTimeFormat(locale, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: language === 'en' ? 'h12' : 'h23',
   });
+  const dayFormat = new Intl.DateTimeFormat(locale, {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  });
+  const today = dayKey(new Date());
+  const yesterday = dayKey(new Date(Date.now() - DAY_MS));
+
+  function dayLabel(sample: string): string {
+    const date = new Date(sample);
+    const key = dayKey(date);
+    if (key === today) return t('Hoy');
+    if (key === yesterday) return t('Ayer');
+    return dayFormat.format(date);
+  }
+
+  const roomScoped = !!roomId;
+  const showTabs = !roomArchive && (roomScoped || archive || !!page?.hasArchived);
+  // Opciones del filtro: tus salas más las de las llamadas cargadas; el código distingue salas con el mismo nombre.
+  const roomOptions = new Map<string, string>();
+  for (const room of owned.rooms) roomOptions.set(room.id, `${room.name} · ${room.code}`);
+  for (const entry of entries)
+    if (!roomOptions.has(entry.roomId))
+      roomOptions.set(entry.roomId, `${entry.roomName} · ${entry.roomCode}`);
 
   return (
-    <div className={styles.card}>
-      <h1>
-        {t(
-          roomArchive
-            ? 'Archivo de llamadas de la sala'
-            : archive
-              ? 'Historial conservado'
-              : 'Historial',
+    <div className={styles.page}>
+      <header className={styles.header}>
+        {roomArchive && (
+          <Link href="/history" className={styles.back}>
+            <span aria-hidden="true">← </span>
+            {t('Volver al historial')}
+          </Link>
         )}
-      </h1>
-      {roomArchive && (
-        <Link href={`/history?roomId=${encodeURIComponent(roomArchive)}`}>
-          {t('Ver historial de la sala')}
-        </Link>
-      )}
-      {!roomArchive && <OwnedRoomsSection roomFilter={roomId} />}
-      {!archive && <p className={styles.filter}>{t('Llamadas de los últimos 90 días')}</p>}
-      {loading && <p>{t('Cargando historial…')}</p>}
-      {error && (
-        <p className={styles.error} role="alert">
-          {t(error)}
-        </p>
-      )}
-
-      {roomId && !loading && !error && (
-        <p className={styles.filter}>
-          {filteredRoomName
-            ? `${t('Mostrando solo las llamadas de')} ${filteredRoomName}.`
-            : t(
-                archive
-                  ? 'Esta sala no tiene llamadas conservadas.'
-                  : 'Esta sala no tiene llamadas recientes.',
-              )}{' '}
-          <Link href="/history">{t('Ver todo el historial')}</Link>
-        </p>
-      )}
-
-      {!roomId && !loading && !error && entries.length === 0 && (
+        <h1>{roomArchive ? t('Archivo compartido de la sala') : t('Historial')}</h1>
         <p>
-          {t(archive ? 'No hay llamadas conservadas.' : 'No hay llamadas en los últimos 90 días.')}
-        </p>
-      )}
-
-      {!loading && entries.length > 0 && (
-        <ul className={styles.list}>
-          {entries.map((entry) => (
-            <li key={entry.id} className={styles.entry}>
-              <div className={styles.entryMain}>
-                <strong>{entry.roomName}</strong>
-                <span className={styles.code}>{entry.roomCode}</span>
-              </div>
-              <div className={styles.entryMeta}>
-                <span className={styles.date}>{dateFormat.format(new Date(entry.startedAt))}</span>
-                {/* Sin sessionId: el intento nunca llegó a materializarse
-                      en una sesión (falló, o nadie llegó a conectar del
-                      todo) — la fila sigue ahí para no perder de cuál
-                      llamada era, simplemente sin botón al gráfico. */}
-                {entry.sessionId && (
-                  <Link href={`/history/${entry.sessionId}`} className={styles.sessionLink}>
-                    {t('Ver gráfico de interacción')}
-                  </Link>
-                )}
-                {entry.sessionId && (
-                  <Link
-                    href={`/history/${entry.sessionId}#transcript`}
-                    className={styles.sessionLink}
-                  >
-                    {t('Ver transcripción')}
-                  </Link>
-                )}
-                {/* Las notas son por sala, no por sesión: a diferencia del
-                      gráfico de arriba, este botón sale siempre. La ruta
-                      identifica la sala por roomId (D4-C: el code puede
-                      haber sido reciclado a otra sala desde esta llamada);
-                      roomCode viaja como query param, solo para la clave
-                      de notas personales de este dispositivo. */}
-                {!roomArchive && (
-                  <Link
-                    href={`/history/notes/${entry.roomId}?code=${encodeURIComponent(entry.roomCode)}`}
-                    className={styles.sessionLink}
-                  >
-                    {t('Obtener notas')}
-                  </Link>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-      {!loading && (cursors.length > 1 || page?.nextCursor) && (
-        <div className={styles.actions}>
-          {cursors.length > 1 && (
-            <button
-              type="button"
-              className={styles.sessionLink}
-              disabled={deleting}
-              onClick={() => setCursors(cursors.slice(0, -1))}
-            >
-              {t('Página anterior')}
-            </button>
+          {t(
+            roomArchive
+              ? 'Llamadas de hace más de 90 días de todas las personas que usaron esta sala. Solo lo ven quienes la administran.'
+              : archive
+                ? 'Tus llamadas de hace más de 90 días.'
+                : 'Tus llamadas de los últimos 90 días.',
           )}
-          {page?.nextCursor && (
-            <button
-              type="button"
-              className={styles.sessionLink}
-              disabled={deleting}
-              onClick={() => setCursors([...cursors, page.nextCursor])}
-            >
-              {t('Página siguiente')}
-            </button>
+        </p>
+      </header>
+
+      {!roomArchive && <OwnedRoomsSection {...owned} />}
+
+      <section className={styles.callsSection} aria-labelledby="calls-title">
+        <div className={styles.sectionHead}>
+          <h2 id="calls-title" className={styles.sectionTitle}>
+            {t('Llamadas')}
+          </h2>
+          {!roomArchive && (roomScoped || roomOptions.size > 1) && (
+            <label className={styles.roomFilter}>
+              <span className={styles.srOnly}>{t('Filtrar por sala')}</span>
+              <select
+                value={roomId ?? ''}
+                onChange={(event) =>
+                  router.push(
+                    event.target.value
+                      ? `/history?roomId=${encodeURIComponent(event.target.value)}`
+                      : '/history',
+                  )
+                }
+              >
+                <option value="">{t('Todas las salas')}</option>
+                {[...roomOptions].map(([id, name]) => (
+                  <option key={id} value={id}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {showTabs && (
+            <Tabs
+              recentActive={!archive}
+              onRecent={() => showView('recent')}
+              onOlder={() => showView('archive')}
+            />
           )}
         </div>
-      )}
-      {!roomArchive && (archive || page?.hasArchived) && (
-        <div className={styles.archive}>
-          <p>{t('Las llamadas de hace más de 90 días se guardan en el archivo de tu cuenta.')}</p>
-          <div className={styles.actions}>
-            <button
-              type="button"
-              className={styles.sessionLink}
-              disabled={deleting}
-              onClick={() => showView(archive ? 'recent' : 'archive')}
-            >
-              {t(archive ? 'Volver a las llamadas recientes' : 'Conservar y ver el archivo')}
-            </button>
-            {!roomId && !showDelete && (page?.hasArchived || (archive && entries.length > 0)) && (
+
+        {loading && <SkeletonList label={t('Cargando historial…')} />}
+        {error && (
+          <p className={styles.error} role="alert">
+            {t(error)}
+          </p>
+        )}
+
+        {!loading && !error && entries.length === 0 && (
+          <EmptyState
+            title={t(
+              roomScoped
+                ? archive
+                  ? 'Esta sala no tiene llamadas conservadas.'
+                  : 'Esta sala no tiene llamadas recientes.'
+                : archive
+                  ? 'No hay llamadas conservadas.'
+                  : 'No hay llamadas en los últimos 90 días.',
+            )}
+            hint={
+              roomScoped ? undefined : t('Las llamadas en las que participes van a aparecer acá.')
+            }
+          />
+        )}
+
+        {!loading &&
+          groupByDay(entries).map(([key, dayEntries]) => (
+            <div key={key} className={styles.day}>
+              <h3 className={styles.dayTitle}>{dayLabel(dayEntries[0].startedAt)}</h3>
+              <ul className={styles.list}>
+                {dayEntries.map((entry) => (
+                  <li key={entry.id} className={styles.call}>
+                    <time className={styles.time} dateTime={entry.startedAt}>
+                      {timeFormat.format(new Date(entry.startedAt))}
+                    </time>
+                    <div className={styles.callMain}>
+                      <strong>{entry.roomName}</strong>
+                      <span className={styles.code}>{entry.roomCode}</span>
+                    </div>
+                    <div className={styles.callActions}>
+                      {/* Sin sessionId vos no llegaste a conectarte: no hay gráfico ni transcripción. */}
+                      {entry.sessionId ? (
+                        <>
+                          <Link
+                            href={`/history/${entry.sessionId}`}
+                            className={styles.action}
+                            aria-label={t('Ver gráfico de interacción')}
+                          >
+                            {t('Gráfico')}
+                          </Link>
+                          <Link
+                            href={`/history/${entry.sessionId}#transcript`}
+                            className={styles.action}
+                            aria-label={t('Ver transcripción')}
+                          >
+                            {t('Transcripción')}
+                          </Link>
+                        </>
+                      ) : (
+                        <span className={styles.noSession}>{t('No llegaste a conectarte')}</span>
+                      )}
+                      {/* Las notas son de la sala (por roomId); el code solo arma la clave local. */}
+                      {!roomArchive && (
+                        <Link
+                          href={`/history/notes/${entry.roomId}?code=${encodeURIComponent(entry.roomCode)}`}
+                          className={styles.action}
+                          aria-label={t('Obtener notas')}
+                        >
+                          {t('Notas')}
+                        </Link>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+
+        {!loading && (cursors.length > 1 || page?.nextCursor) && (
+          <div className={styles.pager}>
+            {cursors.length > 1 && (
               <button
                 type="button"
-                className={styles.sessionLink}
-                onClick={() => setShowDelete(true)}
+                className="secondary"
+                disabled={deleting}
+                onClick={() => setCursors(cursors.slice(0, -1))}
               >
-                {t('Borrar historial anterior')}
+                {t('Página anterior')}
+              </button>
+            )}
+            {page?.nextCursor && (
+              <button
+                type="button"
+                className="secondary"
+                disabled={deleting}
+                onClick={() => setCursors([...cursors, page.nextCursor])}
+              >
+                {t('Página siguiente')}
               </button>
             )}
           </div>
-          {showDelete && (
+        )}
+      </section>
+
+      {!roomScoped && archive && entries.length > 0 && (
+        <section className={styles.dangerZone} aria-labelledby="delete-archive-title">
+          <div>
+            <h2 id="delete-archive-title" className={styles.sectionTitle}>
+              {t('Borrar llamadas antiguas')}
+            </h2>
+            <p>
+              {t(
+                'Quita de tu cuenta las llamadas de hace más de 90 días. A los demás participantes no les cambia nada.',
+              )}
+            </p>
+          </div>
+          {!showDelete ? (
+            <button
+              type="button"
+              className={styles.dangerButton}
+              onClick={() => setShowDelete(true)}
+            >
+              {t('Borrar historial anterior')}
+            </button>
+          ) : (
             <div role="group" aria-labelledby="confirm-history-deletion">
               <p id="confirm-history-deletion">
                 {t(
                   '¿Borrar de tu cuenta todas las llamadas de hace más de 90 días? Esta acción es permanente.',
                 )}
               </p>
-              <div className={styles.actions}>
+              <div className={styles.pager}>
                 <button
                   type="button"
-                  className={styles.sessionLink}
+                  className="secondary"
                   disabled={deleting}
                   onClick={() => setShowDelete(false)}
                 >
@@ -275,8 +390,9 @@ function HistoryList({
                 </button>
                 <button
                   type="button"
-                  className={`${styles.sessionLink} ${styles.danger}`}
+                  className={styles.dangerButton}
                   disabled={deleting}
+                  aria-busy={deleting}
                   onClick={() => void deleteArchive()}
                 >
                   {t(deleting ? 'Borrando…' : 'Confirmar borrado')}
@@ -284,7 +400,7 @@ function HistoryList({
               </div>
             </div>
           )}
-        </div>
+        </section>
       )}
       {deleteError && (
         <p className={styles.error} role="alert">
@@ -296,7 +412,7 @@ function HistoryList({
   );
 }
 
-function OwnedRoomsSection({ roomFilter }: { roomFilter: string | null }) {
+function useOwnedRooms() {
   const { t } = useTranslation();
   const [rooms, setRooms] = useState<OwnedRoom[]>([]);
   const [loading, setLoading] = useState(true);
@@ -312,35 +428,38 @@ function OwnedRoomsSection({ roomFilter }: { roomFilter: string | null }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const visibleRooms = roomFilter ? rooms.filter((room) => room.id === roomFilter) : rooms;
+  return { rooms, loading, error };
+}
 
+function OwnedRoomsSection({ rooms, loading, error }: ReturnType<typeof useOwnedRooms>) {
+  const { t } = useTranslation();
   return (
     <section aria-label={t('Salas que administrás')} className={styles.roomsSection}>
-      <h2>{t('Salas que administrás')}</h2>
-      {loading && <p>{t('Cargando salas…')}</p>}
+      <h2 className={styles.sectionTitle}>{t('Salas que administrás')}</h2>
+      {loading && <SkeletonList label={t('Cargando salas…')} rows={2} />}
       {error && (
         <p role="alert" className={styles.error}>
           {error}
         </p>
       )}
-      {!loading && !error && visibleRooms.length === 0 && !roomFilter && (
-        <p>{t('Todavía no tenés salas como administrador.')}</p>
+      {!loading && !error && rooms.length === 0 && (
+        <EmptyState title={t('Todavía no tenés salas como administrador.')} />
       )}
-      {visibleRooms.length > 0 && (
-        <ul className={styles.list}>
-          {visibleRooms.map((room) => (
-            <li key={room.id} className={styles.entry}>
-              <div className={styles.entryMain}>
+      {rooms.length > 0 && (
+        <ul className={styles.rooms}>
+          {rooms.map((room) => (
+            <li key={room.id} className={styles.room}>
+              <div className={styles.roomText}>
                 <strong>{room.name}</strong>
                 <span className={styles.code}>{room.code}</span>
               </div>
-              <div className={styles.entryMeta}>
+              <div className={styles.roomActions}>
                 {room.isJoinable ? (
-                  <Link href={`/room/${room.code}`} className={styles.sessionLink}>
+                  <Link href={`/room/${room.code}`} className={styles.enter}>
                     {t('Entrar')}
                   </Link>
                 ) : (
-                  <span className={styles.date}>{t('Vencida')}</span>
+                  <span className={styles.expired}>{t('Vencida')}</span>
                 )}
               </div>
             </li>

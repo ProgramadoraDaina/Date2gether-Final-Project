@@ -9,6 +9,7 @@ jest.mock('@livekit/components-react', () => ({
   useMaybeTrackRefContext: () => trackRef,
   useMaybeLayoutContext: () => ({ pin: { dispatch: jest.fn() } }),
   usePinnedTracks: () => pinned,
+  useIsSpeaking: () => false,
 }));
 jest.mock('../../translation/useTranslation', () => {
   const t = (key: string) => key;

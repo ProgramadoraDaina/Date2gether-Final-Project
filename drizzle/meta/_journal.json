@@ -125,14 +125,14 @@
       "idx": 17,
       "version": "7",
       "when": 1794771658697,
-      "tag": "0012_room_notes",
+      "tag": "0017_room_notes",
       "breakpoints": true
     },
     {
       "idx": 18,
       "version": "7",
       "when": 1794771658698,
-      "tag": "0013_room_notes_reconcile",
+      "tag": "0018_room_notes_reconcile",
       "breakpoints": true
     },
     {
@@ -189,6 +189,55 @@
       "version": "7",
       "when": 1795554405647,
       "tag": "0026_user_role",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1795554406647,
+      "tag": "0027_widen_room_code",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1795554407647,
+      "tag": "0028_breakout_rooms",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1795554408647,
+      "tag": "0029_breakout_join_policy",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1795569146769,
+      "tag": "0030_room_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1795642521878,
+      "tag": "0031_call_summaries",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1795709656486,
+      "tag": "0032_drop_rooms_is_active",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1795722244202,
+      "tag": "0033_breakout_open_name_unique",
       "breakpoints": true
     }
   ]

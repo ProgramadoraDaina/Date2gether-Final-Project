@@ -153,4 +153,31 @@ describe('AdmissionControl', () => {
     expect(items[0]).toHaveTextContent('Esperando hace más de 24h');
     expect(items[1]).not.toHaveTextContent('Esperando hace más de 24h');
   });
+
+  it('sin abrir el panel, avisa que alguien quiere entrar y deja admitirlo desde el aviso', async () => {
+    const { getRoomAdmission, decideAdmission } = await import('@/lib/api');
+    jest.mocked(getRoomAdmission).mockResolvedValue(
+      baseAdmission({
+        requests: [
+          {
+            id: 'req-1',
+            name: 'Gabi',
+            registered: false,
+            createdAt: '2026-11-24T20:00:00Z',
+            stale: false,
+          },
+        ],
+      }),
+    );
+    jest.mocked(decideAdmission).mockResolvedValue(undefined as never);
+    const { AdmissionControl } = await import('./AdmissionControl');
+
+    render(<AdmissionControl code="abc-defg-hij" />);
+    const toasts = await screen.findByRole('region', { name: 'Solicitudes para entrar' });
+    expect(toasts).toHaveTextContent('Gabi quiere entrar a la sala');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Admitir Gabi' }));
+
+    expect(decideAdmission).toHaveBeenCalledWith('abc-defg-hij', 'req-1', 'admitted');
+  });
 });

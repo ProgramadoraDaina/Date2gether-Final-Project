@@ -14,6 +14,8 @@ import { connectTestDb } from '../../test-support/test-database';
 import { RoomEventsService } from '../rooms/room-events.service';
 import { RoomResolverService } from '../rooms/room-resolver.service';
 import { RoomsService } from '../rooms/rooms.service';
+import type { BreakoutRoomsService } from './breakout-rooms.service';
+import { CallGroupResolverService } from './call-group-resolver.service';
 import { CallsService } from './calls.service';
 import { CallsWebhookService } from './calls-webhook.service';
 import { CallSessionCloseService } from './call-session-close.service';
@@ -76,10 +78,11 @@ describe('Herencia de admin durante una llamada (real Postgres)', () => {
   it('solo un admin promovido sostiene el ingreso a la llamada sin el creador y conserva el snapshot histórico', async () => {
     const { room, heir, identity, roomsService, resolver, creatorId } = await fixture();
     vi.spyOn(RoomServiceClient.prototype, 'createRoom').mockResolvedValue({} as never);
-    vi
-      .spyOn(RoomServiceClient.prototype, 'listParticipants')
-      .mockResolvedValue([{ identity } as ParticipantInfo]);
-    const calls = new CallsService(roomsService, config, ctx.db, resolver);
+    vi.spyOn(RoomServiceClient.prototype, 'listParticipants').mockResolvedValue([
+      { identity } as ParticipantInfo,
+    ]);
+    const groupResolver = new CallGroupResolverService(ctx.db);
+    const calls = new CallsService(roomsService, config, ctx.db, resolver, groupResolver);
     const guest = {
       kind: 'room-participant' as const,
       sub: randomUUID(),
@@ -99,10 +102,11 @@ describe('Herencia de admin durante una llamada (real Postgres)', () => {
       .where(eq(callParticipantIdentities.livekitIdentity, identity));
     expect(recorded.roleAtIssue).toBe('participante');
 
-    const close = new CallSessionCloseService(config, ctx.db);
+    const breakoutRooms = { closeGroupBreakouts: vi.fn() } as unknown as BreakoutRoomsService;
+    const close = new CallSessionCloseService(config, ctx.db, groupResolver, breakoutRooms);
     const schedule = vi.spyOn(global, 'setTimeout');
     try {
-      await close.onAdminLeft('RM_role_inheritance', room.code);
+      await close.onAdminLeft('RM_role_inheritance', room.code, room.id);
       expect(schedule.mock.calls.some(([, delay]) => delay === 15_000)).toBe(false);
     } finally {
       close.cancelPending('RM_role_inheritance');
@@ -128,10 +132,11 @@ describe('Herencia de admin durante una llamada (real Postgres)', () => {
       config,
       ctx.db,
       close as unknown as CallSessionCloseService,
+      new RoomEventsService(),
     );
 
     await webhook.handle(Buffer.from('{}'), 'test-signature');
 
-    expect(close.onAdminLeft).toHaveBeenCalledWith('RM_role_inheritance', room.code);
+    expect(close.onAdminLeft).toHaveBeenCalledWith('RM_role_inheritance', room.code, room.id);
   });
 });

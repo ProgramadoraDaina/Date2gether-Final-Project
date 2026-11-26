@@ -46,9 +46,10 @@ export function useResizablePanel({
 
   // Listeners activos del drag en curso (si hay uno). Permite limpiarlos si
   // el componente se desmonta a mitad de un arrastre, no solo en mouseup.
-  const activeDragRef = useRef<{ onMouseMove: (e: MouseEvent) => void; onMouseUp: () => void } | null>(
-    null,
-  );
+  const activeDragRef = useRef<{
+    onMouseMove: (e: MouseEvent) => void;
+    onMouseUp: () => void;
+  } | null>(null);
   useEffect(() => {
     return () => {
       if (!activeDragRef.current) return;

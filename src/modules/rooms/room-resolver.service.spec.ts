@@ -10,7 +10,6 @@ function makeRoom(overrides: Partial<Room> = {}): Room {
     id: 'room-1',
     code: 'abc-defg-hij',
     name: 'Reunión de Daina',
-    isActive: true,
     isPermanent: false,
     historyDeletedBefore: null,
     historyCleanupPending: false,
@@ -55,12 +54,6 @@ describe('RoomResolverService', () => {
       );
     });
 
-    it('lanza ForbiddenException (distinto del 404) cuando la sala existe pero isActive=false', async () => {
-      const room = makeRoom({ isActive: false });
-      db.select.mockReturnValueOnce(chain([room]));
-
-      await expect(resolver.resolveJoinable(room.code)).rejects.toThrow(ForbiddenException);
-    });
   });
 
   describe('lockJoinable', () => {
@@ -77,17 +70,6 @@ describe('RoomResolverService', () => {
       expect(selectChain.for).toHaveBeenCalledWith('update');
     });
 
-    it('con requireActive:false no rechaza una sala cerrada', async () => {
-      const room = makeRoom({ isActive: false });
-      const selectChain = chain([room]);
-      const tx = { select: () => selectChain } as unknown as Parameters<
-        typeof resolver.lockJoinable
-      >[0];
-
-      await expect(resolver.lockJoinable(tx, room.code, { requireActive: false })).resolves.toBe(
-        room,
-      );
-    });
   });
 
   describe('assertBound', () => {
@@ -126,6 +108,31 @@ describe('RoomResolverService', () => {
       >[1];
 
       await expect(resolver.findPoolOccupant(room.code, tx)).resolves.toBe(room);
+      expect(db.select).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('assertResolvableCode (breakout-rooms/design.md D11: rechazo de nombres de mini sala)', () => {
+    it('[4.7.1] resolveJoinable con un código que contiene "::" -> 404 NotFoundException, sin consultar rooms', async () => {
+      await expect(resolver.resolveJoinable('abc-defg-hij::breakout-1')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(db.select).not.toHaveBeenCalled();
+    });
+
+    it('[4.7.1] lockJoinable con un código que contiene "::" -> 404 NotFoundException, sin consultar rooms', async () => {
+      const tx = { select: db.select } as unknown as Parameters<typeof resolver.lockJoinable>[0];
+
+      await expect(resolver.lockJoinable(tx, 'abc-defg-hij::breakout-1')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(db.select).not.toHaveBeenCalled();
+    });
+
+    it('[4.7.1] findPoolOccupant con un código que contiene "::" -> 404 NotFoundException, sin consultar rooms', async () => {
+      await expect(resolver.findPoolOccupant('abc-defg-hij::breakout-1')).rejects.toThrow(
+        NotFoundException,
+      );
       expect(db.select).not.toHaveBeenCalled();
     });
   });

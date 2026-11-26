@@ -6,12 +6,14 @@ import { AppController } from './app.controller';
 import { HttpOnlyThrottlerGuard } from './common/http-only-throttler.guard';
 import { DrizzleModule } from './db/drizzle.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { AiSummaryModule } from './modules/ai-summary/ai-summary.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CallsModule } from './modules/calls/calls.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { GifsModule } from './modules/gifs/gifs.module';
 import { MusicSearchModule } from './modules/music-search/music-search.module';
 import { RoomEmojisModule } from './modules/room-emojis/room-emojis.module';
+import { RoomLinksModule } from './modules/room-links/room-links.module';
 import { RoomsModule } from './modules/rooms/rooms.module';
 import { TranscriptsModule } from './modules/transcripts/transcripts.module';
 
@@ -29,7 +31,9 @@ import { TranscriptsModule } from './modules/transcripts/transcripts.module';
     GifsModule,
     MusicSearchModule,
     RoomEmojisModule,
+    RoomLinksModule,
     TranscriptsModule,
+    AiSummaryModule,
   ],
   controllers: [AppController],
   providers: [{ provide: APP_GUARD, useClass: HttpOnlyThrottlerGuard }],

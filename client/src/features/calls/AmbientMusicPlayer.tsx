@@ -14,11 +14,14 @@ import { searchMusic, youTubeSearchUrl, type MusicSearchResult } from '@/lib/mus
 import { useTranslation } from '../translation/useTranslation';
 import {
   currentTrack,
+  effectiveVolume,
   fetchYouTubeTitle,
   formatTime,
   PLAYBACK_MODE_LABELS,
   PLAYBACK_MODE_ORDER,
   reconcilePlayerState,
+  resyncTarget,
+  roomPosition,
   type MusicState,
   type PlaybackMode,
 } from './ambientMusic';
@@ -357,12 +360,20 @@ export function AmbientMusicPlayer({
   const [scrubPosition, setScrubPosition] = useState<number | null>(null);
   const [volume, setVolume] = useState(100);
   const [muted, setMuted] = useState(false);
+  useEffect(() => {
+    mutedRef.current = muted;
+  }, [muted]);
   const playerRef = useRef<YT.Player | null>(null);
   const loadedVideoId = useRef<string | null>(null);
   const pendingState = useRef<MusicState | null>(null);
   const modeRestored = useRef(false);
   // YT.Player exists right after construction but its methods only after onReady.
   const playerIsReady = useRef(false);
+  // Precarga: con la sala en pausa, el video suena un instante en silencio para que ▶ no arranque en frío.
+  const priming = useRef(false);
+  // Último estado de YouTube (1 = sonando): la barra solo lo lee cuando ya suena la canción correcta.
+  const playerState = useRef(-1);
+  const mutedRef = useRef(false);
   const socketRef = useRef(socket);
   // A ref so a language switch does not recreate the player and re-run the admin auto-join.
   const tRef = useRef(t);
@@ -378,11 +389,7 @@ export function AmbientMusicPlayer({
       if (isAdmin && persistModes && roomCode) syncStoredMode(state, roomCode);
       pendingState.current = state;
       setMusicState(state);
-      if (playerRef.current && playerIsReady.current) {
-        reconcilePlayerState(playerRef.current, loadedVideoId.current, state);
-        loadedVideoId.current = currentTrack(state)?.videoId ?? null;
-        setDuration(playerRef.current.getDuration() || 0);
-      }
+      if (playerRef.current && playerIsReady.current) applyState(playerRef.current, state);
     }
     function onError({ message }: { message: string }) {
       setError(message);
@@ -419,26 +426,45 @@ export function AmbientMusicPlayer({
     };
   }, []);
 
-  // Posición mostrada en la barra de avance: misma fórmula que usa
-  // reconcilePlayerState para el player, no lee player.getCurrentTime(). Así
-  // la barra muestra lo mismo que ve el resto de la sala, no lo que arrastra
-  // el buffer local del admin.
+  // La barra sigue al audio que suena de verdad: mientras YouTube carga no avanza. Como el player
+  // se realinea con la sala al arrancar, lo que muestra coincide con lo que oye el resto.
   useEffect(() => {
     if (!musicState) {
       setPosition(0);
       return;
     }
     function tick() {
-      const elapsedSinceUpdate = musicState!.isPlaying
-        ? Math.max(0, (Date.now() - musicState!.updatedAt) / 1000)
-        : 0;
-      setPosition(musicState!.positionSeconds + elapsedSinceUpdate);
+      const player = playerRef.current;
+      const sounding =
+        playerState.current === 1 && loadedVideoId.current === currentTrack(musicState!)?.videoId;
+      if (joined && player && playerIsReady.current && musicState!.isPlaying && sounding) {
+        setPosition(player.getCurrentTime());
+        return;
+      }
+      setPosition(roomPosition(musicState!));
     }
     tick();
     if (!musicState.isPlaying) return;
     const interval = setInterval(tick, 500);
     return () => clearInterval(interval);
-  }, [musicState]);
+  }, [musicState, joined]);
+
+  function applyState(player: YT.Player, state: MusicState) {
+    const newTrack = currentTrack(state)?.videoId !== loadedVideoId.current;
+    if (newTrack) setError(null);
+    reconcilePlayerState(player, loadedVideoId.current, state);
+    loadedVideoId.current = currentTrack(state)?.videoId ?? null;
+    setDuration(player.getDuration() || 0);
+    if (state.isPlaying) {
+      priming.current = false;
+    } else if (newTrack && loadedVideoId.current) {
+      priming.current = true;
+      player.mute();
+      player.playVideo();
+    }
+  }
+  const applyStateRef = useRef(applyState);
+  applyStateRef.current = applyState;
 
   // new YT.Player(...) devuelve el objeto al toque, pero sus métodos
   // (unMute, playVideo, etc.) recién quedan disponibles cuando el iframe
@@ -461,11 +487,7 @@ export function AmbientMusicPlayer({
               playerIsReady.current = true;
               const player = playerRef.current;
               const state = pendingState.current;
-              if (player && state) {
-                reconcilePlayerState(player, loadedVideoId.current, state);
-                loadedVideoId.current = currentTrack(state)?.videoId ?? null;
-                setDuration(player.getDuration() || 0);
-              }
+              if (player && state) applyStateRef.current(player, state);
               resolve();
             },
             // getDuration() en onReady suele devolver 0: el iframe recién
@@ -474,14 +496,48 @@ export function AmbientMusicPlayer({
             // a leer ahí.
             onStateChange: (event: { data: number }) => {
               const player = playerRef.current;
+              playerState.current = event.data;
               if (player) setDuration(player.getDuration() || 0);
               const state = pendingState.current;
+              if (event.data === 1 && player && priming.current) {
+                priming.current = false;
+                if (!state?.isPlaying) {
+                  player.pauseVideo();
+                  if (state) player.seekTo(roomPosition(state), true);
+                }
+                if (!mutedRef.current) player.unMute();
+                if (!state?.isPlaying) return;
+              }
+              // 1 = reproduciendo: recién ahora suena, así que se recupera lo que tardó en cargar.
+              if (
+                event.data === 1 &&
+                player &&
+                state &&
+                currentTrack(state)?.videoId === loadedVideoId.current
+              ) {
+                const target = resyncTarget(state, player.getCurrentTime());
+                if (target !== null) player.seekTo(target, true);
+              }
               if (event.data === 0 && state?.isPlaying) {
                 socketRef.current.emit('musicTrackEnded', { updatedAt: state.updatedAt });
               }
             },
-            onError: () =>
-              setError(tRef.current('No se pudo reproducir ese video. Probá con otro link.')),
+            onError: (event: { data: number }) => {
+              const t = tRef.current;
+              const failed = pendingState.current?.tracks.find(
+                (track) => track.videoId === loadedVideoId.current,
+              );
+              if (!failed) {
+                setError(t('No se pudo reproducir ese video. Probá con otro link.'));
+                return;
+              }
+              // 101/150: the owner disabled embedding; any other link to the same video fails too.
+              const reason =
+                event.data === 101 || event.data === 150
+                  ? t('Su dueño no permite reproducirlo fuera de YouTube.')
+                  : t('Probá con otro link.');
+              setError(`${t('No se pudo reproducir')} "${failed.title}". ${reason}`);
+            },
           },
         });
       });
@@ -508,6 +564,33 @@ export function AmbientMusicPlayer({
     if (silenced && playerIsReady.current) playerRef.current?.mute();
   }, [silenced]);
 
+  const roomVolume = musicState?.roomVolume ?? 100;
+  useEffect(() => {
+    if (joined && playerIsReady.current)
+      playerRef.current?.setVolume(effectiveVolume(volume, roomVolume));
+  }, [joined, volume, roomVolume]);
+
+  // Salir deja el reproductor sincronizado pero en silencio, así volver a unirse es instantáneo.
+  function handleLeaveMusic() {
+    playerRef.current?.mute();
+    setMuted(false);
+    setJoined(false);
+  }
+
+  const volumeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [roomVolumeDraft, setRoomVolumeDraft] = useState<number | null>(null);
+  function handleRoomVolumeChange(e: ChangeEvent<HTMLInputElement>) {
+    const value = Number(e.target.value);
+    setRoomVolumeDraft(value);
+    clearTimeout(volumeTimer.current);
+    // Un mensaje por gesto, no uno por cada paso del deslizador.
+    volumeTimer.current = setTimeout(() => {
+      socket.emit('musicSetVolume', { volume: value });
+      setRoomVolumeDraft(null);
+    }, 250);
+  }
+  useEffect(() => () => clearTimeout(volumeTimer.current), []);
+
   function handleToggleMute() {
     const next = !muted;
     setMuted(next);
@@ -522,7 +605,7 @@ export function AmbientMusicPlayer({
   function handleVolumeChange(e: ChangeEvent<HTMLInputElement>) {
     const value = Number(e.target.value);
     setVolume(value);
-    playerRef.current?.setVolume(value);
+    playerRef.current?.setVolume(effectiveVolume(value, roomVolume));
     if (muted) {
       setMuted(false);
       playerRef.current?.unMute();
@@ -580,9 +663,19 @@ export function AmbientMusicPlayer({
     return player?.getCurrentTime() ?? musicState?.positionSeconds ?? 0;
   }
 
+  // Quien toca ▶ arranca su reproductor ya, sin esperar la vuelta del servidor.
   function handleTogglePlay() {
-    if (musicState?.isPlaying) socket.emit('musicPause', { positionSeconds: currentPosition() });
-    else socket.emit('musicPlay', { positionSeconds: currentPosition() });
+    const player = playerIsReady.current ? playerRef.current : null;
+    const position = currentPosition();
+    if (musicState?.isPlaying) {
+      player?.pauseVideo();
+      socket.emit('musicPause', { positionSeconds: position });
+    } else {
+      priming.current = false;
+      if (player && !mutedRef.current) player.unMute();
+      player?.playVideo();
+      socket.emit('musicPlay', { positionSeconds: position });
+    }
   }
 
   function handlePrevious() {
@@ -611,7 +704,24 @@ export function AmbientMusicPlayer({
     socket.emit('musicRemoveTrack', { index });
   }
 
+  // Quien elige la canción la empieza a cargar ya; la vuelta del servidor la encuentra cargada.
   function handleJumpToTrack(index: number) {
+    const player = playerIsReady.current ? playerRef.current : null;
+    const track = musicState?.tracks[index];
+    if (player && track) {
+      playerState.current = -1;
+      loadedVideoId.current = track.videoId;
+      if (musicState?.isPlaying) {
+        priming.current = false;
+        player.loadVideoById(track.videoId, 0);
+        if (!mutedRef.current) player.unMute();
+      } else {
+        // En pausa elegir otra canción no la hace sonar: solo queda precargada.
+        priming.current = true;
+        player.mute();
+        player.loadVideoById(track.videoId, 0);
+      }
+    }
     socket.emit('musicJumpToTrack', { index });
   }
 
@@ -672,7 +782,29 @@ export function AmbientMusicPlayer({
             <span className={styles.volumeValue} aria-hidden="true">
               {muted ? 0 : volume}%
             </span>
+            {!isAdmin && (
+              <button type="button" className={styles.leaveButton} onClick={handleLeaveMusic}>
+                {t('Salir')}
+              </button>
+            )}
           </div>
+        )}
+        {isAdmin && musicState && musicState.tracks.length > 0 && (
+          <label className={styles.roomVolumeRow}>
+            <span>{t('Volumen para todos')}</span>
+            <input
+              type="range"
+              className={styles.volumeBar}
+              style={{ '--volume-fill': `${roomVolumeDraft ?? roomVolume}%` } as CSSProperties}
+              min={0}
+              max={100}
+              value={roomVolumeDraft ?? roomVolume}
+              onChange={handleRoomVolumeChange}
+            />
+            <span className={styles.volumeValue} aria-hidden="true">
+              {roomVolumeDraft ?? roomVolume}%
+            </span>
+          </label>
         )}
         {isAdmin && current && musicState && (
           <div className={styles.nowPlayingBlock}>
@@ -936,9 +1068,18 @@ export function AmbientMusicPlayer({
         )}
       </div>
       {error && (
-        <p role="alert" className={styles.error}>
-          {error}
-        </p>
+        <div role="alert" className={styles.error}>
+          <span>{error}</span>
+          <button
+            type="button"
+            className={styles.errorClose}
+            aria-label={t('Cerrar aviso')}
+            title={t('Cerrar aviso')}
+            onClick={() => setError(null)}
+          >
+            ×
+          </button>
+        </div>
       )}
       <dialog
         ref={removeDialogRef}

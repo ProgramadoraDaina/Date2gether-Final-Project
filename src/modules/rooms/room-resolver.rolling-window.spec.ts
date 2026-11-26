@@ -45,7 +45,6 @@ describe('RoomResolverService — rolling-window regression (real Postgres)', ()
         code: `rw-${randomUUID().slice(0, 8)}`,
         name: 'Sala de prueba de ventana rodante',
         isPermanent: false,
-        isActive: true,
         lastEnteredAt,
         retiredAt: null,
       })

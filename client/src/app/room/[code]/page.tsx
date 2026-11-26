@@ -22,6 +22,7 @@ import { isSelfMentioned, ROLE_MENTION_KEYWORDS } from '@/features/chat/mentions
 import { playMentionSound } from '@/features/chat/mentionSound';
 import { MessageText } from '@/features/chat/MessageText';
 import { useChatHistory } from '@/features/chat/useChatHistory';
+import { startsGroup } from '@/features/chat/grouping';
 import { RoomEmojiShortcuts } from '@/features/chat/RoomEmojiShortcuts';
 import { AppShell } from '@/features/navigation/AppShell';
 import { RoomEmojisDialog } from '@/features/room-emojis/RoomEmojisDialog';
@@ -35,7 +36,10 @@ import { WaitingRoom } from '@/features/rooms/WaitingRoom';
 import { useAdmissionRequest } from '@/features/rooms/useAdmissionRequest';
 import { useRoomMembers } from '@/features/rooms/useRoomMembers';
 import { useRoomNotes } from '@/features/rooms/useRoomNotes';
+import { RoomLinksPanel } from '@/features/rooms/RoomLinksPanel';
+import { linkFromMessage } from '@/features/rooms/roomLinks';
 import {
+  addRoomLink,
   ApiError,
   getRoomInfo,
   requestRoomAccess,
@@ -55,10 +59,12 @@ import { RoomEventButton } from '@/features/calls/roomEvents/RoomEventButton';
 import { RouletteWheel } from '@/features/calls/roomEvents/RouletteWheel';
 import { useRoomEvents } from '@/features/calls/roomEvents/useRoomEvents';
 import { useRoomMediaLock } from '@/features/calls/useRoomMediaLock';
+import { resolveBreakoutEndCopy } from '@/lib/breakouts';
 import { useNameFocusSetting } from '@/features/calls/useNameFocusSetting';
 import { createRoomSocket } from '@/lib/socket';
 import { useTranslation } from '@/features/translation/useTranslation';
 import { NAME_COLOR_HEX, isNameColorId } from '@/lib/nameColors';
+import { BreakoutHostDialog } from '@/features/calls/BreakoutView';
 import styles from './page.module.css';
 
 const MeetingRoom = dynamic(() => import('@/features/calls/MeetingRoom'), { ssr: false });
@@ -173,7 +179,8 @@ export default function RoomPage() {
     const timer = setTimeout(() => setNotice(null), 'text' in notice ? 6000 : 2500);
     return () => clearTimeout(timer);
   }, [notice]);
-  const [chatTab, setChatTab] = useState<'chat' | 'presentes' | 'notas'>('chat');
+  const [chatTab, setChatTab] = useState<'chat' | 'presentes' | 'notas' | 'links'>('chat');
+  const [chatFiltersOpen, setChatFiltersOpen] = useState(false);
   const [notesTab, setNotesTab] = useState<'personal' | 'sala'>('personal');
   const [personalNotes, setPersonalNotes] = useState('');
   const [notesStatus, setNotesStatus] = useState('');
@@ -193,6 +200,8 @@ export default function RoomPage() {
     conflict: 'Otra persona actualizó las notas. Revisá ambas versiones antes de guardar.',
   }[sharedNotes.status];
   const [chatOpen, setChatOpen] = useState(true);
+  const [breakoutsOpen, setBreakoutsOpen] = useState(false);
+  const [unread, setUnread] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   // On phones each panel covers the whole screen, so opening one closes the other.
   const isPhone = () => window.matchMedia?.('(max-width: 640px)').matches ?? false;
@@ -243,10 +252,13 @@ export default function RoomPage() {
   });
   const socketRef = useRef<Socket | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  // El socket se registra una vez; lee por ref si el chat está a la vista.
+  const chatVisibleRef = useRef(true);
   const draftInputRef = useRef<HTMLInputElement>(null);
   const callSession = useCallSession();
   const { joinCall } = callSession;
   const [initialDevices, setInitialDevices] = useState(DEFAULT_CALL_DEVICES);
+  const callDevicesRef = useRef(DEFAULT_CALL_DEVICES);
   const [emojisOpen, setEmojisOpen] = useState(false);
   const [transcriptCallSid, setTranscriptCallSid] = useState<string | null>(null);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
@@ -264,7 +276,7 @@ export default function RoomPage() {
     error: membersError,
     changeRole,
     refetchMembers,
-  } = useRoomMembers(access ? code : undefined);
+  } = useRoomMembers(access ? code : undefined, access?.participant.userId);
   // Sin userId = sin cuenta en la sala (room_members no tiene invitados):
   // es la señal para la @mención colectiva 'invitados' en mentions.ts.
   const isGuest = !access?.participant.userId;
@@ -299,6 +311,27 @@ export default function RoomPage() {
     () => users.map(({ participantId, userName }) => ({ participantId, userName })),
     [users],
   );
+  // Mini salas (breakout-rooms, Fase 6.12): el identity de LiveKit de cada
+  // presente en la sala principal es el mismo participantId del socket
+  // (ver RoomPresence arriba), que el backend asigna como `participant.sub`
+  // del pase de sala (ver chat.gateway.ts: `participantId: participant.sub`)
+  // -- no se deriva ni inventa uno nuevo acá.
+  const breakoutParticipants = useMemo(
+    () =>
+      users.map(({ participantId, userName }) => ({
+        livekitIdentity: participantId,
+        displayName: userName,
+      })),
+    [users],
+  );
+  const participantColors = useMemo(() => {
+    const colors: Record<string, string> = {};
+    for (const { participantId, nameColor } of users) {
+      const hex = nameColorHex(nameColor);
+      if (hex) colors[participantId] = hex;
+    }
+    return colors;
+  }, [users]);
   useEffect(() => {
     setName(localStorage.getItem(NAME_KEY) ?? '');
   }, []);
@@ -323,6 +356,7 @@ export default function RoomPage() {
     try {
       const roomAccess = await requestRoomAccess(code, name.trim());
       setInitialDevices(devices);
+      callDevicesRef.current = devices;
       if ('token' in roomAccess) acceptAccess(roomAccess);
       else admission.start(roomAccess);
     } catch (error) {
@@ -405,6 +439,8 @@ export default function RoomPage() {
 
     socket.on('newMessage', (message: ChatMessage) => {
       receiveMessage(message);
+      if (message.authorName !== access.participant.name && !chatVisibleRef.current)
+        setUnread((count) => count + 1);
       // Nunca te notifica tu propio mensaje, aunque te auto-menciones.
       if (
         message.kind === 'text' &&
@@ -430,6 +466,9 @@ export default function RoomPage() {
     // La sala se borró (su administrador): el backend corta chat y llamada, y desde
     // acá se reemplaza toda la vista por un aviso en vez de dejar una sala muerta.
     socket.on('roomDeleted', () => setRoomDeleted(true));
+    // El administrador hizo permanente la sala: la promoción no tiene vuelta atrás, así que
+    // se habilita la UI solo para permanentes sin recargar la página.
+    socket.on('roomPromoted', () => setIsPermanentRoom(true));
 
     socket.connect();
 
@@ -453,6 +492,12 @@ export default function RoomPage() {
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [chatPage.entries]);
+
+  const chatVisible = chatOpen && chatTab === 'chat';
+  useEffect(() => {
+    chatVisibleRef.current = chatVisible;
+    if (chatVisible) setUnread(0);
+  }, [chatVisible]);
 
   function handleSend(e: FormEvent) {
     e.preventDefault();
@@ -479,6 +524,15 @@ export default function RoomPage() {
 
   function handleRoomEmojiSelect(emoji: RoomEmoji) {
     handleEmojiSelect(`:${emoji.name}: `);
+  }
+
+  async function handlePinLink(link: { url: string; title?: string }) {
+    try {
+      await addRoomLink(code, link);
+      setNotice({ text: t('Link fijado en la biblioteca') });
+    } catch (err) {
+      setNotice({ text: t(err instanceof ApiError ? err.message : 'No se pudo guardar el link') });
+    }
   }
 
   async function handleCopyLink() {
@@ -580,9 +634,20 @@ export default function RoomPage() {
   // room_finished, de forma asíncrona). "Volver a la sala" solo descarta
   // este panel; la sala y el chat siguen disponibles sin cambios (alcance
   // exclusivo a la videollamada, spec host-gate/alcance-exclusivo).
+  // Decisión 2 (design.md "Señal de motivo de remoción"): el panel
+  // terminal ya no asume host-left para cualquier cierre -- distingue
+  // breakout-closed (endedForBreakout, vuelta forzada por el admin) y
+  // breakout-locked (removedByPolicy, expulsión por política) con la
+  // copia de resolveBreakoutEndCopy, y cae al texto de host-left para
+  // cualquier otro caso (null incluido, aunque el panel solo se muestra
+  // con status 'ended').
+  const callEndedMessage =
+    callSession.endReason === 'breakout-closed' || callSession.endReason === 'breakout-locked'
+      ? resolveBreakoutEndCopy(callSession.endReason)
+      : t('La llamada terminó porque el anfitrión se desconectó.');
   const callEndedPanel = (
     <div className={styles.callLoadingPanel} role="status" aria-live="polite">
-      <p>{t('La llamada terminó porque el anfitrión se desconectó.')}</p>
+      <p>{callEndedMessage}</p>
       <div className={styles.callEndedActions}>
         <Link href="/history" className={styles.callLoadingButton}>
           {t('Ver línea de tiempo')}
@@ -604,6 +669,12 @@ export default function RoomPage() {
   // chatPanelInCallWrap). Evita duplicar este bloque dos veces en el JSX.
   const chatContent = (
     <>
+      {/* El número va aparte: dentro de la pestaña cambiaría su nombre accesible. */}
+      {unread > 0 && (
+        <p className={styles.srOnly} role="status" aria-live="polite">
+          {`${unread} ${t(unread === 1 ? 'mensaje sin leer' : 'mensajes sin leer')}`}
+        </p>
+      )}
       <div className={styles.chatTabs}>
         <button
           type="button"
@@ -611,6 +682,15 @@ export default function RoomPage() {
           onClick={() => setChatTab('chat')}
         >
           {t('Conversación')}
+          {unread > 0 && (
+            <span
+              className={styles.unreadBadge}
+              aria-hidden="true"
+              title={`${unread} ${t('sin leer')}`}
+            >
+              {unread > 99 ? '99+' : unread}
+            </span>
+          )}
         </button>
         <button
           type="button"
@@ -626,39 +706,64 @@ export default function RoomPage() {
         >
           {t('Notas')}
         </button>
+        {isPermanentRoom && (
+          <button
+            type="button"
+            className={`${styles.chatTab} ${chatTab === 'links' ? styles.chatTabActive : ''}`}
+            onClick={() => setChatTab('links')}
+          >
+            {t('Links')}
+          </button>
+        )}
+        {chatTab === 'chat' && (
+          <button
+            type="button"
+            className={styles.chatFilterToggle}
+            aria-expanded={chatFiltersOpen}
+            aria-controls="chat-filters"
+            onClick={() => setChatFiltersOpen((open) => !open)}
+            aria-label={t('Filtros')}
+            title={t('Filtros')}
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                d="M1.5 2.5h13l-5 6v5l-3-1.5V8.5z"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        )}
       </div>
       {chatTab === 'chat' ? (
         <>
-          <div className={styles.chatDateFilter}>
-            <label htmlFor="chat-message-day">{t('Filtrar por día')}</label>
-            <input
-              id="chat-message-day"
-              type="date"
-              value={chatHistory.day}
-              onChange={(event) => chatHistory.changeDay(event.target.value)}
-            />
-            {chatHistory.day && (
-              <button type="button" onClick={() => chatHistory.changeDay('')}>
-                {t('Limpiar filtro')}
-              </button>
-            )}
-            {isPermanentRoom && (
-              <button
-                type="button"
-                aria-pressed={chatHistory.archive}
-                onClick={chatHistory.toggleArchive}
-              >
-                {t(chatHistory.archive ? 'Volver al chat reciente' : 'Ver archivo del chat')}
-              </button>
-            )}
-            {chatHistory.archive && access.participant.userId && (
-              <Link
-                href={`/history?roomId=${encodeURIComponent(access.participant.roomId)}&roomArchive=1`}
-              >
-                {t('Ver archivo de llamadas')}
-              </Link>
-            )}
-          </div>
+          {chatFiltersOpen && (
+            <div id="chat-filters" className={styles.chatDateFilter}>
+              <label htmlFor="chat-message-day">{t('Filtrar por día')}</label>
+              <input
+                id="chat-message-day"
+                type="date"
+                value={chatHistory.day}
+                onChange={(event) => chatHistory.changeDay(event.target.value)}
+              />
+              {chatHistory.day && (
+                <button type="button" onClick={() => chatHistory.changeDay('')}>
+                  {t('Limpiar filtro')}
+                </button>
+              )}
+              {isPermanentRoom && (
+                <button
+                  type="button"
+                  aria-pressed={chatHistory.archive}
+                  onClick={chatHistory.toggleArchive}
+                >
+                  {t(chatHistory.archive ? 'Volver al chat reciente' : 'Ver archivo del chat')}
+                </button>
+              )}
+            </div>
+          )}
           {(chatPage.nextCursor || chatHistory.before) && (
             <div className={styles.chatDateFilter}>
               {chatHistory.before && (
@@ -696,7 +801,8 @@ export default function RoomPage() {
                   )}
                 </li>
               )}
-            {chatPage.entries.map((m) => {
+            {chatPage.entries.map((m, index) => {
+              const continued = !startsGroup(chatPage.entries[index - 1], m);
               // No hay un id de autor persistido por mensaje: el color se
               // resuelve cruzando por nombre contra la presencia actual.
               // Es una simplificación aceptada para v1 (ver comentario en
@@ -711,12 +817,18 @@ export default function RoomPage() {
                   name: access?.participant.name ?? '',
                   roleKeywords: myMentionRoleKeywords,
                 });
+              const pinnable =
+                isPermanentRoom && canManageEvents && m.kind === 'text'
+                  ? linkFromMessage(m.content)
+                  : null;
               return (
                 <li
                   key={m.id}
-                  className={
-                    mentionsMe ? `${styles.message} ${styles.messageMentioned}` : styles.message
-                  }
+                  className={[
+                    styles.message,
+                    mentionsMe ? styles.messageMentioned : '',
+                    continued ? styles.messageContinued : '',
+                  ].join(' ')}
                 >
                   <span className={styles.author} style={color ? { color } : undefined}>
                     {m.authorName}
@@ -730,6 +842,15 @@ export default function RoomPage() {
                       emojisByName={emojisByName}
                       mentionNames={messageMentionNames}
                     />
+                  )}
+                  {pinnable && (
+                    <button
+                      type="button"
+                      className={styles.pinLink}
+                      onClick={() => void handlePinLink(pinnable)}
+                    >
+                      {t('Fijar link')}
+                    </button>
                   )}
                 </li>
               );
@@ -813,6 +934,13 @@ export default function RoomPage() {
             })}
           </ul>
         </div>
+      ) : chatTab === 'links' ? (
+        <RoomLinksPanel
+          code={code}
+          token={access.token}
+          socket={roomSocket}
+          canManage={canManageEvents}
+        />
       ) : (
         <section className={styles.notesPanel}>
           <div className={styles.notesTabs}>
@@ -942,9 +1070,24 @@ export default function RoomPage() {
               participants={eventParticipants}
               onStartRoulette={roomEvents.startRoulette}
               onStartPoll={roomEvents.startPoll}
+              onOpenBreakouts={
+                isCurrentUserAdmin && callSession.status === 'in-call'
+                  ? () => setBreakoutsOpen(true)
+                  : undefined
+              }
             />
           }
         />
+        {isCurrentUserAdmin && (
+          <BreakoutHostDialog
+            open={breakoutsOpen && callSession.status === 'in-call'}
+            onClose={() => setBreakoutsOpen(false)}
+            roomCode={code}
+            roomToken={access.token}
+            participants={breakoutParticipants}
+            currentParticipantId={access.participant.sub}
+          />
+        )}
         <button
           type="button"
           className={styles.sidebarToggleButton}
@@ -1013,6 +1156,7 @@ export default function RoomPage() {
                       roomToken={access.token}
                       roomEmojis={emojis}
                       initialDevices={initialDevices}
+                      devicesRef={callDevicesRef}
                       onTranscriptAvailable={setTranscriptCallSid}
                       onHangUp={
                         transcriptCallSid
@@ -1027,6 +1171,10 @@ export default function RoomPage() {
                       videoLocked={mediaLock.videoLocked}
                       onSetAudioLock={mediaLock.setAudioLock}
                       onSetVideoLock={mediaLock.setVideoLock}
+                      participants={breakoutParticipants}
+                      participantColors={participantColors}
+                      roomSocket={roomSocket}
+                      currentParticipantId={access.participant.sub}
                       nameFocusEnabled={nameFocus.enabled}
                       onSetNameFocus={nameFocus.setEnabled}
                     />
@@ -1067,6 +1215,11 @@ export default function RoomPage() {
               aria-label={chatOpen ? t('Ocultar chat') : t('Mostrar chat')}
               title={chatOpen ? t('Ocultar chat') : t('Mostrar chat')}
             >
+              {!chatOpen && unread > 0 && (
+                <span className={styles.unreadDot} aria-hidden="true">
+                  {unread > 99 ? '99+' : unread}
+                </span>
+              )}
               {chatOpen ? (
                 <CloseIcon />
               ) : (

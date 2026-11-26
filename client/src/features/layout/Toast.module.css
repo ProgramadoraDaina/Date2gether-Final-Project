@@ -1,0 +1,27 @@
+/* Base común de los avisos flotantes: capa "overlay", sombra solo acá y entrada de 6px. */
+.surface {
+  background: var(--color-overlay);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  box-shadow: var(--shadow-overlay);
+  color: var(--color-text);
+  font-size: 14px;
+  animation: toast-in var(--dur-pop) var(--ease-out) both;
+}
+
+@keyframes toast-in {
+  from {
+    transform: translateY(-6px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .surface {
+    animation: none;
+  }
+}

@@ -20,6 +20,12 @@ export class TranscriptHistoryService {
     return this.transcripts.getCall(session.roomId, session.livekitRoomSid);
   }
 
+  // Same participation rule as the transcript, exposed for features built on top of it
+  // (e.g. the AI summary): 404 whether the session does not exist or the user was not in it.
+  requireSession(sessionId: string, userId: string) {
+    return this.findParticipated(eq(callSessions.id, sessionId), userId);
+  }
+
   async resolveBySid(livekitRoomSid: string, userId: string): Promise<{ id: string }> {
     const session = await this.findParticipated(
       eq(callSessions.livekitRoomSid, livekitRoomSid),

@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { ApiError, createRoom, type CreateScheduleSlot } from '@/lib/api';
 import { getCurrentUser, isLoggedIn, logout, onAuthChange, type AuthUser } from '@/lib/auth';
 import { useTranslation } from '@/features/translation/useTranslation';
+import { loginUrlFor } from '@/features/auth/safeRedirect';
 import { AppShell } from '@/features/navigation/AppShell';
 import { ScheduleSlotEditor } from '@/features/rooms/ScheduleSlotEditor';
 import styles from './page.module.css';
@@ -36,7 +37,9 @@ export default function HomePage() {
     getCurrentUser()
       .then((currentUser) => {
         setUser(currentUser);
-        setLoggedIn(currentUser !== null);
+        // null is not proof of "logged out": /auth/me can fail with 429/5xx while the token is
+        // still valid. A truly dead session (401 after refresh) already cleared the tokens.
+        setLoggedIn(currentUser !== null || isLoggedIn());
         if (currentUser) {
           setName(currentUser.name);
           localStorage.setItem(NAME_KEY, currentUser.name);
@@ -59,13 +62,18 @@ export default function HomePage() {
     router.replace('/login');
   }
 
+  // push (not replace) so the back button returns to the home page.
+  function redirectToLogin() {
+    router.push(loginUrlFor('/'));
+  }
+
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
-    if (!name.trim()) return;
     if (!loggedIn) {
-      setError(t('Necesitás iniciar sesión para crear una reunión.'));
+      redirectToLogin();
       return;
     }
+    if (!name.trim()) return;
     localStorage.setItem(NAME_KEY, name.trim());
     setLoading(true);
     setError(null);
@@ -105,21 +113,34 @@ export default function HomePage() {
     <AppShell>
       <div className={styles.card}>
         <h1 className={styles.brandTitle}>
-          <BrandMark size={46} />
+          <BrandMark size={60} />
           Date2gether
         </h1>
         <p className={styles.subtitle} data-testid="subtitle">
-          {t('Videollamadas simples, en el navegador.')}
+          {t('Juntarse nunca fue tan simple.')}
         </p>
 
         {!checkingSession && (
           <div className={styles.authBar} data-testid="auth-bar">
             {user ? (
               <>
-                <span>
+                <span className={styles.authUser}>
                   {t('Conectado como')} <strong>{user.name}</strong>
                 </span>
-                <button type="button" className={styles.linkButton} onClick={handleLogout}>
+                <button type="button" className={styles.logoutButton} onClick={handleLogout}>
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M10 17l5-5-5-5m5 5H3m9-8h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6" />
+                  </svg>
                   {t('Cerrar sesión')}
                 </button>
               </>
@@ -142,15 +163,17 @@ export default function HomePage() {
             maxLength={60}
             required
           />
-          <label className={styles.permanentToggle}>
-            <input
-              type="checkbox"
-              checked={isPermanent}
-              onChange={(event) => setIsPermanent(event.target.checked)}
-            />
-            {t('Sala permanente (enlace fijo, con sala de espera siempre activa)')}
-          </label>
-          {isPermanent && (
+          {loggedIn && (
+            <label className={styles.permanentToggle}>
+              <input
+                type="checkbox"
+                checked={isPermanent}
+                onChange={(event) => setIsPermanent(event.target.checked)}
+              />
+              {t('Sala permanente (enlace fijo, con sala de espera siempre activa)')}
+            </label>
+          )}
+          {loggedIn && isPermanent && (
             <>
               <label htmlFor="room-name">{t('Nombre de la sala')}</label>
               <input
@@ -162,15 +185,15 @@ export default function HomePage() {
               />
             </>
           )}
-          {isPermanent && <ScheduleSlotEditor slots={slots} onChange={setSlots} />}
-          <button type="submit" disabled={loading || !loggedIn}>
+          {loggedIn && isPermanent && <ScheduleSlotEditor slots={slots} onChange={setSlots} />}
+          {/* Logged out: plain button + onClick so the name input's `required` cannot block the redirect. */}
+          <button
+            type={loggedIn ? 'submit' : 'button'}
+            onClick={loggedIn ? undefined : redirectToLogin}
+            disabled={loading}
+          >
             {loading ? t('Creando…') : t('Crear reunión')}
           </button>
-          {!checkingSession && !loggedIn && (
-            <p className={styles.hintBelowButton}>
-              {t('Necesitás iniciar sesión (arriba) para crear una reunión.')}
-            </p>
-          )}
         </form>
 
         <div className={styles.divider}>{t('o unite a una existente')}</div>

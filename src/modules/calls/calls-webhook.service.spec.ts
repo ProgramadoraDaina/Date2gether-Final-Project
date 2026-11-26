@@ -2,9 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MockInstance } from 'vitest';
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { WebhookReceiver, type WebhookEvent } from 'livekit-server-sdk';
+import { RoomServiceClient, WebhookReceiver, type WebhookEvent } from 'livekit-server-sdk';
 import type { DrizzleDb } from '../../db/drizzle.module';
 import {
+  callBreakoutRooms,
   callEvents,
   callHistory,
   callParticipantIdentities,
@@ -12,6 +13,7 @@ import {
   callSessions,
 } from '../../db/schema';
 import { chain } from '../../test-support/fake-drizzle';
+import type { RoomEventsService } from '../rooms/room-events.service';
 import type { CallSessionCloseService } from './call-session-close.service';
 import { CallsWebhookService } from './calls-webhook.service';
 
@@ -19,6 +21,16 @@ function createCloseServiceMock() {
   return {
     onAdminLeft: vi.fn<CallSessionCloseService['onAdminLeft']>().mockResolvedValue(undefined),
     cancelPending: vi.fn<CallSessionCloseService['cancelPending']>(),
+  };
+}
+
+// Decisión 2 (design.md "Señal de motivo de remoción", tasks.md 2.6): mismo
+// puente que BreakoutRoomsService ya usa -- se verifica que el servicio
+// emita la señal, no que ChatGateway la reciba (eso lo cubre
+// chat.gateway.spec.ts).
+function createRoomEventsMock() {
+  return {
+    emitBreakoutRemoval: vi.fn(),
   };
 }
 
@@ -66,7 +78,8 @@ function createDbMock() {
         update: vi.fn().mockReturnValue(chain([])),
       }),
     );
-  return { insert, values, onConflictDoNothing, returning, select, transaction };
+  const update = vi.fn().mockReturnValue({ set: vi.fn().mockReturnValue(chain(undefined)) });
+  return { insert, values, onConflictDoNothing, returning, select, update, transaction };
 }
 
 // tx dedicado para los tests de materialización en room_finished: cada tabla
@@ -85,10 +98,15 @@ function createMaterializationTxMock(opts: {
     roomId?: string | null;
   }>;
   claimed?: { id: string }[];
+  // Fase 4 (D5.3, D6): filas de call_breakout_rooms que resuelven la
+  // atribución de grupo del roomCode del evento (vacío por defecto -- sin
+  // mini sala conocida, callGroupId queda null).
+  breakoutRows?: Array<{ parentLivekitRoomSid: string | null }>;
 }) {
   const sessionEvents = opts.sessionEvents ?? [];
   const identities = opts.identities ?? [];
   const claimed = opts.claimed ?? [{ id: 'session-1' }];
+  const breakoutRows = opts.breakoutRows ?? [];
 
   const participantsInsertValues = vi
     .fn<(values: unknown) => Promise<void>>()
@@ -109,6 +127,7 @@ function createMaterializationTxMock(opts: {
     from: vi.fn().mockImplementation((table: unknown) => {
       if (table === callEvents) return chain(sessionEvents);
       if (table === callParticipantIdentities) return chain(identities);
+      if (table === callBreakoutRooms) return chain(breakoutRows);
       return chain([]);
     }),
   }));
@@ -140,16 +159,19 @@ function createMaterializationTxMock(opts: {
 describe('CallsWebhookService', () => {
   let db: ReturnType<typeof createDbMock>;
   let closeService: ReturnType<typeof createCloseServiceMock>;
+  let roomEvents: ReturnType<typeof createRoomEventsMock>;
   let service: CallsWebhookService;
   let receive: MockInstance<WebhookReceiver['receive']>;
 
   beforeEach(() => {
     db = createDbMock();
     closeService = createCloseServiceMock();
+    roomEvents = createRoomEventsMock();
     service = new CallsWebhookService(
       new ConfigService(config),
       db as unknown as DrizzleDb,
       closeService as unknown as CallSessionCloseService,
+      roomEvents as unknown as RoomEventsService,
     );
     receive = vi.spyOn(WebhookReceiver.prototype, 'receive');
   });
@@ -264,16 +286,19 @@ describe('CallsWebhookService', () => {
 describe('CallsWebhookService: materialización en room_finished', () => {
   let db: ReturnType<typeof createDbMock>;
   let closeService: ReturnType<typeof createCloseServiceMock>;
+  let roomEvents: ReturnType<typeof createRoomEventsMock>;
   let service: CallsWebhookService;
   let receive: MockInstance<WebhookReceiver['receive']>;
 
   beforeEach(() => {
     db = createDbMock();
     closeService = createCloseServiceMock();
+    roomEvents = createRoomEventsMock();
     service = new CallsWebhookService(
       new ConfigService(config),
       db as unknown as DrizzleDb,
       closeService as unknown as CallSessionCloseService,
+      roomEvents as unknown as RoomEventsService,
     );
     receive = vi.spyOn(WebhookReceiver.prototype, 'receive');
   });
@@ -330,6 +355,36 @@ describe('CallsWebhookService: materialización en room_finished', () => {
     await service.handle(Buffer.from('{}'), 'valid-sig');
 
     expect(closeService.cancelPending).toHaveBeenCalledWith('RM_session-A');
+  });
+
+  // R1 (design.md "R1 -- Admin sola que se traslada", tasks.md Fase 1):
+  // caracterización obligatoria antes de tocar el evaluador de cierre --
+  // room_finished de la PRINCIPAL nunca ejecuta la cascada
+  // closeGroupBreakouts. Esa cascada solo se invoca desde
+  // CallSessionCloseService.claimAndClose (ver
+  // call-session-close.service.spec.ts, caso [5.7.7]); este archivo fija
+  // que CallsWebhookService.onRoomFinished no tiene ningún camino hacia
+  // ella.
+  it('[R1-C5] room_finished de la principal nunca invoca la cascada de cierre de mini salas: su único contacto con el cierre forzado es cancelPending', async () => {
+    const tx = createMaterializationTxMock({});
+    db.transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(tx));
+    receive.mockResolvedValue(
+      buildEvent({ event: 'room_finished', room: { sid: 'RM_session-A', name: 'abc-defg-hij' } }),
+    );
+
+    await service.handle(Buffer.from('{}'), 'valid-sig');
+
+    expect(closeService.cancelPending).toHaveBeenCalledWith('RM_session-A');
+    expect(closeService.onAdminLeft).not.toHaveBeenCalled();
+    // CallsWebhookService no tiene ninguna referencia a BreakoutRoomsService
+    // (su única dependencia relacionada con cierre es CallSessionCloseService,
+    // ya verificado arriba): estructuralmente no puede invocar
+    // closeGroupBreakouts desde este camino. Si alguien lo conecta más
+    // adelante (reproduciendo la tabla de Flujo 3 del diseño original), esta
+    // aserción se rompe a propósito.
+    expect(Object.keys(service as unknown as Record<string, unknown>)).not.toContain(
+      'breakoutRooms',
+    );
   });
 
   it('reentrega de room_finished (compare-and-set sin filas afectadas) no duplica el resumen (spec timeline/resiliencia-parcial)', async () => {
@@ -409,21 +464,114 @@ describe('CallsWebhookService: materialización en room_finished', () => {
     expect(tx.insert).not.toHaveBeenCalledWith(callHistory);
     expect(tx.update).not.toHaveBeenCalledWith(callHistory);
   });
+
+  // Fase 4 (design.md D5.3/D6; spec call-participation-timeline ADDED
+  // "Vínculo de grupo..."; spec call-webhook-ingestion ADDED "Atribución de
+  // eventos de mini sala..."): callGroupId stampeado en room_finished.
+
+  it('[4.5.1/4.6.2] roomCode sin "::" (sala principal sin mini salas): callGroupId queda null, cero consultas nuevas a call_breakout_rooms', async () => {
+    const sessionEvents = [
+      {
+        eventType: 'participant_joined',
+        livekitIdentity: 'id-a',
+        trackSource: null,
+        occurredAt: new Date('2026-11-06T10:00:00Z'),
+      },
+    ];
+    const identities = [{ livekitIdentity: 'id-a', userId: 'user-a', displayName: 'Ana' }];
+    const tx = createMaterializationTxMock({ sessionEvents, identities });
+    db.transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(tx));
+    receive.mockResolvedValue(
+      buildEvent({ event: 'room_finished', room: { sid: 'RM_session-A', name: 'abc-defg-hij' } }),
+    );
+
+    await service.handle(Buffer.from('{}'), 'valid-sig');
+
+    expect(tx.sessionInsertValues).toHaveBeenCalledWith(
+      expect.objectContaining({ callGroupId: null }),
+    );
+    // Sin '::' en el roomCode, parseBreakoutRoomName corta antes de
+    // cualquier select a callBreakoutRooms (D6: cero consultas nuevas).
+    expect(tx.select).not.toHaveBeenCalledWith(callBreakoutRooms);
+  });
+
+  it('[4.5.2/4.6.1] roomCode con "::" que resuelve a un grupo conocido: callGroupId = parent_livekit_room_sid (atribución a la sala padre)', async () => {
+    const sessionEvents = [
+      {
+        eventType: 'participant_joined',
+        livekitIdentity: 'id-a',
+        trackSource: null,
+        occurredAt: new Date('2026-11-06T10:00:00Z'),
+      },
+    ];
+    const identities = [{ livekitIdentity: 'id-a', userId: 'user-a', displayName: 'Ana' }];
+    const tx = createMaterializationTxMock({
+      sessionEvents,
+      identities,
+      breakoutRows: [{ parentLivekitRoomSid: 'RM_parent-A' }],
+    });
+    db.transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(tx));
+    receive.mockResolvedValue(
+      buildEvent({
+        event: 'room_finished',
+        room: { sid: 'RM_breakout-A', name: 'abc-defg-hij::breakout-1' },
+      }),
+    );
+
+    await service.handle(Buffer.from('{}'), 'valid-sig');
+
+    expect(tx.sessionInsertValues).toHaveBeenCalledWith(
+      expect.objectContaining({ callGroupId: 'RM_parent-A', roomCode: 'abc-defg-hij::breakout-1' }),
+    );
+  });
+
+  it('[4.5.3] roomCode con "::" que no corresponde a ningún grupo conocido: se acepta sin error, callGroupId queda null (sin efecto de negocio)', async () => {
+    const sessionEvents = [
+      {
+        eventType: 'participant_joined',
+        livekitIdentity: 'id-a',
+        trackSource: null,
+        occurredAt: new Date('2026-11-06T10:00:00Z'),
+      },
+    ];
+    const identities = [{ livekitIdentity: 'id-a', userId: 'user-a', displayName: 'Ana' }];
+    const tx = createMaterializationTxMock({
+      sessionEvents,
+      identities,
+      breakoutRows: [],
+    });
+    db.transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(tx));
+    receive.mockResolvedValue(
+      buildEvent({
+        event: 'room_finished',
+        room: { sid: 'RM_orphan-A', name: 'ghost-code::breakout-1' },
+      }),
+    );
+
+    await expect(service.handle(Buffer.from('{}'), 'valid-sig')).resolves.toBeUndefined();
+
+    expect(tx.sessionInsertValues).toHaveBeenCalledWith(
+      expect.objectContaining({ callGroupId: null }),
+    );
+  });
 });
 
 describe('CallsWebhookService: cierre forzado en participant_left (tasks.md 6.10)', () => {
   let db: ReturnType<typeof createDbMock>;
   let closeService: ReturnType<typeof createCloseServiceMock>;
+  let roomEvents: ReturnType<typeof createRoomEventsMock>;
   let service: CallsWebhookService;
   let receive: MockInstance<WebhookReceiver['receive']>;
 
   beforeEach(() => {
     db = createDbMock();
     closeService = createCloseServiceMock();
+    roomEvents = createRoomEventsMock();
     service = new CallsWebhookService(
       new ConfigService(config),
       db as unknown as DrizzleDb,
       closeService as unknown as CallSessionCloseService,
+      roomEvents as unknown as RoomEventsService,
     );
     receive = vi.spyOn(WebhookReceiver.prototype, 'receive');
   });
@@ -433,7 +581,7 @@ describe('CallsWebhookService: cierre forzado en participant_left (tasks.md 6.10
   });
 
   it('participant_left de un admin actual, incluso promovido durante la llamada, invoca el cierre', async () => {
-    db.select.mockReturnValue(chain([{ role: 'administrador' }]));
+    db.select.mockReturnValue(chain([{ role: 'administrador', roomId: 'room-parent-1' }]));
     receive.mockResolvedValue(
       buildEvent({
         event: 'participant_left',
@@ -444,7 +592,11 @@ describe('CallsWebhookService: cierre forzado en participant_left (tasks.md 6.10
 
     await service.handle(Buffer.from('{}'), 'valid-sig');
 
-    expect(closeService.onAdminLeft).toHaveBeenCalledWith('RM_session-A', 'abc-defg-hij');
+    expect(closeService.onAdminLeft).toHaveBeenCalledWith(
+      'RM_session-A',
+      'abc-defg-hij',
+      'room-parent-1',
+    );
   });
 
   it('participant_left de un invitado o no-admin actual no invoca el cierre', async () => {
@@ -474,5 +626,201 @@ describe('CallsWebhookService: cierre forzado en participant_left (tasks.md 6.10
 
     await expect(service.handle(Buffer.from('{}'), 'valid-sig')).resolves.toBeUndefined();
     expect(closeService.onAdminLeft).not.toHaveBeenCalled();
+  });
+});
+
+describe('CallsWebhookService: expulsión de ocupante locked en participant_joined (tasks.md 5.5.8/5.5.9)', () => {
+  let db: ReturnType<typeof createDbMock>;
+  let closeService: ReturnType<typeof createCloseServiceMock>;
+  let roomEvents: ReturnType<typeof createRoomEventsMock>;
+  let service: CallsWebhookService;
+  let receive: MockInstance<WebhookReceiver['receive']>;
+  let removeParticipant: MockInstance<RoomServiceClient['removeParticipant']>;
+
+  beforeEach(() => {
+    db = createDbMock();
+    closeService = createCloseServiceMock();
+    roomEvents = createRoomEventsMock();
+    service = new CallsWebhookService(
+      new ConfigService(config),
+      db as unknown as DrizzleDb,
+      closeService as unknown as CallSessionCloseService,
+      roomEvents as unknown as RoomEventsService,
+    );
+    receive = vi.spyOn(WebhookReceiver.prototype, 'receive');
+    removeParticipant = vi
+      .spyOn(RoomServiceClient.prototype, 'removeParticipant')
+      .mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('[5.5.8] participant_joined de la principal con una asignación abierta locked: expulsa al ocupante (D8 punto 2, ventana de fuga aceptada)', async () => {
+    db.select.mockReturnValue(chain([{ occupantId: 'occ-1', leavePolicy: 'locked' }]));
+    receive.mockResolvedValue(
+      buildEvent({
+        event: 'participant_joined',
+        room: { sid: 'RM_session-A', name: 'abc-defg-hij' },
+        participant: { identity: 'guest-locked' },
+      }),
+    );
+
+    await service.handle(Buffer.from('{}'), 'valid-sig');
+
+    expect(removeParticipant).toHaveBeenCalledWith('abc-defg-hij', 'guest-locked');
+  });
+
+  // Decisión 2 (design.md "Señal de motivo de remoción", tasks.md 2.6) +
+  // spec call-webhook-ingestion "Señal explícita en la expulsión...locked":
+  // señal propia, distinta de BREAKOUT_MOVE_IN/BREAKOUT_FORCED_RETURN, ANTES
+  // de removeParticipant.
+  it('[2.6] expulsión de ocupante locked emite breakout:removal con motivo BREAKOUT_RETURN_LOCKED antes de removeParticipant', async () => {
+    db.select.mockReturnValue(chain([{ occupantId: 'occ-1', leavePolicy: 'locked' }]));
+    receive.mockResolvedValue(
+      buildEvent({
+        event: 'participant_joined',
+        room: { sid: 'RM_session-A', name: 'abc-defg-hij' },
+        participant: { identity: 'guest-locked' },
+      }),
+    );
+    const callOrder: string[] = [];
+    roomEvents.emitBreakoutRemoval.mockImplementationOnce(() => {
+      callOrder.push('emitBreakoutRemoval');
+    });
+    removeParticipant.mockImplementationOnce(() => {
+      callOrder.push('removeParticipant');
+      return Promise.resolve(undefined);
+    });
+
+    await service.handle(Buffer.from('{}'), 'valid-sig');
+
+    expect(roomEvents.emitBreakoutRemoval).toHaveBeenCalledWith({
+      roomCode: 'abc-defg-hij',
+      targetIdentity: 'guest-locked',
+      reason: 'BREAKOUT_RETURN_LOCKED',
+    });
+    expect(callOrder).toEqual(['emitBreakoutRemoval', 'removeParticipant']);
+  });
+
+  it('[2.6] sin ninguna asignación abierta locked, no se emite ninguna señal de remoción', async () => {
+    db.select.mockReturnValue(chain([]));
+    receive.mockResolvedValue(
+      buildEvent({
+        event: 'participant_joined',
+        room: { sid: 'RM_session-A', name: 'abc-defg-hij' },
+        participant: { identity: 'guest-free' },
+      }),
+    );
+
+    await service.handle(Buffer.from('{}'), 'valid-sig');
+
+    expect(roomEvents.emitBreakoutRemoval).not.toHaveBeenCalled();
+  });
+
+  it('participant_joined de la principal sin ninguna asignación abierta locked no expulsa a nadie', async () => {
+    db.select.mockReturnValue(chain([]));
+    receive.mockResolvedValue(
+      buildEvent({
+        event: 'participant_joined',
+        room: { sid: 'RM_session-A', name: 'abc-defg-hij' },
+        participant: { identity: 'guest-free' },
+      }),
+    );
+
+    await service.handle(Buffer.from('{}'), 'valid-sig');
+
+    expect(removeParticipant).not.toHaveBeenCalled();
+  });
+
+  it('participant_joined de una MINI SALA (nombre con "::") nunca dispara esta regla, ni siquiera consulta la base', async () => {
+    receive.mockResolvedValue(
+      buildEvent({
+        event: 'participant_joined',
+        room: { sid: 'RM_breakout-1', name: 'abc-defg-hij::breakout-1' },
+        participant: { identity: 'new-identity' },
+      }),
+    );
+
+    await service.handle(Buffer.from('{}'), 'valid-sig');
+
+    expect(removeParticipant).not.toHaveBeenCalled();
+  });
+
+  it('un administrador con asignación locked abierta que vuelve a la principal no es expulsado: se cierra su asignación', async () => {
+    db.select
+      .mockReturnValueOnce(chain([{ occupantId: 'occ-admin', leavePolicy: 'locked' }]))
+      .mockReturnValueOnce(chain([{ role: 'administrador' }]));
+    receive.mockResolvedValue(
+      buildEvent({
+        event: 'participant_joined',
+        room: { sid: 'RM_session-A', name: 'abc-defg-hij' },
+        participant: { identity: 'admin-sub' },
+      }),
+    );
+
+    await service.handle(Buffer.from('{}'), 'valid-sig');
+
+    expect(removeParticipant).not.toHaveBeenCalled();
+    expect(roomEvents.emitBreakoutRemoval).not.toHaveBeenCalled();
+    expect(db.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('un participant_joined que llega tarde y es anterior a la asignación no expulsa a nadie', async () => {
+    db.select.mockReturnValueOnce(
+      chain([
+        {
+          occupantId: 'occ-1',
+          leavePolicy: 'locked',
+          assignedAt: new Date((1700000000 + 30) * 1000),
+        },
+      ]),
+    );
+    receive.mockResolvedValue(
+      buildEvent({
+        event: 'participant_joined',
+        createdAt: BigInt(1700000000),
+        room: { sid: 'RM_session-A', name: 'abc-defg-hij' },
+        participant: { identity: 'guest-locked' },
+      }),
+    );
+
+    await service.handle(Buffer.from('{}'), 'valid-sig');
+
+    expect(removeParticipant).not.toHaveBeenCalled();
+    expect(db.update).not.toHaveBeenCalled();
+  });
+
+  it('quien vuelve a la principal desde una mini sala free_return queda marcado como devuelto, sin expulsión', async () => {
+    db.select
+      .mockReturnValueOnce(chain([{ occupantId: 'occ-2', leavePolicy: 'free_return' }]))
+      .mockReturnValueOnce(chain([]));
+    receive.mockResolvedValue(
+      buildEvent({
+        event: 'participant_joined',
+        room: { sid: 'RM_session-A', name: 'abc-defg-hij' },
+        participant: { identity: 'guest-free' },
+      }),
+    );
+
+    await service.handle(Buffer.from('{}'), 'valid-sig');
+
+    expect(removeParticipant).not.toHaveBeenCalled();
+    expect(db.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('removeParticipant falla: no relanza, el webhook sigue resolviendo en 200', async () => {
+    db.select.mockReturnValue(chain([{ occupantId: 'occ-1', leavePolicy: 'locked' }]));
+    removeParticipant.mockRejectedValue(new Error('participant not found'));
+    receive.mockResolvedValue(
+      buildEvent({
+        event: 'participant_joined',
+        room: { sid: 'RM_session-A', name: 'abc-defg-hij' },
+        participant: { identity: 'guest-locked' },
+      }),
+    );
+
+    await expect(service.handle(Buffer.from('{}'), 'valid-sig')).resolves.toBeUndefined();
   });
 });

@@ -64,5 +64,4 @@ describe('Link al acta desde el final de la llamada', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Volver a intentar' }));
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/history/session-1'));
   });
-
 });

@@ -50,9 +50,7 @@ export function DeleteRoomDialog({
       </h2>
       <p id="delete-room-description" className={styles.description}>
         {t('Vas a eliminar')} <strong>{roomName}</strong>.{' '}
-        {t(
-          'Se borran sus mensajes, notas, horarios y miembros. Esta acción no se puede deshacer.',
-        )}
+        {t('Se borran sus mensajes, notas, horarios y miembros. Esta acción no se puede deshacer.')}
       </p>
       {error && (
         <p className={styles.error} role="alert">

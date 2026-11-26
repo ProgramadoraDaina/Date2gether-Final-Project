@@ -14,6 +14,7 @@ describe('RoomsController', () => {
     getByCodeOrThrow: Mock<(...args: unknown[]) => Promise<unknown>>;
     listOwnedRooms: Mock<(...args: unknown[]) => Promise<unknown>>;
     renameRoom: Mock<(...args: unknown[]) => Promise<unknown>>;
+    promoteToPermanent: Mock<(...args: unknown[]) => Promise<unknown>>;
     deleteRoomAsAdmin: Mock<(...args: unknown[]) => Promise<unknown>>;
     setMemberRole: Mock<(...args: unknown[]) => Promise<unknown>>;
   };
@@ -24,6 +25,7 @@ describe('RoomsController', () => {
       getByCodeOrThrow: vi.fn(),
       listOwnedRooms: vi.fn(),
       renameRoom: vi.fn(),
+      promoteToPermanent: vi.fn(),
       deleteRoomAsAdmin: vi.fn(),
       setMemberRole: vi.fn(),
     };
@@ -158,5 +160,33 @@ describe('RoomsController', () => {
 
     expect(result).toEqual({ message: 'Nombre actualizado' });
     expect(roomsService.renameRoom).toHaveBeenCalledWith('abc-defg-hij', 'Grupo de los jueves');
+  });
+
+  it('PATCH /rooms/:code/permanent exige JWT (401 sin token) y delega con el id de quien llama', async () => {
+    const handler = Object.getOwnPropertyDescriptor(
+      RoomsController.prototype,
+      'promoteToPermanent',
+    )!.value as object;
+    expect(Reflect.getMetadata('__guards__', handler)).toEqual([JwtAuthGuard]);
+
+    const promoted = {
+      id: 'room-1',
+      code: 'abc-defg-hij',
+      isPermanent: true,
+      waitingRoomEnabled: true,
+      historyDeletedBefore: null,
+      historyCleanupPending: false,
+    };
+    roomsService.promoteToPermanent.mockResolvedValue(promoted);
+
+    const result = await controller.promoteToPermanent('abc-defg-hij', {
+      sub: 'user-1',
+      email: 'a@example.test',
+    });
+
+    expect(roomsService.promoteToPermanent).toHaveBeenCalledWith('abc-defg-hij', 'user-1');
+    expect(result).toMatchObject({ code: 'abc-defg-hij', isPermanent: true });
+    expect(result).not.toHaveProperty('historyDeletedBefore');
+    expect(result).not.toHaveProperty('historyCleanupPending');
   });
 });

@@ -1,47 +1,136 @@
-.card {
-  composes: card from '../../styles/form.module.css';
-  max-width: 400px;
-  padding: 40px;
+.page {
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-5) var(--space-8);
 }
 
-.subtitle {
-  composes: subtitle from '../../styles/form.module.css';
+.header {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
 }
 
-.error {
-  composes: error from '../../styles/form.module.css';
+.header h1 {
+  margin: 0;
 }
 
-.authLinks {
-  composes: authLinks from '../../styles/form.module.css';
+.header p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 14px;
 }
 
-.section {
-  margin: 0 0 var(--space-6);
-  padding-bottom: var(--space-5);
+.layout {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.nav {
+  position: sticky;
+  top: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--color-border);
+}
+
+.navLink {
+  margin-left: -1px;
+  padding: 8px 12px;
+  border-left: 2px solid transparent;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.navLink:hover,
+.navLink:focus-visible {
+  border-left-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.sections {
+  display: grid;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.panel {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  scroll-margin-top: var(--space-5);
+}
+
+.panelTitle {
+  margin: 0;
+  padding: 12px var(--space-5);
   border-bottom: 1px solid var(--color-border);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
 }
 
-.sectionRow {
+.row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-3);
+  gap: var(--space-5);
+  min-height: 60px;
+  padding: 12px var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.row:last-child,
+.block:last-child {
+  border-bottom: none;
+}
+
+.rowText {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rowLabel {
+  font-size: 15px;
+  color: var(--color-text);
+}
+
+.rowHint {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.rowControl {
+  flex-shrink: 0;
+}
+
+.block {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .palette {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(8, 40px);
   gap: var(--space-3);
 }
 
 .swatch {
-  width: 100%;
-  aspect-ratio: 1;
+  width: 40px;
+  height: 40px;
   padding: 0;
   margin: 0;
-  border-radius: 50%;
   border: 2px solid transparent;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -52,30 +141,99 @@
 }
 
 .swatchSelected {
-  border-color: var(--color-accent);
+  border-color: var(--color-text);
   box-shadow: 0 0 0 2px var(--color-surface) inset;
 }
 
 .saved {
-  margin: var(--space-4) 0 0;
+  margin: 0;
   font-size: 13px;
   color: var(--color-text-muted);
 }
 
-.toggleRow {
-  margin: 0;
-  padding: var(--space-2) 0;
-  font-size: 15px;
-  color: var(--color-text);
-  cursor: pointer;
+.error {
+  composes: error from '../../styles/form.module.css';
 }
 
-.checkbox {
-  width: 20px;
-  height: 20px;
+.loginHint p {
   margin: 0;
-  padding: 0;
-  flex-shrink: 0;
-  accent-color: var(--color-accent);
-  cursor: pointer;
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+.authLinks {
+  composes: authLinks from '../../styles/form.module.css';
+}
+
+@media (max-width: 760px) {
+  .page {
+    padding: calc(48px + var(--space-4)) var(--space-4) var(--space-7);
+  }
+
+  .panel {
+    scroll-margin-top: 60px;
+  }
+
+  /* Flex y no grid: en una grilla el sticky queda atrapado en su propia celda y nunca se pega. */
+  .layout {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  /* En celular el índice queda fijo arriba de la pantalla, siempre a mano. */
+  .nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    /* Debajo del botón de idioma, que también es fijo arriba a la derecha. */
+    z-index: 5;
+    flex-direction: row;
+    justify-content: space-between;
+    overflow-x: auto;
+    margin: 0;
+    padding: 0 64px 0 var(--space-3);
+    border-left: none;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-bg);
+    scrollbar-width: none;
+  }
+
+  .navLink {
+    flex-shrink: 0;
+    margin: 0 0 -1px;
+    padding: 12px 3px;
+    font-size: 12px;
+    border-left: none;
+    border-bottom: 2px solid transparent;
+  }
+
+  .navLink:hover,
+  .navLink:focus-visible {
+    border-bottom-color: var(--color-accent);
+  }
+
+  /* Un control ancho (como el avatar) baja debajo del texto en vez de apretarlo. */
+  .row {
+    flex-wrap: wrap;
+    padding: 12px var(--space-4);
+  }
+
+  .rowText {
+    flex: 1 1 180px;
+  }
+
+  .block {
+    padding: var(--space-4);
+  }
+
+  .palette {
+    grid-template-columns: repeat(4, 44px);
+  }
+
+  .swatch {
+    width: 44px;
+    height: 44px;
+  }
 }

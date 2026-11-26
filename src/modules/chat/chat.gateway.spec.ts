@@ -35,7 +35,6 @@ describe('ChatGateway', () => {
     const room = {
       id: 'room-1',
       code: 'abc-defg-hij',
-      isActive: true,
       isPermanent: roomOptions.isPermanent ?? false,
     };
     const playlists = {
@@ -69,7 +68,13 @@ describe('ChatGateway', () => {
     const roomEvents = {
       onMemberRoleChanged: vi.fn(),
       onRoomEmojisChanged: vi.fn(),
+      onBreakoutAssigned: vi.fn(),
+      onBreakoutClosed: vi.fn(),
+      onBreakoutRemoval: vi.fn(),
+      onBreakoutBroadcast: vi.fn(),
       onRoomDeleted: vi.fn(),
+      onRoomPromoted: vi.fn(),
+      onRoomLinksChanged: vi.fn(),
     } as unknown as RoomEventsService;
 
     const gateway = new ChatGateway(
@@ -132,6 +137,21 @@ describe('ChatGateway', () => {
     });
   });
 
+  describe('roomPromoted (evento del bridge RoomEventsService)', () => {
+    it('avisa a la sala sin desconectar a nadie', () => {
+      const { roomEvents, serverTo, serverEmit, disconnectSockets } = createGateway();
+      const onRoomPromoted = vi.mocked(roomEvents.onRoomPromoted);
+      expect(onRoomPromoted).toHaveBeenCalledTimes(1);
+      const listener = onRoomPromoted.mock.calls[0][0];
+
+      listener({ roomCode: 'abc-defg-hij', roomId: 'room-1' });
+
+      expect(serverTo).toHaveBeenCalledWith('abc-defg-hij');
+      expect(serverEmit).toHaveBeenCalledWith('roomPromoted');
+      expect(disconnectSockets).not.toHaveBeenCalled();
+    });
+  });
+
   describe('handleJoinRoom (Categoría E, D4: resolver.resolveJoinable + assertBound)', () => {
     it('código retirado/vencido/inexistente: emite el evento error existente, no lanza', async () => {
       const { gateway, resolveJoinable } = createGateway();
@@ -162,7 +182,6 @@ describe('ChatGateway', () => {
       resolveJoinable.mockResolvedValueOnce({
         id: 'room-2-recycled',
         code: 'abc-defg-hij',
-        isActive: true,
       } as never);
       const participant: RoomParticipant = {
         kind: 'room-participant',
@@ -496,6 +515,57 @@ describe('ChatGateway', () => {
         'musicState',
         expect.objectContaining({ isPlaying: true, positionSeconds: 45, updatedAt: 1_015_000 }),
       );
+    });
+
+    it('el admin le baja la mano a otra persona: el aviso va solo al socket de esa persona', async () => {
+      const { gateway, client, serverTo, serverEmit } = await joinedAdmin('administrador');
+      const guest = createSocket(
+        {
+          kind: 'room-participant',
+          roomId: 'room-1',
+          sub: 'guest-sub',
+          roomCode: 'abc-defg-hij',
+          name: 'Beto',
+        },
+        'socket-2',
+      );
+      await gateway.handleJoinRoom(guest as never, { code: 'abc-defg-hij' });
+      serverTo.mockClear();
+      serverEmit.mockClear();
+
+      await gateway.handleLowerHand(client as never, { participantId: 'guest-sub' });
+
+      expect(serverTo).toHaveBeenCalledWith('socket-2');
+      expect(serverEmit).toHaveBeenCalledWith('lowerHand');
+    });
+
+    it('rechaza lowerHand de alguien que no es administrador', async () => {
+      const { gateway, client, serverEmit } = await joinedAdmin('participante');
+      serverEmit.mockClear();
+
+      await gateway.handleLowerHand(client as never, { participantId: 'guest-sub' });
+
+      expect(serverEmit).not.toHaveBeenCalledWith('lowerHand');
+    });
+
+    it('el admin fija el volumen de la música para toda la sala', async () => {
+      const { gateway, client, serverEmit } = await joinedAdmin('administrador');
+      await gateway.handleMusicAddTrack(client as never, { videoId: 'aaaaaaaaaaa', title: 'Uno' });
+
+      await gateway.handleMusicSetVolume(client as never, { volume: 40 });
+
+      expect(serverEmit).toHaveBeenLastCalledWith(
+        'musicState',
+        expect.objectContaining({ roomVolume: 40 }),
+      );
+    });
+
+    it('rechaza musicSetVolume de alguien que no es administrador', async () => {
+      const { gateway, client, serverEmit } = await joinedAdmin('participante');
+
+      await gateway.handleMusicSetVolume(client as never, { volume: 10 });
+
+      expect(serverEmit).not.toHaveBeenCalled();
     });
 
     it('rechaza musicSetMode de alguien que no es administrador', async () => {
@@ -1382,6 +1452,154 @@ describe('ChatGateway', () => {
           message: 'No hay ninguna encuesta abierta en esta sala',
         });
         expect(serverEmit).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  // Mini salas (Fase 6, D12 del design.md): señal únicamente, nunca el token.
+  describe('Mini salas: señal breakout:assigned / breakout:closed (D12, design.md)', () => {
+    const admin: RoomParticipant = {
+      kind: 'room-participant',
+      sub: 'admin-sub',
+      roomId: 'room-1',
+      roomCode: 'abc-defg-hij',
+      name: 'Admin',
+    };
+    const guest: RoomParticipant = {
+      kind: 'room-participant',
+      sub: 'guest-sub',
+      roomId: 'room-1',
+      roomCode: 'abc-defg-hij',
+      name: 'Invitado',
+    };
+
+    function assignedListener(roomEvents: ReturnType<typeof createGateway>['roomEvents']) {
+      return (roomEvents.onBreakoutAssigned as unknown as ReturnType<typeof vi.fn>).mock
+        .calls[0][0] as (event: {
+        roomCode: string;
+        targetIdentity: string;
+        breakoutId: string;
+        label: string;
+        leavePolicy: string;
+      }) => void;
+    }
+
+    function closedListener(roomEvents: ReturnType<typeof createGateway>['roomEvents']) {
+      return (roomEvents.onBreakoutClosed as unknown as ReturnType<typeof vi.fn>).mock
+        .calls[0][0] as (event: { roomCode: string; breakoutId: string }) => void;
+    }
+
+    it('breakout:assigned llega solo al socket del participante trasladado, no por broadcast a toda la sala', async () => {
+      const { gateway, serverTo, serverEmit, roomEvents } = createGateway();
+      const adminClient = createSocket(admin, 'socket-admin');
+      const guestClient = createSocket(guest, 'socket-guest');
+      await gateway.handleJoinRoom(adminClient as never, { code: 'abc-defg-hij' });
+      await gateway.handleJoinRoom(guestClient as never, { code: 'abc-defg-hij' });
+      serverTo.mockClear();
+      serverEmit.mockClear();
+
+      assignedListener(roomEvents)({
+        roomCode: 'abc-defg-hij',
+        targetIdentity: 'guest-sub',
+        breakoutId: 'breakout-1',
+        label: 'Mini sala 1',
+        leavePolicy: 'locked',
+      });
+
+      expect(serverTo).toHaveBeenCalledTimes(1);
+      expect(serverTo).toHaveBeenCalledWith('socket-guest');
+      expect(serverEmit).toHaveBeenCalledWith('breakout:assigned', {
+        breakoutId: 'breakout-1',
+        label: 'Mini sala 1',
+        leavePolicy: 'locked',
+      });
+    });
+
+    it('breakout:assigned no emite nada si el participante señalado ya no está conectado', () => {
+      const { serverTo, roomEvents } = createGateway();
+
+      assignedListener(roomEvents)({
+        roomCode: 'abc-defg-hij',
+        targetIdentity: 'nobody-connected',
+        breakoutId: 'breakout-1',
+        label: 'Mini sala 1',
+        leavePolicy: 'locked',
+      });
+
+      expect(serverTo).not.toHaveBeenCalled();
+    });
+
+    it('breakout:closed se transmite a toda la sala (cualquier occupant de esa mini sala puede estar escuchando)', async () => {
+      const { gateway, serverTo, serverEmit, roomEvents } = createGateway();
+      const adminClient = createSocket(admin, 'socket-admin');
+      await gateway.handleJoinRoom(adminClient as never, { code: 'abc-defg-hij' });
+      serverTo.mockClear();
+      serverEmit.mockClear();
+
+      closedListener(roomEvents)({ roomCode: 'abc-defg-hij', breakoutId: 'breakout-1' });
+
+      expect(serverTo).toHaveBeenCalledWith('abc-defg-hij');
+      expect(serverEmit).toHaveBeenCalledWith('breakout:closed', { breakoutId: 'breakout-1' });
+    });
+
+    it('los avisos de mini salas (cuenta regresiva, idas y vueltas) se transmiten a toda la sala', () => {
+      const { serverTo, serverEmit, roomEvents } = createGateway();
+      const listener = (roomEvents.onBreakoutBroadcast as unknown as ReturnType<typeof vi.fn>).mock
+        .calls[0][0] as (event: unknown) => void;
+      const payload = { kind: 'moved', names: ['Joni'], label: 'Sala 2' };
+
+      listener({ roomCode: 'abc-defg-hij', event: 'breakout:presence', payload });
+
+      expect(serverTo).toHaveBeenCalledWith('abc-defg-hij');
+      expect(serverEmit).toHaveBeenCalledWith('breakout:presence', payload);
+    });
+
+    // Decisión 2 (design.md "Señal de motivo de remoción", tasks.md 2.4):
+    // mismo patrón que breakout:assigned -- personal, nunca broadcast, pero
+    // direccionado por `targetIdentity` del evento, que ya es la
+    // sourceIdentity estable (el llamador -- BreakoutRoomsService/
+    // CallsWebhookService -- ya resolvió cuál identity corresponde al
+    // socket real).
+    describe('señal breakout:removal', () => {
+      function removalListener(roomEvents: ReturnType<typeof createGateway>['roomEvents']) {
+        return (roomEvents.onBreakoutRemoval as unknown as ReturnType<typeof vi.fn>).mock
+          .calls[0][0] as (event: {
+          roomCode: string;
+          targetIdentity: string;
+          reason: string;
+        }) => void;
+      }
+
+      it('[2.4] breakout:removal llega solo al socket del participante señalado, con el motivo como único payload', async () => {
+        const { gateway, serverTo, serverEmit, roomEvents } = createGateway();
+        const adminClient = createSocket(admin, 'socket-admin');
+        const guestClient = createSocket(guest, 'socket-guest');
+        await gateway.handleJoinRoom(adminClient as never, { code: 'abc-defg-hij' });
+        await gateway.handleJoinRoom(guestClient as never, { code: 'abc-defg-hij' });
+        serverTo.mockClear();
+        serverEmit.mockClear();
+
+        removalListener(roomEvents)({
+          roomCode: 'abc-defg-hij',
+          targetIdentity: 'guest-sub',
+          reason: 'BREAKOUT_MOVE_IN',
+        });
+
+        expect(serverTo).toHaveBeenCalledTimes(1);
+        expect(serverTo).toHaveBeenCalledWith('socket-guest');
+        expect(serverEmit).toHaveBeenCalledWith('breakout:removal', { reason: 'BREAKOUT_MOVE_IN' });
+      });
+
+      it('[2.4] breakout:removal no emite nada si el participante señalado ya no está conectado', () => {
+        const { serverTo, roomEvents } = createGateway();
+
+        removalListener(roomEvents)({
+          roomCode: 'abc-defg-hij',
+          targetIdentity: 'nobody-connected',
+          reason: 'BREAKOUT_FORCED_RETURN',
+        });
+
+        expect(serverTo).not.toHaveBeenCalled();
       });
     });
   });

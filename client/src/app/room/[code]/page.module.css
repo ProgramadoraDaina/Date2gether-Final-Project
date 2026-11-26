@@ -82,7 +82,7 @@
 .callLoadingButton {
   width: auto;
   padding: 8px 20px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--color-border);
   background: transparent;
   color: var(--color-accent);
@@ -319,8 +319,10 @@
 
 .chatTabs {
   display: flex;
-  gap: var(--space-5);
-  padding: var(--space-4) var(--space-5) 0;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  /* Right padding keeps the tabs clear of the floating hide-chat button. */
+  padding: var(--space-4) 56px 0 var(--space-5);
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -393,6 +395,25 @@
   }
 }
 
+.chatFilterToggle {
+  display: inline-flex;
+  align-items: center;
+  width: auto;
+  margin: 0 0 10px auto;
+  padding: 2px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.chatFilterToggle:hover,
+.chatFilterToggle[aria-expanded='true'] {
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
 .chatDateFilter {
   display: flex;
   align-items: center;
@@ -429,6 +450,25 @@
   margin-bottom: var(--space-3);
   font-size: 14px;
   line-height: 1.4;
+}
+
+.pinLink {
+  display: block;
+  width: auto;
+  margin-top: var(--space-1);
+  padding: 2px 8px;
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.pinLink:hover {
+  background: none;
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 
 /* Te mencionaron a vos (por nombre o por rol/"invitados", ver
@@ -481,7 +521,7 @@
 .notesTabs button {
   padding: 6px 10px;
   border: 1px solid var(--color-border);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--color-surface);
   color: var(--color-text);
   cursor: pointer;
@@ -498,7 +538,7 @@
   resize: none;
   padding: 10px;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--color-surface);
   color: var(--color-text);
   font: inherit;
@@ -612,4 +652,57 @@
     border-radius: 0;
     padding-top: calc(48px + env(safe-area-inset-top, 0px));
   }
+}
+
+/* Mensajes seguidos de la misma persona: el nombre queda solo para lectores de pantalla. */
+.messageContinued {
+  margin-top: calc(-1 * var(--space-2));
+}
+
+.messageContinued .author {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.unreadBadge,
+.unreadDot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.unreadBadge {
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+
+.unreadDot {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }

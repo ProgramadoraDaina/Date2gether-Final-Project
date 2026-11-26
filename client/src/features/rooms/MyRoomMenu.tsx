@@ -9,9 +9,11 @@ import styles from './MyRoomMenu.module.css';
 export function MyRoomMenu({
   room,
   onVisibilityChange,
+  onPromote,
 }: {
   room: OwnedRoom;
   onVisibilityChange: (roomId: string, hidden: boolean) => void;
+  onPromote: (room: OwnedRoom) => void;
 }) {
   const { t } = useTranslation();
   const menu = useRef<HTMLDetailsElement>(null);
@@ -24,6 +26,7 @@ export function MyRoomMenu({
   const [changingVisibility, setChangingVisibility] = useState(false);
   const [visibilityError, setVisibilityError] = useState('');
   const canManageArchive = room.isPermanent && !room.hiddenFromMyRooms;
+  const canPromote = !room.isPermanent && room.isJoinable;
 
   async function confirm() {
     setDeleting(true);
@@ -77,12 +80,36 @@ export function MyRoomMenu({
             disabled={changingVisibility}
             onClick={() => void changeVisibility()}
           >
-            {t(room.hiddenFromMyRooms ? 'Volver a mostrar la sala' : 'Quitar de Mis salas')}
+            <span className={styles.optionLabel}>
+              {t(room.hiddenFromMyRooms ? 'Volver a mostrar la sala' : 'Quitar de Mis salas')}
+            </span>
+            <span className={styles.optionHint}>
+              {t(
+                room.hiddenFromMyRooms
+                  ? 'Vuelve a aparecer en esta lista.'
+                  : 'La sala no se borra: solo deja de aparecer en esta lista.',
+              )}
+            </span>
           </button>
           {visibilityError && (
             <p className={styles.menuError} role="alert">
               {t(visibilityError)}
             </p>
+          )}
+          {canPromote && (
+            <button
+              type="button"
+              disabled={changingVisibility}
+              onClick={() => {
+                if (menu.current) menu.current.open = false;
+                onPromote(room);
+              }}
+            >
+              <span className={styles.optionLabel}>{t('Hacer permanente')}</span>
+              <span className={styles.optionHint}>
+                {t('La sala deja de vencer. No se puede deshacer.')}
+              </span>
+            </button>
           )}
           {canManageArchive && (
             <>
@@ -92,7 +119,10 @@ export function MyRoomMenu({
                   if (menu.current) menu.current.open = false;
                 }}
               >
-                {t('Ver archivo de llamadas')}
+                <span className={styles.optionLabel}>{t('Archivo compartido')}</span>
+                <span className={styles.optionHint}>
+                  {t('Llamadas de hace más de 90 días de todos los que usaron la sala.')}
+                </span>
               </Link>
               <button
                 type="button"
@@ -105,7 +135,10 @@ export function MyRoomMenu({
                   dialog.current?.showModal();
                 }}
               >
-                {t('Borrar registros archivados')}
+                <span className={styles.optionLabel}>{t('Borrar archivo compartido')}</span>
+                <span className={styles.optionHint}>
+                  {t('Mensajes y llamadas de hace más de 90 días, para todos.')}
+                </span>
               </button>
             </>
           )}
@@ -121,7 +154,7 @@ export function MyRoomMenu({
             if (deleting) event.preventDefault();
           }}
         >
-          <h2 id={heading}>{t('Borrar registros archivados')}</h2>
+          <h2 id={heading}>{t('Borrar archivo compartido')}</h2>
           <p>
             <strong>{room.name}</strong>
           </p>

@@ -57,6 +57,22 @@ describe('useRoomMembers', () => {
     expect(result.current.isCurrentUserAdmin).toBe(true);
   });
 
+  it('reconoce al admin con el id del pase de sala aunque /auth/me falle', async () => {
+    const { isLoggedIn, getCurrentUser } = await import('@/lib/auth');
+    (isLoggedIn as jest.Mock<typeof isLoggedIn>).mockReturnValue(true);
+    (getCurrentUser as jest.Mock<typeof getCurrentUser>).mockResolvedValue(null);
+    const { joinRoom, getRoomMembers } = await import('@/lib/api');
+    (joinRoom as jest.Mock<typeof joinRoom>).mockResolvedValue(undefined);
+    const members = [
+      { userId: 'user-1', name: 'Daina', role: 'administrador' as const, isOwner: true },
+    ];
+    (getRoomMembers as jest.Mock<typeof getRoomMembers>).mockResolvedValue(members);
+    const { useRoomMembers } = await import('./useRoomMembers');
+    const { result } = renderHook(() => useRoomMembers('abc-defg-hij', 'user-1'));
+    await waitFor(() => expect(result.current.members).toEqual(members));
+    expect(result.current.isCurrentUserAdmin).toBe(true);
+  });
+
   it('si no se puede unir a la sala, muestra el error y nunca llega a pedir la lista de miembros', async () => {
     const { isLoggedIn, getCurrentUser } = await import('@/lib/auth');
     (isLoggedIn as jest.Mock<typeof isLoggedIn>).mockReturnValue(true);

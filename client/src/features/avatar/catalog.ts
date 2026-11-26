@@ -576,6 +576,7 @@ export const SLOT_LABELS: Record<AvatarSlot, string> = {
 
 export const AVATAR_PALETTE = [
   '#e04b3a',
+  '#f0821e',
   '#f2c14e',
   '#3d7be0',
   '#2fa36b',
