@@ -791,3 +791,41 @@ LiveKit de código abierto (`livekit/livekit-server`, versión fijada en `deploy
 - Hay que abrir puertos públicos de medios (TCP 7881; UDP 3478 y 7882) además de 80 y 443.
 - Las llamadas activas se interrumpen cuando la EC2 se apaga automáticamente (dos horas después de cada arranque).
 - La columna `rooms.chime_meeting_id` y la migración `0003_chime_meeting` se conservan para no reescribir historial de migraciones; LiveKit no las usa.
+
+---
+
+## 28. PostgreSQL como contenedor en la misma EC2, no como servicio administrado (RDS)
+
+**Fecha:** 2026-11-25
+**Rama:** `chore/repo-hygiene`
+
+### Contexto
+
+El proyecto necesita una base PostgreSQL alojada en la nube, no en la computadora de un integrante. La cuenta de AWS del proyecto usa el plan FREE del nuevo AWS experience, con una única región (`us-east-2`) y créditos limitados. Los servicios disponibles dependen de ese plan, y los administrados se cobran por separado de la EC2.
+
+### Alternativas consideradas
+
+- **Amazon RDS (u otro PostgreSQL administrado).** Ofrece copias automáticas, recuperación a un punto en el tiempo y parches gestionados. Agrega una instancia de base facturable además de la EC2 y no se verificó contra la lista oficial de servicios admitidos del plan FREE; la plantilla del proyecto declara explícitamente que no crea RDS (`deploy/ec2/README.md`, "Costos y créditos").
+- **PostgreSQL en la computadora de un integrante.** Descartada: incumple el requisito de que la base esté en un servicio en la nube.
+- **PostgreSQL 16 en un contenedor Docker en la misma EC2 (elegida).**
+
+### Decisión
+
+El servicio `postgres` (`postgres:16-alpine`) está definido en `deploy/ec2/compose.yaml` junto al resto del stack. Escucha solo en `127.0.0.1` (`listen_addresses=127.0.0.1`) y el puerto 5432 no se abre en el Security Group. Los datos viven en el volumen Docker `postgres_data`, dentro del disco raíz de la instancia: gp3 de 30 GiB con cifrado activado y `DeleteOnTermination: false` (`deploy/ec2/cloudformation.json`). Las migraciones se aplican en `deploy/ec2/start.sh` antes de iniciar la API.
+
+Esto cumple el requisito de que la base esté alojada en un servicio en la nube y no en la computadora de un integrante: corre en una instancia EC2 de AWS.
+
+### Justificación
+
+- Costo: no se agrega ningún recurso facturable aparte de la EC2, el disco y la IPv4 que ya existen.
+- Simplicidad: un solo `docker compose` levanta aplicación, medios, proxy y base, y una sola plantilla de CloudFormation describe todo.
+- Encaja con el alcance de una demostración académica con una llamada a la vez.
+
+### Consecuencias y tradeoffs
+
+- **Sin copias automáticas ni recuperación a un punto en el tiempo.** La única copia prevista es manual con `pg_dump` (`deploy/ec2/README.md`, "Copias, actualización y retiro"), y queda en el mismo disco; hay que copiarla fuera de la instancia si se quiere protección ante la pérdida del host.
+- **La base comparte CPU y RAM con la aplicación y LiveKit.** La plantilla admite `t3.small` (2 GiB) y `t3.medium` (4 GiB, valor por defecto); en `t3.small` la construcción de imágenes puede agotar la memoria, por eso el arranque crea 2 GiB de swap.
+- **La base se apaga con la instancia.** Un temporizador de systemd apaga la EC2 dos horas después de cada arranque; hasta volver a iniciarla desde la consola, la aplicación y la base no responden. Los datos persisten porque el disco y el volumen se conservan.
+- **Parches manuales.** La versión de imagen está fijada; actualizar PostgreSQL o el sistema operativo es una tarea del equipo.
+- **Un solo host, sin réplica ni alta disponibilidad.** Aceptable para la demostración; no para producción real.
+- Si el proyecto continuara más allá de la entrega, migrar a RDS (o equivalente) sería el primer cambio recomendado: bastaría cambiar `DATABASE_URL` y restaurar un volcado.
