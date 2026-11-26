@@ -1068,9 +1068,18 @@ export function AmbientMusicPlayer({
         )}
       </div>
       {error && (
-        <p role="alert" className={styles.error}>
-          {error}
-        </p>
+        <div role="alert" className={styles.error}>
+          <span>{error}</span>
+          <button
+            type="button"
+            className={styles.errorClose}
+            aria-label={t('Cerrar aviso')}
+            title={t('Cerrar aviso')}
+            onClick={() => setError(null)}
+          >
+            ×
+          </button>
+        </div>
       )}
       <dialog
         ref={removeDialogRef}

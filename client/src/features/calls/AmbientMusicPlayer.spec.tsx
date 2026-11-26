@@ -534,6 +534,17 @@ describe('AmbientMusicPlayer', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('El link o ID de YouTube no es válido');
   });
 
+  it('el aviso de error se puede cerrar', async () => {
+    const { AmbientMusicPlayer } = await import('./AmbientMusicPlayer');
+    const socket = fakeSocket();
+    render(<AmbientMusicPlayer socket={socket as never} isAdmin />);
+
+    act(() => socket.handlers.error({ message: 'El link o ID de YouTube no es válido' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar aviso' }));
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('un video que no se puede incrustar avisa cuál es y por qué', async () => {
     const { AmbientMusicPlayer } = await import('./AmbientMusicPlayer');
     const socket = fakeSocket();
