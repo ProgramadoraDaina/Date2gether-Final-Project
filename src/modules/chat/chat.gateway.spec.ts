@@ -35,7 +35,6 @@ describe('ChatGateway', () => {
     const room = {
       id: 'room-1',
       code: 'abc-defg-hij',
-      isActive: true,
       isPermanent: roomOptions.isPermanent ?? false,
     };
     const playlists = {
@@ -167,7 +166,6 @@ describe('ChatGateway', () => {
       resolveJoinable.mockResolvedValueOnce({
         id: 'room-2-recycled',
         code: 'abc-defg-hij',
-        isActive: true,
       } as never);
       const participant: RoomParticipant = {
         kind: 'room-participant',

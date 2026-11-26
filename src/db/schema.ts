@@ -84,7 +84,6 @@ export const rooms = pgTable(
     id: uuid('id').defaultRandom().primaryKey(),
     code: varchar('code', { length: 20 }).notNull(), // .unique() removed — see rooms_code_code_pool_unique
     name: varchar('name', { length: 100 }).notNull(),
-    isActive: boolean('is_active').notNull().default(true),
     // Declared at creation; a room admin can later promote false -> true (never demote). Permanent
     // rooms never expire and never recycle their code.
     isPermanent: boolean('is_permanent').notNull().default(false),

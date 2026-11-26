@@ -776,3 +776,22 @@ La rúbrica pide un CRUD completo y la operación Update de las salas era débil
 - **Pases ya emitidos:** los tokens de admisión de una sala temporal se emitieron con `expiresAt` de 24 h. Después de promover, esos pases conservan su vencimiento original; los nuevos se emiten sin vencimiento. Es aceptable: quien tenga un pase vencido vuelve a entrar por la sala de espera.
 - **Quien ya está dentro de la sala** no ve las funciones solo-permanentes (playlist guardada, eventos, modos persistentes) hasta recargar, porque la página de la sala consulta `isPermanent` al montarse. No se agregó la acción dentro de la sala para mantener el cambio acotado.
 - Los demás consumidores de `isPermanent` (historial de chat, restauración de playlist, links de sala, archivo compartido, línea de tiempo) leen el valor desde la base en cada petición o conexión, por lo que ven la promoción sin invalidar cachés.
+
+---
+
+## 28. Eliminar la columna `rooms.is_active` (código muerto)
+
+### Contexto
+
+`rooms.is_active` nació en la migración 0000 con valor por defecto `true`, pero ninguna ruta del código la puso nunca en `false`: todas las filas valían `true`. Sin embargo condicionaba lógica real (`La sala está cerrada` en el resolver y en la admisión, el barrido `retireExpired`, y la opción `requireActive` de `lockJoinable`), lo que sugería una funcionalidad de "cerrar sala" que no existe.
+
+### Decisión
+
+- Se elimina la columna (migración `0032_drop_rooms_is_active`) y toda la lógica asociada: la opción `requireActive`, las ramas `La sala está cerrada` y el filtro `is_active` del barrido de retiro. El comportamiento observable no cambia.
+- **La regla "no hay administrador conectado" no se guarda como bandera derivada en la base.** Se evalúa en vivo contra LiveKit (`calls.service` `assertHostConnected` y `call-session-close` `onAdminLeft`). Persistirla duplicaría un estado que cambia en cada conexión y desconexión, con riesgo de desincronización.
+- **Fin de vida de una sala:** retiro tras 24 h sin ingresos (`retired_at`, salvo salas permanentes) o eliminación por un administrador.
+
+### Consecuencias
+
+- Si en el futuro se implementa "cerrar sala", debe diseñarse con su propia semántica en vez de reutilizar esta columna.
+- Migración irreversible sin pérdida de información útil: el valor era constante.

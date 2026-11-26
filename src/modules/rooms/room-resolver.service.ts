@@ -31,22 +31,18 @@ export class RoomResolverService {
   async resolveJoinable(code: string): Promise<Room> {
     this.assertResolvableCode(code);
     const [room] = await this.db.select().from(rooms).where(joinableByCode(code)).limit(1);
-    return this.assertJoinable(room, code, true);
+    return this.assertJoinable(room, code);
   }
 
-  async lockJoinable(
-    tx: Transaction,
-    code: string,
-    opts?: { requireActive?: boolean },
-  ): Promise<Room> {
+  async lockJoinable(tx: Transaction, code: string): Promise<Room> {
     this.assertResolvableCode(code);
     const [room] = await tx.select().from(rooms).where(joinableByCode(code)).for('update');
-    return this.assertJoinable(room, code, opts?.requireActive ?? true);
+    return this.assertJoinable(room, code);
   }
 
   /**
    * Code-pool occupancy (D2/D3): "¿este código sigue reservado?", sin el
-   * componente de tiempo de joinability -- una sala cerrada-pero-no-retirada
+   * componente de tiempo de joinability -- una sala vencida-pero-no-retirada
    * sigue ocupando su código (D1). Único consumidor hoy: el probe de
    * colisión de createRoom(); nunca para tráfico en vivo.
    */
@@ -77,9 +73,8 @@ export class RoomResolverService {
     }
   }
 
-  private assertJoinable(room: Room | undefined, code: string, requireActive: boolean): Room {
+  private assertJoinable(room: Room | undefined, code: string): Room {
     if (!room) throw new NotFoundException(`No existe una sala con el código "${code}"`);
-    if (requireActive && !room.isActive) throw new ForbiddenException('La sala está cerrada');
     return room;
   }
 
@@ -113,7 +108,6 @@ export class RoomResolverService {
         and(
           isNull(rooms.retiredAt),
           eq(rooms.isPermanent, false),
-          eq(rooms.isActive, true),
           sql`${rooms.lastEnteredAt} < now() - interval '24 hours'`,
           not(
             sql`exists (select 1 from ${callSessions} cs where cs.room_id = ${rooms.id} and cs.ended_at is null and cs.forced_close_at is null)`,

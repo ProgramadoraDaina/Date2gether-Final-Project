@@ -225,6 +225,13 @@
       "when": 1795642521878,
       "tag": "0031_call_summaries",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1795709656486,
+      "tag": "0032_drop_rooms_is_active",
+      "breakpoints": true
     }
   ]
 }

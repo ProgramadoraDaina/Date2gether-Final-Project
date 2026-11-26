@@ -14,7 +14,6 @@ export interface Room {
   id: string;
   code: string;
   name: string;
-  isActive: boolean;
   isPermanent: boolean;
   createdAt: string;
 }

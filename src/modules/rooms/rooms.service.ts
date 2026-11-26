@@ -294,7 +294,7 @@ export class RoomsService {
   // - Idempotente: si ya es permanente devuelve la sala sin escribir.
   async promoteToPermanent(code: string, userId: string): Promise<Room> {
     return this.db.transaction(async (tx) => {
-      const room = await this.resolver.lockJoinable(tx, code, { requireActive: false });
+      const room = await this.resolver.lockJoinable(tx, code);
       const [member] = await tx
         .select({ role: roomMembers.role })
         .from(roomMembers)

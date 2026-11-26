@@ -11,7 +11,6 @@ const room: Room = {
   id: 'room-1',
   code: 'abc-defg-hij',
   name: 'Reunión de Daina',
-  isActive: true,
   isPermanent: false,
   historyDeletedBefore: null,
   historyCleanupPending: false,
@@ -164,13 +163,6 @@ describe('RoomsService', () => {
       await expect(service.getByCodeOrThrow(room.code)).rejects.toThrow(NotFoundException);
     });
 
-    it('propaga el 403 del resolver cuando la sala existe pero está cerrada', async () => {
-      resolver.resolveJoinable.mockRejectedValueOnce(
-        new ForbiddenException('La sala está cerrada'),
-      );
-
-      await expect(service.getByCodeOrThrow(room.code)).rejects.toThrow(ForbiddenException);
-    });
   });
 
   describe('joinRoom', () => {
@@ -371,7 +363,7 @@ describe('RoomsService', () => {
       const result = await service.promoteToPermanent(room.code, 'owner-1');
 
       expect(result).toBe(promoted);
-      expect(resolver.lockJoinable).toHaveBeenCalledWith(tx, room.code, { requireActive: false });
+      expect(resolver.lockJoinable).toHaveBeenCalledWith(tx, room.code);
       expect(updateChain.set).toHaveBeenCalledWith({
         isPermanent: true,
         waitingRoomEnabled: true,

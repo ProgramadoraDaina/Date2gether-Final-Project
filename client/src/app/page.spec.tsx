@@ -67,7 +67,6 @@ describe('HomePage', () => {
       id: 'room-1',
       code: 'abc-defg-hij',
       name: 'Reunión de Ana',
-      isActive: true,
       isPermanent: false,
       createdAt: '2026-01-01',
     });
@@ -133,7 +132,6 @@ describe('HomePage', () => {
       id: 'room-1',
       code: 'abc-defg-hij',
       name: 'Reunión de Daina',
-      isActive: true,
       isPermanent: true,
       createdAt: '2026-01-01',
     });
@@ -181,7 +179,6 @@ describe('HomePage', () => {
       id: 'room-1',
       code: 'abc-defg-hij',
       name: 'Grupo de los jueves',
-      isActive: true,
       isPermanent: true,
       createdAt: '2026-01-01',
     });
