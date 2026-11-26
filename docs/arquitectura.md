@@ -321,9 +321,13 @@ Todas las rutas están bajo `/api` en producción (Caddy quita el prefijo) y sin
 | GET | `/rooms/:code/members` | Cuenta | Miembro de la sala (cualquier rol) | Lista de miembros con su rol y si es propietario (`isOwner`) |
 | PATCH | `/rooms/:code/members/:userId` | Cuenta | Rol de sala `administrador` | Cambia el rol por sala. No se puede quitar el rol al propietario ni dejar la sala sin administradores (403); emite `memberRoleChanged` |
 | PATCH | `/rooms/:code/name` | Cuenta | Rol de sala `administrador` | Renombra la sala (solo permanentes; 403 si es temporal) |
+| PATCH | `/rooms/:code/permanent` | Cuenta | Rol de sala `administrador` (validado en el servicio; 403 si no, 404 si no existe) | Convierte una sala temporal en permanente; irreversible e idempotente |
 | GET | `/rooms/:roomCode/messages` | Pase | - | Historial de chat paginado: `view=recent\|archive`, `from` y `to` (un día, ISO 8601) y cursor `before`; el archivo solo existe en salas permanentes |
 | GET | `/rooms/:roomCode/notes` | Pase | - | Bloc compartido |
 | PATCH | `/rooms/:roomCode/notes` | Pase | - | Guarda con control de revisión |
+| GET | `/rooms/:roomCode/links` | Pase | - | Biblioteca de links de la sala (invitados incluidos) |
+| POST | `/rooms/:code/links` | Cuenta | Rol de sala `administrador` o `colaborador` | Agrega un link |
+| DELETE | `/rooms/:code/links/:id` | Cuenta | Rol de sala `administrador` o `colaborador` | Quita un link (204) |
 
 ### Admisión (sala de espera)
 
@@ -371,6 +375,22 @@ Con ingreso directo, `POST /rooms/:code/access` devuelve `{ token, participant }
 | GET | `/transcripts/:roomCode?callSid=` | Pase | - | Acta de esa llamada en orden |
 | GET | `/gifs/:roomCode` | Pase | - | Búsqueda de GIFs (Giphy) |
 | GET | `/music-search/:roomCode` | Pase | - | Búsqueda de canciones |
+
+### Mini salas
+
+Todas usan el pase de sala (`RoomAccessGuard`); el rol por sala se valida en `BreakoutRoomsService` y responde 403 si no corresponde. Hay como máximo tres mini salas abiertas por sala (`MAX_BREAKOUT_ROOMS`).
+
+| Método | Ruta | Autenticación | Rol requerido | Notas |
+| --- | --- | --- | --- | --- |
+| POST | `/calls/:roomCode/breakouts` | Pase | Rol de sala `administrador` | Crea una mini sala; 409 si ya hay tres abiertas |
+| GET | `/calls/:roomCode/breakouts` | Pase | - | El administrador ve las asignaciones; el resto, una vista pública |
+| PATCH | `/calls/:roomCode/breakouts/:breakoutId` | Pase | Rol de sala `administrador` | Cambia las políticas de entrada (`joinPolicy`) y salida (`leavePolicy`) |
+| POST | `/calls/:roomCode/breakouts/:breakoutId/participants` | Pase | `administrador`, o la propia persona si la mini sala es de entrada libre | Traslada a una persona a la mini sala |
+| POST | `/calls/:roomCode/breakouts/:breakoutId/token` | Pase | Tener una asignación en esa mini sala | Token de LiveKit para la mini sala |
+| POST | `/calls/:roomCode/breakouts/:breakoutId/return` | Pase | La propia persona, o un `administrador` para devolver a otra | Vuelve a la sala principal (204); 403 si la salida está bloqueada |
+| DELETE | `/calls/:roomCode/breakouts/:breakoutId` | Pase | Rol de sala `administrador` | Cierra una mini sala (204) |
+| POST | `/calls/:roomCode/breakouts/recall` | Pase | Rol de sala `administrador` | Llama de vuelta a todos a la sala principal |
+| DELETE | `/calls/:roomCode/breakouts` | Pase | Rol de sala `administrador` | Cierra todas las mini salas (204) |
 
 ### Socket.io
 

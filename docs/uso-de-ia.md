@@ -7,7 +7,9 @@ Este documento describe, con evidencia del repositorio, cómo se usó inteligenc
 | Herramienta | Uso | Evidencia en el repositorio |
 | --- | --- | --- |
 | **Claude Code** (Anthropic), agente de línea de comandos | Exploración del código, implementación de cambios, depuración, documentación y pruebas | `AGENTS.md` (instrucciones para el agente), `openspec/` (artefactos del flujo SDD), `.atl/skill-registry.md` (registro de habilidades del agente) |
-| **OpenAI Codex** | Generación de código para el rediseño de la sala de espera | Rama `codex/waiting-room-redesign` (PR #41, commit `b92507a`), creada por Alex Sanchez |
+| **OpenAI Codex** | Generación de código para el rediseño de la sala de espera y del botón de cerrar sesión | Ramas `codex/waiting-room-redesign` (PR #41, commit `b92507a`) y `codex/fix-logout-button` (PR #51), creadas por Alex Sanchez |
+| **gentle-ai** sobre Claude Code | Arnés que agrega al agente un flujo de trabajo (ODD), memoria persistente entre sesiones (Engram), un índice del código (CodeGraph) y subagentes para explorar o verificar | Ramas de Jonatan Luque; los documentos de cada funcionalidad se guardaban en `odd/tasks/`, excluido de git |
+| **Playwright** manejado por el agente | Pruebas en un navegador real con dos cuentas, cámara y micrófono simulados, contra LiveKit local | Guiones fuera del repositorio; los hallazgos quedaron en los PR #52 y #56 |
 
 El equipo repartía las tareas en un tablero de Trello y cada integrante creaba la rama de la tarea que tenía asignada; por eso el autor de cada rama indica quién hizo esa parte. Con ese criterio, Codex se usó en el rediseño de la sala de espera y el resto del trabajo asistido por IA se hizo con Claude Code.
 
@@ -25,7 +27,7 @@ El equipo combinó varias metodologías según el momento:
 
 - **SDD (Spec-Driven Development).** Para cambios grandes se escribió primero la especificación y se avanzó por fases: propuesta, especificaciones, diseño, tareas, implementación y verificación. Evidencia: `openspec/changes/call-participation-timeline/` (`proposal.md`, `specs/`, `design.md`, `tasks.md`, `state.yaml`) y `openspec/changes/permanent-scheduled-rooms/` (con `verify-report.md`).
 - **TDD (pruebas primero).** `openspec/config.yaml` define `strict_tdd: true`, y `state.yaml` registra ciclos rojo-verde (por ejemplo `src/app-setup.spec.ts`). Evidencia en pruebas: `src/modules/auth/guards/roles.guard.spec.ts`, `src/modules/auth/guards/ws-jwt-auth.guard.spec.ts`, `src/modules/rooms/guards/room-roles.guard.spec.ts`, `src/modules/auth/auth.service.spec.ts` y recorridos E2E como `e2e/auth.spec.ts` y `e2e/admin-and-room-delete.spec.ts`.
-- **ODD (Outcome-Driven Development).** El trabajo se define por el resultado medible que obtiene la persona usuaria, y no por una lista fija de funcionalidades o especificaciones; sirve para priorizar qué construir y para validar que lo construido entregó valor. Según el equipo, Jonatan Luque aplicó ODD en la personalización de avatar, las transiciones y animaciones de la interfaz, los subtítulos en vivo (transcripción) y los emojis y sonidos de sala (junto con funcionalidades similares de interacción). El repositorio contiene código de estas áreas (avatar, subtítulos, emojis y sonidos de sala y hojas de estilo con transiciones y animaciones), pero no deja evidencia escrita de la metodología ni se definieron métricas de resultado.
+- **ODD (Organic Driven Development).** Es el flujo que trae el arnés gentle-ai y que usó Jonatan Luque. En vez de fijar todas las fases de antemano como en SDD, el agente sigue siempre los mismos pasos y ajusta su profundidad al tamaño del pedido: (1) confirmar que el pedido autoriza cambiar código, (2) explorar el código existente, (3) preguntar solo lo que es una decisión de producto, (4) clasificar la tarea como chica o grande, (5) en las grandes, escribir antes de tocar código un documento con los requisitos citados textualmente, las tareas y una bitácora, (6) implementar tarea por tarea con prueba primero (rojo y después verde) y (7) cerrar informando qué se verificó, qué quedó pendiente y el riesgo del cambio. Las tareas chicas se hacen directo, sin documento. Hay documentos de tareas de ODD para los avatares, los subtítulos en vivo, los emojis y sonidos de sala, las correcciones generales (PR #27), las mini salas y sus transiciones, el rediseño visual y los ajustes posteriores; las tareas chicas (como los arreglos de los PR #54 a #57) se hicieron directo. Esos documentos quedaron fuera del repositorio porque eran notas de trabajo del agente.
 
 ## Tareas en las que la usamos
 
@@ -54,6 +56,10 @@ Para verificar la firma de un webhook, `WebhookReceiver.receive()` necesita el c
 
 Resultado verificable en el código: `src/app-setup.ts` declara `LIVEKIT_WEBHOOK_CONTENT_TYPE` (línea 10) y lo registra junto con `application/json` en `useBodyParser` (línea 33), con una prueba que primero falla y luego pasa (`src/app-setup.spec.ts`; el detalle del ciclo rojo-verde está en `state.yaml`, tareas 2.1 a 2.4). Con ese trabajo previo la verificación de firma no se rompió por una causa invisible.
 
+**Otro caso (Jonatan Luque): la causa real de "No se pudo crear la mini sala".**
+
+Después de usar y cerrar mini salas, crear una nueva fallaba siempre, aunque no hubiera ninguna abierta. El agente siguió el error hasta la base: `call_breakout_rooms` tenía una restricción única **global** sobre `livekit_room_name`, y los nombres se arman como `<código de sala>::breakout-N` con N de 1 a 3. Las filas cerradas conservan su nombre, así que reutilizar un número ya usado en esa sala chocaba contra la restricción y la creación fallaba. La corrección fue un índice único **parcial**, que solo aplica a las mini salas abiertas (`WHERE closed_at IS NULL`, migración `drizzle/0033_breakout_open_name_unique.sql`), más ordenar por fecha las búsquedas por nombre para que tomen la fila vigente. Se probó contra la base de pruebas y en el navegador: tres creadas, la cuarta rechazada con 409, se cierra una y se puede crear otra, y una segunda ronda completa funciona (commit `08d4c29`, PR #56).
+
 ## Un caso en que hubo que corregirla
 
 **El nombre del encabezado de autenticación del webhook de LiveKit.**
@@ -65,6 +71,12 @@ Corrección: commit `df84caa` (`fix(calls): read the real Authorization header, 
 **Lección:** una especificación escrita con ayuda de IA parecía coherente y estaba equivocada en un detalle que solo se confirma contra el sistema real. Las suposiciones sobre servicios externos se verifican con una prueba de integración o un despliegue, no solo con pruebas unitarias que repiten esa suposición. Lo mismo ocurrió con la decisión 18: las pruebas del gateway llamaban a los métodos directamente y se saltaban el pipeline de guards, por lo que el error solo apareció al probar a mano.
 
 Autoría: los artefactos de `openspec/changes/call-participation-timeline/` los generó Claude Code en las fases de exploración y diseño del flujo SDD, dirigido y revisado por Daina, autora de la rama (PR #22). El error salió de ese texto generado, y no lo detectó la revisión humana ni las pruebas unitarias; se descubrió recién contra el despliegue real.
+
+**Otro caso (Jonatan Luque): un arreglo que pasaba las pruebas y no funcionaba.**
+
+Al entrar a una mini sala se perdía el estado del micrófono y la cámara. El agente propuso guardar ese estado dentro del componente de la llamada (`MeetingRoom`) y escribió una prueba que lo confirmaba; la prueba pasaba. Al probarlo en un navegador real con Playwright, el micrófono seguía volviendo a encenderse. Con registros temporales se vio la causa: al cambiar de sala se desmonta y se vuelve a montar **todo** `MeetingRoom`, así que el estado guardado ahí se perdía; la prueba solo volvía a renderizar el componente y nunca lo desmontaba. La corrección movió el estado a la página de la sala, que sobrevive al cambio (`devicesRef` en `client/src/app/room/[code]/page.tsx`), y la prueba pasó a desmontar y montar de nuevo para reproducir el caso real (commit `365296a`, PR #56).
+
+**Lección:** una prueba escrita por la misma IA que escribió el arreglo puede repetir su misma suposición. Lo que la desmintió fue probar el recorrido real en el navegador.
 
 ## Funcionalidad de IA en el producto
 
