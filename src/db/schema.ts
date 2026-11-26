@@ -624,7 +624,10 @@ export const callBreakoutRooms = pgTable(
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   (table) => [
-    unique('call_breakout_rooms_livekit_room_name_unique').on(table.livekitRoomName),
+    // Only open rows: a closed mini sala must free its slot name for the next one.
+    uniqueIndex('call_breakout_rooms_open_livekit_room_name_unique')
+      .on(table.livekitRoomName)
+      .where(sql`${table.closedAt} is null`),
     index('call_breakout_rooms_room_id_closed_at_idx').on(table.roomId, table.closedAt),
   ],
 );

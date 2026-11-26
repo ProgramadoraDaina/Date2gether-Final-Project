@@ -285,6 +285,7 @@ const en: Record<string, string> = {
   'En la sala': 'In the room',
   'Escribí un mensaje...': 'Write a message...',
   'Filtrar por día': 'Filter by day',
+  Filtros: 'Filters',
   'Limpiar filtro': 'Clear filter',
   'No hay mensajes de ese día.': 'There are no messages from that day.',
   'Ver archivo del chat': 'View chat archive',
@@ -429,6 +430,9 @@ const en: Record<string, string> = {
   'Hacer administrador': 'Make administrator',
   'Quitar administrador': 'Remove administrator',
   Propietario: 'Owner',
+  colab: 'collab',
+  Colaborador: 'Collaborator',
+  Participante: 'Participant',
   'Permisos de': 'Permissions for',
   'La sala debe conservar al menos un administrador':
     'The room must keep at least one administrator',

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDb } from '../../db/drizzle.module';
 import { callBreakoutRooms } from '../../db/schema';
 import { buildCallGroupRoomNames, parseBreakoutRoomName, type OpenBreakout } from './call-group';
@@ -43,6 +43,8 @@ export class CallGroupResolverService {
       .select({ parentLivekitRoomSid: callBreakoutRooms.parentLivekitRoomSid })
       .from(callBreakoutRooms)
       .where(eq(callBreakoutRooms.livekitRoomName, roomCode))
+      // Slot names are reused once closed: the newest row is the current one.
+      .orderBy(desc(callBreakoutRooms.createdAt))
       .limit(1);
 
     if (!row?.parentLivekitRoomSid) return { parentSid: livekitRoomSid, parentCode: roomCode };

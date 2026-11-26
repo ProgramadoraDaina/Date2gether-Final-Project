@@ -60,6 +60,20 @@ describe('AvatarEditor', () => {
     expect(screen.getAllByRole('group', { name: /^Color:/ })).toHaveLength(1);
   });
 
+  it('el naranja está entre los colores elegibles', () => {
+    const onChange = jest.fn();
+    render(<Harness initial={{ head: ['cap'], sticker: true }} onChange={onChange} />);
+
+    const headColors = screen.getByRole('group', { name: 'Color: Gorra' });
+    fireEvent.click(within(headColors).getByRole('button', { name: '#f0821e' }));
+
+    expect(onChange).toHaveBeenLastCalledWith({
+      head: ['cap'],
+      colors: { 'head:cap': '#f0821e' },
+      sticker: true,
+    });
+  });
+
   it('modo catálogo: dos piezas del mismo slot se recolorean cada una por separado', () => {
     const onChange = jest.fn();
     render(<Harness initial={{ head: ['crown', 'tiara'], sticker: true }} onChange={onChange} />);

@@ -824,6 +824,18 @@ describe('RoomPage: notas y menciones', () => {
     return { callbacks, socket, ...view };
   }
 
+  it('el filtro por día del chat queda oculto hasta abrirlo con el botón Filtros', async () => {
+    await enter();
+    expect(screen.queryByLabelText('Filtrar por día')).not.toBeInTheDocument();
+    const toggle = screen.getByRole('button', { name: 'Filtros' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByLabelText('Filtrar por día')).toBeVisible();
+    fireEvent.click(toggle);
+    expect(screen.queryByLabelText('Filtrar por día')).not.toBeInTheDocument();
+  });
+
   it('guarda y recupera las notas personales al volver a la sala', async () => {
     const first = await enter();
     fireEvent.click(screen.getByRole('button', { name: /^Notas$/ }));

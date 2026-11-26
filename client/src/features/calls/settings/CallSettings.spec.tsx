@@ -40,6 +40,38 @@ describe('Ajustes de la llamada', () => {
     });
   });
 
+  it('el panel nunca es más alto que el espacio libre arriba del botón', () => {
+    const offsetParent = jest
+      .spyOn(HTMLElement.prototype, 'offsetParent', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return this.parentElement;
+      });
+    const rect = jest
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue({ top: 300 } as DOMRect);
+    try {
+      render(
+        <CallSettingsButton
+          buttonClassName="btn"
+          isAdmin
+          audioLocked={false}
+          videoLocked={false}
+          onSetAudioLock={jest.fn()}
+          onSetVideoLock={jest.fn()}
+          nameFocusEnabled={false}
+          onSetNameFocus={jest.fn()}
+        />,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Ajustes de la llamada' }));
+      expect(screen.getByRole('dialog', { name: 'Ajustes de la llamada' })).toHaveStyle({
+        maxHeight: '280px',
+      });
+    } finally {
+      offsetParent.mockRestore();
+      rect.mockRestore();
+    }
+  });
+
   it('la subvista de subtítulos tiene flecha atrás y X, y el menú abre el modal del avatar', () => {
     render(
       <CallSettingsButton

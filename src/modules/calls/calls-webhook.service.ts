@@ -6,7 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import {
   RoomServiceClient,
   TrackSource,
@@ -380,6 +380,8 @@ export class CallsWebhookService {
           .select({ parentLivekitRoomSid: callBreakoutRooms.parentLivekitRoomSid })
           .from(callBreakoutRooms)
           .where(eq(callBreakoutRooms.livekitRoomName, roomCode))
+          // Slot names are reused once closed: the newest row is the current one.
+          .orderBy(desc(callBreakoutRooms.createdAt))
           .limit(1);
         callGroupId = breakout?.parentLivekitRoomSid ?? null;
       }
