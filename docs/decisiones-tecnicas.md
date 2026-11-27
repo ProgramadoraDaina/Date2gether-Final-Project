@@ -72,6 +72,8 @@ Se eligió **Amazon Chime SDK**.
 
 ## 3. Jest como test runner unitario del backend
 
+> **Nota de estado actual:** el script `test` del backend ejecuta hoy `vitest run` (`package.json` y `vitest.config.mts`, con `unplugin-swc` para los decoradores). El cliente sigue usando Jest. Esta sección registra la decisión original y su razonamiento; los ejemplos de Chime que menciona son históricos (ver sección 12).
+
 **Fecha:** 2026-10-24
 **Rama:** `feature/voice-video-call`
 
@@ -915,3 +917,37 @@ La rúbrica pide un CRUD completo y la operación Update de las salas era débil
 
 - Si en el futuro se implementa "cerrar sala", debe diseñarse con su propia semántica en vez de reutilizar esta columna.
 - Migración irreversible sin pérdida de información útil: el valor era constante.
+
+---
+
+## 32. Documentación del proyecto alineada al enunciado del Proyecto Integrador (Anexo A/C, sección 6)
+
+**Fecha:** 2026-11-24
+**Rama:** `docs/project-documentation`
+
+### Contexto
+
+El enunciado del Proyecto Integrador Final exige un README con secciones definidas (Anexo A), una justificación de las tecnologías, una descripción de la arquitectura y un documento de uso de IA (Anexo C). La documentación existente estaba repartida entre el README y este registro.
+
+### Alternativas consideradas
+
+- **Dejar todo en el README.** Lo vuelve inmanejable: ya mezclaba instalación, seguridad, API y despliegue.
+- **Documentos separados enlazados desde el README (elegida).**
+
+### Decisión
+
+- `README.md` se reorganiza con las secciones del Anexo A (Demo, Usuarios de prueba, Funcionalidades, Stack, Arquitectura, Cómo correrlo en local, Equipo, Uso de IA) y conserva el detalle operativo al final.
+- Se crean `docs/arquitectura.md` (diagramas Mermaid, flujo de una petición, ER y tabla de endpoints, que se movió desde el README), `docs/justificacion.md` y `docs/uso-de-ia.md`.
+- Los datos que no se pueden verificar en el repositorio (URLs, credenciales de prueba, video, nombres reales) quedan como marcadores `TODO` visibles.
+- Las secciones 2, 9, 10 y 11 reciben una nota de que Chime fue reemplazado por LiveKit (sección 12); la sección 3 anota que el backend usa hoy Vitest.
+
+### Justificación
+
+- Cada documento responde una pregunta distinta (cómo se usa, cómo está hecho, por qué, con qué ayuda) y puede evaluarse por separado.
+- Marcar lo desconocido evita documentar datos inventados.
+
+### Consecuencias
+
+- Los `TODO` deben completarse antes de la entrega. Al 26/11 ya se completaron URLs, credenciales y nombres; queda solo el link del video.
+- Si cambia la API, hay que actualizar la tabla de `docs/arquitectura.md` y no el README.
+
