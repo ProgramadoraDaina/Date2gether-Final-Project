@@ -184,10 +184,17 @@ export default function RoomPage() {
   const [notesTab, setNotesTab] = useState<'personal' | 'sala'>('personal');
   const [personalNotes, setPersonalNotes] = useState('');
   const [notesStatus, setNotesStatus] = useState('');
+  // Además del ref (que el resto del componente ya usaba para emitir desde
+  // handlers sin re-render), se guarda en estado para pasarlo como prop a
+  // MeetingRoom: mutar un ref no dispara un re-render, así que sin esto
+  // AmbientMusicPlayer podía quedarse con socket=null aunque el ref ya
+  // tuviera la conexión real.
+  const [roomSocket, setRoomSocket] = useState<Socket | null>(null);
   const sharedNotes = useRoomNotes(
     code,
     access?.token,
     access ? `${personalNotesKey(code, access.participant)}:shared-draft` : undefined,
+    roomSocket,
   );
   const sharedNotesStatus = {
     loading: 'Cargando notas de sala…',
@@ -230,12 +237,6 @@ export default function RoomPage() {
       () => setIsPermanentRoom(false),
     );
   }, [code]);
-  // Además del ref (que el resto del componente ya usaba para emitir desde
-  // handlers sin re-render), se guarda en estado para pasarlo como prop a
-  // MeetingRoom: mutar un ref no dispara un re-render, así que sin esto
-  // AmbientMusicPlayer podía quedarse con socket=null aunque el ref ya
-  // tuviera la conexión real.
-  const [roomSocket, setRoomSocket] = useState<Socket | null>(null);
   const sidebarResize = useResizablePanel({
     storageKey: 'date2gether:sidebarWidth',
     defaultWidth: 220,

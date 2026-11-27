@@ -71,6 +71,11 @@ export interface RoomLinksChangedEvent {
   roomCode: string;
 }
 
+export interface RoomNotesChangedEvent {
+  roomCode: string;
+  note: { content: string; revision: number; updatedAt: string };
+}
+
 // Puente desacoplado entre RoomsService/CallsModule (REST) y ChatGateway
 // (sockets): evita que RoomsModule importe ChatModule (ChatModule ya importa
 // RoomsModule) y, para breakout-rooms, evita un import circular entre
@@ -149,5 +154,13 @@ export class RoomEventsService {
 
   emitRoomLinksChanged(event: RoomLinksChangedEvent): void {
     this.emitter.emit('roomLinksChanged', event);
+  }
+
+  onRoomNotesChanged(listener: (event: RoomNotesChangedEvent) => void): void {
+    this.emitter.on('roomNotesChanged', listener);
+  }
+
+  emitRoomNotesChanged(event: RoomNotesChangedEvent): void {
+    this.emitter.emit('roomNotesChanged', event);
   }
 }

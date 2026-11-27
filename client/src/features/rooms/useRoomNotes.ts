@@ -16,6 +16,15 @@ interface Actions {
   edit(content: string): void;
   retry(): void;
   resolveConflict(keepLocal: boolean): void;
+  applyRemote(note: LiveNote): void;
+}
+interface LiveNote {
+  content: string;
+  revision: number;
+}
+interface NotesSocket {
+  on(event: 'roomNotesChanged', listener: (note: LiveNote) => void): unknown;
+  off(event: 'roomNotesChanged', listener: (note: LiveNote) => void): unknown;
 }
 
 function readDraft(key: string): Draft | null {
@@ -41,7 +50,12 @@ function readDraft(key: string): Draft | null {
 
 // La persistencia pertenece a la sesión de sala, independientemente de la
 // pestaña visible. El borrador local permite recuperar también un cierre sin red.
-export function useRoomNotes(code: string, token?: string, storageKey?: string) {
+export function useRoomNotes(
+  code: string,
+  token?: string,
+  storageKey?: string,
+  socket?: NotesSocket | null,
+) {
   const [state, setState] = useState<NotesState>({ content: '', status: 'loading', remote: null });
   const actions = useRef<Actions | null>(null);
 
@@ -170,6 +184,17 @@ export function useRoomNotes(code: string, token?: string, storageKey?: string) 
         publish();
         if (keepLocal) void flush();
       },
+      applyRemote(note) {
+        // Unsaved local edits win; the save that follows hits 409 and opens the conflict view.
+        if (revision === null || note.revision <= revision || dirty() || saving) return;
+        if (status === 'conflict') return;
+        revision = note.revision;
+        content = note.content;
+        savedContent = note.content;
+        status = 'ready';
+        persist();
+        publish();
+      },
     };
     actions.current = sessionActions;
     const onPageHide = () => {
@@ -200,6 +225,15 @@ export function useRoomNotes(code: string, token?: string, storageKey?: string) 
       void flush(true);
     };
   }, [code, token, storageKey]);
+
+  useEffect(() => {
+    if (!socket) return;
+    const onChanged = (note: LiveNote) => actions.current?.applyRemote(note);
+    socket.on('roomNotesChanged', onChanged);
+    return () => {
+      socket.off('roomNotesChanged', onChanged);
+    };
+  }, [socket]);
 
   const edit = useCallback((content: string) => actions.current?.edit(content), []);
   const retry = useCallback(() => actions.current?.retry(), []);
