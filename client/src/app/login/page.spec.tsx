@@ -108,4 +108,13 @@ describe('LoginPage', () => {
       });
     });
   });
+
+  it('ofrece recuperar la contraseña', async () => {
+    const LoginPage = (await import('./page')).default;
+    render(<LoginPage />);
+    expect(screen.getByRole('link', { name: '¿Olvidaste tu contraseña?' })).toHaveAttribute(
+      'href',
+      '/forgot-password',
+    );
+  });
 });

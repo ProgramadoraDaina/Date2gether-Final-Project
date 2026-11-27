@@ -126,6 +126,26 @@ export async function login(email: string, password: string): Promise<AuthUser> 
   return data.user;
 }
 
+export async function requestPasswordReset(email: string): Promise<string> {
+  const res = await fetch(`${API_URL}/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  if (!res.ok) throw new Error(await extractErrorMessage(res, 'No se pudo enviar el link'));
+  return ((await res.json()) as { message: string }).message;
+}
+
+export async function resetPassword(token: string, password: string): Promise<string> {
+  const res = await fetch(`${API_URL}/auth/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, password }),
+  });
+  if (!res.ok) throw new Error(await extractErrorMessage(res, 'No se pudo cambiar la contraseña'));
+  return ((await res.json()) as { message: string }).message;
+}
+
 export async function logout(): Promise<void> {
   const refreshToken = getRefreshToken();
   clearTokens();
