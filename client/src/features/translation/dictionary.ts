@@ -263,6 +263,32 @@ const en: Record<string, string> = {
   Email: 'Email',
   Contraseña: 'Password',
   'Entrando…': 'Signing in…',
+  '¿Olvidaste tu contraseña?': 'Forgot your password?',
+  'Recuperar contraseña': 'Reset password',
+  'Escribí el email de tu cuenta y te mandamos un link para elegir una nueva.':
+    'Enter your account email and we will send you a link to choose a new one.',
+  'Enviando…': 'Sending…',
+  'Mandarme el link': 'Send me the link',
+  'No se pudo enviar el link': 'The link could not be sent',
+  'Volver a iniciar sesión': 'Back to log in',
+  'Si existe una cuenta con ese email, te mandamos un link.':
+    'If an account with that email exists, we sent you a link.',
+  'El envío de emails no está configurado': 'Email sending is not configured',
+  'No se pudo enviar el email. Probá de nuevo más tarde.':
+    'The email could not be sent. Try again later.',
+  'Elegir contraseña nueva': 'Choose a new password',
+  'Elegí una contraseña con al menos 8 caracteres, una letra y un número.':
+    'Choose a password with at least 8 characters, a letter and a number.',
+  'Contraseña nueva': 'New password',
+  'Repetí la contraseña': 'Repeat the password',
+  'Cambiar contraseña': 'Change password',
+  'Las contraseñas no coinciden': 'The passwords do not match',
+  'No se pudo cambiar la contraseña': 'The password could not be changed',
+  'Este link no es válido.': 'This link is not valid.',
+  'Pedir un link nuevo': 'Request a new link',
+  'El link para cambiar la contraseña venció o ya se usó':
+    'The password link expired or was already used',
+  'Listo, ya podés entrar con tu contraseña nueva.': 'Done, you can log in with your new password.',
   Entrar: 'Log in',
   'No se pudo iniciar sesión': 'Could not log in',
   '¿No tenés cuenta? ': "Don't have an account? ",

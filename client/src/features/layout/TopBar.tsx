@@ -6,7 +6,7 @@ import { LanguageToggle } from '@/features/translation/LanguageToggle';
 import styles from './TopBar.module.css';
 
 // Solo antes de entrar a la cuenta; adentro, tema e idioma viven en Configuración.
-const AUTH_PATHS = ['/login', '/register'];
+const AUTH_PATHS = ['/login', '/register', '/forgot-password', '/reset-password'];
 
 export function TopBar() {
   const pathname = usePathname();

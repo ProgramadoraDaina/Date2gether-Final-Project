@@ -73,6 +73,10 @@ export default function LoginPage() {
       )}
 
       <p className={styles.switchLink}>
+        <Link href="/forgot-password">{t('¿Olvidaste tu contraseña?')}</Link>
+      </p>
+
+      <p className={styles.switchLink}>
         {t('¿No tenés cuenta? ')}
         <Link href="/register">{t('Creá una')}</Link>
       </p>
