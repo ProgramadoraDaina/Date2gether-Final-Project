@@ -99,6 +99,8 @@ pnpm dev:client
 
 `GET http://localhost:3001/health` comprueba el proceso de la API. No existe un script raíz `pnpm dev` que inicie ambos. Si un puerto está ocupado, revisá si el servidor ya está corriendo.
 
+La documentación interactiva de la API (Swagger UI) está en `http://localhost:3001/docs` (`/api/docs` detrás de Caddy); en producción requiere `SWAGGER_ENABLED=true`.
+
 ## AWS y llamadas
 
 Audio y video utilizan **LiveKit autohospedado**. Se reemplaza la integración anterior de Chime porque no está admitida en el plan FREE del nuevo AWS experience. El plan gratuito de LiveKit Cloud tampoco es necesario para este despliegue: se utiliza su servidor abierto en EC2, con consumo de los créditos de infraestructura AWS.

@@ -21,6 +21,7 @@ import { Controller, HttpCode, Post, Req, type RawBodyRequest } from '@nestjs/co
 import { THROTTLER_SKIP } from '@nestjs/throttler/dist/throttler.constants.js';
 import type { Request } from 'express';
 import { CallsWebhookService } from './calls-webhook.service';
+import { ApiExcludeController } from '@nestjs/swagger';
 
 function skipGlobalThrottle(): ClassDecorator {
   return (target) => {
@@ -36,6 +37,7 @@ function skipGlobalThrottle(): ClassDecorator {
 // porque el ThrottlerGuard global (app.module.ts) es 60 req/min/IP y LiveKit pega
 // desde una sola IP: cerrar una sala de 6 personas puede generar ~19 eventos
 // seguidos.
+@ApiExcludeController()
 @Controller('calls/livekit')
 @skipGlobalThrottle()
 export class CallsWebhookController {

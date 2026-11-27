@@ -1,6 +1,7 @@
 import { Controller, Get, NotFoundException, Param } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RoomServiceClient } from 'livekit-server-sdk';
+import { ApiExcludeController } from '@nestjs/swagger';
 
 // Endpoint exclusivo de la suite E2E (Fase 7, tasks.md 7.1): expone
 // listParticipants de LiveKit por nombre de sala para verificar el
@@ -13,6 +14,7 @@ import { RoomServiceClient } from 'livekit-server-sdk';
 // producción). No reutiliza RoomAccessGuard porque esta ruta no pertenece a
 // ninguna sala concreta ni a ningún participante: es pura introspección de
 // LiveKit para la suite, nunca debe quedar accesible fuera de ella.
+@ApiExcludeController()
 @Controller('test-support')
 export class TestSupportController {
   constructor(private readonly config: ConfigService) {}

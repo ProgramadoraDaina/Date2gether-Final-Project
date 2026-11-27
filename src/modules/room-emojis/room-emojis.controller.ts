@@ -31,6 +31,19 @@ import {
   type EmojiCallOptions,
   type NewEmojiContent,
 } from './room-emojis.service';
+import {
+  ApiBadRequestResponse,
+  ApiBearerAuth,
+  ApiBody,
+  ApiConflictResponse,
+  ApiConsumes,
+  ApiForbiddenResponse,
+  ApiNotFoundResponse,
+  ApiOperation,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
+import { ACCESS_TOKEN_AUTH } from '../../swagger';
 
 interface UploadedFile {
   buffer: Buffer;
@@ -43,6 +56,7 @@ interface EmojiUploads {
 
 // Lectura abierta: <img> y <audio> no pueden mandar el header Authorization.
 // Los archivos se piden por uuid y no contienen datos personales.
+@ApiTags('Room emojis')
 @Controller('rooms/:code/emojis')
 export class RoomEmojisController {
   constructor(
@@ -50,12 +64,29 @@ export class RoomEmojisController {
     private readonly freesound: FreesoundService,
   ) {}
 
+  @ApiOperation({
+    summary: 'List the custom emojis of a room',
+    description: 'Public: no authentication required.',
+  })
+  @ApiNotFoundResponse({ description: 'Room not found' })
   @Get()
   list(@Param('code') code: string) {
     return this.roomEmojis.list(code);
   }
 
   // Protegido: solo quien puede crear emojis gasta la cuota de la API key de Freesound.
+  @ApiOperation({
+    summary: 'Search Freesound sounds for a new emoji',
+    description: 'Requires room role: administrador or colaborador.',
+  })
+  @ApiBadRequestResponse({ description: 'Validation failed' })
+  @ApiBearerAuth(ACCESS_TOKEN_AUTH)
+  @ApiUnauthorizedResponse({ description: 'Missing, invalid or expired access token' })
+  @ApiForbiddenResponse({
+    description:
+      'Not a member of the room, or room role not allowed (requires: administrador, colaborador)',
+  })
+  @ApiNotFoundResponse({ description: 'Room not found' })
   @UseGuards(JwtAuthGuard, RoomRolesGuard)
   @RoomRoles('administrador', 'colaborador')
   @Get('sounds')
@@ -63,6 +94,12 @@ export class RoomEmojisController {
     return this.freesound.search(dto.q);
   }
 
+  @ApiOperation({
+    summary: 'Download the image of an emoji',
+    description: 'Public so that img tags can load it without an Authorization header.',
+  })
+  @ApiBadRequestResponse({ description: 'Invalid emoji id' })
+  @ApiNotFoundResponse({ description: 'Emoji not found' })
   @Get(':id/image')
   async image(
     @Param('code') code: string,
@@ -72,6 +109,12 @@ export class RoomEmojisController {
     send(res, await this.roomEmojis.getImage(code, id));
   }
 
+  @ApiOperation({
+    summary: 'Download the sound of an emoji',
+    description: 'Public so that audio tags can load it without an Authorization header.',
+  })
+  @ApiBadRequestResponse({ description: 'Invalid emoji id' })
+  @ApiNotFoundResponse({ description: 'Emoji not found' })
   @Get(':id/sound')
   async sound(
     @Param('code') code: string,
@@ -81,6 +124,38 @@ export class RoomEmojisController {
     send(res, await this.roomEmojis.getSound(code, id));
   }
 
+  @ApiOperation({
+    summary: 'Create a custom emoji',
+    description: 'Multipart upload. Requires room role: administrador or colaborador.',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['name'],
+      properties: {
+        name: { type: 'string' },
+        emoji: { type: 'string', description: 'Unicode emoji, instead of an image' },
+        image: { type: 'string', format: 'binary' },
+        sound: { type: 'string', format: 'binary' },
+        freesoundId: {
+          type: 'integer',
+          description: 'Freesound sound id, instead of a sound file',
+        },
+      },
+    },
+  })
+  @ApiBadRequestResponse({
+    description: 'Validation failed, invalid media, or the room reached its emoji limit',
+  })
+  @ApiConflictResponse({ description: 'An emoji or sound with that name already exists' })
+  @ApiBearerAuth(ACCESS_TOKEN_AUTH)
+  @ApiUnauthorizedResponse({ description: 'Missing, invalid or expired access token' })
+  @ApiForbiddenResponse({
+    description:
+      'Not a member of the room, or room role not allowed (requires: administrador, colaborador)',
+  })
+  @ApiNotFoundResponse({ description: 'Room not found' })
   @UseGuards(JwtAuthGuard, RoomRolesGuard)
   @RoomRoles('administrador', 'colaborador')
   @UseInterceptors(emojiUploads())
@@ -100,6 +175,33 @@ export class RoomEmojisController {
     );
   }
 
+  @ApiOperation({
+    summary: 'Update a custom emoji',
+    description: 'Multipart upload. Requires room role: administrador or colaborador.',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        removeSound: { type: 'boolean' },
+        emoji: { type: 'string' },
+        image: { type: 'string', format: 'binary' },
+        sound: { type: 'string', format: 'binary' },
+        freesoundId: { type: 'integer' },
+      },
+    },
+  })
+  @ApiBadRequestResponse({ description: 'Validation failed' })
+  @ApiConflictResponse({ description: 'An emoji or sound with that name already exists' })
+  @ApiBearerAuth(ACCESS_TOKEN_AUTH)
+  @ApiUnauthorizedResponse({ description: 'Missing, invalid or expired access token' })
+  @ApiForbiddenResponse({
+    description:
+      'Not a member of the room, or room role not allowed (requires: administrador, colaborador)',
+  })
+  @ApiNotFoundResponse({ description: 'Room or emoji not found' })
   @UseGuards(JwtAuthGuard, RoomRolesGuard)
   @RoomRoles('administrador', 'colaborador')
   @UseInterceptors(emojiUploads())
@@ -118,6 +220,18 @@ export class RoomEmojisController {
     });
   }
 
+  @ApiOperation({
+    summary: 'Delete a custom emoji',
+    description: 'Requires room role: administrador or colaborador.',
+  })
+  @ApiBadRequestResponse({ description: 'Invalid emoji id' })
+  @ApiBearerAuth(ACCESS_TOKEN_AUTH)
+  @ApiUnauthorizedResponse({ description: 'Missing, invalid or expired access token' })
+  @ApiForbiddenResponse({
+    description:
+      'Not a member of the room, or room role not allowed (requires: administrador, colaborador)',
+  })
+  @ApiNotFoundResponse({ description: 'Room or emoji not found' })
   @UseGuards(JwtAuthGuard, RoomRolesGuard)
   @RoomRoles('administrador', 'colaborador')
   @Delete(':id')

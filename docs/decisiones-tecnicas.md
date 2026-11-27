@@ -915,3 +915,33 @@ La rúbrica pide un CRUD completo y la operación Update de las salas era débil
 
 - Si en el futuro se implementa "cerrar sala", debe diseñarse con su propia semántica en vez de reutilizar esta columna.
 - Migración irreversible sin pérdida de información útil: el valor era constante.
+
+---
+
+## 32. Documentación OpenAPI/Swagger de la API (`/api/docs`)
+
+**Fecha:** 2026-11-27
+**Rama:** `feat/swagger-docs`
+
+### Contexto
+
+La rúbrica recomienda documentar los endpoints (OpenAPI/Swagger). Además, la defensa prueba la API en vivo: petición sin token (se espera 401), con el token de otro rol (403) y con identificadores ajenos. Hacerlo con `curl` es lento y propenso a errores; hace falta una interfaz donde se pueda pegar un token y probar cada ruta.
+
+### Decisión
+
+- **`@nestjs/swagger` 12.1.3** (su `peerDependencies` acepta `@nestjs/core` y `@nestjs/common` `^12.0.0`). Se monta en `src/swagger.ts` y se invoca desde `main.ts`; `createApp` no cambia, así que los tests de bootstrap no se ven afectados.
+- **Rutas:** la interfaz queda en `/docs` y el JSON en `/docs-json`. El backend no tiene prefijo global: Caddy quita `/api` antes de reenviar, por lo que públicamente son `/api/docs` y `/api/docs-json`. Los recursos de la interfaz se piden con rutas relativas (`./docs/...`), por lo que funcionan con y sin el prefijo.
+- **Autenticación:** dos esquemas Bearer, ambos en el encabezado `Authorization`. `access-token` es el JWT de cuenta (login, registro, refresh) y `room-pass` es el pase de sala que emite `POST /rooms/:code/access`. El botón "Authorize" permite cargar los dos y `persistAuthorization` los conserva al recargar. Cada ruta indica cuál usa y sus respuestas 400/401/403/404 relevantes; el rol exigido (rol global o rol de sala) figura en la descripción.
+- **Esquemas automáticos:** el plugin del CLI de Nest (`classValidatorShim` e `introspectComments` en `nest-cli.json`) genera los esquemas de los DTO a partir de `class-validator`. Solo actúa en `nest build`; Vitest compila con SWC y no lo usa.
+- **Excluidos de la documentación:** `test-support` (responde 404 fuera de `NODE_ENV=test`) y el webhook de LiveKit (lo llama LiveKit con firma HMAC, no una persona).
+- **Activación:** variable `SWAGGER_ENABLED`. Sin definir, está activa cuando `NODE_ENV` no es `production`; para exponerla en producción se debe poner `true` de forma explícita. `SWAGGER_SERVER_URL=/api` hace que "Try it out" llame a la ruta correcta detrás de Caddy.
+
+### Alternativas descartadas
+
+- **Tabla en Markdown con los endpoints:** no se puede ejecutar, se desactualiza sin que nada lo avise y no sirve para la demostración de 401/403.
+- **Colección de Postman o Bruno:** exige instalar una herramienta y mantener un archivo aparte que se desincroniza del código.
+
+### Consecuencias
+
+- **Una documentación pública revela el mapa de la API.** Por eso queda desactivada por defecto en producción y requiere `SWAGGER_ENABLED=true` explícito (por ejemplo, durante la defensa). No expone datos: los esquemas salen de los DTO de entrada y ninguna respuesta documenta hashes de contraseña.
+- **Los decoradores hay que mantenerlos.** Un endpoint nuevo sin `@ApiOperation` aparece sin resumen; no rompe nada, pero queda incompleto. Los tipos de respuesta no se documentaron porque los controladores devuelven objetos sin clase propia.

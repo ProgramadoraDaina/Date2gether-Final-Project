@@ -1,8 +1,10 @@
 import { AppModule } from './app.module';
 import { createApp } from './app-setup';
+import { setupSwagger } from './swagger';
 
 async function bootstrap() {
   const app = await createApp(AppModule);
+  if (setupSwagger(app)) console.log('Swagger UI available at /docs (public URL: /api/docs)');
 
   const port = process.env.PORT ?? 3001;
   await app.listen(port);
