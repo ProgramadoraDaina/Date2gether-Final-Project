@@ -8,6 +8,7 @@ import { CallLayoutEditor } from '../layout/CallLayoutEditor';
 import { useCallLayoutStore } from '../layout/store';
 import { useCallSettingsStore, type CallPreference, type CaptionSize } from './store';
 import { ToggleSwitch } from './ToggleSwitch';
+import { BACKGROUND_PRESETS, PRESET_PREFIX, presetCss, resizeImageFile } from './backgrounds';
 import type { PictureInPictureControl } from '../PictureInPicture';
 import { useTheme } from '@/features/theme/useTheme';
 import { LanguagePicker } from '@/features/translation/LanguagePicker';
@@ -46,7 +47,7 @@ function SettingsIcon() {
   );
 }
 
-type View = 'menu' | 'captions' | 'layout';
+type View = 'menu' | 'captions' | 'layout' | 'background';
 
 interface CallSettingsButtonProps {
   buttonClassName: string;
@@ -105,6 +106,13 @@ export function CallSettingsButton({
   const layoutEnabled = useCallLayoutStore((state) => state.enabled && state.zones.length > 0);
   const setLayoutEditing = useCallLayoutStore((state) => state.setEditing);
   const layoutLabel = t('Mosaicos');
+  const backgroundLabel = t('Fondo virtual');
+  const backgroundImage = useCallSettingsStore((state) => state.backgroundImage);
+  const setBackgroundImage = useCallSettingsStore((state) => state.setBackgroundImage);
+  const [uploadError, setUploadError] = useState(false);
+  const currentBackground = BACKGROUND_PRESETS.find(
+    (preset) => backgroundImage === `${PRESET_PREFIX}${preset.id}`,
+  );
   const editingLayout = open && view === 'layout';
   useEffect(() => {
     setLayoutEditing(editingLayout);
@@ -150,6 +158,18 @@ export function CallSettingsButton({
                   <span>{layoutLabel}</span>
                   <span className={styles.menuHint}>
                     {t(layoutEnabled ? 'Personalizados' : 'Grilla')} ›
+                  </span>
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  className={styles.menuItem}
+                  onClick={() => setView('background')}
+                >
+                  <span>{backgroundLabel}</span>
+                  <span className={styles.menuHint}>
+                    {t(currentBackground ? currentBackground.label : backgroundImage ? 'Imagen propia' : 'Ninguno')} ›
                   </span>
                 </button>
               </li>
@@ -268,7 +288,11 @@ export function CallSettingsButton({
                   ‹
                 </button>
                 <span className={styles.subTitle}>
-                  {view === 'layout' ? layoutLabel : captionsLabel}
+                  {view === 'layout'
+                    ? layoutLabel
+                    : view === 'background'
+                      ? backgroundLabel
+                      : captionsLabel}
                 </span>
                 <button
                   type="button"
@@ -284,6 +308,75 @@ export function CallSettingsButton({
                 <div className={styles.layoutBody}>
                   <CallLayoutEditor showPreview={false} />
                 </div>
+              ) : view === 'background' ? (
+                <fieldset className={styles.field}>
+                  <legend className={styles.srOnly}>{backgroundLabel}</legend>
+                  <div className={styles.backgrounds}>
+                    <label className={styles.backgroundOption}>
+                      <input
+                        type="radio"
+                        name="background"
+                        checked={!backgroundImage}
+                        onChange={() => setBackgroundImage(null)}
+                        aria-label={t('Ninguno')}
+                      />
+                      <span className={styles.backgroundSwatch} aria-hidden="true">
+                        Ø
+                      </span>
+                    </label>
+                    {BACKGROUND_PRESETS.map((preset) => (
+                      <label key={preset.id} className={styles.backgroundOption} title={t(preset.label)}>
+                        <input
+                          type="radio"
+                          name="background"
+                          checked={backgroundImage === `${PRESET_PREFIX}${preset.id}`}
+                          onChange={() => setBackgroundImage(`${PRESET_PREFIX}${preset.id}`)}
+                          aria-label={t(preset.label)}
+                        />
+                        <span
+                          className={styles.backgroundSwatch}
+                          style={{ backgroundImage: presetCss(preset) }}
+                          aria-hidden="true"
+                        />
+                      </label>
+                    ))}
+                    {backgroundImage && !backgroundImage.startsWith(PRESET_PREFIX) && (
+                      <label className={styles.backgroundOption} title={t('Imagen propia')}>
+                        <input type="radio" name="background" checked readOnly aria-label={t('Imagen propia')} />
+                        <span
+                          className={styles.backgroundSwatch}
+                          style={{ backgroundImage: `url(${backgroundImage})` }}
+                          aria-hidden="true"
+                        />
+                      </label>
+                    )}
+                  </div>
+                  <label className={styles.uploadButton}>
+                    {t('Subir una imagen')}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      aria-label={t('Subir una imagen')}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        event.target.value = '';
+                        if (!file) return;
+                        setUploadError(false);
+                        resizeImageFile(file)
+                          .then((image) => setBackgroundImage(image))
+                          .catch(() => setUploadError(true));
+                      }}
+                    />
+                  </label>
+                  {uploadError && (
+                    <p role="alert" className={styles.backgroundError}>
+                      {t('No se pudo usar esa imagen. Probá con otra.')}
+                    </p>
+                  )}
+                  <p className={styles.backgroundHint}>
+                    {t('Usa más procesador: si tu equipo va lento, dejalo en Ninguno.')}
+                  </p>
+                </fieldset>
               ) : (
                 <fieldset className={styles.field}>
                   <legend className={styles.srOnly}>{captionsLabel}</legend>
