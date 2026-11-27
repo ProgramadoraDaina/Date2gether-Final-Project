@@ -6,7 +6,7 @@ import { users } from '../../db/schema';
 import { sanitizeAvatar, type UserAvatar } from '../auth/avatar';
 import { UpdateAvatarDto } from '../auth/dto/update-avatar.dto';
 import { WsJwtAuthGuard } from '../auth/guards/ws-jwt-auth.guard';
-import type { RoomParticipant } from '../auth/room-access.service';
+import { RoomAccessService, type RoomParticipant } from '../auth/room-access.service';
 import {
   ConnectedSocket,
   MessageBody,
@@ -25,6 +25,7 @@ import { afterTrackEnded, skipToNext, type PlaybackState } from './music-playbac
 import { MusicModeDto } from './dto/music-mode.dto';
 import { MusicVolumeDto } from './dto/music-volume.dto';
 import { LowerHandDto } from './dto/lower-hand.dto';
+import { KickParticipantDto } from './dto/kick-participant.dto';
 import { MusicTrackEndedDto } from './dto/music-track-ended.dto';
 import { JoinRoomDto } from './dto/join-room.dto';
 import { MusicAddTrackDto } from './dto/music-add-track.dto';
@@ -157,6 +158,7 @@ export class ChatGateway implements OnGatewayDisconnect {
     private readonly roomEvents: RoomEventsService,
     private readonly resolver: RoomResolverService,
     private readonly playlists: RoomPlaylistsService,
+    private readonly access: RoomAccessService,
   ) {
     this.roomEvents.onMemberRoleChanged(({ roomCode }) => {
       this.server.to(roomCode).emit('memberRoleChanged');
@@ -522,6 +524,41 @@ export class ChatGateway implements OnGatewayDisconnect {
         this.server.to(socketId).emit('lowerHand');
       }
     }
+  }
+
+  @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage('kickParticipant')
+  async handleKickParticipant(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() dto: KickParticipantDto,
+  ) {
+    const user = await this.requireHandAdmin(client);
+    if (!user) return;
+    if (dto.participantId === user.participantId) {
+      client.emit('error', { message: 'No podés expulsarte a vos' });
+      return;
+    }
+    const targets = [...this.connectedUsers].filter(
+      ([, other]) => other.roomCode === user.roomCode && other.participantId === dto.participantId,
+    );
+    if (targets.length === 0) {
+      client.emit('error', { message: 'Esa persona ya no está en la sala' });
+      return;
+    }
+    const target = targets[0][1];
+    if (target.userId && (await this.roomsService.isRoomOwner(user.roomCode, target.userId))) {
+      client.emit('error', { message: 'No se puede expulsar a quien creó la sala' });
+      return;
+    }
+    this.access.revoke(user.roomId, { sub: target.participantId, userId: target.userId });
+    for (const [socketId] of targets) {
+      this.server.to(socketId).emit('kicked');
+      this.server.in(socketId).disconnectSockets(true);
+    }
+    this.roomEvents.emitParticipantKicked({
+      roomCode: user.roomCode,
+      participantId: target.participantId,
+    });
   }
 
   // Any listener may report the end: the admin is not necessarily listening.

@@ -1005,6 +1005,50 @@ describe('RoomPage: concesión de permisos', () => {
     );
     expect(mockRoomMembersState.refetchMembers).toHaveBeenCalled();
   });
+
+  it('el admin expulsa a alguien después de confirmar; no se ofrece para sí mismo', async () => {
+    const { createRoomSocket } = await import('@/lib/socket');
+    await enter();
+    const socket = (createRoomSocket as jest.Mock).mock.results.at(-1)!.value as {
+      emit: jest.Mock;
+    };
+    expect(screen.queryByRole('button', { name: 'Expulsar a Ana' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expulsar a Invitado' }));
+    expect(socket.emit).not.toHaveBeenCalledWith('kickParticipant', expect.anything());
+    fireEvent.click(screen.getByRole('button', { name: 'Sí, expulsar' }));
+
+    expect(socket.emit).toHaveBeenCalledWith('kickParticipant', { participantId: 'guest' });
+  });
+
+  it('cancelar la confirmación no expulsa', async () => {
+    const { createRoomSocket } = await import('@/lib/socket');
+    await enter();
+    const socket = (createRoomSocket as jest.Mock).mock.results.at(-1)!.value as {
+      emit: jest.Mock;
+    };
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expulsar a Beto' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+    expect(socket.emit).not.toHaveBeenCalledWith('kickParticipant', expect.anything());
+    expect(screen.getByRole('button', { name: 'Expulsar a Beto' })).toBeInTheDocument();
+  });
+
+  it('quien no es admin no ve el botón de expulsar', async () => {
+    mockRoomMembersState.isCurrentUserAdmin = false;
+    await enter();
+    expect(screen.queryByRole('button', { name: /Expulsar a/ })).not.toBeInTheDocument();
+  });
+
+  it('a quien expulsan se le reemplaza la sala por un aviso', async () => {
+    const callbacks = await enter();
+
+    act(() => callbacks.kicked());
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Te expulsaron de esta sala.');
+    expect(screen.queryByPlaceholderText('Escribí un mensaje...')).not.toBeInTheDocument();
+  });
 });
 
 describe('RoomPage: biblioteca de links', () => {

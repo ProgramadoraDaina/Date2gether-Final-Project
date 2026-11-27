@@ -67,6 +67,11 @@ export class CallsWebhookService {
       config.get<string>('LIVEKIT_API_KEY', ''),
       config.get<string>('LIVEKIT_API_SECRET', ''),
     );
+    this.roomEvents.onParticipantKicked(({ roomCode, participantId }) => {
+      void this.client.removeParticipant(roomCode, participantId).catch(() => {
+        this.logger.warn('No se pudo sacar de la llamada a una persona expulsada');
+      });
+    });
     const wsUrl = config.get<string>('LIVEKIT_URL') ?? '';
     const apiUrl = config.get<string>('LIVEKIT_API_URL') || wsUrl.replace(/^ws/, 'http');
     this.client = new RoomServiceClient(

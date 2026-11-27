@@ -13,7 +13,7 @@ import {
   callSessions,
 } from '../../db/schema';
 import { chain } from '../../test-support/fake-drizzle';
-import type { RoomEventsService } from '../rooms/room-events.service';
+import { RoomEventsService } from '../rooms/room-events.service';
 import type { CallSessionCloseService } from './call-session-close.service';
 import { CallsWebhookService } from './calls-webhook.service';
 
@@ -31,6 +31,7 @@ function createCloseServiceMock() {
 function createRoomEventsMock() {
   return {
     emitBreakoutRemoval: vi.fn(),
+    onParticipantKicked: vi.fn(),
   };
 }
 
@@ -822,5 +823,26 @@ describe('CallsWebhookService: expulsión de ocupante locked en participant_join
     );
 
     await expect(service.handle(Buffer.from('{}'), 'valid-sig')).resolves.toBeUndefined();
+  });
+});
+
+describe('CallsWebhookService: expulsión', () => {
+  it('saca de la llamada principal a quien expulsaron', async () => {
+    const events = new RoomEventsService();
+    const remove = vi
+      .spyOn(RoomServiceClient.prototype, 'removeParticipant')
+      .mockResolvedValue(undefined as never);
+    new CallsWebhookService(
+      new ConfigService(config),
+      createDbMock() as unknown as DrizzleDb,
+      createCloseServiceMock() as unknown as CallSessionCloseService,
+      events,
+    );
+
+    events.emitParticipantKicked({ roomCode: 'abc-defg-hij', participantId: 'guest-7' });
+    await Promise.resolve();
+
+    expect(remove).toHaveBeenCalledWith('abc-defg-hij', 'guest-7');
+    remove.mockRestore();
   });
 });

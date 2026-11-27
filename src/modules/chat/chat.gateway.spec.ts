@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import type { DrizzleDb } from '../../db/drizzle.module';
 import { WsJwtAuthGuard } from '../auth/guards/ws-jwt-auth.guard';
-import type { RoomParticipant } from '../auth/room-access.service';
+import type { RoomAccessService, RoomParticipant } from '../auth/room-access.service';
 import type { RoomEventsService } from '../rooms/room-events.service';
 import type { RoomResolverService } from '../rooms/room-resolver.service';
 import type { RoomsService } from '../rooms/rooms.service';
@@ -43,7 +43,9 @@ describe('ChatGateway', () => {
     };
     const roomsService = {
       getMemberRole: getMemberRole ?? vi.fn<RoomsService['getMemberRole']>(),
+      isRoomOwner: vi.fn<RoomsService['isRoomOwner']>().mockResolvedValue(false),
     } as unknown as RoomsService;
+    const access = { revoke: vi.fn<RoomAccessService['revoke']>() };
     // resolveJoinable/assertBound replican la lógica real (D4, Categoría E):
     // 404 si el código no resuelve (chain().resolveJoinable configurable por
     // test), 403 si el roomId del participante no coincide con el de la sala.
@@ -75,6 +77,7 @@ describe('ChatGateway', () => {
       onRoomDeleted: vi.fn(),
       onRoomPromoted: vi.fn(),
       onRoomLinksChanged: vi.fn(),
+      emitParticipantKicked: vi.fn(),
     } as unknown as RoomEventsService;
 
     const gateway = new ChatGateway(
@@ -84,6 +87,7 @@ describe('ChatGateway', () => {
       roomEvents,
       resolver,
       playlists as unknown as RoomPlaylistsService,
+      access as unknown as RoomAccessService,
     );
     const serverEmit = vi.fn();
     const serverTo = vi.fn().mockReturnValue({ emit: serverEmit });
@@ -105,6 +109,7 @@ describe('ChatGateway', () => {
       disconnectSockets,
       roomEvents,
       playlists,
+      access,
     };
   }
 
@@ -546,6 +551,61 @@ describe('ChatGateway', () => {
       await gateway.handleLowerHand(client as never, { participantId: 'guest-sub' });
 
       expect(serverEmit).not.toHaveBeenCalledWith('lowerHand');
+    });
+
+    async function withGuest(role: 'administrador' | 'participante') {
+      const setup = await joinedAdmin(role);
+      const guest = createSocket(
+        { kind: 'room-participant', roomId: 'room-1', sub: 'guest-sub', roomCode: 'abc-defg-hij', name: 'Beto' },
+        'socket-2',
+      );
+      await setup.gateway.handleJoinRoom(guest as never, { code: 'abc-defg-hij' });
+      setup.serverTo.mockClear();
+      setup.serverEmit.mockClear();
+      return setup;
+    }
+
+    it('el admin expulsa a alguien: se le revoca el pase, se le avisa, se corta su socket y sale de la llamada', async () => {
+      const { gateway, client, serverTo, serverEmit, serverIn, disconnectSockets, access, roomEvents } =
+        await withGuest('administrador');
+
+      await gateway.handleKickParticipant(client as never, { participantId: 'guest-sub' });
+
+      expect(access.revoke).toHaveBeenCalledWith('room-1', { sub: 'guest-sub', userId: undefined });
+      expect(serverTo).toHaveBeenCalledWith('socket-2');
+      expect(serverEmit).toHaveBeenCalledWith('kicked');
+      expect(serverIn).toHaveBeenCalledWith('socket-2');
+      expect(disconnectSockets).toHaveBeenCalledWith(true);
+      expect(roomEvents.emitParticipantKicked).toHaveBeenCalledWith({
+        roomCode: 'abc-defg-hij',
+        participantId: 'guest-sub',
+      });
+    });
+
+    it('quien no es administrador no puede expulsar', async () => {
+      const { gateway, client, access, serverEmit } = await withGuest('participante');
+
+      await gateway.handleKickParticipant(client as never, { participantId: 'guest-sub' });
+
+      expect(access.revoke).not.toHaveBeenCalled();
+      expect(serverEmit).not.toHaveBeenCalledWith('kicked');
+    });
+
+    it('no se puede expulsar a uno mismo ni a quien creó la sala', async () => {
+      const { gateway, client, access, roomsService } = await withGuest('administrador');
+
+      await gateway.handleKickParticipant(client as never, { participantId: admin.sub });
+      expect(client.emit).toHaveBeenCalledWith('error', { message: 'No podés expulsarte a vos' });
+
+      vi.mocked(roomsService.isRoomOwner).mockResolvedValue(true);
+      const owner = createSocket({ ...admin, sub: 'owner-sub', userId: 'owner-id' }, 'socket-3');
+      await gateway.handleJoinRoom(owner as never, { code: 'abc-defg-hij' });
+      await gateway.handleKickParticipant(client as never, { participantId: 'owner-sub' });
+
+      expect(client.emit).toHaveBeenCalledWith('error', {
+        message: 'No se puede expulsar a quien creó la sala',
+      });
+      expect(access.revoke).not.toHaveBeenCalled();
     });
 
     it('el admin fija el volumen de la música para toda la sala', async () => {

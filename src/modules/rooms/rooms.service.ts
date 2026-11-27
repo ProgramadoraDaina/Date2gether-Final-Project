@@ -222,6 +222,16 @@ export class RoomsService {
       .where(eq(roomMembers.roomId, room.id));
   }
 
+  async isRoomOwner(code: string, userId: string): Promise<boolean> {
+    const room = await this.getByCodeOrThrow(code);
+    const [member] = await this.db
+      .select({ isOwner: roomMembers.isOwner })
+      .from(roomMembers)
+      .where(and(eq(roomMembers.roomId, room.id), eq(roomMembers.userId, userId)))
+      .limit(1);
+    return member?.isOwner ?? false;
+  }
+
   async getMemberRole(code: string, userId: string): Promise<RoomRole | undefined> {
     const room = await this.getByCodeOrThrow(code);
     const [member] = await this.db

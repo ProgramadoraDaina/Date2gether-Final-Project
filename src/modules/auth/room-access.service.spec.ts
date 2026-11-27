@@ -140,3 +140,32 @@ describe('Acceso de invitados con enlace', () => {
     expect(lifetimeHours).toBeCloseTo(24, 0);
   });
 });
+
+describe('Expulsión de la sala', () => {
+  it('un pase expulsado deja de valer en esa sala, y los demás pases siguen valiendo', async () => {
+    const service = new RoomAccessService(jwt, config);
+    const kicked = await service.create('room-1', 'abc-defg-hij', 'Bruno');
+    const other = await service.create('room-1', 'abc-defg-hij', 'Carla');
+
+    service.revoke('room-1', { sub: kicked.participant.sub });
+
+    await expect(service.verify(kicked.token)).rejects.toThrow('Te expulsaron de esta sala');
+    await expect(service.verify(other.token)).resolves.toMatchObject({ name: 'Carla' });
+  });
+
+  it('expulsar una cuenta invalida cualquier pase nuevo de esa cuenta solo en esa sala', async () => {
+    const service = new RoomAccessService(jwt, config);
+    service.revoke('room-1', { sub: 'old-pass', userId: 'account-9' });
+    const account = await jwt.signAsync(
+      { sub: 'account-9', email: 'b@example.test' },
+      { secret: 'room-access-test-secret' },
+    );
+    const again = await service.create('room-1', 'abc-defg-hij', 'Bruno', `Bearer ${account}`);
+    const elsewhere = await service.create('room-2', 'xyz-abcd-efg', 'Bruno', `Bearer ${account}`);
+
+    await expect(service.verify(again.token)).rejects.toThrow('Te expulsaron de esta sala');
+    await expect(service.verify(elsewhere.token)).resolves.toMatchObject({ roomId: 'room-2' });
+    expect(service.isRevoked('room-1', { userId: 'account-9' })).toBe(true);
+    expect(service.isRevoked('room-2', { userId: 'account-9' })).toBe(false);
+  });
+});

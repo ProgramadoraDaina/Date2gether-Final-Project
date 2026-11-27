@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { randomUUID } from 'node:crypto';
@@ -99,7 +99,34 @@ export class RoomAccessService {
     }
   }
 
+  // In memory on purpose: one API instance, and a pass lives 24h at most (365 days only in permanent rooms).
+  private readonly revoked = new Map<string, { subs: Set<string>; userIds: Set<string> }>();
+
+  revoke(roomId: string, target: { sub: string; userId?: string }): void {
+    const entry = this.revoked.get(roomId) ?? { subs: new Set(), userIds: new Set() };
+    entry.subs.add(target.sub);
+    if (target.userId) entry.userIds.add(target.userId);
+    this.revoked.set(roomId, entry);
+  }
+
+  isRevoked(roomId: string, target: { sub?: string; userId?: string }): boolean {
+    const entry = this.revoked.get(roomId);
+    if (!entry) return false;
+    return (
+      (!!target.sub && entry.subs.has(target.sub)) ||
+      (!!target.userId && entry.userIds.has(target.userId))
+    );
+  }
+
   async verify(token: string): Promise<RoomParticipant> {
+    const participant = await this.verifySignature(token);
+    if (this.isRevoked(participant.roomId, participant)) {
+      throw new ForbiddenException('Te expulsaron de esta sala');
+    }
+    return participant;
+  }
+
+  private async verifySignature(token: string): Promise<RoomParticipant> {
     try {
       const participant = await this.jwt.verifyAsync<RoomParticipant>(token, {
         secret: this.secret,
