@@ -1,4 +1,4 @@
-import { Controller, Get, Header, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Header, Param, ParseUUIDPipe, UseGuards } from '@nestjs/common';
 import type { AccessTokenPayload } from '../auth/auth.types';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -20,7 +20,7 @@ export class TranscriptHistoryController {
 
   @Get(':sessionId/transcript')
   @Header('Cache-Control', 'no-store')
-  getForSession(@Param('sessionId') sessionId: string, @CurrentUser() user: AccessTokenPayload) {
+  getForSession(@Param('sessionId', ParseUUIDPipe) sessionId: string, @CurrentUser() user: AccessTokenPayload) {
     return this.history.getForSession(sessionId, user.sub);
   }
 }
