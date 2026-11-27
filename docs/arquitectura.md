@@ -294,6 +294,8 @@ Todas las rutas están bajo `/api` en producción (Caddy quita el prefijo) y sin
 | POST | `/auth/login` | Público | - | Devuelve `accessToken` y `refreshToken` |
 | POST | `/auth/refresh` | Refresh token en el cuerpo | - | Rota el refresh token; su reutilización cierra todas las sesiones |
 | POST | `/auth/logout` | Refresh token en el cuerpo | - | Idempotente |
+| POST | `/auth/forgot-password` | Público | - | `{ email }`; responde siempre el mismo mensaje y manda el link si la cuenta existe; 5 por minuto; 503 sin SMTP configurado |
+| POST | `/auth/reset-password` | Token del link en el cuerpo | - | `{ token, password }`; 400 si el link venció o ya se usó; revoca los refresh tokens; 10 por minuto |
 | GET | `/auth/me` | Cuenta | - | Incluye el rol global (`user` o `admin`) |
 | PATCH | `/auth/me/color` | Cuenta | - | Color del nombre |
 | PATCH | `/auth/me/avatar` | Cuenta | - | Avatar |
@@ -393,6 +395,8 @@ Todas usan el pase de sala (`RoomAccessGuard`); el rol por sala se valida en `Br
 | DELETE | `/calls/:roomCode/breakouts` | Pase | Rol de sala `administrador` | Cierra todas las mini salas (204) |
 
 ### Socket.io
+
+Eventos agregados: `kickParticipant` `{ participantId }` (solo administradores; el servidor revoca el pase, emite `kicked` a esa persona y corta su socket) y `roomNotesChanged` `{ content, revision, updatedAt }` (el servidor lo emite a la sala después de guardar las notas compartidas).
 
 El namespace es `/rooms` y el cliente envía `auth: { token }` con el pase de sala (`WsJwtAuthGuard`). `joinRoom` recibe `{ code }`; el nombre, el identificador y la cuenta se obtienen del pase verificado. `sendMessage` recibe `{ content }` y `leaveRoom` no requiere payload. El servidor emite `roomHistory` (la página más reciente del chat; el resto se pide por REST), `roomUsers`, `userJoined`, `userLeft`, `newMessage`, `memberRoleChanged`, `roomEmojisChanged` y `roomDeleted` (al borrarse la sala, tras lo cual desconecta a los sockets de esa sala); la presencia incluye `{ participantId, userName, userId? }`. El gateway (`src/modules/chat/chat.gateway.ts`) también atiende los eventos de avatar, música ambiental sincronizada, bloqueo de medios, foco por nombre y eventos de sala (`startRoomEvent`, `castPollVote`, `closePollEvent`).
 

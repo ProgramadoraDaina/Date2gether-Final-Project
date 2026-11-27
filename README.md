@@ -43,6 +43,11 @@ Los roles globales son `user` (por defecto) y `admin`; son distintos de los role
 - Pantalla de la llamada configurable: cada persona divide la vista en zonas (cuántas, dónde y con qué proporción) y elige qué participantes van en cada una. El propio video aparece primero.
 - Mano levantada con cola por orden de llegada, que cualquier administrador puede bajar; aviso al hablar con el micrófono apagado; desenfoque de fondo; imagen en imagen y atajos de teclado.
 - Biblioteca de links persistente en las salas permanentes, que administradores y colaboradores pueden editar. Una sala temporal se puede convertir en permanente.
+- Las notas compartidas de la sala se ven en tiempo real: lo que guarda una persona aparece al instante en las demás, sin pisar a quien está escribiendo.
+- El administrador de la sala puede expulsar a alguien desde **Presentes**, con confirmación. Esa persona pierde el pase y sale del chat y de la llamada; si tiene cuenta, no puede volver a entrar a esa sala. No se puede expulsar a quien creó la sala.
+- Fondos virtuales para la cámara: cinco predefinidos o una imagen propia, además del desenfoque.
+- Recuperar la contraseña por email: el link vence en 30 minutos, sirve una sola vez y al usarlo se cierran las sesiones abiertas. Requiere configurar un Gmail del equipo (`SMTP_USER` y `SMTP_PASS`).
+- Límite de 10 intentos por minuto por IP en el inicio de sesión y el registro (`AUTH_THROTTLE_LIMIT`).
 - "Mis salas" (`/rooms`) lista las salas en las que la cuenta es administradora, incluidas las heredadas por delegación. Cada cuenta puede ocultar una sala de esa lista sin borrarla ni perder su rol; la preferencia es por cuenta.
 - Retención y archivo: el historial de llamadas de cada cuenta y el chat de las salas permanentes se muestran paginados durante 90 días; lo anterior pasa a una vista de **archivo**. El chat se consulta por día. Cada cuenta puede vaciar su archivo de llamadas y el administrador de una sala permanente puede vaciar el archivo de esa sala (la purga corre en segundo plano).
 - Borrado de salas por su administrador y moderación global (borrar cualquier sala, cambiar el rol global de otras cuentas) por parte de un `admin`.
@@ -54,7 +59,7 @@ Los roles globales son `user` (por defecto) y `admin`; son distintos de los role
 | Frontend | Next.js 15 (App Router), React 19, Zustand, CSS Modules, `livekit-client` y `@livekit/components-react` |
 | Backend | NestJS 12 sobre Node.js 22, Socket.io para chat y presencia, `livekit-server-sdk` |
 | DB | PostgreSQL 16 con Drizzle ORM y migraciones SQL versionadas (`drizzle/`) |
-| Auth | JWT de acceso (15 min) y refresh token (7 días, con hash bcrypt en base); contraseñas con bcrypt; pase de sala de 24 h para invitados; roles global y por sala |
+| Auth | JWT de acceso (15 min) y refresh token (7 días, con hash bcrypt en base); contraseñas con bcrypt; recuperación por email (Gmail SMTP, `nodemailer`); pase de sala de 24 h para invitados; roles global y por sala |
 | Audio y video | LiveKit autohospedado (reemplazó a Amazon Chime SDK) |
 | Deploy | AWS EC2 con Docker Compose, Caddy como proxy inverso HTTPS y plantilla CloudFormation (`deploy/ec2/`) |
 
@@ -106,6 +111,10 @@ GEMINI_MODEL=gemini-3.5-flash-lite   # opcional
 YOUTUBE_API_KEY=<clave-de-YouTube-Data-API>   # búsqueda de canciones
 FREESOUND_API_KEY=<clave-de-freesound.org>   # búsqueda de sonidos para emojis de sala
 MAX_BREAKOUT_ROOMS=3   # opcional: mini salas simultáneas (0 a 3)
+AUTH_THROTTLE_LIMIT=10   # opcional: intentos de login/registro por minuto por IP
+SMTP_USER=<gmail-del-equipo>   # recuperar contraseña
+SMTP_PASS=<contraseña-de-aplicación-de-gmail>
+APP_URL=http://localhost:3002   # base del link del email
 ```
 
 Generar cada secreto por separado con `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`. Los `.env` y las credenciales no se versionan.
@@ -219,7 +228,7 @@ Los cambios de LiveKit y seguridad deben revisarse en el PR antes de desplegarlo
 
 ## Pendientes
 
-La entrega académica usa seis participantes por llamada. Siguen pendientes expulsión, cierre de salas de la aplicación, vencimiento del chat y fondos virtuales con imagen, según los requisitos.
+La entrega académica usa seis participantes por llamada. Siguen pendientes el cierre de salas de la aplicación y el vencimiento del chat, según los requisitos.
 
 ## Documentación
 
