@@ -320,7 +320,7 @@ Todas las rutas están bajo `/api` en producción (Caddy quita el prefijo) y sin
 | POST | `/rooms/:code/join` | Cuenta | - | Registra la membresía |
 | GET | `/rooms/:code/members` | Cuenta | Miembro de la sala (cualquier rol) | Lista de miembros con su rol y si es propietario (`isOwner`) |
 | PATCH | `/rooms/:code/members/:userId` | Cuenta | Rol de sala `administrador` | Cambia el rol por sala. No se puede quitar el rol al propietario ni dejar la sala sin administradores (403); emite `memberRoleChanged` |
-| PATCH | `/rooms/:code/name` | Cuenta | Rol de sala `administrador` | Renombra la sala (solo permanentes; 403 si es temporal) |
+| PATCH | `/rooms/:code/name` | Cuenta | Rol de sala `administrador` | Renombra cualquier sala, temporal o permanente |
 | PATCH | `/rooms/:code/permanent` | Cuenta | Rol de sala `administrador` (validado en el servicio; 403 si no, 404 si no existe) | Convierte una sala temporal en permanente; irreversible e idempotente |
 | GET | `/rooms/:roomCode/messages` | Pase | - | Historial de chat paginado: `view=recent\|archive`, `from` y `to` (un día, ISO 8601) y cursor `before`; el archivo solo existe en salas permanentes |
 | GET | `/rooms/:roomCode/notes` | Pase | - | Bloc compartido |
@@ -364,9 +364,9 @@ Con ingreso directo, `POST /rooms/:code/access` devuelve `{ token, participant }
 | GET | `/calls/history` | Cuenta | - | Historial de llamadas de la cuenta, paginado: `view=recent` (últimos 90 días) o `archive`, `roomId` y cursor `before`; devuelve `hasArchived` |
 | DELETE | `/calls/history/archive` | Cuenta | - | Vacía el archivo de llamadas de la cuenta (más de 90 días) (204) |
 | GET | `/calls/rooms/:roomId/archive` | Cuenta | Haber participado en la sala; solo salas permanentes | Sesiones archivadas de la sala, paginadas con `before` |
-| GET | `/calls/history/:roomId/notes` | Cuenta | - | Notas de una sala del historial |
+| GET | `/calls/history/:roomId/notes` | Cuenta | Tener historial en la sala (403 si no) | Notas de una sala del historial |
 | GET | `/calls/sessions` | Cuenta | - | Sesiones en las que participó la cuenta |
-| GET | `/calls/sessions/:sessionId/timeline` | Cuenta | - | Línea de tiempo de participación |
+| GET | `/calls/sessions/:sessionId/timeline` | Cuenta | Haber participado (404 si no) | Línea de tiempo de participación |
 | GET | `/calls/sessions/:sessionId/transcript` | Cuenta | Haber participado (404 si no) | Acta de esa sesión |
 | GET | `/calls/sessions/:sessionId/summary` | Cuenta | Haber participado (404 si no) | Resumen guardado: `{ summary }` (`null` si aún no existe) |
 | POST | `/calls/sessions/:sessionId/summary` | Cuenta | Haber participado (404 si no); 5 por minuto | Cuerpo opcional `{ language }` con `es` o `en` (por defecto `es`). Devuelve el resumen guardado o lo genera con Gemini. Errores: 422 (sin transcripción), 413 (más de 100 000 caracteres), 429 con `code: AI_QUOTA` (cuota del proveedor), 503 (sin clave o servicio caído) |

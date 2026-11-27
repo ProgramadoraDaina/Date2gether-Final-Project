@@ -948,6 +948,6 @@ El enunciado del Proyecto Integrador Final exige un README con secciones definid
 
 ### Consecuencias
 
-- Los `TODO` deben completarse antes de la entrega.
+- Los `TODO` deben completarse antes de la entrega. Al 26/11 ya se completaron URLs, credenciales y nombres; queda solo el link del video.
 - Si cambia la API, hay que actualizar la tabla de `docs/arquitectura.md` y no el README.
 

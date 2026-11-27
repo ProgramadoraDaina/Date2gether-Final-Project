@@ -37,7 +37,7 @@ Los roles globales son `user` (por defecto) y `admin`; son distintos de los role
 - Antes de entrar hay un lobby para confirmar el nombre, seleccionar cámara y micrófono y probarlos con video local y un medidor de voz. Ambos empiezan apagados y solo se solicitan permisos al activarlos. Una vez concedido el ingreso, se conectan chat y llamada con LiveKit usando la elección confirmada; hay grilla de participantes y controles para cambiar los dispositivos durante la llamada. Las llamadas admiten seis personas por defecto. También se puede compartir pantalla durante la llamada.
 - Subtítulos en vivo con la Web Speech API del navegador (solo Chrome y Edge). Cada persona transcribe únicamente su propio micrófono, y se transcribe siempre que el micrófono esté encendido y el navegador lo soporte; el botón **CC** solo muestra u oculta los subtítulos. El texto viaja a los demás por el data channel de LiveKit (topic `transcript`). Las frases finales se guardan en `transcript_lines`, asociadas al sid de la llamada de LiveKit. **Ver transcripción**, en el panel lateral, muestra el acta de esa llamada, y al colgar se abre sola. El botón de ajustes, a la izquierda de colgar, permite elegir el tamaño de los subtítulos y lo recuerda para las próximas llamadas. En Chrome, el audio de los subtítulos pasa por los servidores de Google. La transcripción guardada alimenta el resumen con IA descrito a continuación (ver [docs/uso-de-ia.md](docs/uso-de-ia.md)).
 - Resumen con IA de cada llamada: quien participó puede pulsar **Resumir con IA** en la transcripción de una sesión. El backend envía la transcripción a la API de Gemini (`gemini-3.5-flash-lite`) y guarda un único resumen por sesión en `call_summaries`, en español o inglés. Requiere `GEMINI_API_KEY`; sin ella el resto de la aplicación funciona y el resumen responde 503. El texto de la transcripción sale de AWS hacia Google.
-- El ingreso es directo por defecto. El administrador puede activar la sala de espera, admitir o rechazar solicitudes y bloquear nuevos ingresos desde **Administrar ingresos** (ver [Moderar el ingreso](#moderar-el-ingreso)). Quien espera no recibe chat ni pases de llamada; el cupo de admisión al chat sigue pendiente.
+- En las salas temporales el ingreso es directo por defecto; en las permanentes la sala de espera es obligatoria. El administrador puede activar la sala de espera, admitir o rechazar solicitudes y bloquear nuevos ingresos desde **Administrar ingresos** (ver [Moderar el ingreso](#moderar-el-ingreso)). Quien espera no recibe chat ni pases de llamada; el cupo de admisión al chat sigue pendiente.
 - Salas permanentes con agenda semanal, bloc de notas compartido, playlist de música ambiental sincronizada (YouTube), GIFs, emojis y sonidos propios de cada sala, historial de llamadas y línea de tiempo de participación por llamada.
 - Mini salas: durante la llamada, el administrador crea hasta tres salas paralelas, traslada a las personas, define si se puede entrar libremente o salir sin permiso, programa un cierre automático y llama a todos de vuelta con una cuenta regresiva. Al pasar de sala se conservan el micrófono y la cámara como estaban.
 - Pantalla de la llamada configurable: cada persona divide la vista en zonas (cuántas, dónde y con qué proporción) y elige qué participantes van en cada una. El propio video aparece primero.
@@ -102,6 +102,10 @@ LIVEKIT_API_SECRET=devsecret-for-local-development-only-32chars
 MAX_ROOM_PARTICIPANTS=6
 GIPHY_API_KEY=<key-beta-de-developers.giphy.com>
 GEMINI_API_KEY=<clave-de-aistudio.google.com>   # opcional: sin ella el resumen con IA responde 503
+GEMINI_MODEL=gemini-3.5-flash-lite   # opcional
+YOUTUBE_API_KEY=<clave-de-YouTube-Data-API>   # búsqueda de canciones
+FREESOUND_API_KEY=<clave-de-freesound.org>   # búsqueda de sonidos para emojis de sala
+MAX_BREAKOUT_ROOMS=3   # opcional: mini salas simultáneas (0 a 3)
 ```
 
 Generar cada secreto por separado con `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`. Los `.env` y las credenciales no se versionan.
@@ -173,11 +177,11 @@ El desarrollo se apoyó en Claude Code y OpenAI Codex, combinando SDD (`openspec
 
 ## Moderar el ingreso
 
-El administrador entra con su cuenta y abre **Administrar ingresos** desde la sala. Puede activar o desactivar la espera y bloquear nuevos ingresos. La espera empieza desactivada; el anfitrión no necesita admitirse a sí mismo. Los nombres visibles nunca conceden permisos de administrador.
+El administrador entra con su cuenta y abre **Administrar ingresos** desde la sala. Puede activar o desactivar la espera y bloquear nuevos ingresos. En las salas temporales la espera empieza desactivada; en las permanentes está siempre activa y no se puede apagar. El anfitrión no necesita admitirse a sí mismo. Los nombres visibles nunca conceden permisos de administrador.
 
 Con la espera activa, cada ingreso crea una solicitud propia, incluso si varias personas usan el mismo nombre. El administrador ve su nombre, si tiene cuenta y cuándo lo solicitó, y puede admitirla o rechazarla. La pantalla se actualiza automáticamente; el invitado consulta el resultado cada cinco segundos y puede cancelar. Un rechazo requiere una nueva acción de la persona para volver a solicitar acceso.
 
-La credencial de espera se limita a consultar o cancelar esa solicitud; no sirve para chat, llamadas ni acciones de cuenta. Se conserva en sessionStorage para recuperar la espera al recargar, y vence a las 24 horas. La configuración y las decisiones se guardan en PostgreSQL y sobreviven a un reinicio. La admisión usa el ID de la solicitud como identidad estable; volver a consultar el resultado no crea otra participación.
+La credencial de espera se limita a consultar o cancelar esa solicitud; no sirve para chat, llamadas ni acciones de cuenta. Se conserva en sessionStorage para recuperar la espera al recargar, y vence a las 24 horas (365 días en las salas permanentes). La configuración y las decisiones se guardan en PostgreSQL y sobreviven a un reinicio. La admisión usa el ID de la solicitud como identidad estable; volver a consultar el resultado no crea otra participación.
 
 Desactivar la espera admite las solicitudes pendientes cuando los ingresos están desbloqueados; no cambia rechazos o cancelaciones anteriores. Bloquear impide nuevas solicitudes y admisiones, sin retirar a quienes ya fueron admitidos. Si se desactiva la espera mientras está bloqueada, las solicitudes continúan pendientes hasta desbloquear. La capacidad de seis conexiones de LiveKit continúa separada del cupo de admisión al chat, que está pendiente.
 
@@ -215,7 +219,7 @@ Los cambios de LiveKit y seguridad deben revisarse en el PR antes de desplegarlo
 
 ## Pendientes
 
-La entrega académica usa seis participantes por llamada. Siguen pendientes expulsión, cupo del chat, cierre de salas de la aplicación, vencimiento del chat, adjuntos, stickers, grabación local y fondos, según los requisitos.
+La entrega académica usa seis participantes por llamada. Siguen pendientes expulsión, cupo del chat, cierre de salas de la aplicación, vencimiento del chat, adjuntos, grabación local y fondos virtuales con imagen, según los requisitos.
 
 ## Documentación
 
