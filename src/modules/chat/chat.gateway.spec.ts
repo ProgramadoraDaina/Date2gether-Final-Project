@@ -75,6 +75,7 @@ describe('ChatGateway', () => {
       onRoomDeleted: vi.fn(),
       onRoomPromoted: vi.fn(),
       onRoomLinksChanged: vi.fn(),
+      onRoomNotesChanged: vi.fn(),
     } as unknown as RoomEventsService;
 
     const gateway = new ChatGateway(
@@ -149,6 +150,19 @@ describe('ChatGateway', () => {
       expect(serverTo).toHaveBeenCalledWith('abc-defg-hij');
       expect(serverEmit).toHaveBeenCalledWith('roomPromoted');
       expect(disconnectSockets).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('roomNotesChanged (evento del bridge RoomEventsService)', () => {
+    it('reenvía la nota guardada a toda la sala', () => {
+      const { roomEvents, serverTo, serverEmit } = createGateway();
+      const listener = vi.mocked(roomEvents.onRoomNotesChanged).mock.calls[0][0];
+      const note = { content: 'Llevar hielo', revision: 5, updatedAt: '2026-11-26T20:00:00.000Z' };
+
+      listener({ roomCode: 'abc-defg-hij', note });
+
+      expect(serverTo).toHaveBeenCalledWith('abc-defg-hij');
+      expect(serverEmit).toHaveBeenCalledWith('roomNotesChanged', note);
     });
   });
 

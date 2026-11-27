@@ -72,4 +72,26 @@ describe('RoomsService: revisión de notas', () => {
     Object.assign(dto, { revision: 0 });
     expect(await validate(dto)).toHaveLength(0);
   });
+
+  it('después de guardar avisa a la sala con la nota nueva; un conflicto no avisa', async () => {
+    const events = new RoomEventsService();
+    const emitted = vi.fn();
+    events.onRoomNotesChanged(emitted);
+    service = new RoomsService(drizzle(query) as unknown as DrizzleDb, events, {} as never);
+    vi.spyOn(service, 'getByCodeOrThrow').mockResolvedValue(room);
+    query.mockResolvedValueOnce({ rows: [[room.id, 'Llevar hielo', 4, '2026-11-04 00:00:00']] });
+
+    await service.saveRoomNotes(room.code, 'Llevar hielo', 3);
+
+    expect(emitted).toHaveBeenCalledTimes(1);
+    expect(emitted).toHaveBeenCalledWith({
+      roomCode: room.code,
+      note: { content: 'Llevar hielo', revision: 4, updatedAt: expect.any(String) },
+    });
+
+    await expect(service.saveRoomNotes(room.code, 'Copia obsoleta', 3)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(emitted).toHaveBeenCalledTimes(1);
+  });
 });

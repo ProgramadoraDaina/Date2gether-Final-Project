@@ -183,3 +183,75 @@ describe('useRoomNotes: guardado seguro', () => {
     expect(result.current.status).toBe('saved');
   });
 });
+
+describe('useRoomNotes: notas en tiempo real', () => {
+  type Listener = (note: { content: string; revision: number; updatedAt: string }) => void;
+  function fakeSocket() {
+    const listeners: Record<string, Listener> = {};
+    return {
+      on: jest.fn((event: string, fn: Listener) => {
+        listeners[event] = fn;
+      }),
+      off: jest.fn((event: string) => {
+        delete listeners[event];
+      }),
+      emit: (event: string, note: Parameters<Listener>[0]) => listeners[event]?.(note),
+    };
+  }
+  async function setupLive() {
+    const socket = fakeSocket();
+    const hook = renderHook(() => useRoomNotes(code, 'token', storageKey, socket as never));
+    await act(async () => {});
+    return { ...hook, socket };
+  }
+
+  beforeEach(async () => {
+    jest.useFakeTimers();
+    jest.resetAllMocks();
+    localStorage.clear();
+    getNotes.mockResolvedValue(original);
+    useRoomNotes = (await import('./useRoomNotes')).useRoomNotes;
+  });
+  afterEach(() => {
+    cleanup();
+    jest.useRealTimers();
+  });
+
+  it('muestra al instante lo que guardó otra persona', async () => {
+    const { result, socket } = await setupLive();
+
+    act(() => socket.emit('roomNotesChanged', { content: 'Llevar hielo', revision: 4, updatedAt: '' }));
+
+    expect(result.current.content).toBe('Llevar hielo');
+    expect(result.current.status).toBe('ready');
+    expect(getNotes).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignora el eco de su propio guardado y versiones viejas', async () => {
+    const { result, socket } = await setupLive();
+
+    act(() => socket.emit('roomNotesChanged', { content: 'Vieja', revision: 3, updatedAt: '' }));
+
+    expect(result.current.content).toBe(original.content);
+  });
+
+  it('no pisa lo que la persona está escribiendo', async () => {
+    const { result, socket } = await setupLive();
+    act(() => result.current.edit('Mi edición'));
+
+    act(() => socket.emit('roomNotesChanged', { content: 'De otra persona', revision: 4, updatedAt: '' }));
+
+    expect(result.current.content).toBe('Mi edición');
+  });
+
+  it('una nota recibida se usa como base del próximo guardado', async () => {
+    saveNotes.mockResolvedValue({ ...original, content: 'Llevar hielo y vasos', revision: 5 });
+    const { result, socket } = await setupLive();
+    act(() => socket.emit('roomNotesChanged', { content: 'Llevar hielo', revision: 4, updatedAt: '' }));
+
+    act(() => result.current.edit('Llevar hielo y vasos'));
+    await tick();
+
+    expect(saveNotes).toHaveBeenCalledWith(code, 'token', 'Llevar hielo y vasos', 4, false);
+  });
+});

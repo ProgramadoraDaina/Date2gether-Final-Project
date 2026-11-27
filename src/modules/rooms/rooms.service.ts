@@ -410,7 +410,16 @@ export class RoomsService {
 
   async saveRoomNotes(code: string, content: string, revision: number) {
     const room = await this.getByCodeOrThrow(code);
-    return this.saveRoomNotesById(room.id, content, revision);
+    const note = await this.saveRoomNotesById(room.id, content, revision);
+    this.roomEvents.emitRoomNotesChanged({
+      roomCode: room.code,
+      note: {
+        content: note.content,
+        revision: note.revision,
+        updatedAt: new Date(note.updatedAt).toISOString(),
+      },
+    });
+    return note;
   }
 
   async saveRoomNotesById(roomId: string, content: string, revision: number) {
