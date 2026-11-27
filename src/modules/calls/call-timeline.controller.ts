@@ -30,7 +30,7 @@ export class CallTimelineController {
 
   @Get('sessions/:sessionId/timeline')
   getSessionTimeline(
-    @Param('sessionId') sessionId: string,
+    @Param('sessionId', ParseUUIDPipe) sessionId: string,
     @CurrentUser() user: AccessTokenPayload,
   ) {
     return this.callTimelineService.getSessionTimeline(sessionId, user.sub);

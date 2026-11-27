@@ -6,6 +6,7 @@ import {
   Header,
   HttpCode,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Req,
@@ -47,7 +48,7 @@ export class BreakoutRoomsController {
   @Patch(':roomCode/breakouts/:breakoutId')
   updatePolicy(
     @Req() request: ParticipantRequest,
-    @Param('breakoutId') breakoutId: string,
+    @Param('breakoutId', ParseUUIDPipe) breakoutId: string,
     @Body() dto: UpdateBreakoutRoomDto,
   ) {
     return this.breakoutRooms.updatePolicy(breakoutId, request.room.id, request.participant, dto);
@@ -56,7 +57,7 @@ export class BreakoutRoomsController {
   @Post(':roomCode/breakouts/:breakoutId/participants')
   moveIn(
     @Req() request: ParticipantRequest,
-    @Param('breakoutId') breakoutId: string,
+    @Param('breakoutId', ParseUUIDPipe) breakoutId: string,
     @Body() dto: MoveParticipantDto,
   ) {
     return this.breakoutRooms.moveIn(breakoutId, request.room.id, request.participant, dto);
@@ -64,7 +65,7 @@ export class BreakoutRoomsController {
 
   @Post(':roomCode/breakouts/:breakoutId/token')
   @Header('Cache-Control', 'no-store')
-  issueToken(@Req() request: ParticipantRequest, @Param('breakoutId') breakoutId: string) {
+  issueToken(@Req() request: ParticipantRequest, @Param('breakoutId', ParseUUIDPipe) breakoutId: string) {
     return this.breakoutRooms.issueBreakoutToken(breakoutId, request.room.id, request.participant);
   }
 
@@ -72,7 +73,7 @@ export class BreakoutRoomsController {
   @HttpCode(204)
   async selfReturn(
     @Req() request: ParticipantRequest,
-    @Param('breakoutId') breakoutId: string,
+    @Param('breakoutId', ParseUUIDPipe) breakoutId: string,
     @Body() dto: ReturnOccupantDto,
   ): Promise<void> {
     await this.breakoutRooms.selfReturn(
@@ -87,7 +88,7 @@ export class BreakoutRoomsController {
   @HttpCode(204)
   async close(
     @Req() request: ParticipantRequest,
-    @Param('breakoutId') breakoutId: string,
+    @Param('breakoutId', ParseUUIDPipe) breakoutId: string,
   ): Promise<void> {
     await this.breakoutRooms.close(breakoutId, request.room.id, request.participant, 'manual');
   }
