@@ -522,22 +522,7 @@ export function AmbientMusicPlayer({
                 socketRef.current.emit('musicTrackEnded', { updatedAt: state.updatedAt });
               }
             },
-            onError: (event: { data: number }) => {
-              const t = tRef.current;
-              const failed = pendingState.current?.tracks.find(
-                (track) => track.videoId === loadedVideoId.current,
-              );
-              if (!failed) {
-                setError(t('No se pudo reproducir ese video. Probá con otro link.'));
-                return;
-              }
-              // 101/150: the owner disabled embedding; any other link to the same video fails too.
-              const reason =
-                event.data === 101 || event.data === 150
-                  ? t('Su dueño no permite reproducirlo fuera de YouTube.')
-                  : t('Probá con otro link.');
-              setError(`${t('No se pudo reproducir')} "${failed.title}". ${reason}`);
-            },
+            // No onError banner: YouTube fires it for tracks whose audio still plays, so it only confused people.
           },
         });
       });
