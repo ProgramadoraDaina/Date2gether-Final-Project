@@ -42,7 +42,14 @@ def main():
         'JWT_ACCESS_EXPIRES_IN': '15m', 'JWT_REFRESH_EXPIRES_IN': '7d',
         'LIVEKIT_URL': 'wss://' + hosts['media'], 'LIVEKIT_API_URL': 'http://127.0.0.1:7880',
         'MAX_ROOM_PARTICIPANTS': str(args.participants),
+        # Caddy strips /api before proxying, so Swagger "Try it out" must target /api.
+        'SWAGGER_SERVER_URL': '/api',
     })
+    # Swagger UI (/api/docs) is on by default for the course demo. Set SWAGGER_ENABLED=false
+    # in the operator's shell to hide it; an existing value in runtime.env is kept when unset.
+    if os.environ.get('SWAGGER_ENABLED'):
+        env['SWAGGER_ENABLED'] = os.environ['SWAGGER_ENABLED']
+    env.setdefault('SWAGGER_ENABLED', 'true')
     # Optional third-party key for AI call summaries. Taken from the operator's shell so it
     # never lives in the repository; an existing value in runtime.env is kept when unset.
     if os.environ.get('GEMINI_API_KEY'):

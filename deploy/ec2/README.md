@@ -64,6 +64,10 @@ sudo docker compose -f deploy/ec2/compose.yaml up -d --force-recreate backend
 
 `read -s` evita que la clave quede en pantalla o en el historial de la terminal. Sin la clave la aplicación funciona igual y el resumen responde 503.
 
+### Documentación de la API (Swagger)
+
+`configure.py` escribe `SWAGGER_ENABLED=true` y `SWAGGER_SERVER_URL=/api` en `runtime.env`, así que Swagger UI queda disponible en `https://app.<dominio>/api/docs`. Para ocultarlo, ejecutar `configure.py` con `SWAGGER_ENABLED=false` en el entorno (o editar `runtime.env`) y recrear el backend. Un valor ya presente en `runtime.env` se conserva en las siguientes ejecuciones.
+
 No compartir logs que incluyan datos de usuarios, nombres de sala o tokens. `configure.py` no imprime secretos. Si hay dominio propio, esperar a que los tres registros DNS resuelvan a la IP antes de exigir que HTTPS responda.
 
 Abrir `ApplicationUrl` por **HTTPS**. Crear una cuenta, crear una sala, copiar el enlace y abrirlo en otro dispositivo. El invitado solo confirma un nombre. Cada persona puede seleccionar y probar sus dispositivos en el lobby antes de pulsar Entrar a la reunión; también puede cambiarlos desde los controles de la llamada. Se puede participar escuchando sin otorgar permisos de cámara o micrófono.
