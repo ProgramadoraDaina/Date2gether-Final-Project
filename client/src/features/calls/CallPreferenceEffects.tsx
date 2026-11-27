@@ -3,6 +3,7 @@
 import { useLocalParticipant, useRoomContext } from '@livekit/components-react';
 import { RoomEvent, Track, type LocalVideoTrack } from 'livekit-client';
 import { useEffect, useRef } from 'react';
+import { backgroundOptions } from './settings/backgrounds';
 import { useCallSettingsStore } from './settings/store';
 import { JOIN_TONE, LEAVE_TONE, playTones } from './tones';
 
@@ -36,30 +37,34 @@ const BLUR_ASSETS = {
   modelAssetPath: '/mediapipe/selfie_segmenter.tflite',
 };
 
-// El modelo de segmentación se carga recién cuando alguien prende el desenfoque.
+// El modelo de segmentación se carga recién cuando alguien elige un efecto de fondo.
 function BackgroundBlurSync() {
   const blur = useCallSettingsStore((state) => state.backgroundBlur);
+  const image = useCallSettingsStore((state) => state.backgroundImage);
   const { cameraTrack } = useLocalParticipant();
   const track = cameraTrack?.track as LocalVideoTrack | undefined;
   useEffect(() => {
     if (!track) return;
     let cancelled = false;
-    if (!blur) {
+    const options = backgroundOptions(blur, image);
+    if (options.mode === 'disabled') {
       if (track.getProcessor()) void track.stopProcessor().catch(() => undefined);
       return;
     }
     void import('@livekit/track-processors')
       .then(({ BackgroundProcessor, supportsBackgroundProcessors }) => {
-        if (cancelled || !supportsBackgroundProcessors() || track.getProcessor()) return;
-        return track.setProcessor(
-          BackgroundProcessor({ mode: 'background-blur', blurRadius: 12, assetPaths: BLUR_ASSETS }),
-        );
+        if (cancelled || !supportsBackgroundProcessors()) return;
+        const current = track.getProcessor() as
+          { switchTo?: (next: typeof options) => Promise<void> } | undefined;
+        // Switching in place avoids a black frame between blur and an image.
+        if (current?.switchTo) return current.switchTo(options);
+        return track.setProcessor(BackgroundProcessor({ ...options, assetPaths: BLUR_ASSETS }));
       })
       .catch(() => undefined);
     return () => {
       cancelled = true;
     };
-  }, [blur, track]);
+  }, [blur, image, track]);
   return null;
 }
 

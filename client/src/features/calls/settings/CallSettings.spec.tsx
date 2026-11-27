@@ -211,4 +211,33 @@ describe('Ajustes de la llamada', () => {
     expect(screen.getByRole('button', { name: /Mosaicos/ })).toBeInTheDocument();
     expect(useCallLayoutStore.getState().editing).toBe(false);
   });
+
+  it('desde la tuerca se elige un fondo virtual y se puede volver a "Ninguno"', () => {
+    useCallSettingsStore.setState({ backgroundBlur: true, backgroundImage: null });
+    render(
+      <CallSettingsButton
+        buttonClassName="btn"
+        isAdmin={false}
+        audioLocked={false}
+        videoLocked={false}
+        onSetAudioLock={jest.fn()}
+        onSetVideoLock={jest.fn()}
+        nameFocusEnabled={false}
+        onSetNameFocus={jest.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Ajustes de la llamada' }));
+    fireEvent.click(screen.getByRole('button', { name: /Fondo virtual/ }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Grafito' }));
+
+    expect(useCallSettingsStore.getState()).toMatchObject({
+      backgroundImage: 'preset:graphite',
+      backgroundBlur: false,
+    });
+    expect(screen.getByRole('radio', { name: 'Grafito' })).toBeChecked();
+    expect(screen.getByLabelText('Subir una imagen')).toHaveAttribute('accept', 'image/*');
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Ninguno' }));
+    expect(useCallSettingsStore.getState().backgroundImage).toBeNull();
+  });
 });

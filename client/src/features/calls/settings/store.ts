@@ -18,6 +18,9 @@ interface CallSettingsState {
   joinLeaveSounds: boolean;
   backgroundBlur: boolean;
   setPreference: (key: CallPreference, value: boolean) => void;
+  // "preset:<id>" or an uploaded image as a data URL; exclusive with the blur.
+  backgroundImage: string | null;
+  setBackgroundImage: (image: string | null) => void;
 }
 
 export const useCallSettingsStore = create<CallSettingsState>()(
@@ -33,7 +36,15 @@ export const useCallSettingsStore = create<CallSettingsState>()(
       noiseSuppression: true,
       joinLeaveSounds: false,
       backgroundBlur: false,
-      setPreference: (key, value) => set({ [key]: value }),
+      setPreference: (key, value) =>
+        set(
+          key === 'backgroundBlur' && value
+            ? { backgroundBlur: true, backgroundImage: null }
+            : { [key]: value },
+        ),
+      backgroundImage: null,
+      setBackgroundImage: (backgroundImage) =>
+        set(backgroundImage ? { backgroundImage, backgroundBlur: false } : { backgroundImage }),
     }),
     { name: 'date2gether:call-settings', version: 1 },
   ),
