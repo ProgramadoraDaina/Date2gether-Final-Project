@@ -28,6 +28,7 @@ import { AppShell } from '@/features/navigation/AppShell';
 import { RoomEmojisDialog } from '@/features/room-emojis/RoomEmojisDialog';
 import { useRoomEmojis } from '@/features/room-emojis/useRoomEmojis';
 import { RoleTag } from '@/features/rooms/RoleTag';
+import { KickButton } from '@/features/rooms/KickButton';
 import { MemberRoleMenu } from '@/features/rooms/MemberRoleMenu';
 import { RoomSidebar } from '@/features/rooms/RoomSidebar';
 import { useResizablePanel } from '@/features/rooms/useResizablePanel';
@@ -264,6 +265,7 @@ export default function RoomPage() {
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [callEnded, setCallEnded] = useState(false);
   const [roomDeleted, setRoomDeleted] = useState(false);
+  const [kicked, setKicked] = useState(false);
   const { emojis, refetchEmojis } = useRoomEmojis(access ? code : undefined);
   const chatEmojis = useMemo(() => emojis.filter((e) => e.kind === 'emoji'), [emojis]);
   const emojisByName = useMemo(() => new Map(chatEmojis.map((e) => [e.name, e])), [chatEmojis]);
@@ -466,6 +468,7 @@ export default function RoomPage() {
     // La sala se borró (su administrador): el backend corta chat y llamada, y desde
     // acá se reemplaza toda la vista por un aviso en vez de dejar una sala muerta.
     socket.on('roomDeleted', () => setRoomDeleted(true));
+    socket.on('kicked', () => setKicked(true));
     // El administrador hizo permanente la sala: la promoción no tiene vuelta atrás, así que
     // se habilita la UI solo para permanentes sin recargar la página.
     socket.on('roomPromoted', () => setIsPermanentRoom(true));
@@ -559,6 +562,21 @@ export default function RoomPage() {
             onJoin={handleJoin}
           />
         )}
+      </AppShell>
+    );
+  }
+
+  if (kicked) {
+    return (
+      <AppShell>
+        <div className={styles.callLoadingPanel} role="alert">
+          <p>{t('Te expulsaron de esta sala.')}</p>
+          <div className={styles.callEndedActions}>
+            <Link href="/" className={styles.callLoadingButton}>
+              {t('Volver al inicio')}
+            </Link>
+          </div>
+        </div>
       </AppShell>
     );
   }
@@ -905,6 +923,10 @@ export default function RoomPage() {
               // roles y botones de permisos.
               const member = userId ? members.find((m) => m.userId === userId) : undefined;
               const canChangeRole = isCurrentUserAdmin && member && !member.isOwner;
+              const canKick =
+                isCurrentUserAdmin &&
+                participantId !== access.participant.sub &&
+                !member?.isOwner;
               const color = nameColorHex(nameColor);
               return (
                 <li key={participantId}>
@@ -927,6 +949,12 @@ export default function RoomPage() {
                         members.filter((m) => m.role === 'administrador').length === 1
                       }
                       onChangeRole={changeRole}
+                    />
+                  )}
+                  {canKick && (
+                    <KickButton
+                      name={userName}
+                      onKick={() => socketRef.current?.emit('kickParticipant', { participantId })}
                     />
                   )}
                 </li>

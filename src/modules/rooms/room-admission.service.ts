@@ -56,6 +56,9 @@ export class RoomAdmissionService {
     const userId = await this.access.authenticateAccount(authorization);
     return this.db.transaction(async (tx) => {
       const room = await this.lockRoom(tx, code);
+      if (userId && this.access.isRevoked(room.id, { userId })) {
+        throw new ForbiddenException('Te expulsaron de esta sala');
+      }
       const [member] = userId
         ? await tx
             .select({ role: roomMembers.role })
